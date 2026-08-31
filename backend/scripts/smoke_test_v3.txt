@@ -1,0 +1,189 @@
+# Smoke Test V3: Finance MVP full workflow
+$ErrorActionPreference = "Stop"
+
+$API = "http://localhost:8000/api/v1"
+$PASS = 0
+$FAIL = 0
+
+function Check {
+    param($Name, $Method, $Url, $Body, $Expected)
+    
+    try {
+        $params = @{
+            Uri = "$API$Url"
+            Method = $Method
+            Headers = @{Authorization = "Bearer $TOKEN"}
+            ContentType = "application/json"
+        }
+        if ($Body) { $params.Body = $Body }
+        
+        $response = Invoke-WebRequest @params -ErrorAction Stop
+        
+        if ($response.StatusCode -eq $Expected) {
+            Write-Host "OK $Name ($($response.StatusCode))" -ForegroundColor Green
+            $script:PASS++
+            return ($response.Content | ConvertFrom-Json)
+        } else {
+            Write-Host "FAIL $Name (expected $Expected, got $($response.StatusCode))" -ForegroundColor Red
+            $script:FAIL++
+            return $null
+        }
+    } catch {
+        $code = $_.Exception.Response.StatusCode.value__
+        if ($code -eq $Expected) {
+            Write-Host "OK $Name ($code)" -ForegroundColor Green
+            $script:PASS++
+            return $null
+        } else {
+            Write-Host "FAIL $Name (expected $Expected, got $code)" -ForegroundColor Red
+            $script:FAIL++
+            return $null
+        }
+    }
+}
+
+function CheckPdf {
+    param($Name, $Url)
+    
+    try {
+        $response = Invoke-WebRequest -Uri "$API$Url" -Headers @{Authorization = "Bearer $TOKEN"} -ErrorAction Stop
+        
+        if ($response.StatusCode -eq 200 -and $response.Headers["Content-Type"] -like "*pdf*") {
+            Write-Host "OK $Name (PDF, $($response.Content.Length) bytes)" -ForegroundColor Green
+            $script:PASS++
+        } else {
+            Write-Host "FAIL $Name (not PDF)" -ForegroundColor Red
+            $script:FAIL++
+        }
+    } catch {
+        Write-Host "FAIL $Name (error: $($_.Exception.Message))" -ForegroundColor Red
+        $script:FAIL++
+    }
+}
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host " Smoke Test V3: Finance MVP" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+# === 1. Auth ===
+Write-Host "Auth" -ForegroundColor Yellow
+$login = Invoke-RestMethod -Uri "$API/auth/login" -Method POST -ContentType "application/json" -Body '{"email":"admin@spectech.dev","password":"admin123"}'
+$global:TOKEN = $login.access_token
+Write-Host "OK Login successful" -ForegroundColor Green
+$PASS++
+
+# === 2. Dashboard ===
+Write-Host ""
+Write-Host "Dashboard" -ForegroundColor Yellow
+$dash = Check "Get dashboard" "GET" "/payments/dashboard"
+if ($dash) {
+    Write-Host "   Revenue: $($dash.total_revenue) RUB" -ForegroundColor Gray
+    Write-Host "   Commission: $($dash.total_commission_earned) RUB" -ForegroundColor Gray
+}
+
+# === 3. Invoices ===
+Write-Host ""
+Write-Host "Invoices" -ForegroundColor Yellow
+$invoiceBody = @{
+    request_id = 1
+    client_id = 2
+    invoice_date = "2026-09-01"
+    due_date = "2026-09-15"
+    vat_rate = 20
+    items = @(
+        @{description="Экскаватор CAT 320D - 8 часов"; quantity=8; unit="час"; unit_price=2500}
+    )
+} | ConvertTo-Json -Depth 3
+
+$invoice = Check "Create invoice" "POST" "/invoices" $invoiceBody 201
+if ($invoice) {
+    Write-Host "   Number: $($invoice.document_number)" -ForegroundColor Gray
+    Write-Host "   Total: $($invoice.total) RUB" -ForegroundColor Gray
+    $invoiceId = $invoice.id
+    
+    Check "Send invoice" "POST" "/invoices/$invoiceId/send" $null 200 | Out-Null
+    CheckPdf "Download invoice PDF" "/invoices/$invoiceId/pdf"
+}
+
+# === 4. Acts ===
+Write-Host ""
+Write-Host "Acts" -ForegroundColor Yellow
+$actBody = @{
+    request_id = 1
+    client_id = 2
+    act_date = "2026-09-01"
+    total_amount = 24000
+} | ConvertTo-Json
+
+$act = Check "Create act" "POST" "/acts" $actBody 201
+if ($act) {
+    $actId = $act.id
+    
+    Check "Sign by client" "POST" "/acts/$actId/sign" '{"signed_by":"client"}' 200 | Out-Null
+    Check "Sign by executor" "POST" "/acts/$actId/sign" '{"signed_by":"executor"}' 200 | Out-Null
+    CheckPdf "Download act PDF" "/acts/$actId/pdf"
+}
+
+# === 5. Payouts ===
+Write-Host ""
+Write-Host "Payouts" -ForegroundColor Yellow
+$payoutBody = @{
+    owner_id = 3
+    vehicle_id = 1
+    request_id = 1
+    gross_amount = 20000
+    commission_rate = 15
+    payout_date = "2026-09-01"
+} | ConvertTo-Json
+
+$payout = Check "Create payout" "POST" "/payouts" $payoutBody 201
+if ($payout) {
+    Write-Host "   Gross: $($payout.gross_amount)" -ForegroundColor Gray
+    Write-Host "   Commission: $($payout.platform_commission)" -ForegroundColor Gray
+    Write-Host "   Net: $($payout.net_amount)" -ForegroundColor Gray
+    $payoutId = $payout.id
+    
+    Check "Approve payout" "POST" "/payouts/$payoutId/approve" $null 200 | Out-Null
+    CheckPdf "Download payout PDF" "/payouts/$payoutId/pdf"
+}
+
+# === 6. Payments ===
+Write-Host ""
+Write-Host "Payments" -ForegroundColor Yellow
+if ($invoiceId) {
+    $paymentBody = @{
+        invoice_id = $invoiceId
+        amount = 24000
+        method = "bank_transfer"
+        payment_date = "2026-09-10"
+    } | ConvertTo-Json
+    
+    Check "Register payment" "POST" "/payments" $paymentBody 201 | Out-Null
+}
+
+# === 7. Final dashboard ===
+Write-Host ""
+Write-Host "Final Dashboard" -ForegroundColor Yellow
+$finalDash = Check "Final dashboard" "GET" "/payments/dashboard"
+if ($finalDash) {
+    Write-Host "   Revenue: $($finalDash.total_revenue) RUB" -ForegroundColor Gray
+    Write-Host "   Paid: $($finalDash.total_paid) RUB" -ForegroundColor Gray
+    Write-Host "   Outstanding: $($finalDash.total_outstanding) RUB" -ForegroundColor Gray
+    Write-Host "   Commission earned: $($finalDash.total_commission_earned) RUB" -ForegroundColor Gray
+    Write-Host "   Invoices: $($finalDash.invoices_count)" -ForegroundColor Gray
+    Write-Host "   Acts: $($finalDash.acts_count)" -ForegroundColor Gray
+    Write-Host "   Payouts: $($finalDash.payouts_count)" -ForegroundColor Gray
+}
+
+# === Results ===
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+if ($FAIL -eq 0) {
+    Write-Host " ALL $PASS CHECKS PASSED" -ForegroundColor Green
+} else {
+    Write-Host " $PASS passed, $FAIL failed" -ForegroundColor Yellow
+}
+Write-Host "========================================" -ForegroundColor Cyan
+
+if ($FAIL -gt 0) { exit 1 }
