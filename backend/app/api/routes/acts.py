@@ -1,16 +1,20 @@
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.db import get_db
 from app.models.auth import User
+from app.models.contractor import Contractor
 from app.models.finance import Act, DocumentStatus
 from app.schemas.finance import ActCreate, ActRead, ActSign
 from app.services.finance_service import generate_document_number
+from app.services.pdf_service import generate_act_pdf
 
 router = APIRouter()
 
@@ -95,8 +99,37 @@ def sign_act(
     
     # Если обе стороны подписали — акт завершён
     if act.signed_by_client_at and act.signed_by_executor_at:
-        act.status = DocumentStatus.paid  # Используем 'paid' как статус "подписан"
+        act.status = DocumentStatus.paid
     
     db.commit()
     db.refresh(act)
     return act
+
+
+@router.get("/{act_id}/pdf", response_class=FileResponse)
+def download_act_pdf(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Скачать акт в формате PDF."""
+    act = db.get(Act, act_id)
+    if not act:
+        raise HTTPException(status_code=404, detail="Act not found")
+    
+    client = db.get(Contractor, act.client_id)
+    client_name = client.name if client else ""
+    
+    pdf_path = generate_act_pdf(act, client_name=client_name)
+    
+    # Сохраняем путь к PDF в модели
+    relative_path = f"documents/{Path(pdf_path).name}"
+    if act.pdf_url != relative_path:
+        act.pdf_url = relative_path
+        db.commit()
+    
+    return FileResponse(
+        path=pdf_path,
+        filename=f"act_{act.document_number}.pdf",
+        media_type="application/pdf",
+    )

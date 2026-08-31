@@ -1,18 +1,23 @@
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.db import get_db
 from app.models.auth import User
+from app.models.catalog import Vehicle
+from app.models.contractor import Contractor
 from app.models.finance import Payout, DocumentStatus
 from app.schemas.finance import PayoutCreate, PayoutRead, PayoutUpdate
 from app.services.finance_service import (
     generate_document_number,
     calculate_payout,
 )
+from app.services.pdf_service import generate_payout_pdf
 
 router = APIRouter()
 
@@ -130,3 +135,29 @@ def approve_payout(
     db.commit()
     db.refresh(payout)
     return payout
+
+
+@router.get("/{payout_id}/pdf", response_class=FileResponse)
+def download_payout_pdf(
+    payout_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Скачать ведомость выплаты в формате PDF."""
+    payout = db.get(Payout, payout_id)
+    if not payout:
+        raise HTTPException(status_code=404, detail="Payout not found")
+    
+    owner = db.get(Contractor, payout.owner_id)
+    owner_name = owner.name if owner else ""
+    
+    vehicle = db.get(Vehicle, payout.vehicle_id)
+    vehicle_name = vehicle.name if vehicle else ""
+    
+    pdf_path = generate_payout_pdf(payout, owner_name=owner_name, vehicle_name=vehicle_name)
+    
+    return FileResponse(
+        path=pdf_path,
+        filename=f"payout_{payout.document_number}.pdf",
+        media_type="application/pdf",
+    )

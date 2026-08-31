@@ -1,12 +1,15 @@
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, require_permission
 from app.core.db import get_db
 from app.models.auth import User
+from app.models.contractor import Contractor
 from app.models.finance import Invoice, DocumentStatus
 from app.schemas.finance import (
     InvoiceCreate,
@@ -14,6 +17,7 @@ from app.schemas.finance import (
     InvoiceUpdate,
 )
 from app.services.finance_service import create_invoice
+from app.services.pdf_service import generate_invoice_pdf
 
 router = APIRouter()
 
@@ -27,8 +31,6 @@ def list_invoices(
     current_user: User = Depends(get_current_user),
 ):
     """Список счетов."""
-    # require_permission(db, current_user, "invoices", "view")
-    
     stmt = (
         select(Invoice)
         .options(joinedload(Invoice.items))
@@ -48,8 +50,6 @@ def create_invoice_endpoint(
     current_user: User = Depends(get_current_user),
 ):
     """Создать новый счёт."""
-    # require_permission(db, current_user, "invoices", "create")
-    
     invoice = create_invoice(
         db=db,
         payload=payload,
@@ -66,8 +66,6 @@ def get_invoice(
     current_user: User = Depends(get_current_user),
 ):
     """Получить счёт по ID."""
-    # require_permission(db, current_user, "invoices", "view")
-    
     stmt = (
         select(Invoice)
         .options(joinedload(Invoice.items))
@@ -89,8 +87,6 @@ def update_invoice(
     current_user: User = Depends(get_current_user),
 ):
     """Обновить счёт."""
-    # require_permission(db, current_user, "invoices", "update")
-    
     invoice = db.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -110,8 +106,6 @@ def send_invoice(
     current_user: User = Depends(get_current_user),
 ):
     """Отправить счёт клиенту (меняет статус на 'sent')."""
-    # require_permission(db, current_user, "invoices", "send")
-    
     invoice = db.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -135,8 +129,6 @@ def cancel_invoice(
     current_user: User = Depends(get_current_user),
 ):
     """Отменить счёт."""
-    # require_permission(db, current_user, "invoices", "update")
-    
     invoice = db.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -149,3 +141,26 @@ def cancel_invoice(
     
     invoice.status = DocumentStatus.cancelled
     db.commit()
+
+
+@router.get("/{invoice_id}/pdf", response_class=FileResponse)
+def download_invoice_pdf(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Скачать счёт в формате PDF."""
+    invoice = db.get(Invoice, invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    client = db.get(Contractor, invoice.client_id)
+    client_name = client.name if client else ""
+    
+    pdf_path = generate_invoice_pdf(invoice, client_name=client_name)
+    
+    return FileResponse(
+        path=pdf_path,
+        filename=f"invoice_{invoice.document_number}.pdf",
+        media_type="application/pdf",
+    )

@@ -63,3 +63,7 @@ firebase-service-account.json
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Storage files
+backend/storage/*
+!backend/storage/.gitkeep
