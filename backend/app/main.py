@@ -1,4 +1,8 @@
-from app.api.routes import auth, vehicles, requests, shifts, contractors, rbac, me, categories
+from app.api.routes import (
+    auth, vehicles, requests, shifts,
+    contractors, rbac, me, categories,
+    invoices, acts, payouts, payments,
+)
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -39,6 +43,11 @@ app.include_router(contractors.router, prefix="/api/v1/contractors", tags=["cont
 app.include_router(rbac.router, prefix="/api/v1/rbac", tags=["rbac"])
 app.include_router(me.router, prefix="/api/v1", tags=["me"])
 app.include_router(categories.router, prefix="/api/v1/categories", tags=["categories"])
+# Finance
+app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["finance"])
+app.include_router(acts.router, prefix="/api/v1/acts", tags=["finance"])
+app.include_router(payouts.router, prefix="/api/v1/payouts", tags=["finance"])
+app.include_router(payments.router, prefix="/api/v1/payments", tags=["finance"])
 
 
 @app.get("/health")
