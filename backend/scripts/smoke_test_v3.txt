@@ -76,7 +76,7 @@ $PASS++
 # === 2. Dashboard ===
 Write-Host ""
 Write-Host "Dashboard" -ForegroundColor Yellow
-$dash = Check "Get dashboard" "GET" "/payments/dashboard"
+$dash = Check "Dashboard" "GET" "/payments/dashboard" $null 200
 if ($dash) {
     Write-Host "   Revenue: $($dash.total_revenue) RUB" -ForegroundColor Gray
     Write-Host "   Commission: $($dash.total_commission_earned) RUB" -ForegroundColor Gray
@@ -165,7 +165,7 @@ if ($invoiceId) {
 # === 7. Final dashboard ===
 Write-Host ""
 Write-Host "Final Dashboard" -ForegroundColor Yellow
-$finalDash = Check "Final dashboard" "GET" "/payments/dashboard"
+$finalDash = Check "Final dashboard" "GET" "/payments/dashboard" $null 200
 if ($finalDash) {
     Write-Host "   Revenue: $($finalDash.total_revenue) RUB" -ForegroundColor Gray
     Write-Host "   Paid: $($finalDash.total_paid) RUB" -ForegroundColor Gray
