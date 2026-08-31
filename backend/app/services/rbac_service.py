@@ -43,6 +43,19 @@ SYSTEM_PERMISSIONS = [
     ("rbac", "manage"),
     # Справочники
     ("catalogs", "manage"),
+        # Финансы
+    ("invoices", "view"),
+    ("invoices", "create"),
+    ("invoices", "update"),
+    ("invoices", "send"),
+    ("acts", "view"),
+    ("acts", "create"),
+    ("acts", "sign"),
+    ("payouts", "view"),
+    ("payouts", "create"),
+    ("payouts", "pay"),
+    ("payments", "view"),
+    ("finance", "dashboard"),
 ]
 
 
@@ -84,14 +97,20 @@ def init_system_data(db: Session) -> None:
             ("shifts", "view"), ("shifts", "create"), ("shifts", "approve"),
             ("contractors", "view"), ("contractors", "create"), ("contractors", "update"),
             ("rbac", "manage"),
-            ("catalogs", "manage"),
+            ("catalogs", "manage"),("invoices", "view"), ("invoices", "create"), ("invoices", "update"), ("invoices", "send"),
+("acts", "view"), ("acts", "create"), ("acts", "sign"),
+("payouts", "view"), ("payouts", "create"), ("payouts", "pay"),
+("payments", "view"), ("finance", "dashboard"),
         ],
         "dispatcher": [
             ("vehicles", "view"), ("vehicles", "create"), ("vehicles", "update"),
             ("requests", "view"), ("requests", "create"), ("requests", "assign"), ("requests", "update"),
             ("shifts", "view"), ("shifts", "create"),
             ("contractors", "view"),
-            ("catalogs", "manage"),
+            ("catalogs", "manage"),("invoices", "view"), ("invoices", "create"),
+("acts", "view"), ("acts", "create"),
+("payouts", "view"),
+("payments", "view"), ("finance", "dashboard"),
         ],
         "operator": [
             ("vehicles", "view"),
@@ -100,12 +119,15 @@ def init_system_data(db: Session) -> None:
         ],
         "client": [
             ("requests", "view"),
-            ("shifts", "view"),
+            ("shifts", "view"),("invoices", "view"),
+("acts", "view"),
+("payments", "view"),
         ],
         "owner": [
             ("vehicles", "view"),
             ("requests", "view"),
-            ("shifts", "view"),
+            ("shifts", "view"),("payouts", "view"),
+("payments", "view"), ("finance", "dashboard"),
         ],
         "mechanic": [
             ("vehicles", "view"), ("vehicles", "update"),

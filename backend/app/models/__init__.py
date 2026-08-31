@@ -5,6 +5,7 @@ from app.models.contractor import Contractor, Employee, EmployeeCertificate
 from app.models.dispatch import Request, RequestStatusLog, RequestAssignment
 from app.models.shift import ShiftTask, ShiftReport
 from app.models.rbac import Role, Permission, RolePermission, UserRole
+from app.models.finance import Invoice, InvoiceItem, Act, Payout, Payment
 
 __all__ = [
     "Company",
@@ -24,4 +25,9 @@ __all__ = [
     "Permission",
     "RolePermission",
     "UserRole",
+    "Invoice",
+    "InvoiceItem",
+    "Act",
+    "Payout",
+    "Payment",
 ]
