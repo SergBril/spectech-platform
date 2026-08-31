@@ -75,19 +75,67 @@ def init_system_data(db: Session) -> None:
     
     db.flush()
     
-    # Назначаем все права админу
-    admin_role = db.scalar(select(Role).where(Role.code == "admin"))
-    if admin_role:
-        all_permissions = db.scalars(select(Permission)).all()
-        for perm in all_permissions:
+    # Маппинг прав по ролям
+    role_permissions_map = {
+        "admin": [
+            # Админ имеет ВСЕ права
+            ("vehicles", "view"), ("vehicles", "create"), ("vehicles", "update"), ("vehicles", "delete"),
+            ("requests", "view"), ("requests", "create"), ("requests", "assign"), ("requests", "update"), ("requests", "cancel"),
+            ("shifts", "view"), ("shifts", "create"), ("shifts", "approve"),
+            ("contractors", "view"), ("contractors", "create"), ("contractors", "update"),
+            ("rbac", "manage"),
+            ("catalogs", "manage"),
+        ],
+        "dispatcher": [
+            ("vehicles", "view"), ("vehicles", "create"), ("vehicles", "update"),
+            ("requests", "view"), ("requests", "create"), ("requests", "assign"), ("requests", "update"),
+            ("shifts", "view"), ("shifts", "create"),
+            ("contractors", "view"),
+            ("catalogs", "manage"),
+        ],
+        "operator": [
+            ("vehicles", "view"),
+            ("requests", "view"),
+            ("shifts", "view"), ("shifts", "create"),
+        ],
+        "client": [
+            ("requests", "view"),
+            ("shifts", "view"),
+        ],
+        "owner": [
+            ("vehicles", "view"),
+            ("requests", "view"),
+            ("shifts", "view"),
+        ],
+        "mechanic": [
+            ("vehicles", "view"), ("vehicles", "update"),
+        ],
+    }
+    
+    # Назначаем права ролям
+    for role_code, perms_list in role_permissions_map.items():
+        role = db.scalar(select(Role).where(Role.code == role_code))
+        if not role:
+            continue
+        
+        for entity, action in perms_list:
+            perm = db.scalar(
+                select(Permission).where(
+                    Permission.entity == entity,
+                    Permission.action == action,
+                )
+            )
+            if not perm:
+                continue
+            
             existing = db.scalar(
                 select(RolePermission).where(
-                    RolePermission.role_id == admin_role.id,
+                    RolePermission.role_id == role.id,
                     RolePermission.permission_id == perm.id,
                 )
             )
             if not existing:
-                db.add(RolePermission(role_id=admin_role.id, permission_id=perm.id))
+                db.add(RolePermission(role_id=role.id, permission_id=perm.id))
     
     db.commit()
 
