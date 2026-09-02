@@ -21,114 +21,135 @@ def _get_db():
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60,
                  name="app.tasks.pdf_tasks.generate_invoice_pdf_async")
 def generate_invoice_pdf_async(self, invoice_id: int, company_id: int):
-    """Реальная асинхронная генерация PDF счёта."""
-    db = None
-    try:
-        logger.info(f"Starting PDF generation for invoice {invoice_id}")
+            # Генерируем PDF локально
+        local_path = os.path.join(PDF_DIR, f"invoice_{invoice_id}.pdf")
+        generate_invoice_pdf(db, invoice, local_path)
         
-        db = _get_db()
+        # Загружаем в MinIO
+        from app.services import storage_service
+        with open(local_path, "rb") as f:
+            upload_result = storage_service.upload_file(
+                file_obj=f,
+                filename=f"invoice_{invoice.document_number}.pdf",
+                folder="finance/invoices",
+                content_type="application/pdf",
+            )
         
-        from app.models.finance import Invoice
-        from app.services.pdf_service import generate_invoice_pdf
+        # Сохраняем метаданные
+        from app.models.telematics import UploadedFile
+        uploaded_file = UploadedFile(
+            original_filename=f"invoice_{invoice.document_number}.pdf",
+            storage_path=upload_result["path"],
+            content_type="application/pdf",
+            size_bytes=upload_result["size"],
+            file_category="invoice_pdf",
+            invoice_id=invoice_id,
+            company_id=company_id,
+        )
+        db.add(uploaded_file)
+        db.commit()
         
-        invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-        if not invoice:
-            logger.error(f"Invoice {invoice_id} not found")
-            return {"status": "error", "message": f"Invoice {invoice_id} not found"}
-        
-        # Генерируем PDF через существующий сервис
-        pdf_path = os.path.join(PDF_DIR, f"invoice_{invoice_id}.pdf")
-        generate_invoice_pdf(db, invoice, pdf_path)
-        
-        logger.info(f"PDF generated successfully: {pdf_path}")
+        logger.info(f"PDF uploaded to storage: {upload_result['path']}")
         
         return {
             "status": "success",
             "invoice_id": invoice_id,
             "document_number": invoice.document_number,
-            "path": pdf_path,
-            "size_bytes": os.path.getsize(pdf_path) if os.path.exists(pdf_path) else 0,
+            "local_path": local_path,
+            "storage_path": upload_result["path"],
+            "url": upload_result["url"],
+            "size_bytes": upload_result["size"],
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
-    except Exception as exc:
-        logger.error(f"PDF generation failed for invoice {invoice_id}: {exc}")
-        # Retry с экспоненциальной задержкой
-        raise self.retry(exc=exc, countdown=60 * (2 ** self.request.retries))
-    finally:
-        if db:
-            db.close()
-
 
 @celery_app.task(bind=True, max_retries=3,
                  name="app.tasks.pdf_tasks.generate_act_pdf_async")
 def generate_act_pdf_async(self, act_id: int, company_id: int):
-    """Реальная асинхронная генерация PDF акта."""
-    db = None
-    try:
-        logger.info(f"Starting PDF generation for act {act_id}")
+            # Генерируем PDF локально
+        local_path = os.path.join(PDF_DIR, f"invoice_{invoice_id}.pdf")
+        generate_invoice_pdf(db, invoice, local_path)
         
-        db = _get_db()
+        # Загружаем в MinIO
+        from app.services import storage_service
+        with open(local_path, "rb") as f:
+            upload_result = storage_service.upload_file(
+                file_obj=f,
+                filename=f"invoice_{invoice.document_number}.pdf",
+                folder="finance/invoices",
+                content_type="application/pdf",
+            )
         
-        from app.models.finance import Act
-        from app.services.pdf_service import generate_act_pdf
+        # Сохраняем метаданные
+        from app.models.telematics import UploadedFile
+        uploaded_file = UploadedFile(
+            original_filename=f"invoice_{invoice.document_number}.pdf",
+            storage_path=upload_result["path"],
+            content_type="application/pdf",
+            size_bytes=upload_result["size"],
+            file_category="invoice_pdf",
+            invoice_id=invoice_id,
+            company_id=company_id,
+        )
+        db.add(uploaded_file)
+        db.commit()
         
-        act = db.query(Act).filter(Act.id == act_id).first()
-        if not act:
-            logger.error(f"Act {act_id} not found")
-            return {"status": "error", "message": f"Act {act_id} not found"}
-        
-        pdf_path = os.path.join(PDF_DIR, f"act_{act_id}.pdf")
-        generate_act_pdf(db, act, pdf_path)
-        
-        logger.info(f"PDF generated successfully: {pdf_path}")
+        logger.info(f"PDF uploaded to storage: {upload_result['path']}")
         
         return {
             "status": "success",
-            "act_id": act_id,
-            "document_number": act.document_number,
-            "path": pdf_path,
-            "size_bytes": os.path.getsize(pdf_path) if os.path.exists(pdf_path) else 0,
+            "invoice_id": invoice_id,
+            "document_number": invoice.document_number,
+            "local_path": local_path,
+            "storage_path": upload_result["path"],
+            "url": upload_result["url"],
+            "size_bytes": upload_result["size"],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
-    except Exception as exc:
-        logger.error(f"Act PDF generation failed: {exc}")
-        raise self.retry(exc=exc)
-    finally:
-        if db:
-            db.close()
 
 
 @celery_app.task(bind=True, max_retries=3,
                  name="app.tasks.pdf_tasks.generate_payout_pdf_async")
 def generate_payout_pdf_async(self, payout_id: int, company_id: int):
-    """Реальная асинхронная генерация PDF выплаты."""
-    db = None
-    try:
-        logger.info(f"Starting PDF generation for payout {payout_id}")
+            # Генерируем PDF локально
+        local_path = os.path.join(PDF_DIR, f"invoice_{invoice_id}.pdf")
+        generate_invoice_pdf(db, invoice, local_path)
         
-        db = _get_db()
+        # Загружаем в MinIO
+        from app.services import storage_service
+        with open(local_path, "rb") as f:
+            upload_result = storage_service.upload_file(
+                file_obj=f,
+                filename=f"invoice_{invoice.document_number}.pdf",
+                folder="finance/invoices",
+                content_type="application/pdf",
+            )
         
-        from app.models.finance import Payout
-        from app.services.pdf_service import generate_payout_pdf
+        # Сохраняем метаданные
+        from app.models.telematics import UploadedFile
+        uploaded_file = UploadedFile(
+            original_filename=f"invoice_{invoice.document_number}.pdf",
+            storage_path=upload_result["path"],
+            content_type="application/pdf",
+            size_bytes=upload_result["size"],
+            file_category="invoice_pdf",
+            invoice_id=invoice_id,
+            company_id=company_id,
+        )
+        db.add(uploaded_file)
+        db.commit()
         
-        payout = db.query(Payout).filter(Payout.id == payout_id).first()
-        if not payout:
-            return {"status": "error", "message": f"Payout {payout_id} not found"}
-        
-        pdf_path = os.path.join(PDF_DIR, f"payout_{payout_id}.pdf")
-        generate_payout_pdf(db, payout, pdf_path)
+        logger.info(f"PDF uploaded to storage: {upload_result['path']}")
         
         return {
             "status": "success",
-            "payout_id": payout_id,
-            "document_number": payout.document_number,
-            "path": pdf_path,
+            "invoice_id": invoice_id,
+            "document_number": invoice.document_number,
+            "local_path": local_path,
+            "storage_path": upload_result["path"],
+            "url": upload_result["url"],
+            "size_bytes": upload_result["size"],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
-    except Exception as exc:
-        logger.error(f"Payout PDF generation failed: {exc}")
-        raise self.retry(exc=exc)
-    finally:
-        if db:
-            db.close()
 
 
 @celery_app.task(name="app.tasks.pdf_tasks.cleanup_old_pdfs")
