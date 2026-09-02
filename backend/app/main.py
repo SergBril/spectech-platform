@@ -1,7 +1,7 @@
 from app.api.routes import (
     auth, vehicles, requests, shifts,
     contractors, rbac, me, categories,
-    invoices, acts, payouts, payments,
+    invoices, acts, payouts, payments, telematics,
 )
 from contextlib import asynccontextmanager
 
@@ -48,6 +48,8 @@ app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["finance"])
 app.include_router(acts.router, prefix="/api/v1/acts", tags=["finance"])
 app.include_router(payouts.router, prefix="/api/v1/payouts", tags=["finance"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["finance"])
+# Telematics
+app.include_router(telematics.router, prefix="/api/v1/telematics", tags=["telematics"])
 
 
 @app.get("/health")
