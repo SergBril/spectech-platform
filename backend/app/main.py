@@ -1,3 +1,17 @@
+import logging
+from fastapi.exceptions import RequestValidationError
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.core.logging_config import setup_logging
+from app.core.exception_handlers import (
+    validation_exception_handler,
+    sqlalchemy_exception_handler,
+    general_exception_handler,
+)
+
+# Настраиваем логирование
+setup_logging("INFO")
+logger = logging.getLogger("spectech.app")
 from app.api.routes import (
     auth, vehicles, requests, shifts,
     contractors, rbac, me, categories,
@@ -26,7 +40,10 @@ app = FastAPI(
     version="0.5.0-dev",
     description="Платформа управления спецтехникой",
 )
-
+# Регистрируем обработчики ошибок
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(SQLAlchemyError, sqlalchemy_exception_handler)
+app.add_exception_handler(Exception, general_exception_handler)
 # 2. CORS middleware (если есть)
 app.add_middleware(
     CORSMiddleware,
