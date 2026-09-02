@@ -4,9 +4,9 @@ from app.models.auth import User
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
 from app.models.contractor import Contractor
-from app.models.dispatch import Request
 from app.services.auth_service import hash_password
 from app.services.rbac_service import init_system_data
+from tests.conftest import make_test_request
 
 
 def setup_finance_test_data(db):
@@ -67,20 +67,12 @@ def setup_finance_test_data(db):
     db.add(vehicle)
     db.flush()
 
-    now = datetime.now(timezone.utc)
-    request = Request(
+    request = make_test_request(
+        db,
         client_id=client.id,
-        status="completed",
-        request_type="one_time",
-        vehicle_category_id=category.id,
-        work_type="API test work",
-        object_address="Test address",
-        planned_start=now,
-        planned_end=now + timedelta(hours=8),
-        shift_duration_hours=8,
-        source_channel="phone",
-        priority="normal",
+        category_id=category.id,
         company_id=company.id,
+        work_type="API test work",
     )
     db.add(request)
     db.commit()

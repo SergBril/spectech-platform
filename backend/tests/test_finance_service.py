@@ -1,13 +1,9 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-import pytest
-
-from app.models.auth import User
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
 from app.models.contractor import Contractor
-from app.models.dispatch import Request
 from app.models.finance import (
     Invoice, InvoiceItem, Act, Payout, Payment, DocumentStatus,
 )
@@ -19,6 +15,7 @@ from app.services.finance_service import (
     get_finance_dashboard,
 )
 from app.services.rbac_service import init_system_data
+from tests.conftest import make_test_request
 
 
 def create_test_entities(db):
@@ -69,23 +66,12 @@ def create_test_entities(db):
     db.add(vehicle)
     db.flush()
 
-    now = datetime.now(timezone.utc)
-    request = Request(
+    request = make_test_request(
+        db,
         client_id=client.id,
-        status="completed",
-        request_type="one_time",
-        vehicle_category_id=category.id,
-        work_type="Тест работа",
-        object_address="Москва",
-        planned_start=now,
-        planned_end=now + timedelta(hours=8),
-        shift_duration_hours=8,
-        client_rate=Decimal("15000"),
-        rate_type="per_shift",
-        estimated_amount=Decimal("15000"),
-        source_channel="phone",
-        priority="normal",
+        category_id=category.id,
         company_id=company.id,
+        work_type="Тест работа",
     )
     db.add(request)
     db.flush()
