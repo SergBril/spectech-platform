@@ -12,7 +12,6 @@ from app.main import app
 from app.models import *  # noqa: F401, F403
 from app.models.dispatch import Request
 
-# Тестовая БД в памяти
 TEST_DATABASE_URL = "sqlite:///:memory:"
 
 engine = create_engine(
@@ -25,7 +24,6 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 @pytest.fixture(scope="function")
 def db():
-    """Создаёт таблицы и сессию для каждого теста."""
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     try:
@@ -37,7 +35,6 @@ def db():
 
 @pytest.fixture(scope="function")
 def client(db):
-    """TestClient с подменой БД."""
     def override_get_db():
         try:
             yield db
@@ -50,7 +47,7 @@ def client(db):
     app.dependency_overrides.clear()
 
 
-def make_test_request(db, client_id: int, category_id: int, company_id: int, **overrides):
+def make_test_request(db, client_id, category_id, company_id, **overrides):
     """Фабрика тестовых заявок с заполненными обязательными полями."""
     now = datetime.now(timezone.utc)
     defaults = {

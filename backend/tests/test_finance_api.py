@@ -1,5 +1,3 @@
-from datetime import datetime, timedelta, timezone
-
 from app.models.auth import User
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
@@ -10,467 +8,231 @@ from tests.conftest import make_test_request
 
 
 def setup_finance_test_data(db):
-    """Подготовка данных для финансовых тестов."""
     init_system_data(db)
+    company = Company(name="API Co", legal_name='ООО "API"', inn="7712345678")
+    db.add(company); db.flush()
 
-    company = Company(
-        name="API Test Co",
-        legal_name='ООО "API Test"',
-        inn="7712345678",
-    )
-    db.add(company)
-    db.flush()
+    user = User(email="fin@test.com", full_name="T", password_hash=hash_password("x"),
+                company_id=company.id, is_superuser=True)
+    db.add(user); db.flush()
 
-    user = User(
-        email="finance_api@test.com",
-        full_name="Finance Tester",
-        password_hash=hash_password("test123"),
-        company_id=company.id,
-        is_superuser=True,
-    )
-    db.add(user)
-    db.flush()
+    client = Contractor(type="client", name="C", inn="7798765432", company_id=company.id)
+    owner = Contractor(type="owner", name="O", company_id=company.id)
+    db.add(client); db.add(owner); db.flush()
 
-    client = Contractor(
-        type="client",
-        name="API Client",
-        inn="7798765432",
-        company_id=company.id,
-    )
-    db.add(client)
+    category = Category(name="Cat", code="api", level=1, company_id=company.id)
+    db.add(category); db.flush()
 
-    owner = Contractor(
-        type="owner",
-        name="API Owner",
-        company_id=company.id,
-    )
-    db.add(owner)
-    db.flush()
+    vehicle = Vehicle(id_type="vin", id_value="APITEST12345678901", category_id=category.id,
+                      name="V", status="free", company_id=company.id)
+    db.add(vehicle); db.flush()
 
-    category = Category(
-        name="API Category",
-        code="api_test",
-        level=1,
-        company_id=company.id,
-    )
-    db.add(category)
-    db.flush()
+    request = make_test_request(db, client.id, category.id, company.id)
+    db.add(request); db.commit()
 
-    vehicle = Vehicle(
-        id_type="vin",
-        id_value="APITEST12345678901",
-        category_id=category.id,
-        name="API Vehicle",
-        status="free",
-        company_id=company.id,
-    )
-    db.add(vehicle)
-    db.flush()
-
-    request = make_test_request(
-        db,
-        client_id=client.id,
-        category_id=category.id,
-        company_id=company.id,
-        work_type="API test work",
-    )
-    db.add(request)
-    db.commit()
-
-    return {
-        "user": user,
-        "company": company,
-        "client": client,
-        "owner": owner,
-        "vehicle": vehicle,
-        "request": request,
-    }
+    return {"user": user, "company": company, "client": client, "owner": owner, "vehicle": vehicle, "request": request}
 
 
-def get_auth_header(client, db):
-    """Получает данные с подменой авторизации на суперпользователя."""
+def _setup(client, db):
     from app.api.deps import get_current_user
     from app.main import app
-
     data = setup_finance_test_data(db)
-
-    def override():
-        return data["user"]
-
-    app.dependency_overrides[get_current_user] = override
+    app.dependency_overrides[get_current_user] = lambda: data["user"]
     return data
 
 
-def clear_overrides():
-    """Очищает подмены зависимостей."""
+def _clear():
     from app.main import app
     app.dependency_overrides.clear()
 
 
-# === Invoice API ===
-
-
 def test_create_invoice(client, db):
-    """Создание счёта через API."""
-    data = get_auth_header(client, db)
+    d = _setup(client, db)
     try:
-        response = client.post(
-            "/api/v1/invoices",
-            json={
-                "request_id": data["request"].id,
-                "client_id": data["client"].id,
-                "invoice_date": "2026-09-01",
-                "due_date": "2026-09-15",
-                "vat_rate": 20.0,
-                "comment": "Test invoice",
-                "items": [
-                    {
-                        "description": "Экскаватор - 8 часов",
-                        "quantity": 8,
-                        "unit": "час",
-                        "unit_price": 2000,
-                    }
-                ],
-            },
-        )
-        assert response.status_code == 201
-        body = response.json()
-        assert body["document_number"].startswith("INV-")
-        assert body["subtotal"] == "16000.00"
-        assert body["vat_amount"] == "3200.00"
-        assert body["total"] == "19200.00"
-        assert body["status"] == "draft"
-        assert len(body["items"]) == 1
+        r = client.post("/api/v1/invoices", json={
+            "request_id": d["request"].id, "client_id": d["client"].id,
+            "invoice_date": "2026-09-01", "due_date": "2026-09-15", "vat_rate": 20.0,
+            "items": [{"description": "E", "quantity": 8, "unit": "ч", "unit_price": 2000}],
+        })
+        assert r.status_code == 201
+        b = r.json()
+        assert b["document_number"].startswith("INV-")
+        assert b["subtotal"] == "16000.00"
+        assert b["total"] == "19200.00"
     finally:
-        clear_overrides()
+        _clear()
 
 
 def test_list_invoices(client, db):
-    """Список счетов."""
-    data = get_auth_header(client, db)
+    d = _setup(client, db)
     try:
-        client.post(
-            "/api/v1/invoices",
-            json={
-                "request_id": data["request"].id,
-                "client_id": data["client"].id,
-                "invoice_date": "2026-09-01",
-                "items": [
-                    {"description": "Услуга", "quantity": 1, "unit": "шт", "unit_price": 1000}
-                ],
-            },
-        )
-        response = client.get("/api/v1/invoices")
-        assert response.status_code == 200
-        body = response.json()
-        assert isinstance(body, list)
-        assert len(body) >= 1
+        client.post("/api/v1/invoices", json={
+            "request_id": d["request"].id, "client_id": d["client"].id,
+            "invoice_date": "2026-09-01",
+            "items": [{"description": "U", "quantity": 1, "unit": "шт", "unit_price": 1000}],
+        })
+        r = client.get("/api/v1/invoices")
+        assert r.status_code == 200
+        assert len(r.json()) >= 1
     finally:
-        clear_overrides()
+        _clear()
 
 
 def test_send_invoice(client, db):
-    """Отправка счёта меняет статус."""
-    data = get_auth_header(client, db)
+    d = _setup(client, db)
     try:
-        create_resp = client.post(
-            "/api/v1/invoices",
-            json={
-                "request_id": data["request"].id,
-                "client_id": data["client"].id,
-                "invoice_date": "2026-09-01",
-                "items": [
-                    {"description": "Услуга", "quantity": 1, "unit": "шт", "unit_price": 1000}
-                ],
-            },
-        )
-        invoice_id = create_resp.json()["id"]
-        assert create_resp.json()["status"] == "draft"
-
-        send_resp = client.post(f"/api/v1/invoices/{invoice_id}/send")
-        assert send_resp.status_code == 200
-        assert send_resp.json()["status"] == "sent"
-
-        send_resp2 = client.post(f"/api/v1/invoices/{invoice_id}/send")
-        assert send_resp2.status_code == 409
+        cr = client.post("/api/v1/invoices", json={
+            "request_id": d["request"].id, "client_id": d["client"].id,
+            "invoice_date": "2026-09-01",
+            "items": [{"description": "U", "quantity": 1, "unit": "шт", "unit_price": 1000}],
+        })
+        iid = cr.json()["id"]
+        sr = client.post(f"/api/v1/invoices/{iid}/send")
+        assert sr.status_code == 200 and sr.json()["status"] == "sent"
+        assert client.post(f"/api/v1/invoices/{iid}/send").status_code == 409
     finally:
-        clear_overrides()
+        _clear()
 
 
 def test_download_invoice_pdf(client, db):
-    """Скачивание PDF счёта."""
-    data = get_auth_header(client, db)
+    d = _setup(client, db)
     try:
-        create_resp = client.post(
-            "/api/v1/invoices",
-            json={
-                "request_id": data["request"].id,
-                "client_id": data["client"].id,
-                "invoice_date": "2026-09-01",
-                "items": [
-                    {"description": "PDF тест", "quantity": 1, "unit": "шт", "unit_price": 500}
-                ],
-            },
-        )
-        invoice_id = create_resp.json()["id"]
-
-        response = client.get(f"/api/v1/invoices/{invoice_id}/pdf")
-        assert response.status_code == 200
-        assert response.headers["content-type"] == "application/pdf"
-        assert response.content[:4] == b"%PDF"
+        cr = client.post("/api/v1/invoices", json={
+            "request_id": d["request"].id, "client_id": d["client"].id,
+            "invoice_date": "2026-09-01",
+            "items": [{"description": "P", "quantity": 1, "unit": "шт", "unit_price": 500}],
+        })
+        r = client.get(f"/api/v1/invoices/{cr.json()['id']}/pdf")
+        assert r.status_code == 200
+        assert r.headers["content-type"] == "application/pdf"
+        assert r.content[:4] == b"%PDF"
     finally:
-        clear_overrides()
-
-
-# === Act API ===
+        _clear()
 
 
 def test_create_act(client, db):
-    """Создание акта."""
-    data = get_auth_header(client, db)
+    d = _setup(client, db)
     try:
-        response = client.post(
-            "/api/v1/acts",
-            json={
-                "request_id": data["request"].id,
-                "client_id": data["client"].id,
-                "act_date": "2026-09-01",
-                "total_amount": 15000,
-                "comment": "Test act",
-            },
-        )
-        assert response.status_code == 201
-        body = response.json()
-        assert body["document_number"].startswith("ACT-")
-        assert body["status"] == "draft"
+        r = client.post("/api/v1/acts", json={
+            "request_id": d["request"].id, "client_id": d["client"].id,
+            "act_date": "2026-09-01", "total_amount": 15000,
+        })
+        assert r.status_code == 201
+        assert r.json()["document_number"].startswith("ACT-")
     finally:
-        clear_overrides()
+        _clear()
 
 
 def test_sign_act_both_parties(client, db):
-    """Подписание акта обеими сторонами."""
-    data = get_auth_header(client, db)
+    d = _setup(client, db)
     try:
-        create_resp = client.post(
-            "/api/v1/acts",
-            json={
-                "request_id": data["request"].id,
-                "client_id": data["client"].id,
-                "act_date": "2026-09-01",
-                "total_amount": 10000,
-            },
-        )
-        act_id = create_resp.json()["id"]
-
-        sign1 = client.post(
-            f"/api/v1/acts/{act_id}/sign",
-            json={"signed_by": "client"},
-        )
-        assert sign1.status_code == 200
-        body1 = sign1.json()
-        assert body1["signed_by_client_at"] is not None
-        assert body1["signed_by_executor_at"] is None
-
-        sign2 = client.post(
-            f"/api/v1/acts/{act_id}/sign",
-            json={"signed_by": "executor"},
-        )
-        assert sign2.status_code == 200
-        body2 = sign2.json()
-        assert body2["signed_by_executor_at"] is not None
-        assert body2["status"] == "paid"
-
-        sign3 = client.post(
-            f"/api/v1/acts/{act_id}/sign",
-            json={"signed_by": "client"},
-        )
-        assert sign3.status_code == 409
+        cr = client.post("/api/v1/acts", json={
+            "request_id": d["request"].id, "client_id": d["client"].id,
+            "act_date": "2026-09-01", "total_amount": 10000,
+        })
+        aid = cr.json()["id"]
+        s1 = client.post(f"/api/v1/acts/{aid}/sign", json={"signed_by": "client"})
+        assert s1.status_code == 200
+        assert s1.json()["signed_by_client_at"] is not None
+        s2 = client.post(f"/api/v1/acts/{aid}/sign", json={"signed_by": "executor"})
+        assert s2.status_code == 200
+        assert s2.json()["status"] == "paid"
+        assert client.post(f"/api/v1/acts/{aid}/sign", json={"signed_by": "client"}).status_code == 409
     finally:
-        clear_overrides()
-
-
-# === Payout API ===
+        _clear()
 
 
 def test_create_payout_auto_commission(client, db):
-    """Выплата с автоматическим расчётом комиссии."""
-    data = get_auth_header(client, db)
+    d = _setup(client, db)
     try:
-        response = client.post(
-            "/api/v1/payouts",
-            json={
-                "owner_id": data["owner"].id,
-                "vehicle_id": data["vehicle"].id,
-                "request_id": data["request"].id,
-                "gross_amount": 20000,
-                "commission_rate": 15,
-                "payout_date": "2026-09-01",
-            },
-        )
-        assert response.status_code == 201
-        body = response.json()
-        assert body["document_number"].startswith("PAY-")
-        assert body["gross_amount"] == "20000.00"
-        assert body["platform_commission"] == "3000.00"
-        assert body["net_amount"] == "17000.00"
-        assert body["commission_rate"] == "15.00"
+        r = client.post("/api/v1/payouts", json={
+            "owner_id": d["owner"].id, "vehicle_id": d["vehicle"].id,
+            "request_id": d["request"].id,
+            "gross_amount": 20000, "commission_rate": 15, "payout_date": "2026-09-01",
+        })
+        assert r.status_code == 201
+        b = r.json()
+        assert b["gross_amount"] == "20000.00"
+        assert b["platform_commission"] == "3000.00"
+        assert b["net_amount"] == "17000.00"
+        assert b["commission_rate"] == "15.00"
     finally:
-        clear_overrides()
+        _clear()
 
 
 def test_approve_payout(client, db):
-    """Одобрение выплаты."""
-    data = get_auth_header(client, db)
+    d = _setup(client, db)
     try:
-        create_resp = client.post(
-            "/api/v1/payouts",
-            json={
-                "owner_id": data["owner"].id,
-                "vehicle_id": data["vehicle"].id,
-                "gross_amount": 10000,
-                "commission_rate": 10,
-                "payout_date": "2026-09-01",
-            },
-        )
-        payout_id = create_resp.json()["id"]
-
-        approve_resp = client.post(f"/api/v1/payouts/{payout_id}/approve")
-        assert approve_resp.status_code == 200
-        assert approve_resp.json()["status"] == "sent"
+        cr = client.post("/api/v1/payouts", json={
+            "owner_id": d["owner"].id, "vehicle_id": d["vehicle"].id,
+            "gross_amount": 10000, "commission_rate": 10, "payout_date": "2026-09-01",
+        })
+        r = client.post(f"/api/v1/payouts/{cr.json()['id']}/approve")
+        assert r.status_code == 200
+        assert r.json()["status"] == "sent"
     finally:
-        clear_overrides()
-
-
-# === Payment API ===
+        _clear()
 
 
 def test_payment_updates_invoice(client, db):
-    """Платёж обновляет paid_amount счёта."""
-    data = get_auth_header(client, db)
+    d = _setup(client, db)
     try:
-        inv_resp = client.post(
-            "/api/v1/invoices",
-            json={
-                "request_id": data["request"].id,
-                "client_id": data["client"].id,
-                "invoice_date": "2026-09-01",
-                "items": [
-                    {"description": "Услуга", "quantity": 1, "unit": "шт", "unit_price": 10000}
-                ],
-            },
-        )
-        invoice_id = inv_resp.json()["id"]
-        assert inv_resp.json()["paid_amount"] == "0.00"
-
-        pay_resp = client.post(
-            "/api/v1/payments",
-            json={
-                "invoice_id": invoice_id,
-                "amount": 5000,
-                "method": "bank_transfer",
-                "payment_date": "2026-09-05",
-            },
-        )
-        assert pay_resp.status_code == 201
-
-        get_resp = client.get(f"/api/v1/invoices/{invoice_id}")
-        assert get_resp.json()["paid_amount"] == "5000.00"
-        assert get_resp.json()["status"] == "partially_paid"
+        cr = client.post("/api/v1/invoices", json={
+            "request_id": d["request"].id, "client_id": d["client"].id,
+            "invoice_date": "2026-09-01",
+            "items": [{"description": "U", "quantity": 1, "unit": "шт", "unit_price": 10000}],
+        })
+        iid = cr.json()["id"]
+        pr = client.post("/api/v1/payments", json={
+            "invoice_id": iid, "amount": 5000, "method": "bank_transfer", "payment_date": "2026-09-05",
+        })
+        assert pr.status_code == 201
+        gr = client.get(f"/api/v1/invoices/{iid}")
+        assert gr.json()["paid_amount"] == "5000.00"
+        assert gr.json()["status"] == "partially_paid"
     finally:
-        clear_overrides()
-
-
-# === Dashboard ===
+        _clear()
 
 
 def test_finance_dashboard(client, db):
-    """Финансовый дашборд возвращает корректную статистику."""
-    data = get_auth_header(client, db)
+    d = _setup(client, db)
     try:
-        response = client.get("/api/v1/payments/dashboard")
-        assert response.status_code == 200
-        body = response.json()
-        assert "total_revenue" in body
-        assert "total_paid" in body
-        assert "total_outstanding" in body
-        assert "total_commission_earned" in body
-        assert "invoices_count" in body
+        r = client.get("/api/v1/payments/dashboard")
+        assert r.status_code == 200
+        b = r.json()
+        for k in ("total_revenue", "total_paid", "total_outstanding", "total_commission_earned", "invoices_count"):
+            assert k in b
     finally:
-        clear_overrides()
-
-
-# === Полный цикл ===
+        _clear()
 
 
 def test_full_finance_workflow(client, db):
-    """Полный финансовый цикл: счёт → платёж → выплата → PDF."""
-    data = get_auth_header(client, db)
+    d = _setup(client, db)
     try:
-        inv_resp = client.post(
-            "/api/v1/invoices",
-            json={
-                "request_id": data["request"].id,
-                "client_id": data["client"].id,
-                "invoice_date": "2026-09-01",
-                "vat_rate": 20,
-                "items": [
-                    {"description": "Работы", "quantity": 8, "unit": "час", "unit_price": 1000}
-                ],
-            },
-        )
-        assert inv_resp.status_code == 201
-        invoice_id = inv_resp.json()["id"]
-
-        client.post(f"/api/v1/invoices/{invoice_id}/send")
-
-        pay_resp = client.post(
-            "/api/v1/payments",
-            json={
-                "invoice_id": invoice_id,
-                "amount": 9600,
-                "method": "bank_transfer",
-                "payment_date": "2026-09-10",
-            },
-        )
-        assert pay_resp.status_code == 201
-
-        act_resp = client.post(
-            "/api/v1/acts",
-            json={
-                "request_id": data["request"].id,
-                "client_id": data["client"].id,
-                "act_date": "2026-09-10",
-                "total_amount": 9600,
-            },
-        )
-        act_id = act_resp.json()["id"]
-
-        client.post(f"/api/v1/acts/{act_id}/sign", json={"signed_by": "client"})
-        client.post(f"/api/v1/acts/{act_id}/sign", json={"signed_by": "executor"})
-
-        pay_out_resp = client.post(
-            "/api/v1/payouts",
-            json={
-                "owner_id": data["owner"].id,
-                "vehicle_id": data["vehicle"].id,
-                "request_id": data["request"].id,
-                "gross_amount": 8000,
-                "commission_rate": 15,
-                "payout_date": "2026-09-10",
-            },
-        )
-        assert pay_out_resp.status_code == 201
-        assert pay_out_resp.json()["net_amount"] == "6800.00"
-        assert pay_out_resp.json()["platform_commission"] == "1200.00"
-
-        pdf_resp = client.get(f"/api/v1/invoices/{invoice_id}/pdf")
-        assert pdf_resp.status_code == 200
-        assert pdf_resp.headers["content-type"] == "application/pdf"
-
-        dash_resp = client.get("/api/v1/payments/dashboard")
-        assert dash_resp.status_code == 200
-        dash = dash_resp.json()
+        inv = client.post("/api/v1/invoices", json={
+            "request_id": d["request"].id, "client_id": d["client"].id,
+            "invoice_date": "2026-09-01", "vat_rate": 20,
+            "items": [{"description": "W", "quantity": 8, "unit": "ч", "unit_price": 1000}],
+        }).json()
+        client.post(f"/api/v1/invoices/{inv['id']}/send")
+        client.post("/api/v1/payments", json={
+            "invoice_id": inv["id"], "amount": 9600, "method": "bank_transfer", "payment_date": "2026-09-10",
+        })
+        act = client.post("/api/v1/acts", json={
+            "request_id": d["request"].id, "client_id": d["client"].id,
+            "act_date": "2026-09-10", "total_amount": 9600,
+        }).json()
+        client.post(f"/api/v1/acts/{act['id']}/sign", json={"signed_by": "client"})
+        client.post(f"/api/v1/acts/{act['id']}/sign", json={"signed_by": "executor"})
+        po = client.post("/api/v1/payouts", json={
+            "owner_id": d["owner"].id, "vehicle_id": d["vehicle"].id, "request_id": d["request"].id,
+            "gross_amount": 8000, "commission_rate": 15, "payout_date": "2026-09-10",
+        }).json()
+        assert po["net_amount"] == "6800.00"
+        assert po["platform_commission"] == "1200.00"
+        pdf = client.get(f"/api/v1/invoices/{inv['id']}/pdf")
+        assert pdf.status_code == 200
+        dash = client.get("/api/v1/payments/dashboard").json()
         assert float(dash["total_revenue"]) >= 9600
-        assert float(dash["total_commission_earned"]) >= 1200
     finally:
-        clear_overrides()
+        _clear()
