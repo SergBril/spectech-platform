@@ -259,3 +259,42 @@ class AlertRule(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    
+
+class UploadedFile(Base):
+    """Метаданные загруженного файла."""
+    __tablename__ = "uploaded_files"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Категория файла
+    file_category: Mapped[str] = mapped_column(String(50), nullable=False)
+    # vehicle_photo | invoice_pdf | act_pdf | contractor_doc | other
+
+    # Связь с сущностями (опционально)
+    vehicle_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("vehicles.id"), nullable=True
+    )
+    invoice_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("invoices.id"), nullable=True
+    )
+    act_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("acts.id"), nullable=True
+    )
+    contractor_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("contractors.id"), nullable=True
+    )
+
+    uploaded_by: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    company_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

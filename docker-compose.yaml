@@ -19,6 +19,19 @@ services:
     volumes:
       - redis_data:/data
 
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web Console
+    environment:
+      MINIO_ROOT_USER: spectech
+      MINIO_ROOT_PASSWORD: spectech123
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
 volumes:
   postgres_data:
   redis_data:
+  minio_data:
