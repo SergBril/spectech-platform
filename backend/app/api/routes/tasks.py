@@ -216,3 +216,48 @@ def detect_offline_vehicles(
         status="queued",
         message=f"Offline detection queued (>{minutes_threshold} min)",
     )
+# === Ручной запуск периодических задач ===
+
+@router.post("/scheduled/morning-digest", response_model=TaskResponse)
+def trigger_morning_digest(current_user: User = Depends(get_current_user)):
+    """Ручной запуск утреннего дайджеста."""
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    from app.tasks.scheduled_tasks import send_morning_digest
+    
+    task = send_morning_digest.delay()
+    
+    return TaskResponse(
+        task_id=task.id,
+        status="queued",
+        message="Morning digest queued",
+    )
+
+
+@router.post("/scheduled/health-check", response_model=TaskResponse)
+def trigger_health_check(current_user: User = Depends(get_current_user)):
+    """Ручной запуск проверки здоровья."""
+    from app.tasks.scheduled_tasks import system_health_check
+    
+    task = system_health_check.delay()
+    
+    return TaskResponse(
+        task_id=task.id,
+        status="queued",
+        message="Health check queued",
+    )
+
+
+@router.post("/scheduled/aggregate-engine-hours", response_model=TaskResponse)
+def trigger_engine_hours_aggregation(current_user: User = Depends(get_current_user)):
+    """Ручной запуск агрегации моточасов."""
+    from app.tasks.scheduled_tasks import aggregate_all_vehicles_engine_hours
+    
+    task = aggregate_all_vehicles_engine_hours.delay()
+    
+    return TaskResponse(
+        task_id=task.id,
+        status="queued",
+        message="Engine hours aggregation queued",
+    )
