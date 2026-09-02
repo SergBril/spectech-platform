@@ -5,6 +5,8 @@ from app.models.contractor import Contractor
 from app.services.auth_service import hash_password
 from app.services.rbac_service import init_system_data
 from tests.conftest import make_test_request
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 def setup(db):
     init_system_data(db)
