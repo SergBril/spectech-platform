@@ -1,7 +1,7 @@
 import logging
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
-
+from app.api.routes import tasks
 from app.core.logging_config import setup_logging
 from app.core.exception_handlers import (
     validation_exception_handler,
@@ -84,6 +84,9 @@ app.include_router(payments.router, prefix="/api/v1/payments", tags=["finance"])
 
 # Telematics
 app.include_router(telematics.router, prefix="/api/v1/telematics", tags=["telematics"])
+
+# Tasks (Celery)
+app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
 
 # System (новый из Дня 1 Недели 4)
 app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
