@@ -1,10 +1,11 @@
 from app.api.routes import (
     auth, vehicles, requests, shifts,
     contractors, rbac, me, categories,
-    invoices, acts, payouts, payments, telematics,
+    invoices, acts, payouts, payments, telematics, system,
 )
 from contextlib import asynccontextmanager
-
+from app.core.middleware import RequestLoggingMiddleware
+from app.api.routes import system
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -19,11 +20,57 @@ async def lifespan(app: FastAPI):
     print("👋 Shutting down...")
 
 
+# 1. Создаём приложение
 app = FastAPI(
-    title=settings.app_name,
-    version=settings.app_version,
-    lifespan=lifespan,
+    title="SpectechPlatform",
+    version="0.5.0-dev",
+    description="Платформа управления спецтехникой",
 )
+
+# 2. CORS middleware (если есть)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 3. Наш middleware логирования (ПОСЛЕДНИМ!)
+from app.core.middleware import RequestLoggingMiddleware
+app.add_middleware(RequestLoggingMiddleware)
+
+# 4. Роутеры
+# Auth
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+
+# Catalog
+app.include_router(categories.router, prefix="/api/v1/categories", tags=["catalog"])
+app.include_router(vehicles.router, prefix="/api/v1/vehicles", tags=["catalog"])
+
+# Dispatch
+app.include_router(requests.router, prefix="/api/v1/requests", tags=["dispatch"])
+app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["dispatch"])
+
+# Contractors
+app.include_router(contractors.router, prefix="/api/v1/contractors", tags=["contractors"])
+
+# RBAC
+app.include_router(rbac.router, prefix="/api/v1/rbac", tags=["rbac"])
+app.include_router(me.router, prefix="/api/v1/me", tags=["me"])
+
+# Finance
+app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["finance"])
+app.include_router(acts.router, prefix="/api/v1/acts", tags=["finance"])
+app.include_router(payouts.router, prefix="/api/v1/payouts", tags=["finance"])
+app.include_router(payments.router, prefix="/api/v1/payments", tags=["finance"])
+
+# Telematics
+app.include_router(telematics.router, prefix="/api/v1/telematics", tags=["telematics"])
+
+# System (новый из Дня 1 Недели 4)
+app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
+1
 
 allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 
@@ -50,6 +97,13 @@ app.include_router(payouts.router, prefix="/api/v1/payouts", tags=["finance"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["finance"])
 # Telematics
 app.include_router(telematics.router, prefix="/api/v1/telematics", tags=["telematics"])
+# System
+app.include_router(
+    system.router,
+    prefix="/api/v1/system",
+    tags=["system"],
+    dependencies=[],  # Явно без глобальных зависимостей
+)
 
 
 @app.get("/health")
