@@ -1,6 +1,8 @@
-from typing import List, Optional
+from datetime import datetime
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -9,25 +11,25 @@ from app.core.db import get_db
 from app.models.auth import User
 from app.models.telematics import (
     GpsPoint, Geofence, GeofenceEvent, FuelTransaction,
-    Alert, Notification, AlertStatus,
+    Alert, Notification, AlertRule, AlertStatus,
 )
 from app.schemas.telematics import (
     GpsPointCreate, GpsPointBatch, GpsPointRead,
     GeofenceCreate, GeofenceRead,
     FuelTransactionCreate, FuelTransactionRead,
-    AlertRead, AlertAck,
-    NotificationRead,
-    TelematicsDashboard,
+    AlertAck, NotificationRead, TelematicsDashboard,
 )
 from app.services.telematics_service import (
-    save_gps_points,
-    get_telematics_dashboard,
+    save_gps_points, get_telematics_dashboard,
 )
+from app.services.alert_engine import seed_default_rules
 
 router = APIRouter()
 
 
+# =========================================
 # === GPS ===
+# =========================================
 
 
 @router.post("/gps", response_model=List[GpsPointRead], status_code=201)
@@ -39,8 +41,7 @@ def receive_gps_points(
     """Приём пачки GPS-точек с устройства."""
     if not payload.points:
         raise HTTPException(status_code=400, detail="No points provided")
-    points = save_gps_points(db, payload.points, current_user.company_id or 0)
-    return points
+    return save_gps_points(db, payload.points, current_user.company_id or 0)
 
 
 @router.post("/gps/single", response_model=GpsPointRead, status_code=201)
@@ -50,8 +51,7 @@ def receive_single_gps_point(
     current_user: User = Depends(get_current_user),
 ):
     """Приём одной GPS-точки."""
-    points = save_gps_points(db, [payload], current_user.company_id or 0)
-    return points[0]
+    return save_gps_points(db, [payload], current_user.company_id or 0)[0]
 
 
 @router.get("/gps/{vehicle_id}", response_model=List[GpsPointRead])
@@ -71,7 +71,9 @@ def get_vehicle_track(
     return db.scalars(stmt).all()
 
 
+# =========================================
 # === Geofences ===
+# =========================================
 
 
 @router.get("/geofences", response_model=List[GeofenceRead])
@@ -109,12 +111,14 @@ def delete_geofence(
     db.commit()
 
 
+# =========================================
 # === Fuel ===
+# =========================================
 
 
 @router.get("/fuel", response_model=List[FuelTransactionRead])
 def list_fuel_transactions(
-    vehicle_id: Optional[int] = None,
+    vehicle_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -133,7 +137,6 @@ def create_fuel_transaction(
     total_cost = None
     if payload.price_per_liter:
         total_cost = payload.volume * payload.price_per_liter
-
     ft = FuelTransaction(
         **payload.model_dump(),
         total_cost=total_cost,
@@ -145,12 +148,35 @@ def create_fuel_transaction(
     return ft
 
 
+# =========================================
 # === Alerts ===
+# =========================================
+
+
+class AlertRead(BaseModel):
+    id: int
+    alert_type: str
+    severity: str
+    status: str
+    vehicle_id: int | None = None
+    title: str
+    description: str | None = None
+    details: dict | None = None
+    occurred_at: datetime
+    acknowledged_at: datetime | None = None
+    resolved_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("severity", "status", mode="before")
+    @classmethod
+    def _enum_to_str(cls, v):
+        return v.value if hasattr(v, "value") else v
 
 
 @router.get("/alerts", response_model=List[AlertRead])
 def list_alerts(
-    status_filter: Optional[str] = Query(default=None, alias="status"),
+    status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=100, ge=1, le=1000),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -182,7 +208,9 @@ def acknowledge_alert(
     return alert
 
 
+# =========================================
 # === Notifications ===
+# =========================================
 
 
 @router.get("/notifications", response_model=List[NotificationRead])
@@ -219,7 +247,24 @@ def mark_notification_read(
     return notif
 
 
+@router.get("/notifications/unread-count")
+def get_unread_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from sqlalchemy import func
+    count = db.scalar(
+        select(func.count(Notification.id)).where(
+            Notification.user_id == current_user.id,
+            Notification.is_read == False,
+        )
+    )
+    return {"unread_count": count or 0}
+
+
+# =========================================
 # === Dashboard ===
+# =========================================
 
 
 @router.get("/dashboard", response_model=TelematicsDashboard)
@@ -229,3 +274,87 @@ def get_dashboard(
 ):
     stats = get_telematics_dashboard(db, current_user.company_id or 0)
     return TelematicsDashboard(**stats)
+
+
+# =========================================
+# === Alert Rules ===
+# =========================================
+
+
+class AlertRuleCreate(BaseModel):
+    name: str
+    rule_type: str
+    threshold: float | None = None
+    severity: str = "warning"
+    notify_email: bool = False
+    notify_in_app: bool = True
+
+
+class AlertRuleRead(BaseModel):
+    id: int
+    name: str
+    rule_type: str
+    threshold: float | None = None
+    severity: str
+    is_active: bool
+    notify_email: bool
+    notify_in_app: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def _enum_to_str(cls, v):
+        return v.value if hasattr(v, "value") else v
+
+
+@router.get("/rules", response_model=List[AlertRuleRead])
+def list_alert_rules(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Список правил алертов компании."""
+    stmt = select(AlertRule).where(
+        AlertRule.company_id == (current_user.company_id or 0)
+    )
+    return db.scalars(stmt).all()
+
+
+@router.post("/rules", response_model=AlertRuleRead, status_code=201)
+def create_alert_rule(
+    payload: AlertRuleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Создать правило алерта."""
+    rule = AlertRule(
+        company_id=current_user.company_id or 0,
+        **payload.model_dump(),
+    )
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+@router.post("/rules/seed-defaults", status_code=201)
+def seed_defaults(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Создать правила по умолчанию для компании."""
+    seed_default_rules(db, current_user.company_id or 0)
+    return {"detail": "Default rules created"}
+
+
+@router.delete("/rules/{rule_id}", status_code=204)
+def delete_alert_rule(
+    rule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rule = db.get(AlertRule, rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    rule.is_active = False
+    db.commit()

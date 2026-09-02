@@ -14,7 +14,9 @@ from app.models.telematics import (
 
 
 def save_gps_points(db: Session, points_data: list, company_id: int) -> List[GpsPoint]:
-    """Сохраняет GPS точки и обрабатывает события."""
+    """Сохраняет GPS точки, проверяет геозоны и применяет правила алертов."""
+    from app.services.alert_engine import process_point_with_rules
+    
     saved = []
     for pd in points_data:
         point = GpsPoint(**pd.model_dump(), received_at=datetime.now(timezone.utc))
@@ -25,23 +27,8 @@ def save_gps_points(db: Session, points_data: list, company_id: int) -> List[Gps
         # Проверяем геозоны
         _check_geofences(db, point)
 
-        # Проверяем скорость
-        if point.speed and point.speed > 90:
-            _create_alert(
-                db,
-                alert_type="speed_limit",
-                severity=AlertSeverity.warning,
-                vehicle_id=point.vehicle_id,
-                title=f"Превышение скорости: {point.speed:.0f} км/ч",
-                description=f"Техника превысила скорость 90 км/ч",
-                details={"speed": point.speed, "lat": point.latitude, "lon": point.longitude},
-                occurred_at=point.recorded_at,
-                company_id=company_id,
-            )
-
-        # Детекция слива топлива (резкое падение уровня)
-        if point.fuel_level is not None:
-            _check_fuel_drain(db, point, company_id)
+        # Применяем правила алертов
+        process_point_with_rules(db, point, company_id)
 
     db.commit()
     return saved

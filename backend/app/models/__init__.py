@@ -17,6 +17,7 @@ from app.models.telematics import (
     GeofenceType,
     AlertSeverity,
     AlertStatus,
+    AlertRule,
 )
 
 __all__ = [
@@ -52,4 +53,5 @@ __all__ = [
     "GeofenceType",
     "AlertSeverity",
     "AlertStatus",
+    "AlertRule",
 ]

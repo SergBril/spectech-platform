@@ -231,3 +231,31 @@ class Notification(Base):
     sent_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    
+
+class AlertRule(Base):
+    """Настраиваемое правило генерации алертов."""
+    __tablename__ = "alert_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    rule_type: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    threshold: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    severity: Mapped[AlertSeverity] = mapped_column(
+        SqlEnum(AlertSeverity, name="alert_severity", create_type=False),
+        default=AlertSeverity.warning,
+        nullable=False,
+    )
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    notify_email: Mapped[bool] = mapped_column(Boolean, default=False)
+    notify_in_app: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
