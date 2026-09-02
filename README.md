@@ -53,3 +53,19 @@ python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000# SpectechPlatform 
+### 📝 Структурированное логирование
+
+Все логи выводятся в JSON формате для удобной интеграции с ELK/Loki:
+
+```json
+{
+  "timestamp": "2026-09-02T12:34:56.789Z",
+  "level": "INFO",
+  "logger": "spectech.api",
+  "message": "REQUEST",
+  "request_id": "a1b2c3d4",
+  "method": "POST",
+  "path": "/api/v1/auth/login",
+  "status": 200,
+  "duration_ms": 45.23
+}
