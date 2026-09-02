@@ -203,7 +203,10 @@ def delete_file(
 
 
 @router.get("/stats")
-def storage_stats(current_user: User = Depends(get_current_user)):
+def storage_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Статистика хранилища."""
     stats = storage_service.get_storage_stats()
     

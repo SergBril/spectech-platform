@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlalchemy import (
     Boolean, DateTime, Enum as SqlEnum, Float,
-    ForeignKey, Integer, JSON, Numeric, String, Text
+    ForeignKey, Integer, JSON, Numeric, String, Text, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func

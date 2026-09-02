@@ -4,6 +4,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.api.routes import tasks
 from app.api.routes import files
 from app.core.logging_config import setup_logging
+from app.core.db import Base, engine
+from app.models import *  # noqa: F401, F403 — импортирует ВСЕ модели
 from app.core.exception_handlers import (
     validation_exception_handler,
     sqlalchemy_exception_handler,
@@ -33,6 +35,10 @@ async def lifespan(app: FastAPI):
     print(f"🚀 {settings.app_name} v{settings.app_version} starting...")
     yield
     print("👋 Shutting down...")
+    # Создаём таблицы если их нет
+from app.core.db import Base, engine
+from app.models import *  # noqa: F401, F403 — импортируем все модели
+Base.metadata.create_all(bind=engine)
 
 
 # 1. Создаём приложение
@@ -41,6 +47,9 @@ app = FastAPI(
     version="0.5.0-dev",
     description="Платформа управления спецтехникой",
 )
+# Создаём все таблицы в БД при старте (для dev-режима)
+# В production использовать Alembic миграции
+Base.metadata.create_all(bind=engine)
 # Регистрируем обработчики ошибок
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(SQLAlchemyError, sqlalchemy_exception_handler)

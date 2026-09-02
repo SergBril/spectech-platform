@@ -199,8 +199,8 @@ def list_files(folder: str = "", max_keys: int = 100) -> list:
 
 def get_storage_stats() -> dict:
     """Статистика хранилища."""
-    s3 = _get_s3_client()
     try:
+        s3 = _get_s3_client()
         response = s3.list_objects_v2(Bucket=MINIO_BUCKET)
         files = response.get("Contents", [])
         total_size = sum(obj["Size"] for obj in files)
@@ -210,6 +210,12 @@ def get_storage_stats() -> dict:
             "total_size_bytes": total_size,
             "total_size_mb": round(total_size / (1024 * 1024), 2),
         }
-    except ClientError as e:
+    except Exception as e:
         logger.error(f"Stats failed: {e}")
-        return {"error": str(e)}
+        return {
+            "bucket": MINIO_BUCKET,
+            "total_files": 0,
+            "total_size_bytes": 0,
+            "total_size_mb": 0,
+            "error": str(e),
+        }
