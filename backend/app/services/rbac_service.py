@@ -56,6 +56,15 @@ SYSTEM_PERMISSIONS = [
     ("payouts", "pay"),
     ("payments", "view"),
     ("finance", "dashboard"),
+        # Телематика
+    ("telematics", "view"),
+    ("telematics", "manage"),
+    ("gps", "receive"),
+    ("geofences", "manage"),
+    ("fuel", "manage"),
+    ("alerts", "view"),
+    ("alerts", "acknowledge"),
+    ("notifications", "view"),
 ]
 
 
@@ -100,7 +109,14 @@ def init_system_data(db: Session) -> None:
             ("catalogs", "manage"),("invoices", "view"), ("invoices", "create"), ("invoices", "update"), ("invoices", "send"),
 ("acts", "view"), ("acts", "create"), ("acts", "sign"),
 ("payouts", "view"), ("payouts", "create"), ("payouts", "pay"),
-("payments", "view"), ("finance", "dashboard"),
+("payments", "view"), ("finance", "dashboard"), ("telematics", "view"),
+    ("telematics", "manage"),
+    ("gps", "receive"),
+    ("geofences", "manage"),
+    ("fuel", "manage"),
+    ("alerts", "view"),
+    ("alerts", "acknowledge"),
+    ("notifications", "view"),
         ],
         "dispatcher": [
             ("vehicles", "view"), ("vehicles", "create"), ("vehicles", "update"),
@@ -110,12 +126,12 @@ def init_system_data(db: Session) -> None:
             ("catalogs", "manage"),("invoices", "view"), ("invoices", "create"),
 ("acts", "view"), ("acts", "create"),
 ("payouts", "view"),
-("payments", "view"), ("finance", "dashboard"),
+("payments", "view"), ("finance", "dashboard"), ("telematics", "view"), ("geofences", "manage"), ("alerts", "view"), ("alerts", "acknowledge"),
         ],
         "operator": [
             ("vehicles", "view"),
             ("requests", "view"),
-            ("shifts", "view"), ("shifts", "create"),
+            ("shifts", "view"), ("shifts", "create"), ("telematics", "view"),
         ],
         "client": [
             ("requests", "view"),
@@ -127,7 +143,7 @@ def init_system_data(db: Session) -> None:
             ("vehicles", "view"),
             ("requests", "view"),
             ("shifts", "view"),("payouts", "view"),
-("payments", "view"), ("finance", "dashboard"),
+("payments", "view"), ("finance", "dashboard"), ("telematics", "view"), ("alerts", "view"),
         ],
         "mechanic": [
             ("vehicles", "view"), ("vehicles", "update"),
