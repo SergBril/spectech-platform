@@ -1,4 +1,4 @@
-﻿from app.models.auth import User
+from app.models.auth import User
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
 from app.models.contractor import Contractor
