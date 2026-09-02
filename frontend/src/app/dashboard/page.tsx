@@ -94,6 +94,13 @@ export default function DashboardPage() {
     className="rounded-lg bg-green-600 px-3 py-1.5 text-sm text-white hover:bg-green-700"
   >
     💰 Финансы
+    </button>
+    <button
+  onClick={() => router.push("/telematics")}
+  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-700"
+>
+  🛰️ Телематика
+
   </button>
   <button
     onClick={() => router.push("/catalogs")}
