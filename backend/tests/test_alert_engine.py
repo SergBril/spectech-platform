@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
@@ -9,23 +10,28 @@ from app.services.alert_engine import (
     process_point_with_rules,
     seed_default_rules,
 )
-from tests.conftest import make_test_request
 
 
 def setup_alert_test(db):
     """Подготовка данных для тестов алертов."""
     company = Company(name="Alert Co", legal_name='ООО "Alert"', inn="7700000001")
-    db.add(company); db.flush()
+    db.add(company)
+    db.flush()
 
     category = Category(name="Cat", code="alert_cat", level=1, company_id=company.id)
-    db.add(category); db.flush()
+    db.add(category)
+    db.flush()
 
     vehicle = Vehicle(
-        id_type="vin", id_value="ALERT12345678901234",
-        category_id=category.id, name="Alert Vehicle",
-        status="free", company_id=company.id,
+        id_type="vin",
+        id_value="ALERT12345678901234",
+        category_id=category.id,
+        name="Alert Vehicle",
+        status="free",
+        company_id=company.id,
     )
-    db.add(vehicle); db.flush()
+    db.add(vehicle)
+    db.flush()
 
     return {"company": company, "vehicle": vehicle}
 
@@ -51,7 +57,6 @@ def test_speed_limit_alert(db):
     """Превышение скорости создаёт алерт."""
     data = setup_alert_test(db)
 
-    # Создаём правило
     rule = AlertRule(
         company_id=data["company"].id,
         name="Speed 60",
@@ -59,9 +64,9 @@ def test_speed_limit_alert(db):
         threshold=60.0,
         severity=AlertSeverity.warning,
     )
-    db.add(rule); db.commit()
+    db.add(rule)
+    db.commit()
 
-    # Создаём точку с превышением
     point = GpsPoint(
         vehicle_id=data["vehicle"].id,
         latitude=55.7558,
@@ -69,7 +74,8 @@ def test_speed_limit_alert(db):
         speed=85.0,
         recorded_at=datetime.now(timezone.utc),
     )
-    db.add(point); db.flush()
+    db.add(point)
+    db.flush()
 
     alerts = process_point_with_rules(db, point, data["company"].id)
 
@@ -89,7 +95,8 @@ def test_no_alert_below_threshold(db):
         threshold=90.0,
         severity=AlertSeverity.warning,
     )
-    db.add(rule); db.commit()
+    db.add(rule)
+    db.commit()
 
     point = GpsPoint(
         vehicle_id=data["vehicle"].id,
@@ -98,7 +105,8 @@ def test_no_alert_below_threshold(db):
         speed=50.0,
         recorded_at=datetime.now(timezone.utc),
     )
-    db.add(point); db.flush()
+    db.add(point)
+    db.flush()
 
     alerts = process_point_with_rules(db, point, data["company"].id)
     assert len(alerts) == 0
@@ -115,27 +123,28 @@ def test_alert_deduplication(db):
         threshold=60.0,
         severity=AlertSeverity.warning,
     )
-    db.add(rule); db.commit()
+    db.add(rule)
+    db.commit()
 
     now = datetime.now(timezone.utc)
 
-    # Первая точка — алерт создаётся
     point1 = GpsPoint(
         vehicle_id=data["vehicle"].id,
         latitude=55.7558, longitude=37.6173,
         speed=85.0, recorded_at=now,
     )
-    db.add(point1); db.flush()
+    db.add(point1)
+    db.flush()
     alerts1 = process_point_with_rules(db, point1, data["company"].id)
     assert len(alerts1) == 1
 
-    # Вторая точка через 1 минуту — алерт НЕ создаётся (дубль)
     point2 = GpsPoint(
         vehicle_id=data["vehicle"].id,
         latitude=55.7559, longitude=37.6174,
         speed=90.0, recorded_at=now + timedelta(minutes=1),
     )
-    db.add(point2); db.flush()
+    db.add(point2)
+    db.flush()
     alerts2 = process_point_with_rules(db, point2, data["company"].id)
     assert len(alerts2) == 0
 
@@ -151,30 +160,43 @@ def test_fuel_drain_alert(db):
         threshold=10.0,
         severity=AlertSeverity.critical,
     )
-    db.add(rule); db.commit()
+    db.add(rule)
+    db.commit()
 
     now = datetime.now(timezone.utc)
 
-    # Первая точка с полным баком
     point1 = GpsPoint(
         vehicle_id=data["vehicle"].id,
         latitude=55.7558, longitude=37.6173,
         fuel_level=100.0,
         recorded_at=now,
     )
-    db.add(point1); db.flush()
+    db.add(point1)
+    db.flush()
 
-    # Вторая точка с резким падением
     point2 = GpsPoint(
         vehicle_id=data["vehicle"].id,
         latitude=55.7559, longitude=37.6174,
         fuel_level=85.0,
         recorded_at=now + timedelta(minutes=5),
     )
-    db.add(point2); db.flush()
+    db.add(point2)
+    db.flush()
 
     alerts = process_point_with_rules(db, point2, data["company"].id)
 
     assert len(alerts) == 1
     assert alerts[0].alert_type == "fuel_drain"
     assert alerts[0].severity == AlertSeverity.critical
+
+
+def test_default_rules_created_once(db):
+    """Повторный вызов seed_default_rules не создаёт дубликаты."""
+    data = setup_alert_test(db)
+    seed_default_rules(db, data["company"].id)
+    seed_default_rules(db, data["company"].id)
+
+    count = db.query(AlertRule).filter(
+        AlertRule.company_id == data["company"].id
+    ).count()
+    assert count == 4, "Правила не должны дублироваться"
