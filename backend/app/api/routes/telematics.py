@@ -32,26 +32,113 @@ router = APIRouter()
 # =========================================
 
 
-@router.post("/gps", response_model=List[GpsPointRead], status_code=201)
-def receive_gps_points(
-    payload: GpsPointBatch,
+@router.post("/telematics/gps", status_code=201)
+async def receive_gps_points(
+    points: list[GpsPointCreate],
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Приём пачки GPS-точек с устройства."""
-    if not payload.points:
-        raise HTTPException(status_code=400, detail="No points provided")
-    return save_gps_points(db, payload.points, current_user.company_id or 0)
+    """Принимает массив GPS точек и транслирует через WebSocket."""
+    from app.services.websocket_manager import manager
+    
+    saved_points = []
+    for point in points:
+        gps_point = GpsPoint(
+            vehicle_id=point.vehicle_id,
+            latitude=point.latitude,
+            longitude=point.longitude,
+            speed=point.speed,
+            heading=point.heading,
+            altitude=point.altitude,
+            engine_on=point.engine_on,
+            engine_hours=point.engine_hours,
+            fuel_level=point.fuel_level,
+            recorded_at=point.recorded_at or datetime.now(timezone.utc),
+            company_id=current_user.company_id,
+        )
+        db.add(gps_point)
+        saved_points.append(gps_point)
+    
+    db.commit()
+    
+    # Broadcast каждой точки через WebSocket
+    for gps_point in saved_points:
+        try:
+            await manager.broadcast_gps_to_company(
+                company_id=current_user.company_id or 0,
+                gps_data={
+                    "vehicle_id": gps_point.vehicle_id,
+                    "lat": float(gps_point.latitude),
+                    "lon": float(gps_point.longitude),
+                    "speed": float(gps_point.speed) if gps_point.speed else 0,
+                    "heading": float(gps_point.heading) if gps_point.heading else 0,
+                    "altitude": float(gps_point.altitude) if gps_point.altitude else 0,
+                    "engine_on": bool(gps_point.engine_on) if gps_point.engine_on is not None else False,
+                    "engine_hours": float(gps_point.engine_hours) if gps_point.engine_hours else None,
+                    "fuel_level": float(gps_point.fuel_level) if gps_point.fuel_level else None,
+                    "recorded_at": gps_point.recorded_at.isoformat() if gps_point.recorded_at else None,
+                    "geofence_id": gps_point.geofence_id,
+                },
+            )
+        except Exception as e:
+            logger.warning("GPS broadcast failed: %s", e)
+    
+    return {"status": "ok", "saved": len(saved_points)}
 
 
-@router.post("/gps/single", response_model=GpsPointRead, status_code=201)
-def receive_single_gps_point(
-    payload: GpsPointCreate,
+@router.post("/telematics/gps/single", status_code=201)
+async def receive_single_gps_point(
+    point: GpsPointCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Приём одной GPS-точки."""
-    return save_gps_points(db, [payload], current_user.company_id or 0)[0]
+    """Принимает одну GPS точку и транслирует через WebSocket."""
+    from app.services.websocket_manager import manager
+    
+    gps_point = GpsPoint(
+        vehicle_id=point.vehicle_id,
+        latitude=point.latitude,
+        longitude=point.longitude,
+        speed=point.speed,
+        heading=point.heading,
+        altitude=point.altitude,
+        engine_on=point.engine_on,
+        engine_hours=point.engine_hours,
+        fuel_level=point.fuel_level,
+        recorded_at=point.recorded_at or datetime.now(timezone.utc),
+        company_id=current_user.company_id,
+    )
+    db.add(gps_point)
+    db.commit()
+    db.refresh(gps_point)
+    
+    # Broadcast через WebSocket
+    try:
+        await manager.broadcast_gps_to_company(
+            company_id=current_user.company_id or 0,
+            gps_data={
+                "vehicle_id": gps_point.vehicle_id,
+                "lat": float(gps_point.latitude),
+                "lon": float(gps_point.longitude),
+                "speed": float(gps_point.speed) if gps_point.speed else 0,
+                "heading": float(gps_point.heading) if gps_point.heading else 0,
+                "altitude": float(gps_point.altitude) if gps_point.altitude else 0,
+                "engine_on": bool(gps_point.engine_on) if gps_point.engine_on is not None else False,
+                "engine_hours": float(gps_point.engine_hours) if gps_point.engine_hours else None,
+                "fuel_level": float(gps_point.fuel_level) if gps_point.fuel_level else None,
+                "recorded_at": gps_point.recorded_at.isoformat() if gps_point.recorded_at else None,
+                "geofence_id": gps_point.geofence_id,
+            },
+        )
+    except Exception as e:
+        logger.warning("GPS broadcast failed: %s", e)
+    
+    return {
+        "status": "ok",
+        "id": gps_point.id,
+        "vehicle_id": gps_point.vehicle_id,
+        "coordinates": [gps_point.latitude, gps_point.longitude],
+    }
 
 
 @router.get("/gps/{vehicle_id}", response_model=List[GpsPointRead])

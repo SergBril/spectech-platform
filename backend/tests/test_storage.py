@@ -5,6 +5,21 @@ from io import BytesIO
 from app.services import storage_service
 from app.models.telematics import UploadedFile
 
+def _minio_available() -> bool:
+    """Проверяет что MinIO доступен."""
+    try:
+        s3 = storage_service._get_s3_client()
+        s3.list_buckets()
+        return True
+    except Exception:
+        return False
+
+
+# Пропускаем все тесты если MinIO не запущен
+pytestmark = pytest.mark.skipif(
+    not _minio_available(),
+    reason="MinIO not available (run: docker compose up -d minio)"
+)
 
 @pytest.fixture
 def sample_file():

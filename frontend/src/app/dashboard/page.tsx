@@ -88,19 +88,24 @@ export default function DashboardPage() {
             Выйти
           </button>
         </div>
-       <div className="flex gap-2">
+      <div className="flex gap-2">
   <button
     onClick={() => router.push("/finance")}
     className="rounded-lg bg-green-600 px-3 py-1.5 text-sm text-white hover:bg-green-700"
   >
     💰 Финансы
-    </button>
-    <button
-  onClick={() => router.push("/telematics")}
-  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-700"
->
-  🛰️ Телематика
-
+  </button>
+  <button
+    onClick={() => router.push("/telematics")}
+    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-700"
+  >
+    🛰️ Телематика
+  </button>
+  <button
+    onClick={() => router.push("/websocket-test")}
+    className="rounded-lg bg-purple-600 px-3 py-1.5 text-sm text-white hover:bg-purple-700"
+  >
+    📡 WebSocket Test
   </button>
   <button
     onClick={() => router.push("/catalogs")}

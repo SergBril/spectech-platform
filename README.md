@@ -69,3 +69,64 @@ uvicorn app.main:app --reload --port 8000# SpectechPlatform
   "status": 200,
   "duration_ms": 45.23
 }
+## 📬 Вертикальный срез 5.0: Celery + MinIO + мониторинг (v0.6.0)
+
+### Что реализовано
+- ⚡ **Celery Worker** — асинхронное выполнение задач
+- ⏰ **Celery Beat** — периодические задачи по расписанию
+- 📦 **MinIO (S3)** — объектное хранилище файлов
+- 📧 **Email задачи** — асинхронная отправка (mock)
+- 📄 **PDF задачи** — генерация в фоне
+- 🗑️ **Cleanup задачи** — автоматическая очистка старых файлов
+- 📊 **Системные метрики** — uptime, request count, response times
+
+### 13 Celery задач
+**PDF задачи (3):**
+- `generate_invoice_pdf_async` — генерация PDF счёта
+- `generate_act_pdf_async` — генерация PDF акта
+- `generate_payout_pdf_async` — генерация PDF выплаты
+
+**Email задачи (3):**
+- `send_email_async` — отправка email
+- `send_alert_notification` — уведомление об алерте
+- `send_invoice_email` — отправка счёта клиенту
+
+**Telematics задачи (3):**
+- `aggregate_engine_hours` — агрегация моточасов
+- `cleanup_old_gps_points` — очистка старых GPS точек
+- `detect_offline_vehicles` — детекция offline техники
+
+**Scheduled задачи (3):**
+- `aggregate_all_vehicles_engine_hours` — агрегация для всей техники
+- `send_morning_digest` — утренний дайджест
+- `system_health_check` — проверка здоровья системы
+
+**Cleanup (1):**
+- `cleanup_old_pdfs` — очистка старых PDF
+
+### 6 периодических задач
+| Задача | Расписание | Описание |
+|--------|-----------|----------|
+| `cleanup-old-pdfs-daily` | 03:00 каждый день | Удаляет PDF старше 30 дней |
+| `cleanup-old-gps-daily` | 04:00 каждый день | Удаляет GPS точки старше 90 дней |
+| `detect-offline-vehicles` | Каждые 15 минут | Находит технику без данных > 60 мин |
+| `aggregate-engine-hours-hourly` | Каждый час в :00 | Агрегирует моточасы |
+| `morning-digest` | 08:00 каждый день | Утренний дайджест админам |
+| `health-check` | Каждые 5 минут | Проверка здоровья системы |
+
+### MinIO файловое хранилище
+- **6 API endpoints** для управления файлами
+- Автоматическая загрузка PDF в MinIO через Celery
+- Presigned URLs для безопасного скачивания
+- Статистика хранилища
+
+### Запуск
+```bash
+# 1. FastAPI
+uvicorn app.main:app --reload --port 8000
+
+# 2. Celery Worker
+celery -A app.core.celery_app worker --loglevel=info --pool=solo
+
+# 3. Celery Beat
+celery -A app.core.celery_app beat --loglevel=info

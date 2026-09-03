@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { apiFetch, getAccessToken } from "@/lib/api";
+import { SpectechWebSocket } from "@/lib/websocket";
 
 // Динамический импорт карты (нельзя рендерить на сервере)
 const MapWithNoSSR = dynamic(() => import("./map"), { ssr: false });
@@ -69,6 +70,9 @@ export default function TelematicsPage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [gpsMessagesCount, setGpsMessagesCount] = useState(0);
+  const wsRef = useRef<SpectechWebSocket | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -103,6 +107,77 @@ export default function TelematicsPage() {
     const interval = setInterval(loadAll, 15000);
     return () => clearInterval(interval);
   }, [router, loadAll]);
+  // === WebSocket для Live GPS ===
+useEffect(() => {
+  const token = getAccessToken();
+  if (!token) {
+    console.warn("No token, skipping WebSocket connection");
+    return;
+  }
+
+  console.log("🔌 Connecting to WebSocket for Live GPS...");
+
+  const ws = new SpectechWebSocket(token, {
+    onConnected: (data) => {
+      console.log("✅ WebSocket connected, subscribing to GPS");
+      setWsConnected(true);
+      ws.subscribe("gps");
+    },
+    onGpsPoint: (data) => {
+      console.log("📍 New GPS point:", data);
+      setGpsMessagesCount((prev) => prev + 1);
+
+      const gpsData = data.data;
+
+      setVehicles((prev) =>
+        prev.map((v) =>
+          v.id === gpsData.vehicle_id
+            ? {
+                ...v,
+                last_lat: gpsData.lat,
+                last_lon: gpsData.lon,
+                last_speed: gpsData.speed,
+                last_updated: gpsData.recorded_at,
+                engine_on: gpsData.engine_on,
+                heading: gpsData.heading,
+                fuel_level: gpsData.fuel_level,
+              }
+            : v
+        )
+      );
+    },
+    onDisconnected: () => {
+      console.log("❌ WebSocket disconnected");
+      setWsConnected(false);
+    },
+    onError: (error) => {
+      console.error("❌ WebSocket error:", error);
+    },
+  });
+
+  ws.connect();
+  wsRef.current = ws;
+
+  return () => {
+    console.log("🔌 Disconnecting WebSocket");
+    ws.disconnect();
+  };
+}, []);
+{/* WebSocket статус */}
+<div className="flex items-center gap-4 mb-4 p-3 bg-white rounded-lg border border-slate-200">
+  <div className="flex items-center gap-2">
+    <div className={`w-3 h-3 rounded-full ${wsConnected ? "bg-green-500" : "bg-red-500"}`} />
+    <span className="text-sm font-medium">
+      {wsConnected ? "🟢 Live GPS активен" : "🔴 Отключено"}
+    </span>
+  </div>
+  <div className="text-sm text-slate-600">
+    Получено GPS точек: <b>{gpsMessagesCount}</b>
+  </div>
+  <div className="text-sm text-slate-600">
+    Машин на карте: <b>{vehicles.filter(v => v.last_lat && v.last_lon).length}</b>
+  </div>
+</div>
 
   async function acknowledgeAlert(id: number) {
     await apiFetch(`/telematics/alerts/${id}/acknowledge`, {

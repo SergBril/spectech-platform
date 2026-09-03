@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from app.api.routes import tasks
 from app.api.routes import files
+from app.api.routes import websocket as ws_routes
 from app.core.logging_config import setup_logging
 from app.core.db import Base, engine
 from app.models import *  # noqa: F401, F403 — импортирует ВСЕ модели
@@ -102,6 +103,8 @@ app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
 app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
 # Files (storage)
 app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
+# WebSocket
+app.include_router(ws_routes.router, prefix="/api/v1", tags=["websocket"])
 1
 
 allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
