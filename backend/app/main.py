@@ -117,29 +117,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
-app.include_router(vehicles.router, prefix="/api/v1/vehicles", tags=["vehicles"])
-app.include_router(requests.router, prefix="/api/v1/requests", tags=["requests"])
-app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["shifts"])
-app.include_router(contractors.router, prefix="/api/v1/contractors", tags=["contractors"])
-app.include_router(rbac.router, prefix="/api/v1/rbac", tags=["rbac"])
-app.include_router(me.router, prefix="/api/v1", tags=["me"])
-app.include_router(categories.router, prefix="/api/v1/categories", tags=["categories"])
-# Finance
-app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["finance"])
-app.include_router(acts.router, prefix="/api/v1/acts", tags=["finance"])
-app.include_router(payouts.router, prefix="/api/v1/payouts", tags=["finance"])
-app.include_router(payments.router, prefix="/api/v1/payments", tags=["finance"])
-# Telematics
-app.include_router(telematics.router, prefix="/api/v1/telematics", tags=["telematics"])
-# System
-app.include_router(
-    system.router,
-    prefix="/api/v1/system",
-    tags=["system"],
-    dependencies=[],  # Явно без глобальных зависимостей
-)
-
 
 @app.get("/health")
 def health_check():

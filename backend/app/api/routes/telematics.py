@@ -1,4 +1,5 @@
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -24,6 +25,8 @@ from app.services.telematics_service import (
 )
 from app.services.alert_engine import seed_default_rules
 
+logger = logging.getLogger("spectech.telematics")  # ← ВАЖНО!
+
 router = APIRouter()
 
 
@@ -32,7 +35,7 @@ router = APIRouter()
 # =========================================
 
 
-@router.post("/telematics/gps", status_code=201)
+@router.post("/gps", status_code=201)
 async def receive_gps_points(
     points: list[GpsPointCreate],
     db: Session = Depends(get_db),
@@ -54,7 +57,6 @@ async def receive_gps_points(
             engine_hours=point.engine_hours,
             fuel_level=point.fuel_level,
             recorded_at=point.recorded_at or datetime.now(timezone.utc),
-            company_id=current_user.company_id,
         )
         db.add(gps_point)
         saved_points.append(gps_point)
@@ -77,7 +79,6 @@ async def receive_gps_points(
                     "engine_hours": float(gps_point.engine_hours) if gps_point.engine_hours else None,
                     "fuel_level": float(gps_point.fuel_level) if gps_point.fuel_level else None,
                     "recorded_at": gps_point.recorded_at.isoformat() if gps_point.recorded_at else None,
-                    "geofence_id": gps_point.geofence_id,
                 },
             )
         except Exception as e:
@@ -86,7 +87,7 @@ async def receive_gps_points(
     return {"status": "ok", "saved": len(saved_points)}
 
 
-@router.post("/telematics/gps/single", status_code=201)
+@router.post("/gps/single", status_code=201)
 async def receive_single_gps_point(
     point: GpsPointCreate,
     db: Session = Depends(get_db),
@@ -106,12 +107,13 @@ async def receive_single_gps_point(
         engine_hours=point.engine_hours,
         fuel_level=point.fuel_level,
         recorded_at=point.recorded_at or datetime.now(timezone.utc),
-        company_id=current_user.company_id,
     )
     db.add(gps_point)
     db.commit()
     db.refresh(gps_point)
-    
+
+    logger.info("🚀 GPS point saved. Broadcasting to company_id=%s", current_user.company_id)
+
     # Broadcast через WebSocket
     try:
         await manager.broadcast_gps_to_company(
@@ -127,7 +129,6 @@ async def receive_single_gps_point(
                 "engine_hours": float(gps_point.engine_hours) if gps_point.engine_hours else None,
                 "fuel_level": float(gps_point.fuel_level) if gps_point.fuel_level else None,
                 "recorded_at": gps_point.recorded_at.isoformat() if gps_point.recorded_at else None,
-                "geofence_id": gps_point.geofence_id,
             },
         )
     except Exception as e:
