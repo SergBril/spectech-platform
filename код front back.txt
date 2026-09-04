@@ -1,6 +1,0 @@
-cd C:\Users\osavi\spectech-platform\backend
-.venv\Scripts\activate
-uvicorn app.main:app --reload --port 8000
-
-cd C:\Users\osavi\spectech-platform\frontend
-npm run dev

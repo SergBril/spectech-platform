@@ -67,3 +67,16 @@ htmlcov/
 # Storage files
 backend/storage/*
 !backend/storage/.gitkeep
+
+# Временные скрипты исправлений
+fix_*.py
+final_fix.py
+diagnose_*.py
+rewrite_*.py
+check_users.py
+force_rewrite*.py
+create_admin.py
+fix_everything.py
+
+# Случайные файлы
+код*.txt
