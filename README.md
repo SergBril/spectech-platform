@@ -288,3 +288,47 @@ celery -A app.core.celery_app beat --loglevel=info
 - ✅ Несколько Toast уведомлений появляются
 - ✅ Дедупликация предотвращает спам
 - ✅ Маркеры движутся в реальном времени
+
+
+## Неделя 6 — День 7: Деплой + документация ✅ (04.09.2026)
+
+### Реализовано:
+1. **Docker контейнеры**:
+   - `backend/Dockerfile` — FastAPI + Uvicorn на Python 3.12
+   - `frontend/Dockerfile` — Next.js 16 standalone на Node 20
+   - `docker-compose.yaml` — полный стек (postgres, redis, minio, backend, frontend)
+   - `.dockerignore` для обоих проектов
+   - `.env.example` с примерами переменных
+
+2. **Деплой-инструкции**:
+   - Локальный запуск: `docker-compose up --build`
+   - Backend доступен на http://localhost:8000
+   - Frontend доступен на http://localhost:3000
+   - PostgreSQL на localhost:5432
+   - Redis на localhost:6379
+   - MinIO Console на http://localhost:9001
+
+3. **Переменные окружения**:
+   - `DATABASE_URL` — подключение к PostgreSQL
+   - `REDIS_HOST` — Redis для кэширования
+   - `JWT_SECRET_KEY` — секрет для токенов
+   - `CORS_ORIGINS` — разрешённые домены
+   - `NEXT_PUBLIC_API_URL` — URL бэкенда для фронтенда
+
+### Как запустить проект:
+```bash
+# 1. Клонировать репозиторий
+git clone <repo-url>
+cd spectech-platform
+
+# 2. Создать .env файлы
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
+
+# 3. Запустить через Docker
+docker-compose up --build
+
+# 4. Открыть
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:8000/docs
+# MinIO Console: http://localhost:9001

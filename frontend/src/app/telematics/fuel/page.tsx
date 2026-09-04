@@ -67,8 +67,8 @@ export default function FuelPage() {
     async function load() {
       try {
         const [txs, st] = await Promise.all([
-          apiFetch("/telematics/fuel").catch(() => []),
-          apiFetch("/telematics/fuel/stats").catch(() => null),
+          apiFetch<FuelTransaction[]>("/telematics/fuel").catch(() => []),
+          apiFetch<FuelStats>("/telematics/fuel/stats").catch(() => null),
         ]);
         setTransactions(txs);
         setStats(st);
@@ -103,8 +103,8 @@ export default function FuelPage() {
       setShowForm(false);
       // Перезагружаем данные
       const [txs, st] = await Promise.all([
-        apiFetch("/telematics/fuel"),
-        apiFetch("/telematics/fuel/stats"),
+        apiFetch<FuelTransaction[]>("/telematics/fuel"),
+        apiFetch<FuelStats>("/telematics/fuel/stats"),
       ]);
       setTransactions(txs);
       setStats(st);
