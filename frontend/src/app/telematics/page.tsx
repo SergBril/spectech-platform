@@ -8,7 +8,7 @@ import toast, { Toaster } from "react-hot-toast";
 
 const MapWithNoSSR = dynamic(() => import("./map"), { ssr: false });
 
-type Tab = "live" | "tracks" | "alerts" | "notifications" | "rules";
+type Tab = "live" | "tracks" | "fuel" | "alerts" | "notifications" | "rules";
 
 interface Vehicle { id: number; name: string; status: string; category_id?: number; year?: number; last_lat?: number; last_lon?: number; last_speed?: number; last_updated?: string; }
 interface Alert { id: number; title: string; description?: string; severity: string; status: string; occurred_at: string; }
@@ -138,6 +138,7 @@ export default function TelematicsPage() {
   const tabs = [
     { id: "live" as Tab, label: "📍 Онлайн" },
     { id: "tracks" as Tab, label: "🛣️ Треки" },
+    { id: "fuel" as Tab, label: "⛽ Топливо" },
     { id: "alerts" as Tab, label: "🚨 Алерты" },
     { id: "notifications" as Tab, label: "🔔 Уведомления" },
     { id: "rules" as Tab, label: "⚙️ Правила" },
@@ -206,6 +207,17 @@ export default function TelematicsPage() {
                     ))}
                   </div>
                 </div>
+              </div>
+            )}
+            {tab === "fuel" && (
+              <div className="bg-white rounded-xl border border-slate-200 p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-medium">⛽ Учёт топлива</h2>
+                  <button onClick={() => router.push("/telematics/fuel")} className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">
+                    Открыть полную страницу →
+                  </button>
+                </div>
+                <p className="text-slate-600">Перейдите на полную страницу для просмотра всех транзакций, добавления заправок и анализа расхода.</p>
               </div>
             )}
             {tab === "alerts" && (

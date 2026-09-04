@@ -396,6 +396,60 @@ def create_fuel_transaction(
     return ft
 
 
+
+
+@router.get("/fuel/stats")
+def get_fuel_stats(
+    vehicle_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Статистика по топливу: объём, стоимость, средний расход."""
+    stmt = select(FuelTransaction)
+    if vehicle_id:
+        stmt = stmt.where(FuelTransaction.vehicle_id == vehicle_id)
+    transactions = db.scalars(stmt).all()
+
+    if not transactions:
+        return {
+            "transactions_count": 0,
+            "total_volume": 0.0,
+            "total_cost": 0.0,
+            "avg_consumption": None,
+            "last_refuel_at": None,
+            "drains_count": 0,
+        }
+
+    refuels = [t for t in transactions if t.transaction_type == "refuel"]
+    drains = [t for t in transactions if t.transaction_type == "drain"]
+
+    total_volume = float(sum(t.volume for t in refuels))
+    total_cost = float(sum(t.total_cost or 0 for t in refuels))
+
+    # Расчёт среднего расхода если есть одометр
+    avg_consumption = None
+    odometer_readings = [(t.odometer, float(t.volume)) for t in refuels if t.odometer is not None]
+    if len(odometer_readings) >= 2:
+        odometer_readings.sort(key=lambda x: x[0])
+        total_distance = odometer_readings[-1][0] - odometer_readings[0][0]
+        total_fuel = sum(v for _, v in odometer_readings[1:])  # кроме первой
+        if total_distance > 0:
+            avg_consumption = round(total_fuel / total_distance * 100, 2)
+
+    last_refuel = max((t.occurred_at for t in refuels), default=None)
+
+    return {
+        "transactions_count": len(transactions),
+        "refuels_count": len(refuels),
+        "drains_count": len(drains),
+        "total_volume": round(total_volume, 2),
+        "total_cost": round(total_cost, 2),
+        "avg_price_per_liter": round(total_cost / total_volume, 2) if total_volume > 0 else 0,
+        "avg_consumption": avg_consumption,
+        "last_refuel_at": last_refuel.isoformat() if last_refuel else None,
+    }
+
+
 # =========================================
 # === Alerts ===
 # =========================================
