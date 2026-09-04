@@ -187,12 +187,22 @@ export default function TelematicsPage() {
                   <h3 className="font-medium text-slate-900 mb-3">Техника ({vehicles.length})</h3>
                   <div className="space-y-2">
                     {vehicles.map((v) => (
-                      <button key={v.id} onClick={() => setSelectedVehicleId(v.id)} className={"w-full text-left rounded-lg border p-3 transition " + (selectedVehicleId === v.id ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:border-slate-300")}>
+                      <div
+                        key={v.id}
+                        onClick={() => setSelectedVehicleId(v.id)}
+                        className={"w-full text-left rounded-lg border p-3 transition cursor-pointer " + (selectedVehicleId === v.id ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:border-slate-300")}
+                      >
                         <div className="font-medium text-sm">{v.name}</div>
                         <div className="text-xs text-slate-500 mt-1">{"#" + (v.category_id || "—") + " • " + v.status}</div>
                         {v.last_lat && v.last_lon && <div className="text-xs text-blue-600 mt-1">📍 {v.last_lat.toFixed(4)}, {v.last_lon.toFixed(4)}</div>}
                         {v.last_speed !== undefined && v.last_speed > 0 && <div className="text-xs text-green-600 mt-1">🏎️ {v.last_speed.toFixed(0)} км/ч</div>}
-                      </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); router.push("/telematics/tracks/" + v.id); }}
+                          className="mt-2 w-full rounded bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200"
+                        >
+                          🛣️ История трека
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -219,7 +229,41 @@ export default function TelematicsPage() {
                 )}
               </div>
             )}
-            {tab === "tracks" && <div className="bg-white rounded-xl border border-slate-200 p-6"><h2 className="text-lg font-medium mb-4">История треков</h2></div>}
+            {tab === "tracks" && (
+              <div className="bg-white rounded-xl border border-slate-200 p-6">
+                <h2 className="text-lg font-medium mb-4">🛣️ История треков</h2>
+                {vehicles.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-slate-500 mb-4">Машины ещё не загружены</p>
+                    <p className="text-xs text-slate-400 mb-4">Запустите симулятор чтобы машины появились здесь через WebSocket</p>
+                    <button onClick={() => setTab("live")} className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">
+                      📍 Перейти на Live
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {vehicles.map((v) => (
+                      <div
+                        key={v.id}
+                        onClick={() => setSelectedVehicleId(v.id)}
+                        className={"w-full text-left rounded-lg border p-3 transition cursor-pointer " + (selectedVehicleId === v.id ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:border-slate-300")}
+                      >
+                        <div className="font-medium text-sm">{v.name}</div>
+                        <div className="text-xs text-slate-500 mt-1">{"#" + (v.category_id || "—") + " • " + v.status}</div>
+                        {v.last_lat && v.last_lon && <div className="text-xs text-blue-600 mt-1">📍 {v.last_lat.toFixed(4)}, {v.last_lon.toFixed(4)}</div>}
+                        {v.last_speed !== undefined && v.last_speed > 0 && <div className="text-xs text-green-600 mt-1">🏎️ {v.last_speed.toFixed(0)} км/ч</div>}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); router.push("/telematics/tracks/" + v.id); }}
+                          className="mt-2 w-full rounded bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200"
+                        >
+                          🛣️ История трека
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {tab === "notifications" && <div className="bg-white rounded-xl border border-slate-200 p-6"><h2 className="text-lg font-medium mb-4">Уведомления</h2></div>}
             {tab === "rules" && <div className="bg-white rounded-xl border border-slate-200 p-6"><h2 className="text-lg font-medium">Правила алертов</h2></div>}
           </>

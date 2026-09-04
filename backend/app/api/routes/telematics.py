@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import List
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -209,18 +209,114 @@ async def receive_single_gps_point(
 @router.get("/gps/{vehicle_id}", response_model=List[GpsPointRead])
 def get_vehicle_track(
     vehicle_id: int,
-    limit: int = Query(default=100, ge=1, le=1000),
+    limit: int = Query(default=1000, ge=1, le=5000),
+    date_from: Optional[datetime] = Query(default=None),
+    date_to: Optional[datetime] = Query(default=None),
+    order: str = Query(default="asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """История GPS-точек по технике."""
+    stmt = select(GpsPoint).where(GpsPoint.vehicle_id == vehicle_id)
+    if date_from:
+        stmt = stmt.where(GpsPoint.recorded_at >= date_from)
+    if date_to:
+        stmt = stmt.where(GpsPoint.recorded_at <= date_to)
+    if order == "asc":
+        stmt = stmt.order_by(GpsPoint.recorded_at.asc())
+    else:
+        stmt = stmt.order_by(GpsPoint.recorded_at.desc())
+    stmt = stmt.limit(limit)
+    return db.scalars(stmt).all()
+
+
+
+
+# =========================================
+# === Track Statistics ===
+# =========================================
+
+
+@router.get("/gps/{vehicle_id}/stats")
+def get_track_stats(
+    vehicle_id: int,
+    date_from: Optional[datetime] = Query(default=None),
+    date_to: Optional[datetime] = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Статистика трека: пробег, средняя скорость, время в пути, остановки."""
+    import math
+
     stmt = (
         select(GpsPoint)
         .where(GpsPoint.vehicle_id == vehicle_id)
-        .order_by(GpsPoint.recorded_at.desc())
-        .limit(limit)
+        .order_by(GpsPoint.recorded_at.asc())
     )
-    return db.scalars(stmt).all()
+    if date_from:
+        stmt = stmt.where(GpsPoint.recorded_at >= date_from)
+    if date_to:
+        stmt = stmt.where(GpsPoint.recorded_at <= date_to)
+
+    points = db.scalars(stmt).all()
+
+    if not points:
+        return {
+            "vehicle_id": vehicle_id,
+            "points_count": 0,
+            "total_distance_km": 0.0,
+            "avg_speed_kmh": 0.0,
+            "max_speed_kmh": 0.0,
+            "duration_minutes": 0,
+            "stops_count": 0,
+            "started_at": None,
+            "ended_at": None,
+        }
+
+    # Расчёт пробега по формуле гаверсинуса
+    total_distance_km = 0.0
+    speeds = []
+    stops_count = 0
+    was_stopped = False
+
+    for i in range(1, len(points)):
+        p1, p2 = points[i - 1], points[i]
+        lat1, lon1 = math.radians(p1.latitude), math.radians(p1.longitude)
+        lat2, lon2 = math.radians(p2.latitude), math.radians(p2.longitude)
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+        c = 2 * math.asin(math.sqrt(a))
+        distance_km = 6371.0 * c
+        total_distance_km += distance_km
+
+        if p1.speed is not None:
+            speeds.append(p1.speed)
+            if p1.speed < 2 and not was_stopped:
+                stops_count += 1
+                was_stopped = True
+            elif p1.speed >= 2:
+                was_stopped = False
+
+    speeds = [s for s in speeds if s is not None]
+    avg_speed = sum(speeds) / len(speeds) if speeds else 0.0
+    max_speed = max(speeds) if speeds else 0.0
+
+    started_at = points[0].recorded_at
+    ended_at = points[-1].recorded_at
+    duration_minutes = int((ended_at - started_at).total_seconds() / 60)
+
+    return {
+        "vehicle_id": vehicle_id,
+        "points_count": len(points),
+        "total_distance_km": round(total_distance_km, 2),
+        "avg_speed_kmh": round(avg_speed, 1),
+        "max_speed_kmh": round(max_speed, 1),
+        "duration_minutes": duration_minutes,
+        "stops_count": stops_count,
+        "started_at": started_at.isoformat() if started_at else None,
+        "ended_at": ended_at.isoformat() if ended_at else None,
+    }
 
 
 # =========================================
