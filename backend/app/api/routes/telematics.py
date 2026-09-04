@@ -660,3 +660,95 @@ def delete_alert_rule(
         raise HTTPException(status_code=404, detail="Rule not found")
     rule.is_active = False
     db.commit()
+
+
+# =========================================
+# === Dashboard Summary ===
+# =========================================
+
+
+@router.get("/dashboard/summary")
+def get_dashboard_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Агрегированная статистика для дашборда."""
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import func
+    from app.models.catalog import Vehicle
+
+    try:
+        now = datetime.now(timezone.utc)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_ago = now - timedelta(days=7)
+
+        # Машины (простой подсчёт без фильтра по статусу)
+        total_vehicles = db.query(func.count(Vehicle.id)).scalar() or 0
+
+        # GPS точки
+        total_points = db.query(func.count(GpsPoint.id)).scalar() or 0
+        today_points = db.query(func.count(GpsPoint.id)).filter(
+            GpsPoint.recorded_at >= today_start
+        ).scalar() or 0
+
+        # Алерты
+        total_alerts = db.query(func.count(Alert.id)).scalar() or 0
+        
+        # Активные алерты (фильтруем в Python чтобы избежать проблем с Enum)
+        all_alerts = db.query(Alert).all()
+        active_alerts = len([a for a in all_alerts if hasattr(a.status, 'value') and a.status.value == 'active'])
+        critical_alerts = len([a for a in all_alerts if hasattr(a.severity, 'value') and a.severity.value == 'critical' and hasattr(a.status, 'value') and a.status.value == 'active'])
+
+        # Топливо за неделю
+        week_refuels = db.query(FuelTransaction).filter(
+            FuelTransaction.transaction_type == "refuel",
+            FuelTransaction.occurred_at >= week_ago,
+        ).all()
+        week_volume = float(sum(t.volume for t in week_refuels))
+        week_cost = float(sum(float(t.total_cost or 0) for t in week_refuels))
+
+        # Все топливо
+        all_refuels = db.query(FuelTransaction).filter(
+            FuelTransaction.transaction_type == "refuel"
+        ).all()
+        total_volume = float(sum(t.volume for t in all_refuels))
+        total_cost = float(sum(float(t.total_cost or 0) for t in all_refuels))
+
+        # Сливы
+        drains_count = db.query(func.count(FuelTransaction.id)).filter(
+            FuelTransaction.transaction_type == "drain"
+        ).scalar() or 0
+
+        return {
+            "vehicles": {
+                "total": total_vehicles,
+                "active": total_vehicles,  # упрощённо
+            },
+            "gps_points": {
+                "total": total_points,
+                "today": today_points,
+            },
+            "alerts": {
+                "total": total_alerts,
+                "active": active_alerts,
+                "critical": critical_alerts,
+            },
+            "fuel": {
+                "total_volume": round(total_volume, 2),
+                "total_cost": round(total_cost, 2),
+                "week_volume": round(week_volume, 2),
+                "week_cost": round(week_cost, 2),
+                "drains_count": drains_count,
+            },
+            "updated_at": now.isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Dashboard summary error: {e}", exc_info=True)
+        return {
+            "error": str(e),
+            "vehicles": {"total": 0, "active": 0},
+            "gps_points": {"total": 0, "today": 0},
+            "alerts": {"total": 0, "active": 0, "critical": 0},
+            "fuel": {"total_volume": 0, "total_cost": 0, "week_volume": 0, "week_cost": 0, "drains_count": 0},
+            "updated_at": None,
+        }

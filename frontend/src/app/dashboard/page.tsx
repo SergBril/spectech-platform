@@ -16,10 +16,31 @@ interface Request {
   work_type: string;
 }
 
+interface FuelStats {
+  transactions_count: number;
+  refuels_count: number;
+  drains_count: number;
+  total_volume: number;
+  total_cost: number;
+  avg_price_per_liter: number;
+  avg_consumption: number | null;
+}
+
+interface AlertItem {
+  id: number;
+  title: string;
+  severity: string;
+  status: string;
+  occurred_at: string;
+  vehicle_id: number;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [requests, setRequests] = useState<Request[]>([]);
+  const [fuelStats, setFuelStats] = useState<FuelStats | null>(null);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
@@ -34,12 +55,16 @@ export default function DashboardPage() {
 
     async function load() {
       try {
-        const [v, r] = await Promise.all([
+        const [v, r, f, a] = await Promise.all([
           apiFetch<Vehicle[]>("/vehicles?limit=10"),
           apiFetch<Request[]>("/requests?limit=10"),
+          apiFetch<FuelStats>("/telematics/fuel/stats").catch(() => null),
+          apiFetch<AlertItem[]>("/telematics/alerts").catch(() => []),
         ]);
         setVehicles(v);
         setRequests(r);
+        setFuelStats(f);
+        setAlerts(a);
       } catch (err) {
         console.error(err);
       } finally {
@@ -88,6 +113,35 @@ export default function DashboardPage() {
             Выйти
           </button>
         </div>
+
+        {/* Карточки телеметрии */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <button onClick={() => router.push("/telematics")} className="bg-white rounded-lg border border-slate-200 p-4 hover:border-blue-400 transition text-left">
+            <div className="text-2xl mb-2">🛰️</div>
+            <div className="text-xs text-slate-500">Машин онлайн</div>
+            <div className="text-xl font-semibold text-slate-900">{vehicles.length}</div>
+          </button>
+          <button onClick={() => router.push("/telematics")} className="bg-white rounded-lg border border-slate-200 p-4 hover:border-red-400 transition text-left">
+            <div className="text-2xl mb-2">🚨</div>
+            <div className="text-xs text-slate-500">Активных алертов</div>
+            <div className="text-xl font-semibold text-red-600">{alerts.filter((a) => a.status === "active").length}</div>
+          </button>
+          <button onClick={() => router.push("/telematics/fuel")} className="bg-white rounded-lg border border-slate-200 p-4 hover:border-green-400 transition text-left">
+            <div className="text-2xl mb-2">⛽</div>
+            <div className="text-xs text-slate-500">Расход топлива</div>
+            <div className="text-xl font-semibold text-slate-900">
+              {fuelStats ? `${fuelStats.total_volume.toFixed(0)} л` : "—"}
+            </div>
+          </button>
+          <button onClick={() => router.push("/telematics/fuel")} className="bg-white rounded-lg border border-slate-200 p-4 hover:border-yellow-400 transition text-left">
+            <div className="text-2xl mb-2">💰</div>
+            <div className="text-xs text-slate-500">Затраты на топливо</div>
+            <div className="text-xl font-semibold text-slate-900">
+              {fuelStats ? `${fuelStats.total_cost.toFixed(0)} ₽` : "—"}
+            </div>
+          </button>
+        </div>
+
       <div className="flex gap-2">
   <button
     onClick={() => router.push("/finance")}
@@ -142,6 +196,33 @@ export default function DashboardPage() {
                   </span>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <h2 className="text-lg font-medium text-slate-900 mb-4">
+              🚨 Последние алерты ({alerts.length})
+            </h2>
+            <div className="space-y-2">
+              {alerts.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-4">Нет алертов 🎉</p>
+              ) : (
+                alerts.slice(0, 5).map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => router.push(`/telematics/tracks/${a.vehicle_id}`)}
+                    className="w-full flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 hover:border-red-300 transition text-left"
+                  >
+                    <div>
+                      <div className="text-sm text-slate-800">{a.title}</div>
+                      <div className="text-xs text-slate-500">{new Date(a.occurred_at).toLocaleString("ru-RU")}</div>
+                    </div>
+                    <span className={"text-xs px-2 py-0.5 rounded-full " + (a.severity === "critical" ? "bg-red-100 text-red-700" : a.severity === "warning" ? "bg-yellow-100 text-yellow-700" : "bg-blue-100 text-blue-700")}>
+                      {a.severity}
+                    </span>
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
