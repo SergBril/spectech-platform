@@ -158,7 +158,7 @@ async def receive_single_gps_point(
             if triggered:
                 # Проверяем дедупликацию (не создаём алерт если уже есть за последние 10 минут)
                 from datetime import timedelta
-                ten_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=10)
+                ten_minutes_ago = datetime.now(timezone.utc) - timedelta(seconds=10)
                 existing = db.query(Alert).filter(
                     Alert.vehicle_id == gps_point.vehicle_id,
                     Alert.alert_type == rule.rule_type,
