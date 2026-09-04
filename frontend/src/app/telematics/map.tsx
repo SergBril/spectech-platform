@@ -48,6 +48,13 @@ export default function TelematicsMap({ vehicles, selectedVehicleId, onSelectVeh
           <Popup>
             <div className="text-sm">
               <div className="font-bold">{v.name}</div>
+              <div>Скорость: {v.last_speed?.toFixed(1) || 0} км/ч</div>
+              <div>Статус: {v.status}</div>
+            </div>
+          </Popup>
+          <Popup>
+            <div className="text-sm">
+              <div className="font-bold">{v.name}</div>
               <div className="text-slate-600">#{v.category_id || "-"}</div>
               <div className="mt-2">Status: <b>{v.status}</b></div>
               {v.last_speed !== undefined && <div>Speed: <b>{v.last_speed.toFixed(1)} km/h</b></div>}

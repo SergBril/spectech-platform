@@ -113,8 +113,15 @@ export default function TelematicsPage() {
   }, [mounted]);
 
   async function acknowledgeAlert(id: number) {
-    await apiFetch("/telematics/alerts/" + id + "/acknowledge", { method: "POST", body: JSON.stringify({}) });
-    loadAll();
+    try {
+      await apiFetch("/telematics/alerts/" + id + "/acknowledge", { method: "POST", body: JSON.stringify({}) });
+      // Обновляем локальное состояние сразу
+      setAlerts((prev) => prev.map((a) => a.id === id ? { ...a, status: "acknowledged" } : a));
+      // Перезагружаем данные для синхронизации
+      loadAll();
+    } catch (error) {
+      console.error("Failed to acknowledge alert:", error);
+    }
   }
   async function markNotificationRead(id: number) {
     await apiFetch("/telematics/notifications/" + id + "/read", { method: "POST" });
@@ -225,15 +232,18 @@ export default function TelematicsPage() {
                 <h2 className="text-lg font-medium mb-4">Активные алерты</h2>
                 {alerts.length === 0 ? <p className="text-slate-400 text-center py-8">Нет алертов 🎉</p> : (
                   <div className="space-y-2">
-                    {alerts.map((a) => (
-                      <div key={a.id} className={"rounded-lg border p-4 " + (severityColors[a.severity] || severityColors.info)}>
+                    {alerts.map((a) => (<div
+                        key={a.id}
+                        onClick={() => router.push("/telematics/tracks/" + a.vehicle_id)}
+                        className={"rounded-lg border p-4 cursor-pointer transition hover:shadow-md " + (severityColors[a.severity] || severityColors.info)}
+                      >
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <div className="font-medium">{a.title}</div>
                             {a.description && <div className="text-sm mt-1 opacity-80">{a.description}</div>}
                             <div className="text-xs mt-2 opacity-70">{fmtTime(a.occurred_at)} • <span className="uppercase font-semibold">{a.severity}</span></div>
                           </div>
-                          {a.status === "active" && <button onClick={() => acknowledgeAlert(a.id)} className="rounded border border-slate-400 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50">Подтвердить</button>}
+                          {a.status === "active" && <button onClick={(e) => { e.stopPropagation(); acknowledgeAlert(a.id); }} className="rounded border border-slate-400 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50">Подтвердить</button>}
                         </div>
                       </div>
                     ))}
