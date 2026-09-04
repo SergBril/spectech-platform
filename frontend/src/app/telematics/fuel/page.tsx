@@ -293,7 +293,11 @@ export default function FuelPage() {
               </thead>
               <tbody>
                 {transactions.map((tx) => (
-                  <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <tr
+                    key={tx.id}
+                    onClick={() => router.push("/telematics/tracks/" + tx.vehicle_id)}
+                    className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
+                  >
                     <td className="px-4 py-3 text-slate-900">{formatDate(tx.occurred_at)}</td>
                     <td className="px-4 py-3">
                       {tx.transaction_type === "refuel" ? (
