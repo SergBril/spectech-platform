@@ -82,7 +82,7 @@ def _check_speed(db: Session, point: GpsPoint, rule: AlertRule) -> Optional[Aler
             description=f"Лимит: {rule.threshold:.0f} км/ч",
             details={"speed": point.speed, "limit": rule.threshold},
             occurred_at=point.recorded_at,
-            company_id=point.vehicle_id,
+            company_id=company_id,
         )
     return None
 
@@ -117,7 +117,7 @@ def _check_fuel(db: Session, point: GpsPoint, rule: AlertRule) -> Optional[Alert
                 description=f"Уровень упал с {prev.fuel_level:.1f} до {point.fuel_level:.1f} л",
                 details={"drop": drop, "before": prev.fuel_level, "after": point.fuel_level},
                 occurred_at=point.recorded_at,
-                company_id=point.vehicle_id,
+                company_id=company_id,
             )
     return None
 
@@ -154,7 +154,7 @@ def _check_engine_hours(db: Session, point: GpsPoint, rule: AlertRule) -> Option
                 description=f"Лимит: {rule.threshold:.0f} ч",
                 details={"hours_today": hours_today, "limit": rule.threshold},
                 occurred_at=point.recorded_at,
-                company_id=point.vehicle_id,
+                company_id=company_id,
             )
     return None
 
@@ -191,7 +191,7 @@ def _check_idle(db: Session, point: GpsPoint, rule: AlertRule) -> Optional[Alert
                     description="Двигатель работает, техника не движется",
                     details={"idle_minutes": idle_minutes, "limit": rule.threshold},
                     occurred_at=point.recorded_at,
-                    company_id=point.vehicle_id,
+                    company_id=company_id,
                 )
     return None
 

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -11,29 +11,11 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-interface Vehicle {
-  id: number;
-  name: string;
-  status: string;
-  category_id?: number;
-  last_lat?: number;
-  last_lon?: number;
-  last_speed?: number;
-  last_updated?: string;
-}
-
-interface Props {
-  vehicles: Vehicle[];
-  selectedVehicleId: number | null;
-  onSelectVehicle: (id: number) => void;
-}
+interface Vehicle { id: number; name: string; status: string; category_id?: number; last_lat?: number; last_lon?: number; last_speed?: number; last_updated?: string; }
+interface Props { vehicles: Vehicle[]; selectedVehicleId: number | null; onSelectVehicle: (id: number) => void; }
 
 function getIcon(status: string, speed?: number) {
-  const color =
-    speed && speed > 5 ? "#10b981" :
-    status === "busy" ? "#f59e0b" :
-    status === "free" ? "#3b82f6" : "#6b7280";
-
+  const color = speed && speed > 5 ? "#10b981" : status === "busy" ? "#f59e0b" : status === "free" ? "#3b82f6" : "#6b7280";
   return L.divIcon({
     className: "custom-marker",
     html: '<div style="background:' + color + ';width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div>',
@@ -57,20 +39,18 @@ function FitBounds({ vehicles }: { vehicles: Vehicle[] }) {
 export default function TelematicsMap({ vehicles, selectedVehicleId, onSelectVehicle }: Props) {
   const vehiclesWithCoords = vehicles.filter((v) => v.last_lat && v.last_lon);
   const defaultCenter: [number, number] = [55.7558, 37.6173];
-
   return (
     <MapContainer center={defaultCenter} zoom={10} style={{ height: "100%", width: "100%" }} scrollWheelZoom={true}>
-      <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <TileLayer attribution="OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       {vehiclesWithCoords.length > 0 && <FitBounds vehicles={vehiclesWithCoords} />}
       {vehiclesWithCoords.map((v) => (
         <Marker key={v.id} position={[v.last_lat!, v.last_lon!]} icon={getIcon(v.status, v.last_speed)} eventHandlers={{ click: () => onSelectVehicle(v.id) }}>
           <Popup>
             <div className="text-sm">
               <div className="font-bold">{v.name}</div>
-              <div className="text-slate-600">#{v.category_id || "—"}</div>
-              <div className="mt-2">Статус: <b>{v.status}</b></div>
-              {v.last_speed !== undefined && <div>Скорость: <b>{v.last_speed.toFixed(1)} км/ч</b></div>}
-              {v.last_updated && <div className="text-xs text-slate-500 mt-1">Обновлено: {new Date(v.last_updated).toLocaleString("ru-RU")}</div>}
+              <div className="text-slate-600">#{v.category_id || "-"}</div>
+              <div className="mt-2">Status: <b>{v.status}</b></div>
+              {v.last_speed !== undefined && <div>Speed: <b>{v.last_speed.toFixed(1)} km/h</b></div>}
             </div>
           </Popup>
         </Marker>

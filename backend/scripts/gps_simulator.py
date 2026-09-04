@@ -1,119 +1,117 @@
-"""Симулятор движения техники для тестирования Live GPS."""
+"""
+GPS Simulator - отправляет GPS точки на бэкенд для тестирования WebSocket.
+"""
 import asyncio
 import random
 import httpx
-import time
 from datetime import datetime, timezone
 
-BASE_URL = "http://localhost:8000"
-API = f"{BASE_URL}/api/v1"
+API_BASE = "http://localhost:8000/api/v1"
+EMAIL = "admin@spectech.dev"
+PASSWORD = "admin"
+
+async def login(client: httpx.AsyncClient) -> str:
+    """Получает JWT токен через OAuth2 password flow."""
+    # OAuth2 требует form-urlencoded данные
+    resp = await client.post(
+        f"{API_BASE}/auth/login",
+        json={"email": EMAIL, "password": PASSWORD},
+    )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
 
 
-async def login():
-    """Получает токен."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{API}/auth/login", json={
-            "email": "admin@spectech.dev",
-            "password": "admin123",
-        })
-        return resp.json()["access_token"]
+async def get_vehicles(client: httpx.AsyncClient, token: str):
+    """Получает список машин."""
+    resp = await client.get(
+        f"{API_BASE}/vehicles",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
-async def get_vehicles(token: str):
-    """Получает список техники."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{API}/vehicles",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return resp.json()
+async def send_gps(client: httpx.AsyncClient, token: str, vehicle_id: int, lat: float, lon: float, speed: float) -> int:
+    """Отправляет одну GPS точку."""
+    resp = await client.post(
+        f"{API_BASE}/telematics/gps/single",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "vehicle_id": vehicle_id,
+            "latitude": lat,
+            "longitude": lon,
+            "speed": speed,
+            "heading": random.uniform(0, 360),
+            "altitude": random.uniform(100, 200),
+            "engine_on": True,
+            "engine_hours": random.uniform(100, 1000),
+            "fuel_level": random.uniform(30, 90),
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    return resp.status_code
 
 
-async def send_gps(token: str, vehicle_id: int, lat: float, lon: float, speed: float):
-    """Отправляет GPS точку."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{API}/telematics/gps/single",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "vehicle_id": vehicle_id,
-                "latitude": lat,
-                "longitude": lon,
-                "speed": speed,
-                "heading": random.uniform(0, 360),
-                "altitude": random.uniform(100, 200),
-                "engine_on": True,
-                "engine_hours": random.uniform(100, 1000),
-                "fuel_level": random.uniform(30, 90),
-                "recorded_at": datetime.now(timezone.utc).isoformat(),
-            },
-        )
-        return resp.status_code
-
-
-async def simulate_vehicle(vehicle_id: int, vehicle_name: str, token: str):
-    """Симулирует движение одной техники."""
-    # Стартовая позиция (Москва)
+async def simulate_vehicle(client: httpx.AsyncClient, token: str, vehicle_id: int, name: str):
+    """Симулирует движение одной машины."""
     lat = 55.7558 + random.uniform(-0.05, 0.05)
     lon = 37.6173 + random.uniform(-0.05, 0.05)
-    
-    print(f"🚗 {vehicle_name} (ID={vehicle_id}) starting at ({lat:.4f}, {lon:.4f})")
-    
-    for i in range(30):  # 30 точек = 60 секунд при интервале 2с
+    print(f"🚗 {name} (ID={vehicle_id}) starting at ({lat:.4f}, {lon:.4f})")
+
+    for i in range(30):
+        # Скорость 20-120 км/ч (чтобы иногда превышать 90 и вызывать алерты)
+        speed = random.uniform(20, 120)
+
         # Движение
-        speed = random.uniform(20, 80)  # км/ч
-        distance_km = speed * (2 / 3600)  # за 2 секунды
-        distance_deg = distance_km / 111  # примерно
-        
+        distance_deg = speed / 111.0 / 3600.0 * 2
         lat += distance_deg * 0.7 * random.uniform(0.5, 1.5)
         lon += distance_deg * random.uniform(0.5, 1.5)
-        
-        status = await send_gps(token, vehicle_id, lat, lon, speed)
-        
-        print(f"  [{i+1:2d}/30] {vehicle_name}: ({lat:.4f}, {lon:.4f}) "
-              f"speed={speed:.1f} km/h, status={status}")
-        
-        await asyncio.sleep(2)  # Отправляем каждые 2 секунды
+
+        try:
+            status = await send_gps(client, token, vehicle_id, lat, lon, speed)
+            print(f"  [{i+1:2d}/30] {name}: ({lat:.4f}, {lon:.4f}) speed={speed:.1f} km/h, status={status}")
+        except Exception as e:
+            print(f"  [{i+1:2d}/30] {name}: ERROR {type(e).__name__}: {e}")
+
+        await asyncio.sleep(2)
+
+    print(f"✅ {name} finished")
 
 
 async def main():
-    """Запускает симуляцию для нескольких машин."""
     print("🚀 GPS Simulator")
     print("=" * 60)
-    
-    try:
-        token = await login()
-        print(f"✅ Logged in, token: {token[:30]}...")
-    except Exception as e:
-        print(f"❌ Login failed: {e}")
-        print("   Убедитесь что backend запущен: uvicorn app.main:app --reload --port 8000")
-        return
-    
-    try:
-        vehicles = await get_vehicles(token)
-        if not vehicles:
-            print("❌ No vehicles found. Create vehicles first at /vehicles")
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        try:
+            token = await login(client)
+            print(f"✅ Logged in, token: {token[:20]}...")
+        except Exception as e:
+            print(f"❌ Login failed: {e}")
             return
-        
-        print(f"📋 Found {len(vehicles)} vehicles:")
-        for v in vehicles[:5]:
-            print(f"   - {v['name']} (ID={v['id']})")
-        
-        # Запускаем симуляцию для первых 3 машин
+
+        try:
+            vehicles = await get_vehicles(client, token)
+            print(f"📋 Found {len(vehicles)} vehicles:")
+            for v in vehicles:
+                print(f"   - {v['name']} (ID={v['id']})")
+        except Exception as e:
+            print(f"❌ Get vehicles failed: {e}")
+            return
+
+        if not vehicles:
+            print("❌ No vehicles found")
+            return
+
+        print()
+        print("▶️  Starting simulation...")
         tasks = []
-        for vehicle in vehicles[:3]:
-            print(f"\n▶️  Starting simulation for: {vehicle['name']}")
-            tasks.append(simulate_vehicle(vehicle["id"], vehicle["name"], token))
-        
+        for v in vehicles:
+            tasks.append(simulate_vehicle(client, token, v["id"], v["name"]))
+
         await asyncio.gather(*tasks)
-        
-        print("\n✅ Simulation completed!")
-        print("\n📊 Check the map at http://localhost:3000/telematics")
-        
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+        print()
+        print("🎉 Simulation complete!")
 
 
 if __name__ == "__main__":

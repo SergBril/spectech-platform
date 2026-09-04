@@ -120,6 +120,25 @@ class ConnectionManager:
         }
         return await self.broadcast_to_company(company_id, message)
 
+    async def broadcast_alert_to_company(self, company_id: int, alert_data: dict) -> int:
+        """
+        Отправляет алерт всем подписчикам компании.
+
+        Args:
+            company_id: ID компании
+            alert_data: Данные алерта (id, title, severity, vehicle_id, ...)
+
+        Returns:
+            Количество получателей
+        """
+        message = {
+            "type": "alert",
+            "data": alert_data,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        logger.info("🚨 Broadcasting alert to company %s: %s", company_id, alert_data.get("title"))
+        return await self.broadcast_to_company(company_id, message)
+
     async def broadcast_all(self, message: dict):
         """Отправляет сообщение всем подключённым пользователям."""
         total = 0

@@ -134,7 +134,71 @@ async def receive_single_gps_point(
     except Exception as e:
         logger.warning("GPS broadcast failed: %s", e)
     
-    return {
+
+    # === Проверка правил алертов (упрощённая, синхронная) ===
+    try:
+        from app.models.telematics import AlertRule, Alert, AlertStatus, AlertSeverity
+        from datetime import datetime, timezone
+        
+        # Загружаем активные правила для компании
+        rules = db.query(AlertRule).filter(
+            AlertRule.company_id == (current_user.company_id or 0),
+            AlertRule.is_active == True
+        ).all()
+        
+        for rule in rules:
+            triggered = False
+            description = None
+            
+            # Проверяем превышение скорости
+            if rule.rule_type == "speed_limit" and gps_point.speed and gps_point.speed > rule.threshold:
+                triggered = True
+                description = f"Скорость {gps_point.speed:.0f} км/ч превысила лимит {rule.threshold:.0f} км/ч"
+            
+            if triggered:
+                # Проверяем дедупликацию (не создаём алерт если уже есть за последние 10 минут)
+                from datetime import timedelta
+                ten_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=10)
+                existing = db.query(Alert).filter(
+                    Alert.vehicle_id == gps_point.vehicle_id,
+                    Alert.alert_type == rule.rule_type,
+                    Alert.occurred_at >= ten_minutes_ago
+                ).first()
+                
+                if not existing:
+                    alert = Alert(
+                        company_id=current_user.company_id or 0,
+                        vehicle_id=gps_point.vehicle_id,
+                        alert_type=rule.rule_type,
+                        severity=rule.severity,
+                        status=AlertStatus.active,
+                        title=f"Превышение скорости: {gps_point.speed:.0f} км/ч",
+                        description=description,
+                        occurred_at=datetime.now(timezone.utc),
+                    )
+                    db.add(alert)
+                    db.commit()
+                    db.refresh(alert)
+                    
+                    logger.info("🚨 Alert created: %s", alert.title)
+                    
+                    # Отправляем через WebSocket
+                    alert_data = {
+                        "id": alert.id,
+                        "alert_type": alert.alert_type,
+                        "severity": alert.severity.value if hasattr(alert.severity, "value") else alert.severity,
+                        "status": alert.status.value if hasattr(alert.status, "value") else alert.status,
+                        "vehicle_id": alert.vehicle_id,
+                        "title": alert.title,
+                        "description": alert.description,
+                        "occurred_at": alert.occurred_at.isoformat() if alert.occurred_at else None,
+                    }
+                    await manager.broadcast_alert_to_company(current_user.company_id or 0, alert_data)
+                    logger.info("🚨 Broadcasting alert to company %s", current_user.company_id)
+    except Exception as e:
+        logger.warning("Alert processing failed: %s", e)
+
+        return {
         "status": "ok",
         "id": gps_point.id,
         "vehicle_id": gps_point.vehicle_id,
