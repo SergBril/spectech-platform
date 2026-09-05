@@ -1,13 +1,57 @@
+# Python
 .venv
 __pycache__
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
 .pytest_cache
-.git
-.gitignore
-.env
-.venv
-migrations
+.coverage
+htmlcov
 *.log
+
+# IDE
 .idea
 .vscode
-.env.local
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Testing
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Documentation
+*.md
+docs/
+WEEK7_SUMMARY.md
+README.md
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+
+# Scripts and tools
+scripts/
+debug.py
+openapi*.json
+profile.svg
+
+# OS
+.DS_Store
+Thumbs.db
