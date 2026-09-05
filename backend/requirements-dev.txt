@@ -13,3 +13,7 @@ pre-commit==4.0.1testcontainers[postgresql]==4.8.2
 asyncpg==0.30.0
 sentry-sdk[fastapi]==2.14.0
 structlog==24.4.0
+
+echo py-spy==0.4.0 >> requirements-dev.txt
+echo memory-profiler==0.61.0 >> requirements-dev.txt
+echo psutil==6.0.0 >> requirements-dev.txt

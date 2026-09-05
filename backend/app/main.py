@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.api.routes import (
     acts,
     auth,
+    benchmark,
     categories,
     contractors,
     debug,
@@ -148,6 +149,7 @@ app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
 app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
 app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(ws_routes.router, prefix="/api/v1", tags=["websocket"])
+app.include_router(benchmark.router, prefix="/api/v1", tags=["benchmark"])
 
 
 # 6. Кастомизация OpenAPI
