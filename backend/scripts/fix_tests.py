@@ -1,8 +1,9 @@
 from pathlib import Path
+
 T = Path(__file__).parent.parent / "tests"
 
 # test_finance_service.py
-F1 = '''from datetime import date
+F1 = """from datetime import date
 from decimal import Decimal
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
@@ -88,11 +89,11 @@ def test_get_finance_dashboard_with_data(db):
     db.commit()
     r = get_finance_dashboard(db, d["co"].id)
     assert r["total_revenue"] == Decimal("12000") and r["total_paid"] == Decimal("5000") and r["total_commission_earned"] == Decimal("1500")
-'''
-(T/"test_finance_service.py").write_text(F1, encoding="utf-8")
+"""
+(T / "test_finance_service.py").write_text(F1, encoding="utf-8")
 
 # test_finance_api.py
-F2 = '''from app.models.auth import User
+F2 = """from app.models.auth import User
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
 from app.models.contractor import Contractor
@@ -205,6 +206,6 @@ def test_full_finance_workflow(client, db):
         client.post(f"/api/v1/invoices/{inv['id']}/send")
         assert client.post("/api/v1/payouts", json={"owner_id": d["ow"].id, "vehicle_id": d["v"].id, "request_id": d["r"].id, "gross_amount": 8000, "commission_rate": 15, "payout_date": "2026-09-10"}).json()["net_amount"] == "6800.00"
     finally: C()
-'''
-(T/"test_finance_api.py").write_text(F2, encoding="utf-8")
+"""
+(T / "test_finance_api.py").write_text(F2, encoding="utf-8")
 print("DONE - запускай pytest")

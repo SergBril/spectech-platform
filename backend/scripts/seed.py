@@ -1,17 +1,17 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import bcrypt
 from sqlalchemy import select
 
 from app.core.db import SessionLocal
-from app.models.company import Company
 from app.models.auth import User
 from app.models.catalog import Category, Vehicle
+from app.models.company import Company
 from app.models.contractor import Contractor, Employee
 from app.models.dispatch import Request
 from app.models.rbac import Role, UserRole
@@ -34,7 +34,7 @@ def create_seed_data():
             company = Company(
                 name="СпецТехника Про",
                 legal_name='ООО "СпецТехника Про"',
-                inn="7700000000"
+                inn="7700000000",
             )
             db.add(company)
             db.flush()
@@ -45,7 +45,7 @@ def create_seed_data():
         # --- Администратор ---
         admin = db.scalar(select(User).where(User.email == "admin@spectech.dev"))
         if not admin:
-            admin_password = bcrypt.hashpw("admin123".encode(), bcrypt.gensalt()).decode()
+            admin_password = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode()
             admin = User(
                 email="admin@spectech.dev",
                 full_name="Администратор",
@@ -66,13 +66,13 @@ def create_seed_data():
                 name="Землеройная техника",
                 code="earthmoving",
                 level=1,
-                company_id=company.id
+                company_id=company.id,
             )
             db.add(cat_earth)
             db.flush()
             print("   ✅ Категория 'Землеройная техника' создана")
         else:
-            print(f"   ⏭️  Категория 'Землеройная техника' уже существует")
+            print("   ⏭️  Категория 'Землеройная техника' уже существует")
 
         cat_excavator = db.scalar(select(Category).where(Category.code == "excavators"))
         if not cat_excavator:
@@ -81,13 +81,13 @@ def create_seed_data():
                 code="excavators",
                 level=2,
                 parent_id=cat_earth.id,
-                company_id=company.id
+                company_id=company.id,
             )
             db.add(cat_excavator)
             db.flush()
             print("   ✅ Категория 'Экскаваторы' создана")
         else:
-            print(f"   ⏭️  Категория 'Экскаваторы' уже существует")
+            print("   ⏭️  Категория 'Экскаваторы' уже существует")
 
         # --- Клиент ---
         client = db.scalar(select(Contractor).where(Contractor.inn == "7711111111"))
@@ -163,12 +163,14 @@ def create_seed_data():
             db.flush()
             print("   ✅ Техника 'Экскаватор CAT 320D' создана")
         else:
-            print(f"   ⏭️  Техника 'Экскаватор CAT 320D' уже существует")
+            print("   ⏭️  Техника 'Экскаватор CAT 320D' уже существует")
 
         # --- Заявка ---
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         existing_request = db.scalar(
-            select(Request).where(Request.object_address == "г. Москва, ул. Строителей, д. 1")
+            select(Request).where(
+                Request.object_address == "г. Москва, ул. Строителей, д. 1"
+            )
         )
 
         if not existing_request:
@@ -205,10 +207,12 @@ def create_seed_data():
                 )
             )
             if not existing:
-                db.add(UserRole(
-                    user_id=admin.id,
-                    role_id=admin_role.id,
-                ))
+                db.add(
+                    UserRole(
+                        user_id=admin.id,
+                        role_id=admin_role.id,
+                    )
+                )
                 print("   ✅ Роль admin назначена администратору")
             else:
                 print("   ⏭️  Роль admin уже назначена")

@@ -1,10 +1,12 @@
 """Smoke-тест v6: Celery + MinIO + периодические задачи."""
-import requests
+
 import time
-from datetime import datetime
+
+import requests
 
 BASE_URL = "http://localhost:8000"
 API = f"{BASE_URL}/api/v1"
+
 
 class SmokeTest:
     def __init__(self):
@@ -23,10 +25,10 @@ class SmokeTest:
     def login(self):
         """Авторизация."""
         try:
-            resp = requests.post(f"{API}/auth/login", json={
-                "email": "admin@spectech.dev",
-                "password": "admin123"
-            })
+            resp = requests.post(
+                f"{API}/auth/login",
+                json={"email": "admin@spectech.dev", "password": "admin123"},
+            )
             if resp.status_code == 200:
                 self.token = resp.json()["access_token"]
                 self.log("Login successful")
@@ -47,9 +49,9 @@ class SmokeTest:
                 resp = requests.post(
                     f"{API}/files/upload?file_category=other",
                     headers=headers,
-                    files={"file": ("README.md", f, "text/markdown")}
+                    files={"file": ("README.md", f, "text/markdown")},
                 )
-            
+
             if resp.status_code == 201:
                 data = resp.json()
                 self.log(f"File uploaded: id={data['id']}, path={data['storage_path']}")
@@ -84,7 +86,9 @@ class SmokeTest:
             if resp.status_code == 200:
                 data = resp.json()
                 storage = data.get("storage", {})
-                self.log(f"Storage stats: {storage.get('total_files', 0)} files, {storage.get('total_size_bytes', 0)} bytes")
+                self.log(
+                    f"Storage stats: {storage.get('total_files', 0)} files, {storage.get('total_size_bytes', 0)} bytes"
+                )
                 return True
             else:
                 self.log(f"Stats failed: {resp.status_code}", False)
@@ -103,12 +107,14 @@ class SmokeTest:
                 data = resp.json()
                 task_id = data.get("task_id")
                 self.log(f"Celery task queued: {task_id}")
-                
+
                 # Ждём выполнения
                 time.sleep(3)
-                
+
                 # Проверяем статус
-                resp = requests.get(f"{API}/tasks/tasks/{task_id}/status", headers=headers)
+                resp = requests.get(
+                    f"{API}/tasks/tasks/{task_id}/status", headers=headers
+                )
                 if resp.status_code == 200:
                     status = resp.json().get("status")
                     self.log(f"Task status: {status}")
@@ -156,7 +162,7 @@ class SmokeTest:
         file_id = self.test_file_upload()
         if file_id:
             self.test_file_download(file_id)
-        
+
         self.test_storage_stats()
         self.test_celery_task()
         self.test_system_metrics()
@@ -176,6 +182,7 @@ class SmokeTest:
         else:
             print(f"⚠️  {self.failed} checks failed")
         print("=" * 70)
+
 
 if __name__ == "__main__":
     SmokeTest().run()

@@ -1,6 +1,6 @@
 /**
  * WebSocket клиент для SpectechPlatform.
- * 
+ *
  * Использование:
  *   const ws = new SpectechWebSocket(token, {
  *     onGpsPoint: (point) => console.log(point),

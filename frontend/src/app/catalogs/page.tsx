@@ -51,7 +51,7 @@ export default function CatalogsPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [userRoles, setUserRoles] = useState<string[]>([]);
-  
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -77,7 +77,7 @@ export default function CatalogsPage() {
         apiFetch<Permission[]>("/rbac/permissions"),
         apiFetch<string[]>("/me/roles"),
       ]);
-      
+
       setContractors(cont);
       setCategories(cats);
       setRoles(r);

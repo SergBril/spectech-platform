@@ -1,4 +1,5 @@
 """Единый скрипт для исправления Pydantic enum + тестов + API телематики."""
+
 from pathlib import Path
 
 BASE = Path(__file__).parent.parent
@@ -446,7 +447,7 @@ def make_test_request(db, client_id, category_id, company_id, **overrides):
 print("✅ tests/conftest.py rewritten")
 
 # === 3. test_finance_service.py (использует make_test_request!) ===
-FIN_SVC = '''from datetime import date
+FIN_SVC = """from datetime import date
 from decimal import Decimal
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
@@ -608,12 +609,12 @@ def test_get_finance_dashboard_with_data(db):
     assert r["total_revenue"] == Decimal("12000")
     assert r["total_paid"] == Decimal("5000")
     assert r["total_commission_earned"] == Decimal("1500")
-'''
+"""
 (TESTS / "test_finance_service.py").write_text(FIN_SVC, encoding="utf-8")
 print("✅ tests/test_finance_service.py rewritten (uses make_test_request)")
 
 # === 4. test_finance_api.py (использует make_test_request!) ===
-FIN_API = '''from app.models.auth import User
+FIN_API = """from app.models.auth import User
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
 from app.models.contractor import Contractor
@@ -826,7 +827,7 @@ def test_full_finance_workflow(client, db):
         assert pdf.status_code == 200
     finally:
         _clear()
-'''
+"""
 (TESTS / "test_finance_api.py").write_text(FIN_API, encoding="utf-8")
 print("✅ tests/test_finance_api.py rewritten (uses make_test_request)")
 

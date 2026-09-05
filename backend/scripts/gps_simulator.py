@@ -1,14 +1,17 @@
 """
 GPS Simulator - отправляет GPS точки на бэкенд для тестирования WebSocket.
 """
+
 import asyncio
 import random
+from datetime import UTC, datetime
+
 import httpx
-from datetime import datetime, timezone
 
 API_BASE = "http://localhost:8000/api/v1"
 EMAIL = "admin@spectech.dev"
 PASSWORD = "admin"
+
 
 async def login(client: httpx.AsyncClient) -> str:
     """Получает JWT токен через OAuth2 password flow."""
@@ -31,7 +34,14 @@ async def get_vehicles(client: httpx.AsyncClient, token: str):
     return resp.json()
 
 
-async def send_gps(client: httpx.AsyncClient, token: str, vehicle_id: int, lat: float, lon: float, speed: float) -> int:
+async def send_gps(
+    client: httpx.AsyncClient,
+    token: str,
+    vehicle_id: int,
+    lat: float,
+    lon: float,
+    speed: float,
+) -> int:
     """Отправляет одну GPS точку."""
     resp = await client.post(
         f"{API_BASE}/telematics/gps/single",
@@ -46,13 +56,15 @@ async def send_gps(client: httpx.AsyncClient, token: str, vehicle_id: int, lat: 
             "engine_on": True,
             "engine_hours": random.uniform(100, 1000),
             "fuel_level": random.uniform(30, 90),
-            "recorded_at": datetime.now(timezone.utc).isoformat(),
+            "recorded_at": datetime.now(UTC).isoformat(),
         },
     )
     return resp.status_code
 
 
-async def simulate_vehicle(client: httpx.AsyncClient, token: str, vehicle_id: int, name: str):
+async def simulate_vehicle(
+    client: httpx.AsyncClient, token: str, vehicle_id: int, name: str
+):
     """Симулирует движение одной машины."""
     lat = 55.7558 + random.uniform(-0.05, 0.05)
     lon = 37.6173 + random.uniform(-0.05, 0.05)
@@ -69,7 +81,9 @@ async def simulate_vehicle(client: httpx.AsyncClient, token: str, vehicle_id: in
 
         try:
             status = await send_gps(client, token, vehicle_id, lat, lon, speed)
-            print(f"  [{i+1:2d}/30] {name}: ({lat:.4f}, {lon:.4f}) speed={speed:.1f} km/h, status={status}")
+            print(
+                f"  [{i+1:2d}/30] {name}: ({lat:.4f}, {lon:.4f}) speed={speed:.1f} km/h, status={status}"
+            )
         except Exception as e:
             print(f"  [{i+1:2d}/30] {name}: ERROR {type(e).__name__}: {e}")
 

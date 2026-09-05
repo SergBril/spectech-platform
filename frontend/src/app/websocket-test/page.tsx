@@ -20,7 +20,7 @@ export default function WebSocketTestPage() {
   const [pingTime, setPingTime] = useState<number | null>(null);
   const [stats, setStats] = useState<any>(null);
   const wsRef = useRef<SpectechWebSocket | null>(null);
-  
+
 
   const addLog = (type: string, direction: "in" | "out", data: any) => {
   const newId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;

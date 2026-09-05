@@ -10,4 +10,4 @@ migrations
 *.log
 .idea
 .vscode
-.env.local 
+.env.local

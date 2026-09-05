@@ -1,4 +1,5 @@
 """Скрипт создаёт правильные версии тестовых файлов."""
+
 from pathlib import Path
 
 TESTS_DIR = Path(__file__).parent.parent / "tests"
@@ -78,7 +79,7 @@ def make_test_request(db, client_id, category_id, company_id, **overrides):
 '''
 
 # === test_finance_service.py ===
-FINANCE_SERVICE = '''from datetime import date
+FINANCE_SERVICE = """from datetime import date
 from decimal import Decimal
 
 from app.models.catalog import Category, Vehicle
@@ -261,10 +262,10 @@ def test_get_finance_dashboard_with_data(db):
     assert r["invoices_count"] == 1
     assert r["acts_count"] == 1
     assert r["payouts_count"] == 1
-'''
+"""
 
 # === test_finance_api.py ===
-FINANCE_API = '''from app.models.auth import User
+FINANCE_API = """from app.models.auth import User
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
 from app.models.contractor import Contractor
@@ -502,10 +503,12 @@ def test_full_finance_workflow(client, db):
         assert float(dash["total_revenue"]) >= 9600
     finally:
         _clear()
-'''
+"""
 
 if __name__ == "__main__":
     (TESTS_DIR / "conftest.py").write_text(CONFTEST, encoding="utf-8")
-    (TESTS_DIR / "test_finance_service.py").write_text(FINANCE_SERVICE, encoding="utf-8")
+    (TESTS_DIR / "test_finance_service.py").write_text(
+        FINANCE_SERVICE, encoding="utf-8"
+    )
     (TESTS_DIR / "test_finance_api.py").write_text(FINANCE_API, encoding="utf-8")
     print("✅ Все 3 файла обновлены")

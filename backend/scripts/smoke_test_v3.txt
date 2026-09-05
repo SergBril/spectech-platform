@@ -7,7 +7,7 @@ $FAIL = 0
 
 function Check {
     param($Name, $Method, $Url, $Body, $Expected)
-    
+
     try {
         $params = @{
             Uri = "$API$Url"
@@ -16,9 +16,9 @@ function Check {
             ContentType = "application/json"
         }
         if ($Body) { $params.Body = $Body }
-        
+
         $response = Invoke-WebRequest @params -ErrorAction Stop
-        
+
         if ($response.StatusCode -eq $Expected) {
             Write-Host "OK $Name ($($response.StatusCode))" -ForegroundColor Green
             $script:PASS++
@@ -44,10 +44,10 @@ function Check {
 
 function CheckPdf {
     param($Name, $Url)
-    
+
     try {
         $response = Invoke-WebRequest -Uri "$API$Url" -Headers @{Authorization = "Bearer $TOKEN"} -ErrorAction Stop
-        
+
         if ($response.StatusCode -eq 200 -and $response.Headers["Content-Type"] -like "*pdf*") {
             Write-Host "OK $Name (PDF, $($response.Content.Length) bytes)" -ForegroundColor Green
             $script:PASS++
@@ -101,7 +101,7 @@ if ($invoice) {
     Write-Host "   Number: $($invoice.document_number)" -ForegroundColor Gray
     Write-Host "   Total: $($invoice.total) RUB" -ForegroundColor Gray
     $invoiceId = $invoice.id
-    
+
     Check "Send invoice" "POST" "/invoices/$invoiceId/send" $null 200 | Out-Null
     CheckPdf "Download invoice PDF" "/invoices/$invoiceId/pdf"
 }
@@ -119,7 +119,7 @@ $actBody = @{
 $act = Check "Create act" "POST" "/acts" $actBody 201
 if ($act) {
     $actId = $act.id
-    
+
     Check "Sign by client" "POST" "/acts/$actId/sign" '{"signed_by":"client"}' 200 | Out-Null
     Check "Sign by executor" "POST" "/acts/$actId/sign" '{"signed_by":"executor"}' 200 | Out-Null
     CheckPdf "Download act PDF" "/acts/$actId/pdf"
@@ -143,7 +143,7 @@ if ($payout) {
     Write-Host "   Commission: $($payout.platform_commission)" -ForegroundColor Gray
     Write-Host "   Net: $($payout.net_amount)" -ForegroundColor Gray
     $payoutId = $payout.id
-    
+
     Check "Approve payout" "POST" "/payouts/$payoutId/approve" $null 200 | Out-Null
     CheckPdf "Download payout PDF" "/payouts/$payoutId/pdf"
 }
@@ -158,7 +158,7 @@ if ($invoiceId) {
         method = "bank_transfer"
         payment_date = "2026-09-10"
     } | ConvertTo-Json
-    
+
     Check "Register payment" "POST" "/payments" $paymentBody 201 | Out-Null
 }
 

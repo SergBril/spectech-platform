@@ -1,9 +1,10 @@
 """Финальное исправление тестов: Request обязательные поля."""
+
 from pathlib import Path
 
 TESTS = Path(__file__).parent.parent / "tests"
 
-CONFTEST = '''from datetime import datetime, timedelta, timezone
+CONFTEST = """from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
@@ -50,12 +51,12 @@ def make_test_request(db, client_id, category_id, company_id, **kw):
     )
     d.update(kw)
     return Request(**d)
-'''
+"""
 
 (TESTS / "conftest.py").write_text(CONFTEST, encoding="utf-8")
 print("OK conftest.py")
 
-FIN_SVC = '''from datetime import date
+FIN_SVC = """from datetime import date
 from decimal import Decimal
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
@@ -194,12 +195,12 @@ def test_get_finance_dashboard_with_data(db):
     assert r["total_revenue"] == Decimal("12000")
     assert r["total_paid"] == Decimal("5000")
     assert r["total_commission_earned"] == Decimal("1500")
-'''
+"""
 
 (TESTS / "test_finance_service.py").write_text(FIN_SVC, encoding="utf-8")
 print("OK test_finance_service.py")
 
-FIN_API = '''from app.models.auth import User
+FIN_API = """from app.models.auth import User
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
 from app.models.contractor import Contractor
@@ -384,7 +385,7 @@ def test_full_finance_workflow(client, db):
         pdf = client.get(f"/api/v1/invoices/{inv['id']}/pdf")
         assert pdf.status_code == 200
     finally: C()
-'''
+"""
 
 (TESTS / "test_finance_api.py").write_text(FIN_API, encoding="utf-8")
 print("OK test_finance_api.py")

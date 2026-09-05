@@ -1,14 +1,16 @@
 """Smoke-тест v5: полный workflow с обработкой ошибок."""
+
+from datetime import UTC
+
 import requests
-import json
-from typing import Optional
 
 BASE_URL = "http://localhost:8000"
 API = f"{BASE_URL}/api/v1"
 
+
 class SmokeTest:
     def __init__(self):
-        self.token: Optional[str] = None
+        self.token: str | None = None
         self.passed = 0
         self.failed = 0
         self.request_id = None
@@ -24,10 +26,10 @@ class SmokeTest:
     def login(self):
         """Авторизация."""
         try:
-            resp = requests.post(f"{API}/auth/login", json={
-                "email": "admin@spectech.dev",
-                "password": "admin123"
-            })
+            resp = requests.post(
+                f"{API}/auth/login",
+                json={"email": "admin@spectech.dev", "password": "admin123"},
+            )
             if resp.status_code == 200:
                 self.token = resp.json()["access_token"]
                 self.log("Login successful")
@@ -42,15 +44,16 @@ class SmokeTest:
     def test_validation_error(self):
         """Проверка красивых ошибок валидации."""
         try:
-            resp = requests.post(f"{API}/auth/register", json={
-                "email": "not-an-email",
-                "password": "123",
-                "full_name": "Test"
-            })
+            resp = requests.post(
+                f"{API}/auth/register",
+                json={"email": "not-an-email", "password": "123", "full_name": "Test"},
+            )
             if resp.status_code == 422:
                 data = resp.json()
                 if "error" in data and "details" in data:
-                    self.log(f"Validation error: {data['error']}, {len(data['details'])} field errors")
+                    self.log(
+                        f"Validation error: {data['error']}, {len(data['details'])} field errors"
+                    )
                     return
             self.log("Validation error format incorrect", False)
         except Exception as e:
@@ -63,7 +66,9 @@ class SmokeTest:
             if resp.status_code == 200:
                 data = resp.json()
                 if "uptime_seconds" in data and "total_requests" in data:
-                    self.log(f"Metrics: {data['total_requests']} requests, uptime {data['uptime_human']}")
+                    self.log(
+                        f"Metrics: {data['total_requests']} requests, uptime {data['uptime_human']}"
+                    )
                     return
             self.log("Metrics endpoint failed", False)
         except Exception as e:
@@ -74,7 +79,9 @@ class SmokeTest:
         headers = {"Authorization": f"Bearer {self.token}"}
         try:
             # 1. Создаём правило
-            resp = requests.post(f"{API}/telematics/rules/seed-defaults", headers=headers)
+            resp = requests.post(
+                f"{API}/telematics/rules/seed-defaults", headers=headers
+            )
             if resp.status_code == 201:
                 self.log("Default rules created")
             else:
@@ -82,31 +89,42 @@ class SmokeTest:
                 return
 
             # 2. Создаём геозону
-            resp = requests.post(f"{API}/telematics/geofences", headers=headers, json={
-                "name": "Test Zone",
-                "type": "circle",
-                "center_latitude": 55.7558,
-                "center_longitude": 37.6173,
-                "radius_meters": 500
-            })
+            resp = requests.post(
+                f"{API}/telematics/geofences",
+                headers=headers,
+                json={
+                    "name": "Test Zone",
+                    "type": "circle",
+                    "center_latitude": 55.7558,
+                    "center_longitude": 37.6173,
+                    "radius_meters": 500,
+                },
+            )
             if resp.status_code == 201:
                 self.log("Geofence created")
             else:
                 self.log(f"Geofence creation failed: {resp.status_code}", False)
 
             # 3. Отправляем GPS точку
-            from datetime import datetime, timezone
-            resp = requests.post(f"{API}/telematics/gps", headers=headers, json={
-                "points": [{
-                    "vehicle_id": 1,
-                    "latitude": 55.7558,
-                    "longitude": 37.6173,
-                    "speed": 45.0,
-                    "engine_on": True,
-                    "fuel_level": 85.5,
-                    "recorded_at": datetime.now(timezone.utc).isoformat()
-                }]
-            })
+            from datetime import datetime
+
+            resp = requests.post(
+                f"{API}/telematics/gps",
+                headers=headers,
+                json={
+                    "points": [
+                        {
+                            "vehicle_id": 1,
+                            "latitude": 55.7558,
+                            "longitude": 37.6173,
+                            "speed": 45.0,
+                            "engine_on": True,
+                            "fuel_level": 85.5,
+                            "recorded_at": datetime.now(UTC).isoformat(),
+                        }
+                    ]
+                },
+            )
             if resp.status_code == 201:
                 self.log("GPS point received")
             else:
@@ -144,6 +162,7 @@ class SmokeTest:
         else:
             print(f"⚠️  {self.failed} checks failed")
         print("=" * 60)
+
 
 if __name__ == "__main__":
     SmokeTest().run()

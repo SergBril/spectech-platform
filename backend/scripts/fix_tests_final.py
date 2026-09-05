@@ -1,7 +1,8 @@
 ﻿from pathlib import Path
-T = Path('tests')
 
-CONFTEST = '''from datetime import datetime, timedelta, timezone
+T = Path("tests")
+
+CONFTEST = """from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
@@ -36,11 +37,11 @@ def make_test_request(db, client_id, category_id, company_id, **kw):
         rate_type="per_shift", estimated_amount=Decimal("15000"),
         source_channel="phone", priority="normal", company_id=company_id)
     d.update(kw); return Request(**d)
-'''
-(T/'conftest.py').write_text(CONFTEST, encoding='utf-8')
-print('OK conftest.py')
+"""
+(T / "conftest.py").write_text(CONFTEST, encoding="utf-8")
+print("OK conftest.py")
 
-FIN_SVC = '''from datetime import date
+FIN_SVC = """from datetime import date
 from decimal import Decimal
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
@@ -126,11 +127,11 @@ def test_get_finance_dashboard_with_data(db):
     db.commit()
     r = get_finance_dashboard(db, d["co"].id)
     assert r["total_revenue"] == Decimal("12000") and r["total_paid"] == Decimal("5000") and r["total_commission_earned"] == Decimal("1500")
-'''
-(T/'test_finance_service.py').write_text(FIN_SVC, encoding='utf-8')
-print('OK test_finance_service.py')
+"""
+(T / "test_finance_service.py").write_text(FIN_SVC, encoding="utf-8")
+print("OK test_finance_service.py")
 
-FIN_API = '''from app.models.auth import User
+FIN_API = """from app.models.auth import User
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
 from app.models.contractor import Contractor
@@ -243,7 +244,7 @@ def test_full_finance_workflow(client, db):
         client.post(f"/api/v1/invoices/{inv['id']}/send")
         assert client.post("/api/v1/payouts", json={"owner_id": d["ow"].id, "vehicle_id": d["v"].id, "request_id": d["r"].id, "gross_amount": 8000, "commission_rate": 15, "payout_date": "2026-09-10"}).json()["net_amount"] == "6800.00"
     finally: C()
-'''
-(T/'test_finance_api.py').write_text(FIN_API, encoding='utf-8')
-print('OK test_finance_api.py')
-print('DONE')
+"""
+(T / "test_finance_api.py").write_text(FIN_API, encoding="utf-8")
+print("OK test_finance_api.py")
+print("DONE")

@@ -8,13 +8,13 @@ FAIL=0
 check() {
   local name="$1" method="$2" url="$3" data="$4" expected="$5"
   local code
-  
+
   if [ "$method" = "GET" ]; then
     code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" "$API$url")
   else
     code=$(curl -s -o /dev/null -w "%{http_code}" -X "$method" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d "$data" "$API$url")
   fi
-  
+
   if [ "$code" = "$expected" ]; then
     echo "✅ $name ($code)"
     PASS=$((PASS + 1))

@@ -1,12 +1,13 @@
 """Диагностика MinIO и таблицы uploaded_files."""
-import traceback
+
 import sqlite3
+import traceback
 
 print("=" * 60)
 print("=== Test 1: Check table uploaded_files exists ===")
 print("=" * 60)
 try:
-    conn = sqlite3.connect('test.db')
+    conn = sqlite3.connect("test.db")
     cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = [r[0] for r in cur.fetchall()]
     conn.close()
@@ -14,7 +15,7 @@ try:
     for t in sorted(tables):
         print(f"  - {t}")
     print()
-    if 'uploaded_files' in tables:
+    if "uploaded_files" in tables:
         print("✅ uploaded_files table EXISTS")
     else:
         print("❌ uploaded_files table MISSING!")
@@ -29,18 +30,18 @@ print("=== Test 2: Check MinIO connection ===")
 print("=" * 60)
 try:
     import boto3
-    from botocore.exceptions import ClientError, EndpointConnectionError
-    
+    from botocore.exceptions import EndpointConnectionError
+
     s3 = boto3.client(
-        's3',
-        endpoint_url='http://localhost:9000',
-        aws_access_key_id='spectech',
-        aws_secret_access_key='spectech123',
+        "s3",
+        endpoint_url="http://localhost:9000",
+        aws_access_key_id="spectech",
+        aws_secret_access_key="spectech123",
     )
     response = s3.list_buckets()
-    buckets = [b['Name'] for b in response['Buckets']]
+    buckets = [b["Name"] for b in response["Buckets"]]
     print(f"✅ MinIO connected. Buckets: {buckets}")
-    if 'spectech-files' in buckets:
+    if "spectech-files" in buckets:
         print("✅ Bucket 'spectech-files' EXISTS")
     else:
         print("❌ Bucket 'spectech-files' MISSING!")
@@ -57,6 +58,7 @@ print("=== Test 3: Try storage_service.get_storage_stats() ===")
 print("=" * 60)
 try:
     from app.services import storage_service
+
     stats = storage_service.get_storage_stats()
     print(f"✅ Stats: {stats}")
 except Exception as e:
@@ -68,10 +70,11 @@ print("=" * 60)
 print("=== Test 4: Try DB query on UploadedFile ===")
 print("=" * 60)
 try:
+    from sqlalchemy import func
+
     from app.core.db import SessionLocal
     from app.models.telematics import UploadedFile
-    from sqlalchemy import func
-    
+
     db = SessionLocal()
     count = db.query(func.count(UploadedFile.id)).scalar() or 0
     print(f"✅ UploadedFile count: {count}")
