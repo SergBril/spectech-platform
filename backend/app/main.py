@@ -104,9 +104,6 @@ init_sentry()
 # Добавляем Request ID middleware (ПЕРВЫМ!)
 # app.add_middleware(RequestIDMiddleware)  # временно отключено
 
-from sqlalchemy.exc import IntegrityError, OperationalError
-
-# ... (остальной код)
 
 # Создаём таблицы в БД при старте (для dev-режима)
 try:
