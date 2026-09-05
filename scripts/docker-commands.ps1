@@ -12,7 +12,7 @@ param(
 )
 
 function Show-Help {
-    Write-Host "🐳 SpectechPlatform Docker Commands" -ForegroundColor Cyan
+    Write-Host "SpectechPlatform Docker Commands" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "DEVELOPMENT:" -ForegroundColor Yellow
     Write-Host "  dev-up       Start development environment"
@@ -35,51 +35,51 @@ function Show-Help {
 
 switch ($Command) {
     "dev-up" {
-        Write-Host "🚀 Starting development environment..." -ForegroundColor Green
+        Write-Host "Starting development environment..." -ForegroundColor Green
         docker-compose -f docker-compose.dev.yaml up -d
     }
     "dev-down" {
-        Write-Host "🛑 Stopping development environment..." -ForegroundColor Yellow
+        Write-Host "Stopping development environment..." -ForegroundColor Yellow
         docker-compose -f docker-compose.dev.yaml down
     }
     "dev-logs" {
         docker-compose -f docker-compose.dev.yaml logs -f
     }
     "dev-restart" {
-        Write-Host "🔄 Restarting development environment..." -ForegroundColor Cyan
+        Write-Host "Restarting development environment..." -ForegroundColor Cyan
         docker-compose -f docker-compose.dev.yaml down
         docker-compose -f docker-compose.dev.yaml up -d
     }
     "prod-build" {
-        Write-Host "🔨 Building production images..." -ForegroundColor Green
+        Write-Host "Building production images..." -ForegroundColor Green
         cd backend
         docker build -t spectech-backend:latest .
         cd ..
     }
     "prod-up" {
-        Write-Host "🚀 Starting production environment..." -ForegroundColor Green
+        Write-Host "Starting production environment..." -ForegroundColor Green
         docker-compose -f docker-compose.prod.yaml --env-file .env.prod up -d
     }
     "prod-down" {
-        Write-Host "🛑 Stopping production environment..." -ForegroundColor Yellow
-        docker-compose -f docker-compose.prod.yaml down
+        Write-Host "Stopping production environment..." -ForegroundColor Yellow
+        docker-compose -f docker-compose.prod.yaml --env-file .env.prod down
     }
     "prod-logs" {
-        docker-compose -f docker-compose.prod.yaml logs -f
+        docker-compose -f docker-compose.prod.yaml --env-file .env.prod logs -f
     }
     "prod-restart" {
-        Write-Host "🔄 Restarting production environment..." -ForegroundColor Cyan
-        docker-compose -f docker-compose.prod.yaml down
+        Write-Host "Restarting production environment..." -ForegroundColor Cyan
+        docker-compose -f docker-compose.prod.yaml --env-file .env.prod down
         docker-compose -f docker-compose.prod.yaml --env-file .env.prod up -d
     }
     "status" {
-        Write-Host "📊 Container Status:" -ForegroundColor Cyan
+        Write-Host "Container Status:" -ForegroundColor Cyan
         docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
     }
     "clean" {
-        Write-Host "🧹 Cleaning all containers and volumes..." -ForegroundColor Red
+        Write-Host "Cleaning all containers and volumes..." -ForegroundColor Red
         docker-compose -f docker-compose.dev.yaml down -v
-        docker-compose -f docker-compose.prod.yaml down -v
+        docker-compose -f docker-compose.prod.yaml --env-file .env.prod down -v
         docker system prune -f
     }
     default {
