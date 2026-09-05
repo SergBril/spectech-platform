@@ -11,7 +11,7 @@ const MapWithNoSSR = dynamic(() => import("./map"), { ssr: false });
 type Tab = "live" | "tracks" | "fuel" | "alerts" | "notifications" | "rules";
 
 interface Vehicle { id: number; name: string; status: string; category_id?: number; year?: number; last_lat?: number; last_lon?: number; last_speed?: number; last_updated?: string; }
-interface Alert { id: number; title: string; description?: string; severity: string; status: string; occurred_at: string; }
+interface Alert { id: number; title: string; description?: string; severity: string; status: string; occurred_at: string; vehicle_id?: number; }
 interface Notification { id: number; title: string; body: string; is_read: boolean; sent_at: string; }
 interface Rule { id: number; name: string; rule_type: string; threshold?: number; severity: string; is_active: boolean; notify_email: boolean; notify_in_app: boolean; }
 
@@ -49,8 +49,8 @@ export default function TelematicsPage() {
         apiFetch("/telematics/rules").catch(() => []),
         apiFetch("/telematics/notifications/unread-count").catch(() => ({ count: 0 })),
       ]);
-      setVehicles(v); setAlerts(a); setNotifications(n); setRules(r);
-      setUnreadCount(uc?.count || 0);
+      setVehicles(v as any); setAlerts(a as any); setNotifications(n as any); setRules(r as any);
+      setUnreadCount((uc as any)?.count || 0);
     } catch (error) { console.error("Failed to load data:", error); }
     finally { setLoading(false); }
   }, [router]);
@@ -234,7 +234,7 @@ export default function TelematicsPage() {
                   <div className="space-y-2">
                     {alerts.map((a) => (<div
                         key={a.id}
-                        onClick={() => router.push("/telematics/tracks/" + a.vehicle_id)}
+                        onClick={() => router.push("/telematics/tracks/" + (a.vehicle_id ?? 0))}
                         className={"rounded-lg border p-4 cursor-pointer transition hover:shadow-md " + (severityColors[a.severity] || severityColors.info)}
                       >
                         <div className="flex justify-between items-start">

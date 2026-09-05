@@ -164,11 +164,11 @@ export default function TrackPage() {
         if (statsParams.length > 0) statsUrl += `?${statsParams.join("&")}`;
 
         const [pts, st] = await Promise.all([
-          apiFetch(trackUrl).catch(() => []),
-          apiFetch(statsUrl).catch(() => null),
+          apiFetch<any>(trackUrl).catch(() => []),
+          apiFetch<any>(statsUrl).catch(() => null),
         ]);
-        setPoints(pts);
-        setStats(st);
+        setPoints(pts as any);
+        setStats(st as any);
       } catch (e) {
         console.error("Failed to load track:", e);
         toast.error("Ошибка загрузки трека");

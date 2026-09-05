@@ -29,13 +29,13 @@ export async function apiFetch<T>(
     hasToken: !!token,
   });
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(options.headers || {}),
+    ...(options.headers as Record<string, string> || {}),
   };
 
   if (token) {
-    headers.Authorization = `Bearer ${token}`;
+    (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   }
 
   const response = await fetch(`${API_URL}${path}`, {
