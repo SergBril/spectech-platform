@@ -1,7 +1,9 @@
 """Middleware для логирования и генерации request_id."""
+
+import logging
 import time
 import uuid
-import logging
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -47,7 +49,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                         "path": request.url.path,
                         "status": response.status_code,
                         "duration_ms": round(duration_ms, 2),
-                    }
+                    },
                 )
             else:
                 logger.info(
@@ -58,7 +60,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                         "path": request.url.path,
                         "status": response.status_code,
                         "duration_ms": round(duration_ms, 2),
-                    }
+                    },
                 )
 
             # Добавляем request_id в заголовки ответа
@@ -83,6 +85,6 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                     "error": str(exc),
                     "duration_ms": round(duration_ms, 2),
                 },
-                exc_info=True
+                exc_info=True,
             )
             raise

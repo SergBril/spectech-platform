@@ -1,8 +1,8 @@
 """API для работы с файлами."""
-from datetime import datetime
-from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
@@ -24,11 +24,11 @@ class FileRead(BaseModel):
     content_type: str
     size_bytes: int
     file_category: str
-    vehicle_id: Optional[int] = None
-    invoice_id: Optional[int] = None
-    act_id: Optional[int] = None
-    contractor_id: Optional[int] = None
-    uploaded_by: Optional[int] = None
+    vehicle_id: int | None = None
+    invoice_id: int | None = None
+    act_id: int | None = None
+    contractor_id: int | None = None
+    uploaded_by: int | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -48,17 +48,17 @@ class FileUploadResponse(BaseModel):
 async def upload_file(
     file: UploadFile = File(...),
     file_category: str = Query(default="other"),
-    vehicle_id: Optional[int] = Query(default=None),
-    invoice_id: Optional[int] = Query(default=None),
-    act_id: Optional[int] = Query(default=None),
-    contractor_id: Optional[int] = Query(default=None),
+    vehicle_id: int | None = Query(default=None),
+    invoice_id: int | None = Query(default=None),
+    act_id: int | None = Query(default=None),
+    contractor_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Загружает файл в хранилище."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
-    
+
     # Определяем папку по категории
     folder_map = {
         "vehicle_photo": "vehicles/photos",
@@ -68,7 +68,7 @@ async def upload_file(
         "contractor_doc": "contractors/docs",
     }
     folder = folder_map.get(file_category, "uploads")
-    
+
     # Загружаем в MinIO
     try:
         content = await file.read()
@@ -80,7 +80,7 @@ async def upload_file(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Storage error: {str(e)}")
-    
+
     # Сохраняем метаданные в БД
     uploaded_file = UploadedFile(
         original_filename=file.filename,
@@ -98,12 +98,12 @@ async def upload_file(
     db.add(uploaded_file)
     db.commit()
     db.refresh(uploaded_file)
-    
+
     # Генерируем подписанный URL
     presigned_url = storage_service.generate_presigned_url(
         upload_result["path"], expires_in=3600
     )
-    
+
     return FileUploadResponse(
         id=uploaded_file.id,
         original_filename=uploaded_file.original_filename,
@@ -125,7 +125,7 @@ def download_file(
     uploaded_file = db.get(UploadedFile, file_id)
     if not uploaded_file:
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     try:
         content = storage_service.get_file(uploaded_file.storage_path)
         return Response(
@@ -150,7 +150,7 @@ def get_presigned_url(
     uploaded_file = db.get(UploadedFile, file_id)
     if not uploaded_file:
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     url = storage_service.generate_presigned_url(
         uploaded_file.storage_path, expires_in=expires_in
     )
@@ -161,25 +161,25 @@ def get_presigned_url(
     }
 
 
-@router.get("/", response_model=List[FileRead])
+@router.get("/", response_model=list[FileRead])
 def list_files(
-    file_category: Optional[str] = None,
-    vehicle_id: Optional[int] = None,
-    invoice_id: Optional[int] = None,
+    file_category: str | None = None,
+    vehicle_id: int | None = None,
+    invoice_id: int | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Список загруженных файлов."""
     stmt = select(UploadedFile).order_by(UploadedFile.created_at.desc())
-    
+
     if file_category:
         stmt = stmt.where(UploadedFile.file_category == file_category)
     if vehicle_id:
         stmt = stmt.where(UploadedFile.vehicle_id == vehicle_id)
     if invoice_id:
         stmt = stmt.where(UploadedFile.invoice_id == invoice_id)
-    
+
     return db.scalars(stmt.limit(limit)).all()
 
 
@@ -193,10 +193,10 @@ def delete_file(
     uploaded_file = db.get(UploadedFile, file_id)
     if not uploaded_file:
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     # Удаляем из хранилища
     storage_service.delete_file(uploaded_file.storage_path)
-    
+
     # Удаляем из БД
     db.delete(uploaded_file)
     db.commit()
@@ -209,11 +209,12 @@ def storage_stats(
 ):
     """Статистика хранилища."""
     stats = storage_service.get_storage_stats()
-    
+
     # Добавляем статистику по БД
     from sqlalchemy import func
+
     db_files_count = db.query(func.count(UploadedFile.id)).scalar() or 0
-    
+
     return {
         "storage": stats,
         "database": {

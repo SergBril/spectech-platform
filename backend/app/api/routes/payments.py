@@ -1,5 +1,3 @@
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,19 +7,19 @@ from app.core.db import get_db
 from app.models.auth import User
 from app.models.finance import Payment
 from app.schemas.finance import (
+    FinanceDashboard,
     PaymentCreate,
     PaymentRead,
-    FinanceDashboard,
 )
 from app.services.finance_service import (
-    register_payment,
     get_finance_dashboard,
+    register_payment,
 )
 
 router = APIRouter()
 
 
-@router.get("", response_model=List[PaymentRead])
+@router.get("", response_model=list[PaymentRead])
 def list_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -47,7 +45,7 @@ def create_payment(
             status_code=422,
             detail="Either invoice_id or payout_id must be specified",
         )
-    
+
     payment = Payment(
         invoice_id=payload.invoice_id,
         payout_id=payload.payout_id,
@@ -59,10 +57,10 @@ def create_payment(
     )
     db.add(payment)
     db.flush()
-    
+
     # Обновляем связанные документы
     register_payment(db, payment)
-    
+
     db.refresh(payment)
     return payment
 
@@ -76,7 +74,7 @@ def get_dashboard(
     Финансовый дашборд: доходы, выплаты, комиссии.
     """
     # require_permission(db, current_user, "finance", "dashboard")
-    
+
     company_id = current_user.company_id or 0
     stats = get_finance_dashboard(db, company_id)
     return FinanceDashboard(**stats)

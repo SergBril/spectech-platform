@@ -1,18 +1,21 @@
 """
 Движок алертов: применяет правила компании к данным телеметрии.
 """
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
 
-from sqlalchemy import select, and_
+from datetime import datetime, timedelta
+
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from app.models.telematics import (
-    GpsPoint, Alert, AlertRule, Notification,
-    AlertSeverity, AlertStatus,
-)
 from app.models.auth import User
-
+from app.models.telematics import (
+    Alert,
+    AlertRule,
+    AlertSeverity,
+    AlertStatus,
+    GpsPoint,
+    Notification,
+)
 
 # Типы правил
 RULE_SPEED = "speed_limit"
@@ -23,7 +26,9 @@ RULE_IDLE = "idle_time"
 RULE_OFFLINE = "offline"
 
 
-def process_point_with_rules(db: Session, point: GpsPoint, company_id: int) -> List[Alert]:
+def process_point_with_rules(
+    db: Session, point: GpsPoint, company_id: int
+) -> list[Alert]:
     """
     Применяет все активные правила компании к GPS-точке.
     Возвращает список созданных алертов.
@@ -56,7 +61,9 @@ def process_point_with_rules(db: Session, point: GpsPoint, company_id: int) -> L
             # Создаём уведомления если правило этого требует
             if rule.notify_in_app or rule.notify_email:
                 _create_notifications(
-                    db, alert, company_id,
+                    db,
+                    alert,
+                    company_id,
                     in_app=rule.notify_in_app,
                     email=rule.notify_email,
                 )
@@ -67,7 +74,7 @@ def process_point_with_rules(db: Session, point: GpsPoint, company_id: int) -> L
     return created_alerts
 
 
-def _check_speed(db: Session, point: GpsPoint, rule: AlertRule) -> Optional[Alert]:
+def _check_speed(db: Session, point: GpsPoint, rule: AlertRule) -> Alert | None:
     """Проверка превышения скорости."""
     if point.speed is None or rule.threshold is None:
         return None
@@ -87,7 +94,7 @@ def _check_speed(db: Session, point: GpsPoint, rule: AlertRule) -> Optional[Aler
     return None
 
 
-def _check_fuel(db: Session, point: GpsPoint, rule: AlertRule) -> Optional[Alert]:
+def _check_fuel(db: Session, point: GpsPoint, rule: AlertRule) -> Alert | None:
     """Проверка резкого падения уровня топлива."""
     if point.fuel_level is None or rule.threshold is None:
         return None
@@ -115,14 +122,18 @@ def _check_fuel(db: Session, point: GpsPoint, rule: AlertRule) -> Optional[Alert
                 vehicle_id=point.vehicle_id,
                 title=f"Подозрение на слив топлива: {drop:.1f} л",
                 description=f"Уровень упал с {prev.fuel_level:.1f} до {point.fuel_level:.1f} л",
-                details={"drop": drop, "before": prev.fuel_level, "after": point.fuel_level},
+                details={
+                    "drop": drop,
+                    "before": prev.fuel_level,
+                    "after": point.fuel_level,
+                },
                 occurred_at=point.recorded_at,
                 company_id=company_id,
             )
     return None
 
 
-def _check_engine_hours(db: Session, point: GpsPoint, rule: AlertRule) -> Optional[Alert]:
+def _check_engine_hours(db: Session, point: GpsPoint, rule: AlertRule) -> Alert | None:
     """Проверка превышения суточных моточасов."""
     if point.engine_hours is None or rule.threshold is None:
         return None
@@ -159,7 +170,7 @@ def _check_engine_hours(db: Session, point: GpsPoint, rule: AlertRule) -> Option
     return None
 
 
-def _check_idle(db: Session, point: GpsPoint, rule: AlertRule) -> Optional[Alert]:
+def _check_idle(db: Session, point: GpsPoint, rule: AlertRule) -> Alert | None:
     """Проверка длительного простоя с включённым двигателем."""
     if rule.threshold is None:
         return None
@@ -206,7 +217,7 @@ def _get_or_create_alert(
     details: dict,
     occurred_at: datetime,
     company_id: int,
-) -> Optional[Alert]:
+) -> Alert | None:
     """Создаёт алерт, избегая дублирования в течение 10 минут."""
     cutoff = occurred_at - timedelta(minutes=10)
     existing = db.scalar(
@@ -258,24 +269,28 @@ def _create_notifications(
 
     for admin in admins:
         if in_app:
-            db.add(Notification(
-                user_id=admin.id,
-                alert_id=alert.id,
-                channel="in_app",
-                title=alert.title,
-                body=alert.description or alert.title,
-            ))
+            db.add(
+                Notification(
+                    user_id=admin.id,
+                    alert_id=alert.id,
+                    channel="in_app",
+                    title=alert.title,
+                    body=alert.description or alert.title,
+                )
+            )
 
         if email:
             # Mock для разработки — в продакшене здесь будет реальный SMTP
             _send_email_mock(admin.email, alert.title, alert.description)
-            db.add(Notification(
-                user_id=admin.id,
-                alert_id=alert.id,
-                channel="email",
-                title=alert.title,
-                body=alert.description or alert.title,
-            ))
+            db.add(
+                Notification(
+                    user_id=admin.id,
+                    alert_id=alert.id,
+                    channel="email",
+                    title=alert.title,
+                    body=alert.description or alert.title,
+                )
+            )
 
 
 def _send_email_mock(to: str, subject: str, body: str) -> None:

@@ -1,7 +1,8 @@
 """Менеджер WebSocket подключений."""
+
 import logging
-from datetime import datetime, timezone
-from typing import Dict, Set
+from datetime import UTC, datetime
+
 from fastapi import WebSocket
 
 logger = logging.getLogger("spectech.websocket")
@@ -10,7 +11,7 @@ logger = logging.getLogger("spectech.websocket")
 class ConnectionManager:
     """
     Управляет WebSocket подключениями с группировкой по компании.
-    
+
     Структура:
     - self.company_connections: dict[company_id -> set[websocket]]
     - self.user_connections: dict[user_id -> websocket]
@@ -18,34 +19,36 @@ class ConnectionManager:
 
     def __init__(self):
         # company_id -> множество активных подключений
-        self.company_connections: Dict[int, Set[WebSocket]] = {}
+        self.company_connections: dict[int, set[WebSocket]] = {}
         # user_id -> websocket (последнее подключение пользователя)
-        self.user_connections: Dict[int, WebSocket] = {}
+        self.user_connections: dict[int, WebSocket] = {}
         # websocket -> метаинформация
-        self.connection_meta: Dict[WebSocket, dict] = {}
+        self.connection_meta: dict[WebSocket, dict] = {}
 
     async def connect(self, websocket: WebSocket, user_id: int, company_id: int):
         """Принимает подключение и регистрирует пользователя."""
         await websocket.accept()
-        
+
         # Регистрируем в company группу
         if company_id not in self.company_connections:
             self.company_connections[company_id] = set()
         self.company_connections[company_id].add(websocket)
-        
+
         # Сохраняем последнее подключение пользователя (не закрывая старые)
         self.user_connections[user_id] = websocket
-        
+
         # Сохраняем метаданные
         self.connection_meta[websocket] = {
             "user_id": user_id,
             "company_id": company_id,
-            "connected_at": datetime.now(timezone.utc).isoformat(),
+            "connected_at": datetime.now(UTC).isoformat(),
         }
-        
+
         logger.info(
             "WebSocket connected: user=%s, company=%s, total_company=%s",
-            user_id, company_id, len(self.company_connections.get(company_id, set()))
+            user_id,
+            company_id,
+            len(self.company_connections.get(company_id, set())),
         )
 
     def disconnect(self, websocket: WebSocket):
@@ -53,17 +56,17 @@ class ConnectionManager:
         meta = self.connection_meta.pop(websocket, {})
         user_id = meta.get("user_id")
         company_id = meta.get("company_id")
-        
+
         # Удаляем из company группы
         if company_id and company_id in self.company_connections:
             self.company_connections[company_id].discard(websocket)
             if not self.company_connections[company_id]:
                 del self.company_connections[company_id]
-        
+
         # Удаляем из user connections
         if user_id and self.user_connections.get(user_id) == websocket:
             del self.user_connections[user_id]
-        
+
         logger.info("WebSocket disconnected: user=%s, company=%s", user_id, company_id)
 
     async def send_personal(self, user_id: int, message: dict):
@@ -83,7 +86,7 @@ class ConnectionManager:
         connections = self.company_connections.get(company_id, set()).copy()
         sent_count = 0
         failed = []
-        
+
         for websocket in connections:
             try:
                 await websocket.send_json(message)
@@ -91,36 +94,40 @@ class ConnectionManager:
             except Exception as e:
                 failed.append(websocket)
                 logger.error("Failed to broadcast: %s", e)
-        
+
         # Удаляем нерабочие подключения
         for ws in failed:
             self.disconnect(ws)
-        
+
         logger.info(
             "Broadcast to company %s: sent=%s, failed=%s",
-            company_id, sent_count, len(failed)
+            company_id,
+            sent_count,
+            len(failed),
         )
         return sent_count
 
     async def broadcast_gps_to_company(self, company_id: int, gps_data: dict) -> int:
         """
         Отправляет GPS точку всем подписчикам компании на канал 'gps'.
-        
+
         Args:
             company_id: ID компании
             gps_data: Данные GPS точки (vehicle_id, lat, lon, speed, ...)
-        
+
         Returns:
             Количество получателей
         """
         message = {
             "type": "gps_point",
             "data": gps_data,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         return await self.broadcast_to_company(company_id, message)
 
-    async def broadcast_alert_to_company(self, company_id: int, alert_data: dict) -> int:
+    async def broadcast_alert_to_company(
+        self, company_id: int, alert_data: dict
+    ) -> int:
         """
         Отправляет алерт всем подписчикам компании.
 
@@ -134,9 +141,13 @@ class ConnectionManager:
         message = {
             "type": "alert",
             "data": alert_data,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
-        logger.info("🚨 Broadcasting alert to company %s: %s", company_id, alert_data.get("title"))
+        logger.info(
+            "🚨 Broadcasting alert to company %s: %s",
+            company_id,
+            alert_data.get("title"),
+        )
         return await self.broadcast_to_company(company_id, message)
 
     async def broadcast_all(self, message: dict):

@@ -1,6 +1,6 @@
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 from fastapi import HTTPException, status
@@ -21,14 +21,16 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(user: User) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": str(user.id),
         "email": user.email,
         "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
         "iat": now,
     }
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(
+        payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+    )
 
 
 def create_refresh_token(db: Session, user: User) -> str:
@@ -38,7 +40,8 @@ def create_refresh_token(db: Session, user: User) -> str:
     session = UserSession(
         user_id=user.id,
         refresh_token_hash=token_hash,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days),
+        expires_at=datetime.now(UTC)
+        + timedelta(days=settings.refresh_token_expire_days),
     )
     db.add(session)
     db.flush()
@@ -48,7 +51,9 @@ def create_refresh_token(db: Session, user: User) -> str:
 
 def decode_access_token(token: str) -> dict:
     try:
-        return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        return jwt.decode(
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        )
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -71,7 +76,7 @@ def authenticate_user(db: Session, email: str, password: str) -> User:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     user.failed_login_attempts = 0
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = datetime.now(UTC)
     db.commit()
 
     return user

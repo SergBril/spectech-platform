@@ -1,33 +1,32 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class ShiftTaskCreate(BaseModel):
     request_id: int
-    assignment_id: Optional[int] = None
+    assignment_id: int | None = None
     operator_id: int
     vehicle_id: int
     shift_date: date
     shift_number: int = 1
-    odometer_start: Optional[int] = None
-    moto_hours_start: Optional[Decimal] = None
-    fuel_level_start: Optional[Decimal] = None
+    odometer_start: int | None = None
+    moto_hours_start: Decimal | None = None
+    fuel_level_start: Decimal | None = None
 
 
 class ShiftTaskRead(BaseModel):
     id: int
     request_id: int
-    assignment_id: Optional[int] = None
+    assignment_id: int | None = None
     operator_id: int
     vehicle_id: int
     shift_date: date
     shift_number: int
-    odometer_start: Optional[int] = None
-    moto_hours_start: Optional[Decimal] = None
-    fuel_level_start: Optional[Decimal] = None
+    odometer_start: int | None = None
+    moto_hours_start: Decimal | None = None
+    fuel_level_start: Decimal | None = None
     status: str
     created_at: datetime
 
@@ -36,46 +35,46 @@ class ShiftTaskRead(BaseModel):
 
 class ShiftReportCreate(BaseModel):
     shift_task_id: int
-    operator_moto_hours: Optional[Decimal] = None
-    operator_odometer: Optional[int] = None
-    operator_fuel_used: Optional[Decimal] = None
-    operator_work_start: Optional[datetime] = None
-    operator_work_end: Optional[datetime] = None
-    operator_idle_hours: Optional[Decimal] = None
-    operator_idle_reasons: Optional[dict] = None
-    operator_comment: Optional[str] = None
+    operator_moto_hours: Decimal | None = None
+    operator_odometer: int | None = None
+    operator_fuel_used: Decimal | None = None
+    operator_work_start: datetime | None = None
+    operator_work_end: datetime | None = None
+    operator_idle_hours: Decimal | None = None
+    operator_idle_reasons: dict | None = None
+    operator_comment: str | None = None
 
 
 class ShiftReportUpdate(BaseModel):
-    client_moto_hours: Optional[Decimal] = None
-    client_odometer: Optional[int] = None
-    client_comment: Optional[str] = None
-    client_status: Optional[str] = None
-    final_moto_hours: Optional[Decimal] = None
-    final_odometer: Optional[int] = None
-    final_fuel_used: Optional[Decimal] = None
+    client_moto_hours: Decimal | None = None
+    client_odometer: int | None = None
+    client_comment: str | None = None
+    client_status: str | None = None
+    final_moto_hours: Decimal | None = None
+    final_odometer: int | None = None
+    final_fuel_used: Decimal | None = None
 
 
 class ShiftReportRead(BaseModel):
     id: int
     shift_task_id: int
     operator_id: int
-    operator_moto_hours: Optional[Decimal] = None
-    operator_odometer: Optional[int] = None
-    operator_fuel_used: Optional[Decimal] = None
-    operator_work_start: Optional[datetime] = None
-    operator_work_end: Optional[datetime] = None
-    operator_idle_hours: Optional[Decimal] = None
-    operator_comment: Optional[str] = None
-    operator_submitted_at: Optional[datetime] = None
-    client_moto_hours: Optional[Decimal] = None
-    client_odometer: Optional[int] = None
-    client_comment: Optional[str] = None
+    operator_moto_hours: Decimal | None = None
+    operator_odometer: int | None = None
+    operator_fuel_used: Decimal | None = None
+    operator_work_start: datetime | None = None
+    operator_work_end: datetime | None = None
+    operator_idle_hours: Decimal | None = None
+    operator_comment: str | None = None
+    operator_submitted_at: datetime | None = None
+    client_moto_hours: Decimal | None = None
+    client_odometer: int | None = None
+    client_comment: str | None = None
     client_status: str
-    client_responded_at: Optional[datetime] = None
-    final_moto_hours: Optional[Decimal] = None
-    final_odometer: Optional[int] = None
-    final_fuel_used: Optional[Decimal] = None
+    client_responded_at: datetime | None = None
+    final_moto_hours: Decimal | None = None
+    final_odometer: int | None = None
+    final_fuel_used: Decimal | None = None
     status: str
     created_at: datetime
 

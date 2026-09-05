@@ -1,6 +1,6 @@
-from typing import List, Optional
+from datetime import UTC
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,9 +19,9 @@ from app.schemas.shift import (
 router = APIRouter()
 
 
-@router.get("/tasks", response_model=List[ShiftTaskRead])
+@router.get("/tasks", response_model=list[ShiftTaskRead])
 def list_shift_tasks(
-    request_id: Optional[int] = None,
+    request_id: int | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -58,9 +58,9 @@ def get_shift_task(
     return task
 
 
-@router.get("/reports", response_model=List[ShiftReportRead])
+@router.get("/reports", response_model=list[ShiftReportRead])
 def list_shift_reports(
-    shift_task_id: Optional[int] = None,
+    shift_task_id: int | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -78,7 +78,7 @@ def create_shift_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     task = db.get(ShiftTask, payload.shift_task_id)
     if not task:
@@ -96,7 +96,7 @@ def create_shift_report(
 
     if payload.operator_moto_hours is not None:
         report.status = "submitted"
-        report.operator_submitted_at = datetime.now(timezone.utc)
+        report.operator_submitted_at = datetime.now(UTC)
 
     db.add(report)
     db.commit()
@@ -111,7 +111,7 @@ def update_shift_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     report = db.get(ShiftReport, report_id)
     if not report:
@@ -120,13 +120,17 @@ def update_shift_report(
     update_data = payload.model_dump(exclude_unset=True)
 
     if "client_status" in update_data:
-        report.client_responded_at = datetime.now(timezone.utc)
+        report.client_responded_at = datetime.now(UTC)
         if update_data["client_status"] == "approved":
             report.status = "approved"
             if report.operator_moto_hours is not None:
-                report.final_moto_hours = report.client_moto_hours or report.operator_moto_hours
+                report.final_moto_hours = (
+                    report.client_moto_hours or report.operator_moto_hours
+                )
             if report.operator_odometer is not None:
-                report.final_odometer = report.client_odometer or report.operator_odometer
+                report.final_odometer = (
+                    report.client_odometer or report.operator_odometer
+                )
 
     for field, value in update_data.items():
         setattr(report, field, value)

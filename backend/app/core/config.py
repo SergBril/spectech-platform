@@ -2,7 +2,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    database_url: str = "postgresql+psycopg://spectech:spectech_dev_password@localhost:5432/spectech"
+    database_url: str = (
+        "postgresql+psycopg://spectech:spectech_dev_password@localhost:5432/spectech"
+    )
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 0

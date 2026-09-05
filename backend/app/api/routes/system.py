@@ -1,8 +1,9 @@
 """Системные эндпоинты: health, метрики, версия."""
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -11,7 +12,7 @@ from app.services.metrics_service import get_metrics
 router = APIRouter()
 
 APP_VERSION = "0.5.0-dev"
-_start_time = datetime.now(timezone.utc)
+_start_time = datetime.now(UTC)
 
 
 @router.get("/health")
@@ -42,7 +43,7 @@ def health_detailed(db: Session = Depends(get_db)):
         "status": "ok" if db_status == "ok" else "degraded",
         "version": APP_VERSION,
         "started_at": _start_time.isoformat(),
-        "current_time": datetime.now(timezone.utc).isoformat(),
+        "current_time": datetime.now(UTC).isoformat(),
         "database": {
             "status": db_status,
             "tables": {
@@ -59,13 +60,13 @@ def health_detailed(db: Session = Depends(get_db)):
 def metrics():
     """Метрики приложения (в памяти)."""
     return get_metrics()
-    from app.services.background_service import get_task_log
 
 
 @router.get("/background-log")
 def background_log():
     """Журнал фоновых задач (без авторизации)."""
     from app.services.background_service import get_task_log
+
     tasks = get_task_log()
     return {
         "tasks": tasks,

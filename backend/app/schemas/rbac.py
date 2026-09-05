@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -7,14 +6,14 @@ from pydantic import BaseModel, ConfigDict, Field
 class RoleCreate(BaseModel):
     code: str = Field(min_length=1, max_length=50)
     name: str = Field(min_length=1, max_length=255)
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class RoleRead(BaseModel):
     id: int
     code: str
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     is_system: bool
     created_at: datetime
 
@@ -25,7 +24,7 @@ class PermissionRead(BaseModel):
     id: int
     entity: str
     action: str
-    description: Optional[str] = None
+    description: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

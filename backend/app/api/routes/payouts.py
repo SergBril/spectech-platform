@@ -1,6 +1,3 @@
-from pathlib import Path
-from typing import List, Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy import select
@@ -11,21 +8,21 @@ from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
 from app.models.contractor import Contractor
-from app.models.finance import Payout, DocumentStatus
+from app.models.finance import DocumentStatus, Payout
 from app.schemas.finance import PayoutCreate, PayoutRead, PayoutUpdate
 from app.services.finance_service import (
-    generate_document_number,
     calculate_payout,
+    generate_document_number,
 )
 from app.services.pdf_service import generate_payout_pdf
 
 router = APIRouter()
 
 
-@router.get("", response_model=List[PayoutRead])
+@router.get("", response_model=list[PayoutRead])
 def list_payouts(
-    status_filter: Optional[str] = Query(default=None, alias="status"),
-    owner_id: Optional[int] = None,
+    status_filter: str | None = Query(default=None, alias="status"),
+    owner_id: int | None = None,
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -33,13 +30,13 @@ def list_payouts(
 ):
     """Список выплат."""
     stmt = select(Payout)
-    
+
     if status_filter:
         stmt = stmt.where(Payout.status == status_filter)
-    
+
     if owner_id:
         stmt = stmt.where(Payout.owner_id == owner_id)
-    
+
     stmt = stmt.order_by(Payout.created_at.desc()).offset(offset).limit(limit)
     return db.scalars(stmt).all()
 
@@ -52,7 +49,7 @@ def create_payout(
 ):
     """Создать выплату собственнику с автоматическим расчётом комиссии."""
     calculation = calculate_payout(payload.gross_amount, payload.commission_rate)
-    
+
     payout = Payout(
         document_number=generate_document_number(db, "PAY"),
         owner_id=payload.owner_id,
@@ -105,10 +102,10 @@ def update_payout(
     payout = db.get(Payout, payout_id)
     if not payout:
         raise HTTPException(status_code=404, detail="Payout not found")
-    
+
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(payout, field, value)
-    
+
     db.commit()
     db.refresh(payout)
     return payout
@@ -124,13 +121,13 @@ def approve_payout(
     payout = db.get(Payout, payout_id)
     if not payout:
         raise HTTPException(status_code=404, detail="Payout not found")
-    
+
     if payout.status != DocumentStatus.draft:
         raise HTTPException(
             status_code=409,
             detail=f"Only draft payouts can be approved. Current: {payout.status}",
         )
-    
+
     payout.status = DocumentStatus.sent
     db.commit()
     db.refresh(payout)
@@ -147,15 +144,17 @@ def download_payout_pdf(
     payout = db.get(Payout, payout_id)
     if not payout:
         raise HTTPException(status_code=404, detail="Payout not found")
-    
+
     owner = db.get(Contractor, payout.owner_id)
     owner_name = owner.name if owner else ""
-    
+
     vehicle = db.get(Vehicle, payout.vehicle_id)
     vehicle_name = vehicle.name if vehicle else ""
-    
-    pdf_path = generate_payout_pdf(payout, owner_name=owner_name, vehicle_name=vehicle_name)
-    
+
+    pdf_path = generate_payout_pdf(
+        payout, owner_name=owner_name, vehicle_name=vehicle_name
+    )
+
     return FileResponse(
         path=pdf_path,
         filename=f"payout_{payout.document_number}.pdf",

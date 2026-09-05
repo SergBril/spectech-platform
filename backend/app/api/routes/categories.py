@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,7 +18,7 @@ def list_categories(
 ):
     stmt = select(Category).order_by(Category.level, Category.name).limit(limit)
     categories = db.scalars(stmt).all()
-    
+
     return [
         {
             "id": c.id,

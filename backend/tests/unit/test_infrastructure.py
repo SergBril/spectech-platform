@@ -1,6 +1,7 @@
 """
 Тесты для проверки работоспособности инфраструктуры тестирования.
 """
+
 import pytest
 
 
@@ -13,9 +14,9 @@ class TestInfrastructure:
 
     def test_imports_work(self):
         """Проверяем что импорты работают."""
-        from app.main import app
-        from app.core.db import Base
         from app.core.config import settings
+        from app.core.db import Base
+        from app.main import app
 
         assert app is not None
         assert Base is not None
@@ -33,6 +34,7 @@ class TestInfrastructure:
     async def test_async_works(self):
         """Проверяем что асинхронные тесты работают."""
         import asyncio
+
         await asyncio.sleep(0.01)
         assert True
 

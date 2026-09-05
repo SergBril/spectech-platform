@@ -1,6 +1,7 @@
 """Сервис фоновых задач на основе FastAPI BackgroundTasks."""
+
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger("spectech.background")
 
@@ -10,12 +11,14 @@ _task_log = []
 
 def log_task(task_name: str, status: str, details: str = ""):
     """Записывает задачу в журнал."""
-    _task_log.append({
-        "task": task_name,
-        "status": status,
-        "details": details,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
+    _task_log.append(
+        {
+            "task": task_name,
+            "status": status,
+            "details": details,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+    )
     # Храним только последние 100
     if len(_task_log) > 100:
         _task_log.pop(0)
@@ -56,10 +59,15 @@ def background_process_gps_batch(vehicle_id: int, points_count: int):
     try:
         logger.info(
             "Background GPS processing: vehicle=%s, points=%s",
-            vehicle_id, points_count,
+            vehicle_id,
+            points_count,
         )
         # Здесь можно добавить агрегацию моточасов, проверку геозон и т.д.
-        log_task("process_gps_batch", "completed", f"vehicle={vehicle_id}, points={points_count}")
+        log_task(
+            "process_gps_batch",
+            "completed",
+            f"vehicle={vehicle_id}, points={points_count}",
+        )
     except Exception as e:
         logger.error("Background GPS error: %s", e)
         log_task("process_gps_batch", "failed", str(e))

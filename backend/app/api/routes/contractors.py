@@ -1,10 +1,8 @@
-from typing import List, Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_permission
+from app.api.deps import get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.contractor import Contractor, Employee
@@ -19,10 +17,10 @@ from app.schemas.contractor import (
 router = APIRouter()
 
 
-@router.get("", response_model=List[ContractorRead])
+@router.get("", response_model=list[ContractorRead])
 def list_contractors(
-    type_filter: Optional[str] = Query(default=None, alias="type"),
-    is_active: Optional[bool] = None,
+    type_filter: str | None = Query(default=None, alias="type"),
+    is_active: bool | None = None,
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -128,7 +126,7 @@ def delete_contractor(
 # --- Employees ---
 
 
-@router.get("/{contractor_id}/employees", response_model=List[EmployeeRead])
+@router.get("/{contractor_id}/employees", response_model=list[EmployeeRead])
 def list_employees(
     contractor_id: int,
     db: Session = Depends(get_db),

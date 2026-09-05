@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.models.auth import User, UserStatus
-from app.services.rbac_service import check_permission
 from app.services.auth_service import decode_access_token
+from app.services.rbac_service import check_permission
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -35,7 +35,7 @@ def get_current_user(
 def require_permission(entity: str, action: str):
     """
     Фабрика зависимости для проверки прав.
-    
+
     Использование:
         @router.post("/something")
         def endpoint(
@@ -45,17 +45,17 @@ def require_permission(entity: str, action: str):
         ):
             ...
     """
+
     def checker(
         db: Session = Depends(get_db),
         user: User = Depends(get_current_user),
     ):
-        from app.services.rbac_service import check_permission
-        
+
         if not check_permission(db, user, entity, action):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied: {entity}:{action}",
             )
         return None
-    
+
     return checker

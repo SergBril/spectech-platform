@@ -1,20 +1,33 @@
-from typing import Optional
-
 from fastapi import HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from app.models.auth import User
-from app.models.rbac import Role, Permission, RolePermission, UserRole
-
+from app.models.rbac import Permission, Role, RolePermission, UserRole
 
 # Системные роли, создаются при инициализации
 SYSTEM_ROLES = [
     {"code": "admin", "name": "Администратор", "description": "Полный доступ ко всему"},
-    {"code": "dispatcher", "name": "Диспетчер", "description": "Управление заявками и техникой"},
-    {"code": "operator", "name": "Оператор", "description": "Работа со сменными заданиями"},
-    {"code": "client", "name": "Клиент", "description": "Просмотр своих заявок и документов"},
-    {"code": "owner", "name": "Собственник", "description": "Просмотр доходов и техники"},
+    {
+        "code": "dispatcher",
+        "name": "Диспетчер",
+        "description": "Управление заявками и техникой",
+    },
+    {
+        "code": "operator",
+        "name": "Оператор",
+        "description": "Работа со сменными заданиями",
+    },
+    {
+        "code": "client",
+        "name": "Клиент",
+        "description": "Просмотр своих заявок и документов",
+    },
+    {
+        "code": "owner",
+        "name": "Собственник",
+        "description": "Просмотр доходов и техники",
+    },
     {"code": "mechanic", "name": "Механик", "description": "Осмотр и ремонт техники"},
 ]
 
@@ -43,7 +56,7 @@ SYSTEM_PERMISSIONS = [
     ("rbac", "manage"),
     # Справочники
     ("catalogs", "manage"),
-        # Финансы
+    # Финансы
     ("invoices", "view"),
     ("invoices", "create"),
     ("invoices", "update"),
@@ -56,7 +69,7 @@ SYSTEM_PERMISSIONS = [
     ("payouts", "pay"),
     ("payments", "view"),
     ("finance", "dashboard"),
-        # Телематика
+    # Телематика
     ("telematics", "view"),
     ("telematics", "manage"),
     ("gps", "receive"),
@@ -80,12 +93,10 @@ def init_system_data(db: Session) -> None:
         )
         if not existing:
             db.add(Permission(entity=entity, action=action))
-    
+
     # Создаём роли
     for role_data in SYSTEM_ROLES:
-        existing = db.scalar(
-            select(Role).where(Role.code == role_data["code"])
-        )
+        existing = db.scalar(select(Role).where(Role.code == role_data["code"]))
         if not existing:
             role = Role(
                 code=role_data["code"],
@@ -94,68 +105,111 @@ def init_system_data(db: Session) -> None:
                 is_system=True,
             )
             db.add(role)
-    
+
     db.flush()
-    
+
     # Маппинг прав по ролям
     role_permissions_map = {
         "admin": [
             # Админ имеет ВСЕ права
-            ("vehicles", "view"), ("vehicles", "create"), ("vehicles", "update"), ("vehicles", "delete"),
-            ("requests", "view"), ("requests", "create"), ("requests", "assign"), ("requests", "update"), ("requests", "cancel"),
-            ("shifts", "view"), ("shifts", "create"), ("shifts", "approve"),
-            ("contractors", "view"), ("contractors", "create"), ("contractors", "update"),
+            ("vehicles", "view"),
+            ("vehicles", "create"),
+            ("vehicles", "update"),
+            ("vehicles", "delete"),
+            ("requests", "view"),
+            ("requests", "create"),
+            ("requests", "assign"),
+            ("requests", "update"),
+            ("requests", "cancel"),
+            ("shifts", "view"),
+            ("shifts", "create"),
+            ("shifts", "approve"),
+            ("contractors", "view"),
+            ("contractors", "create"),
+            ("contractors", "update"),
             ("rbac", "manage"),
-            ("catalogs", "manage"),("invoices", "view"), ("invoices", "create"), ("invoices", "update"), ("invoices", "send"),
-("acts", "view"), ("acts", "create"), ("acts", "sign"),
-("payouts", "view"), ("payouts", "create"), ("payouts", "pay"),
-("payments", "view"), ("finance", "dashboard"), ("telematics", "view"),
-    ("telematics", "manage"),
-    ("gps", "receive"),
-    ("geofences", "manage"),
-    ("fuel", "manage"),
-    ("alerts", "view"),
-    ("alerts", "acknowledge"),
-    ("notifications", "view"),
+            ("catalogs", "manage"),
+            ("invoices", "view"),
+            ("invoices", "create"),
+            ("invoices", "update"),
+            ("invoices", "send"),
+            ("acts", "view"),
+            ("acts", "create"),
+            ("acts", "sign"),
+            ("payouts", "view"),
+            ("payouts", "create"),
+            ("payouts", "pay"),
+            ("payments", "view"),
+            ("finance", "dashboard"),
+            ("telematics", "view"),
+            ("telematics", "manage"),
+            ("gps", "receive"),
+            ("geofences", "manage"),
+            ("fuel", "manage"),
+            ("alerts", "view"),
+            ("alerts", "acknowledge"),
+            ("notifications", "view"),
         ],
         "dispatcher": [
-            ("vehicles", "view"), ("vehicles", "create"), ("vehicles", "update"),
-            ("requests", "view"), ("requests", "create"), ("requests", "assign"), ("requests", "update"),
-            ("shifts", "view"), ("shifts", "create"),
+            ("vehicles", "view"),
+            ("vehicles", "create"),
+            ("vehicles", "update"),
+            ("requests", "view"),
+            ("requests", "create"),
+            ("requests", "assign"),
+            ("requests", "update"),
+            ("shifts", "view"),
+            ("shifts", "create"),
             ("contractors", "view"),
-            ("catalogs", "manage"),("invoices", "view"), ("invoices", "create"),
-("acts", "view"), ("acts", "create"),
-("payouts", "view"),
-("payments", "view"), ("finance", "dashboard"), ("telematics", "view"), ("geofences", "manage"), ("alerts", "view"), ("alerts", "acknowledge"),
+            ("catalogs", "manage"),
+            ("invoices", "view"),
+            ("invoices", "create"),
+            ("acts", "view"),
+            ("acts", "create"),
+            ("payouts", "view"),
+            ("payments", "view"),
+            ("finance", "dashboard"),
+            ("telematics", "view"),
+            ("geofences", "manage"),
+            ("alerts", "view"),
+            ("alerts", "acknowledge"),
         ],
         "operator": [
             ("vehicles", "view"),
             ("requests", "view"),
-            ("shifts", "view"), ("shifts", "create"), ("telematics", "view"),
+            ("shifts", "view"),
+            ("shifts", "create"),
+            ("telematics", "view"),
         ],
         "client": [
             ("requests", "view"),
-            ("shifts", "view"),("invoices", "view"),
-("acts", "view"),
-("payments", "view"),
+            ("shifts", "view"),
+            ("invoices", "view"),
+            ("acts", "view"),
+            ("payments", "view"),
         ],
         "owner": [
             ("vehicles", "view"),
             ("requests", "view"),
-            ("shifts", "view"),("payouts", "view"),
-("payments", "view"), ("finance", "dashboard"), ("telematics", "view"), ("alerts", "view"),
+            ("shifts", "view"),
+            ("payouts", "view"),
+            ("payments", "view"),
+            ("finance", "dashboard"),
+            ("telematics", "view"),
+            ("alerts", "view"),
         ],
         "mechanic": [
-            ("vehicles", "view"), ("vehicles", "update"),
+            ("vehicles", "view"),
+            ("vehicles", "update"),
         ],
     }
-    
+
     # Назначаем права ролям
     for role_code, perms_list in role_permissions_map.items():
         role = db.scalar(select(Role).where(Role.code == role_code))
         if not role:
             continue
-        
+
         for entity, action in perms_list:
             perm = db.scalar(
                 select(Permission).where(
@@ -165,7 +219,7 @@ def init_system_data(db: Session) -> None:
             )
             if not perm:
                 continue
-            
+
             existing = db.scalar(
                 select(RolePermission).where(
                     RolePermission.role_id == role.id,
@@ -174,7 +228,7 @@ def init_system_data(db: Session) -> None:
             )
             if not existing:
                 db.add(RolePermission(role_id=role.id, permission_id=perm.id))
-    
+
     db.commit()
 
 
@@ -184,7 +238,7 @@ def get_user_permissions(db: Session, user: User) -> set[str]:
         # Суперпользователь имеет все права
         all_perms = db.scalars(select(Permission)).all()
         return {f"{p.entity}:{p.action}" for p in all_perms}
-    
+
     # Получаем все роли пользователя
     user_roles = db.scalars(
         select(UserRole).where(
@@ -192,7 +246,7 @@ def get_user_permissions(db: Session, user: User) -> set[str]:
             UserRole.is_active == True,
         )
     ).all()
-    
+
     permissions = set()
     for ur in user_roles:
         role_perms = db.scalars(
@@ -202,7 +256,7 @@ def get_user_permissions(db: Session, user: User) -> set[str]:
             perm = db.get(Permission, rp.permission_id)
             if perm:
                 permissions.add(f"{perm.entity}:{perm.action}")
-    
+
     return permissions
 
 
@@ -215,7 +269,7 @@ def check_permission(
     """Проверяет есть ли у пользователя право entity:action."""
     if user.is_superuser:
         return True
-    
+
     perms = get_user_permissions(db, user)
     return f"{entity}:{action}" in perms
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, List
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -8,20 +8,20 @@ class GpsPointCreate(BaseModel):
     vehicle_id: int
     latitude: float
     longitude: float
-    altitude: Optional[float] = None
-    speed: Optional[float] = None
-    heading: Optional[float] = None
-    engine_on: Optional[bool] = None
-    fuel_level: Optional[float] = None
-    engine_hours: Optional[float] = None
-    signal_quality: Optional[int] = None
-    device_id: Optional[str] = None
-    raw_data: Optional[dict] = None
+    altitude: float | None = None
+    speed: float | None = None
+    heading: float | None = None
+    engine_on: bool | None = None
+    fuel_level: float | None = None
+    engine_hours: float | None = None
+    signal_quality: int | None = None
+    device_id: str | None = None
+    raw_data: dict | None = None
     recorded_at: datetime
 
 
 class GpsPointBatch(BaseModel):
-    points: List[GpsPointCreate]
+    points: list[GpsPointCreate]
 
 
 class GpsPointRead(BaseModel):
@@ -29,10 +29,10 @@ class GpsPointRead(BaseModel):
     vehicle_id: int
     latitude: float
     longitude: float
-    speed: Optional[float] = None
-    engine_on: Optional[bool] = None
-    fuel_level: Optional[float] = None
-    engine_hours: Optional[float] = None
+    speed: float | None = None
+    engine_on: bool | None = None
+    fuel_level: float | None = None
+    engine_hours: float | None = None
     recorded_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -40,23 +40,23 @@ class GpsPointRead(BaseModel):
 
 class GeofenceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    description: Optional[str] = None
+    description: str | None = None
     type: str = Field(pattern="^(circle|polygon)$")
-    center_latitude: Optional[float] = None
-    center_longitude: Optional[float] = None
-    radius_meters: Optional[float] = None
-    polygon: Optional[list] = None
+    center_latitude: float | None = None
+    center_longitude: float | None = None
+    radius_meters: float | None = None
+    polygon: list | None = None
 
 
 class GeofenceRead(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     type: str
-    center_latitude: Optional[float] = None
-    center_longitude: Optional[float] = None
-    radius_meters: Optional[float] = None
-    polygon: Optional[list] = None
+    center_latitude: float | None = None
+    center_longitude: float | None = None
+    radius_meters: float | None = None
+    polygon: list | None = None
     is_active: bool
     created_at: datetime
 
@@ -67,13 +67,13 @@ class FuelTransactionCreate(BaseModel):
     vehicle_id: int
     transaction_type: str = Field(pattern="^(refuel|drain)$")
     volume: Decimal = Field(gt=0, decimal_places=2)
-    price_per_liter: Optional[Decimal] = None
-    fuel_level_before: Optional[float] = None
-    fuel_level_after: Optional[float] = None
-    odometer: Optional[float] = None
-    location_latitude: Optional[float] = None
-    location_longitude: Optional[float] = None
-    comment: Optional[str] = None
+    price_per_liter: Decimal | None = None
+    fuel_level_before: float | None = None
+    fuel_level_after: float | None = None
+    odometer: float | None = None
+    location_latitude: float | None = None
+    location_longitude: float | None = None
+    comment: str | None = None
     occurred_at: datetime
 
 
@@ -82,9 +82,9 @@ class FuelTransactionRead(BaseModel):
     vehicle_id: int
     transaction_type: str
     volume: Decimal
-    total_cost: Optional[Decimal] = None
-    fuel_level_before: Optional[float] = None
-    fuel_level_after: Optional[float] = None
+    total_cost: Decimal | None = None
+    fuel_level_before: float | None = None
+    fuel_level_after: float | None = None
     occurred_at: datetime
     created_at: datetime
 
@@ -96,19 +96,19 @@ class AlertRead(BaseModel):
     alert_type: str
     severity: str
     status: str
-    vehicle_id: Optional[int] = None
+    vehicle_id: int | None = None
     title: str
-    description: Optional[str] = None
-    details: Optional[dict] = None
+    description: str | None = None
+    details: dict | None = None
     occurred_at: datetime
-    acknowledged_at: Optional[datetime] = None
-    resolved_at: Optional[datetime] = None
+    acknowledged_at: datetime | None = None
+    resolved_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class AlertAck(BaseModel):
-    comment: Optional[str] = None
+    comment: str | None = None
 
 
 class NotificationRead(BaseModel):

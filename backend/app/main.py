@@ -1,34 +1,45 @@
 import logging
+
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
-from app.api.routes import tasks
-from app.api.routes import files
+
+from app.api.routes import files, tasks
 from app.api.routes import websocket as ws_routes
-from app.core.logging_config import setup_logging
 from app.core.db import Base, engine
-from app.models import *  # noqa: F401, F403 — импортирует ВСЕ модели
 from app.core.exception_handlers import (
-    validation_exception_handler,
-    sqlalchemy_exception_handler,
     general_exception_handler,
+    sqlalchemy_exception_handler,
+    validation_exception_handler,
 )
+from app.core.logging_config import setup_logging
+from app.models import *  # noqa: F401, F403 — импортирует ВСЕ модели
 
 # Настраиваем логирование
 setup_logging("INFO")
 logger = logging.getLogger("spectech.app")
-from app.api.routes import (
-    auth, vehicles, requests, shifts,
-    contractors, rbac, me, categories,
-    invoices, acts, payouts, payments, telematics, system,
-)
 from contextlib import asynccontextmanager
-from app.core.middleware import RequestLoggingMiddleware
-from app.api.routes import system
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes import (
+    acts,
+    auth,
+    categories,
+    contractors,
+    invoices,
+    me,
+    payments,
+    payouts,
+    rbac,
+    requests,
+    shifts,
+    system,
+    telematics,
+    vehicles,
+)
 from app.core.config import settings
-from app.api.routes import auth, vehicles, requests, shifts
+from app.core.middleware import RequestLoggingMiddleware
 
 
 @asynccontextmanager
@@ -37,8 +48,10 @@ async def lifespan(app: FastAPI):
     yield
     print("👋 Shutting down...")
     # Создаём таблицы если их нет
-from app.core.db import Base, engine
+
+
 from app.models import *  # noqa: F401, F403 — импортируем все модели
+
 Base.metadata.create_all(bind=engine)
 
 
@@ -65,7 +78,7 @@ app.add_middleware(
 )
 
 # 3. Наш middleware логирования (ПОСЛЕДНИМ!)
-from app.core.middleware import RequestLoggingMiddleware
+
 app.add_middleware(RequestLoggingMiddleware)
 
 # 4. Роутеры
@@ -81,7 +94,9 @@ app.include_router(requests.router, prefix="/api/v1/requests", tags=["dispatch"]
 app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["dispatch"])
 
 # Contractors
-app.include_router(contractors.router, prefix="/api/v1/contractors", tags=["contractors"])
+app.include_router(
+    contractors.router, prefix="/api/v1/contractors", tags=["contractors"]
+)
 
 # RBAC
 app.include_router(rbac.router, prefix="/api/v1/rbac", tags=["rbac"])
@@ -125,8 +140,9 @@ def health_check():
 
 @app.get("/ready")
 def readiness_check():
-    from app.core.db import SessionLocal
     from sqlalchemy import text
+
+    from app.core.db import SessionLocal
 
     try:
         db = SessionLocal()

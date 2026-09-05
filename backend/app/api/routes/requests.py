@@ -1,23 +1,21 @@
-from typing import List, Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_permission
 from app.core.db import get_db
 from app.models.auth import User
-from app.models.dispatch import Request, RequestAssignment, RequestStatusLog
 from app.models.catalog import Vehicle
-from app.schemas.request import RequestAssign, RequestCreate, RequestRead, RequestUpdate
+from app.models.dispatch import Request, RequestAssignment, RequestStatusLog
+from app.schemas.request import RequestAssign, RequestCreate, RequestRead
 
 router = APIRouter()
 
 
-@router.get("", response_model=List[RequestRead])
+@router.get("", response_model=list[RequestRead])
 def list_requests(
-    status_filter: Optional[str] = Query(default=None, alias="status"),
-    client_id: Optional[int] = None,
+    status_filter: str | None = Query(default=None, alias="status"),
+    client_id: int | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -40,7 +38,9 @@ def create_request(
     _: None = Depends(require_permission("requests", "create")),
 ):
     if payload.planned_end <= payload.planned_start:
-        raise HTTPException(status_code=422, detail="planned_end must be after planned_start")
+        raise HTTPException(
+            status_code=422, detail="planned_end must be after planned_start"
+        )
 
     request = Request(
         **payload.model_dump(),
@@ -50,13 +50,15 @@ def create_request(
     db.add(request)
     db.flush()
 
-    db.add(RequestStatusLog(
-        request_id=request.id,
-        from_status=None,
-        to_status="new",
-        changed_by_user_id=current_user.id,
-        comment="Заявка создана",
-    ))
+    db.add(
+        RequestStatusLog(
+            request_id=request.id,
+            from_status=None,
+            to_status="new",
+            changed_by_user_id=current_user.id,
+            comment="Заявка создана",
+        )
+    )
 
     db.commit()
     db.refresh(request)
@@ -107,7 +109,9 @@ def assign_request(
     )
 
     if overlap:
-        raise HTTPException(status_code=409, detail="Vehicle is already assigned for this period")
+        raise HTTPException(
+            status_code=409, detail="Vehicle is already assigned for this period"
+        )
 
     assignment = RequestAssignment(
         request_id=request.id,
@@ -125,13 +129,15 @@ def assign_request(
     request.assigned_vehicle_id = payload.vehicle_id
     request.assigned_operator_id = payload.operator_id
 
-    db.add(RequestStatusLog(
-        request_id=request.id,
-        from_status=old_status,
-        to_status="assigned",
-        changed_by_user_id=current_user.id,
-        comment=f"Назначена техника: {vehicle.name}",
-    ))
+    db.add(
+        RequestStatusLog(
+            request_id=request.id,
+            from_status=old_status,
+            to_status="assigned",
+            changed_by_user_id=current_user.id,
+            comment=f"Назначена техника: {vehicle.name}",
+        )
+    )
 
     db.commit()
     db.refresh(request)

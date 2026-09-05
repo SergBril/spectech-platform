@@ -1,25 +1,28 @@
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import List
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.models.telematics import (
-    GpsPoint, Geofence, GeofenceEvent, FuelTransaction,
-    EngineHoursLog, Alert, Notification,
-    AlertSeverity, AlertStatus,
+    Alert,
+    AlertSeverity,
+    AlertStatus,
+    FuelTransaction,
+    Geofence,
+    GeofenceEvent,
+    GpsPoint,
 )
 
 
-def save_gps_points(db: Session, points_data: list, company_id: int) -> List[GpsPoint]:
+def save_gps_points(db: Session, points_data: list, company_id: int) -> list[GpsPoint]:
     """Сохраняет GPS точки, проверяет геозоны и применяет правила алертов."""
     from app.services.alert_engine import process_point_with_rules
-    
+
     saved = []
     for pd in points_data:
-        point = GpsPoint(**pd.model_dump(), received_at=datetime.now(timezone.utc))
+        point = GpsPoint(**pd.model_dump(), received_at=datetime.now(UTC))
         db.add(point)
         saved.append(point)
         db.flush()
@@ -36,16 +39,16 @@ def save_gps_points(db: Session, points_data: list, company_id: int) -> List[Gps
 
 def _check_geofences(db: Session, point: GpsPoint) -> None:
     """Проверяет вхождение точки в активные геозоны."""
-    geofences = db.scalars(
-        select(Geofence).where(Geofence.is_active == True)
-    ).all()
+    geofences = db.scalars(select(Geofence).where(Geofence.is_active == True)).all()
 
     for gf in geofences:
         inside = False
         if gf.type.value == "circle" and gf.center_latitude and gf.radius_meters:
             distance = _haversine(
-                point.latitude, point.longitude,
-                gf.center_latitude, gf.center_longitude,
+                point.latitude,
+                point.longitude,
+                gf.center_latitude,
+                gf.center_longitude,
             )
             inside = distance <= gf.radius_meters
 
@@ -61,14 +64,16 @@ def _check_geofences(db: Session, point: GpsPoint) -> None:
                 .limit(1)
             )
             if not last_event or last_event.event_type == "exit":
-                db.add(GeofenceEvent(
-                    vehicle_id=point.vehicle_id,
-                    geofence_id=gf.id,
-                    event_type="enter",
-                    occurred_at=point.recorded_at,
-                    latitude=point.latitude,
-                    longitude=point.longitude,
-                ))
+                db.add(
+                    GeofenceEvent(
+                        vehicle_id=point.vehicle_id,
+                        geofence_id=gf.id,
+                        event_type="enter",
+                        occurred_at=point.recorded_at,
+                        latitude=point.latitude,
+                        longitude=point.longitude,
+                    )
+                )
         else:
             last_event = db.scalar(
                 select(GeofenceEvent)
@@ -80,14 +85,16 @@ def _check_geofences(db: Session, point: GpsPoint) -> None:
                 .limit(1)
             )
             if last_event and last_event.event_type == "enter":
-                db.add(GeofenceEvent(
-                    vehicle_id=point.vehicle_id,
-                    geofence_id=gf.id,
-                    event_type="exit",
-                    occurred_at=point.recorded_at,
-                    latitude=point.latitude,
-                    longitude=point.longitude,
-                ))
+                db.add(
+                    GeofenceEvent(
+                        vehicle_id=point.vehicle_id,
+                        geofence_id=gf.id,
+                        event_type="exit",
+                        occurred_at=point.recorded_at,
+                        latitude=point.latitude,
+                        longitude=point.longitude,
+                    )
+                )
                 _create_alert(
                     db,
                     alert_type="geofence_exit",
@@ -121,7 +128,11 @@ def _check_fuel_drain(db: Session, point: GpsPoint, company_id: int) -> None:
                 severity=AlertSeverity.critical,
                 vehicle_id=point.vehicle_id,
                 title=f"Подозрение на слив топлива: {diff:.1f} л",
-                details={"drop": diff, "before": prev.fuel_level, "after": point.fuel_level},
+                details={
+                    "drop": diff,
+                    "before": prev.fuel_level,
+                    "after": point.fuel_level,
+                },
                 occurred_at=point.recorded_at,
                 company_id=company_id,
             )
@@ -139,7 +150,7 @@ def _create_alert(
     company_id: int = None,
 ) -> Alert:
     """Создаёт алерт, избегая дублирования в течение 10 минут."""
-    cutoff = (occurred_at or datetime.now(timezone.utc)) - timedelta(minutes=10)
+    cutoff = (occurred_at or datetime.now(UTC)) - timedelta(minutes=10)
     existing = db.scalar(
         select(Alert).where(
             and_(
@@ -161,7 +172,7 @@ def _create_alert(
         title=title,
         description=description,
         details=details,
-        occurred_at=occurred_at or datetime.now(timezone.utc),
+        occurred_at=occurred_at or datetime.now(UTC),
         company_id=company_id,
     )
     db.add(alert)
@@ -175,30 +186,42 @@ def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     phi2 = math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlam = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    a = (
+        math.sin(dphi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    )
     return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 def get_telematics_dashboard(db: Session, company_id: int) -> dict:
     """Собирает статистику телематики."""
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    vehicles_online = db.scalar(
-        select(func.count(func.distinct(GpsPoint.vehicle_id))).where(
-            GpsPoint.recorded_at >= today - timedelta(hours=1)
+    vehicles_online = (
+        db.scalar(
+            select(func.count(func.distinct(GpsPoint.vehicle_id))).where(
+                GpsPoint.recorded_at >= today - timedelta(hours=1)
+            )
         )
-    ) or 0
+        or 0
+    )
 
-    vehicles_moving = db.scalar(
-        select(func.count(func.distinct(GpsPoint.vehicle_id))).where(
-            GpsPoint.recorded_at >= today - timedelta(minutes=15),
-            GpsPoint.speed > 5,
+    vehicles_moving = (
+        db.scalar(
+            select(func.count(func.distinct(GpsPoint.vehicle_id))).where(
+                GpsPoint.recorded_at >= today - timedelta(minutes=15),
+                GpsPoint.speed > 5,
+            )
         )
-    ) or 0
+        or 0
+    )
 
-    active_alerts = db.scalar(
-        select(func.count(Alert.id)).where(Alert.status == AlertStatus.active)
-    ) or 0
+    active_alerts = (
+        db.scalar(
+            select(func.count(Alert.id)).where(Alert.status == AlertStatus.active)
+        )
+        or 0
+    )
 
     total_fuel_today = db.scalar(
         select(func.coalesce(func.sum(FuelTransaction.volume), 0)).where(
@@ -207,11 +230,14 @@ def get_telematics_dashboard(db: Session, company_id: int) -> dict:
         )
     ) or Decimal("0")
 
-    geofence_events_today = db.scalar(
-        select(func.count(GeofenceEvent.id)).where(
-            GeofenceEvent.occurred_at >= today
+    geofence_events_today = (
+        db.scalar(
+            select(func.count(GeofenceEvent.id)).where(
+                GeofenceEvent.occurred_at >= today
+            )
         )
-    ) or 0
+        or 0
+    )
 
     return {
         "vehicles_online": vehicles_online,

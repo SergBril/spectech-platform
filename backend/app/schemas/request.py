@@ -1,38 +1,37 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class RequestCreate(BaseModel):
     client_id: int
     request_type: str = "one_time"
-    vehicle_category_id: Optional[int] = None
-    work_type: Optional[str] = None
-    object_address: Optional[str] = None
+    vehicle_category_id: int | None = None
+    work_type: str | None = None
+    object_address: str | None = None
     planned_start: datetime
     planned_end: datetime
-    shift_duration_hours: Optional[Decimal] = None
-    client_rate: Optional[Decimal] = None
-    rate_type: Optional[str] = None
-    estimated_amount: Optional[Decimal] = None
+    shift_duration_hours: Decimal | None = None
+    client_rate: Decimal | None = None
+    rate_type: str | None = None
+    estimated_amount: Decimal | None = None
     source_channel: str = "phone"
     priority: str = "normal"
-    comment: Optional[str] = None
+    comment: str | None = None
 
 
 class RequestUpdate(BaseModel):
-    status: Optional[str] = None
-    work_type: Optional[str] = None
-    object_address: Optional[str] = None
-    planned_start: Optional[datetime] = None
-    planned_end: Optional[datetime] = None
-    client_rate: Optional[Decimal] = None
-    estimated_amount: Optional[Decimal] = None
-    final_amount: Optional[Decimal] = None
-    priority: Optional[str] = None
-    comment: Optional[str] = None
+    status: str | None = None
+    work_type: str | None = None
+    object_address: str | None = None
+    planned_start: datetime | None = None
+    planned_end: datetime | None = None
+    client_rate: Decimal | None = None
+    estimated_amount: Decimal | None = None
+    final_amount: Decimal | None = None
+    priority: str | None = None
+    comment: str | None = None
 
 
 class RequestRead(BaseModel):
@@ -40,23 +39,23 @@ class RequestRead(BaseModel):
     client_id: int
     status: str
     request_type: str
-    vehicle_category_id: Optional[int] = None
-    work_type: Optional[str] = None
-    object_address: Optional[str] = None
+    vehicle_category_id: int | None = None
+    work_type: str | None = None
+    object_address: str | None = None
     planned_start: datetime
     planned_end: datetime
-    actual_start: Optional[datetime] = None
-    actual_end: Optional[datetime] = None
-    shift_duration_hours: Optional[Decimal] = None
-    client_rate: Optional[Decimal] = None
-    rate_type: Optional[str] = None
-    estimated_amount: Optional[Decimal] = None
-    final_amount: Optional[Decimal] = None
-    assigned_vehicle_id: Optional[int] = None
-    assigned_operator_id: Optional[int] = None
+    actual_start: datetime | None = None
+    actual_end: datetime | None = None
+    shift_duration_hours: Decimal | None = None
+    client_rate: Decimal | None = None
+    rate_type: str | None = None
+    estimated_amount: Decimal | None = None
+    final_amount: Decimal | None = None
+    assigned_vehicle_id: int | None = None
+    assigned_operator_id: int | None = None
     source_channel: str
     priority: str
-    comment: Optional[str] = None
+    comment: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -64,6 +63,6 @@ class RequestRead(BaseModel):
 
 class RequestAssign(BaseModel):
     vehicle_id: int
-    operator_id: Optional[int] = None
-    planned_start: Optional[datetime] = None
-    planned_end: Optional[datetime] = None
+    operator_id: int | None = None
+    planned_start: datetime | None = None
+    planned_end: datetime | None = None

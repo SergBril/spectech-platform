@@ -1,57 +1,93 @@
 # Auth
 from app.models.auth import User, UserSession
 
-# Company
-from app.models.company import Company
-
 # Catalog
 from app.models.catalog import Category, Vehicle
+
+# Company
+from app.models.company import Company
 
 # Contractor
 from app.models.contractor import Contractor, Employee, EmployeeCertificate
 
 # Dispatch
-from app.models.dispatch import Request, RequestStatusLog, RequestAssignment
-
-# Shift
-from app.models.shift import ShiftTask, ShiftReport
-
-# RBAC
-from app.models.rbac import Role, Permission, RolePermission, UserRole
+from app.models.dispatch import Request, RequestAssignment, RequestStatusLog
 
 # Finance
 from app.models.finance import (
-    Invoice, InvoiceItem, Act, Payout, Payment,
+    Act,
     DocumentStatus,
+    Invoice,
+    InvoiceItem,
+    Payment,
+    Payout,
 )
+
+# RBAC
+from app.models.rbac import Permission, Role, RolePermission, UserRole
+
+# Shift
+from app.models.shift import ShiftReport, ShiftTask
 
 # Telematics (models + enums)
 from app.models.telematics import (
-    GpsPoint, Geofence, GeofenceEvent, FuelTransaction,
-    EngineHoursLog, Alert, Notification, AlertRule, UploadedFile,
-    GeofenceType, AlertSeverity, AlertStatus,
+    Alert,
+    AlertRule,
+    AlertSeverity,
+    AlertStatus,
+    EngineHoursLog,
+    FuelTransaction,
+    Geofence,
+    GeofenceEvent,
+    GeofenceType,
+    GpsPoint,
+    Notification,
+    UploadedFile,
 )
 
 __all__ = [
     # Auth
-    "User", "UserSession",
+    "User",
+    "UserSession",
     # Company
     "Company",
     # Catalog
-    "Category", "Vehicle",
+    "Category",
+    "Vehicle",
     # Contractor
-    "Contractor", "Employee", "EmployeeCertificate",
+    "Contractor",
+    "Employee",
+    "EmployeeCertificate",
     # Dispatch
-    "Request", "RequestStatusLog", "RequestAssignment",
+    "Request",
+    "RequestStatusLog",
+    "RequestAssignment",
     # Shift
-    "ShiftTask", "ShiftReport",
+    "ShiftTask",
+    "ShiftReport",
     # RBAC
-    "Role", "Permission", "RolePermission", "UserRole",
+    "Role",
+    "Permission",
+    "RolePermission",
+    "UserRole",
     # Finance
-    "Invoice", "InvoiceItem", "Act", "Payout", "Payment",
+    "Invoice",
+    "InvoiceItem",
+    "Act",
+    "Payout",
+    "Payment",
     "DocumentStatus",
     # Telematics
-    "GpsPoint", "Geofence", "GeofenceEvent", "FuelTransaction",
-    "EngineHoursLog", "Alert", "Notification", "AlertRule", "UploadedFile",
-    "GeofenceType", "AlertSeverity", "AlertStatus",
+    "GpsPoint",
+    "Geofence",
+    "GeofenceEvent",
+    "FuelTransaction",
+    "EngineHoursLog",
+    "Alert",
+    "Notification",
+    "AlertRule",
+    "UploadedFile",
+    "GeofenceType",
+    "AlertSeverity",
+    "AlertStatus",
 ]

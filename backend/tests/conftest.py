@@ -1,21 +1,17 @@
 """
 Базовые фикстуры для всех тестов.
 """
+
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.main import app
 from app.core.db import Base, get_db
-from app.core.config import settings
+from app.main import app
 
 # Используем in-memory SQLite для unit тестов
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-
-
-
-
 
 
 @pytest.fixture(scope="session")
@@ -47,6 +43,7 @@ async def db_session(test_engine):
 @pytest_asyncio.fixture(loop_scope="session")
 async def client(db_session):
     """HTTP клиент для тестирования API."""
+
     async def override_get_db():
         yield db_session
 
@@ -75,5 +72,6 @@ def mock_user():
         "is_superuser": True,
         "company_id": 1,
     }
+
 
 # Импортируем интеграционные фикстуры

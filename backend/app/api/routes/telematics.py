@@ -1,9 +1,8 @@
 import logging
-from datetime import datetime, timezone
-from typing import Optional, List
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,19 +10,29 @@ from app.api.deps import get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.telematics import (
-    GpsPoint, Geofence, GeofenceEvent, FuelTransaction,
-    Alert, Notification, AlertRule, AlertStatus,
+    Alert,
+    AlertRule,
+    AlertStatus,
+    FuelTransaction,
+    Geofence,
+    GpsPoint,
+    Notification,
 )
 from app.schemas.telematics import (
-    GpsPointCreate, GpsPointBatch, GpsPointRead,
-    GeofenceCreate, GeofenceRead,
-    FuelTransactionCreate, FuelTransactionRead,
-    AlertAck, NotificationRead, TelematicsDashboard,
-)
-from app.services.telematics_service import (
-    save_gps_points, get_telematics_dashboard,
+    AlertAck,
+    FuelTransactionCreate,
+    FuelTransactionRead,
+    GeofenceCreate,
+    GeofenceRead,
+    GpsPointCreate,
+    GpsPointRead,
+    NotificationRead,
+    TelematicsDashboard,
 )
 from app.services.alert_engine import seed_default_rules
+from app.services.telematics_service import (
+    get_telematics_dashboard,
+)
 
 logger = logging.getLogger("spectech.telematics")  # ← ВАЖНО!
 
@@ -43,7 +52,7 @@ async def receive_gps_points(
 ):
     """Принимает массив GPS точек и транслирует через WebSocket."""
     from app.services.websocket_manager import manager
-    
+
     saved_points = []
     for point in points:
         gps_point = GpsPoint(
@@ -56,13 +65,13 @@ async def receive_gps_points(
             engine_on=point.engine_on,
             engine_hours=point.engine_hours,
             fuel_level=point.fuel_level,
-            recorded_at=point.recorded_at or datetime.now(timezone.utc),
+            recorded_at=point.recorded_at or datetime.now(UTC),
         )
         db.add(gps_point)
         saved_points.append(gps_point)
-    
+
     db.commit()
-    
+
     # Broadcast каждой точки через WebSocket
     for gps_point in saved_points:
         try:
@@ -75,15 +84,29 @@ async def receive_gps_points(
                     "speed": float(gps_point.speed) if gps_point.speed else 0,
                     "heading": float(gps_point.heading) if gps_point.heading else 0,
                     "altitude": float(gps_point.altitude) if gps_point.altitude else 0,
-                    "engine_on": bool(gps_point.engine_on) if gps_point.engine_on is not None else False,
-                    "engine_hours": float(gps_point.engine_hours) if gps_point.engine_hours else None,
-                    "fuel_level": float(gps_point.fuel_level) if gps_point.fuel_level else None,
-                    "recorded_at": gps_point.recorded_at.isoformat() if gps_point.recorded_at else None,
+                    "engine_on": (
+                        bool(gps_point.engine_on)
+                        if gps_point.engine_on is not None
+                        else False
+                    ),
+                    "engine_hours": (
+                        float(gps_point.engine_hours)
+                        if gps_point.engine_hours
+                        else None
+                    ),
+                    "fuel_level": (
+                        float(gps_point.fuel_level) if gps_point.fuel_level else None
+                    ),
+                    "recorded_at": (
+                        gps_point.recorded_at.isoformat()
+                        if gps_point.recorded_at
+                        else None
+                    ),
                 },
             )
         except Exception as e:
             logger.warning("GPS broadcast failed: %s", e)
-    
+
     return {"status": "ok", "saved": len(saved_points)}
 
 
@@ -95,7 +118,7 @@ async def receive_single_gps_point(
 ):
     """Принимает одну GPS точку и транслирует через WebSocket."""
     from app.services.websocket_manager import manager
-    
+
     gps_point = GpsPoint(
         vehicle_id=point.vehicle_id,
         latitude=point.latitude,
@@ -106,13 +129,15 @@ async def receive_single_gps_point(
         engine_on=point.engine_on,
         engine_hours=point.engine_hours,
         fuel_level=point.fuel_level,
-        recorded_at=point.recorded_at or datetime.now(timezone.utc),
+        recorded_at=point.recorded_at or datetime.now(UTC),
     )
     db.add(gps_point)
     db.commit()
     db.refresh(gps_point)
 
-    logger.info("🚀 GPS point saved. Broadcasting to company_id=%s", current_user.company_id)
+    logger.info(
+        "🚀 GPS point saved. Broadcasting to company_id=%s", current_user.company_id
+    )
 
     # Broadcast через WebSocket
     try:
@@ -125,46 +150,69 @@ async def receive_single_gps_point(
                 "speed": float(gps_point.speed) if gps_point.speed else 0,
                 "heading": float(gps_point.heading) if gps_point.heading else 0,
                 "altitude": float(gps_point.altitude) if gps_point.altitude else 0,
-                "engine_on": bool(gps_point.engine_on) if gps_point.engine_on is not None else False,
-                "engine_hours": float(gps_point.engine_hours) if gps_point.engine_hours else None,
-                "fuel_level": float(gps_point.fuel_level) if gps_point.fuel_level else None,
-                "recorded_at": gps_point.recorded_at.isoformat() if gps_point.recorded_at else None,
+                "engine_on": (
+                    bool(gps_point.engine_on)
+                    if gps_point.engine_on is not None
+                    else False
+                ),
+                "engine_hours": (
+                    float(gps_point.engine_hours) if gps_point.engine_hours else None
+                ),
+                "fuel_level": (
+                    float(gps_point.fuel_level) if gps_point.fuel_level else None
+                ),
+                "recorded_at": (
+                    gps_point.recorded_at.isoformat() if gps_point.recorded_at else None
+                ),
             },
         )
     except Exception as e:
         logger.warning("GPS broadcast failed: %s", e)
-    
 
     # === Проверка правил алертов (упрощённая, синхронная) ===
     try:
-        from app.models.telematics import AlertRule, Alert, AlertStatus, AlertSeverity
-        from datetime import datetime, timezone
-        
+        from datetime import datetime
+
+        from app.models.telematics import Alert, AlertRule, AlertStatus
+
         # Загружаем активные правила для компании
-        rules = db.query(AlertRule).filter(
-            AlertRule.company_id == (current_user.company_id or 0),
-            AlertRule.is_active == True
-        ).all()
-        
+        rules = (
+            db.query(AlertRule)
+            .filter(
+                AlertRule.company_id == (current_user.company_id or 0),
+                AlertRule.is_active == True,
+            )
+            .all()
+        )
+
         for rule in rules:
             triggered = False
             description = None
-            
+
             # Проверяем превышение скорости
-            if rule.rule_type == "speed_limit" and gps_point.speed and gps_point.speed > rule.threshold:
+            if (
+                rule.rule_type == "speed_limit"
+                and gps_point.speed
+                and gps_point.speed > rule.threshold
+            ):
                 triggered = True
                 description = f"Скорость {gps_point.speed:.0f} км/ч превысила лимит {rule.threshold:.0f} км/ч"
-            
+
             if triggered:
                 # Проверяем дедупликацию (не создаём алерт если уже есть за последние 10 минут)
                 from datetime import timedelta
-                ten_minutes_ago = datetime.now(timezone.utc) - timedelta(seconds=10)
-                existing = db.query(Alert).filter(
-                    Alert.vehicle_id == gps_point.vehicle_id,
-                    Alert.alert_type == rule.rule_type,
-                    Alert.occurred_at >= ten_minutes_ago
-                ).first()
-                
+
+                ten_minutes_ago = datetime.now(UTC) - timedelta(seconds=10)
+                existing = (
+                    db.query(Alert)
+                    .filter(
+                        Alert.vehicle_id == gps_point.vehicle_id,
+                        Alert.alert_type == rule.rule_type,
+                        Alert.occurred_at >= ten_minutes_ago,
+                    )
+                    .first()
+                )
+
                 if not existing:
                     alert = Alert(
                         company_id=current_user.company_id or 0,
@@ -174,44 +222,58 @@ async def receive_single_gps_point(
                         status=AlertStatus.active,
                         title=f"Превышение скорости: {gps_point.speed:.0f} км/ч",
                         description=description,
-                        occurred_at=datetime.now(timezone.utc),
+                        occurred_at=datetime.now(UTC),
                     )
                     db.add(alert)
                     db.commit()
                     db.refresh(alert)
-                    
+
                     logger.info("🚨 Alert created: %s", alert.title)
-                    
+
                     # Отправляем через WebSocket
                     alert_data = {
                         "id": alert.id,
                         "alert_type": alert.alert_type,
-                        "severity": alert.severity.value if hasattr(alert.severity, "value") else alert.severity,
-                        "status": alert.status.value if hasattr(alert.status, "value") else alert.status,
+                        "severity": (
+                            alert.severity.value
+                            if hasattr(alert.severity, "value")
+                            else alert.severity
+                        ),
+                        "status": (
+                            alert.status.value
+                            if hasattr(alert.status, "value")
+                            else alert.status
+                        ),
                         "vehicle_id": alert.vehicle_id,
                         "title": alert.title,
                         "description": alert.description,
-                        "occurred_at": alert.occurred_at.isoformat() if alert.occurred_at else None,
+                        "occurred_at": (
+                            alert.occurred_at.isoformat() if alert.occurred_at else None
+                        ),
                     }
-                    await manager.broadcast_alert_to_company(current_user.company_id or 0, alert_data)
-                    logger.info("🚨 Broadcasting alert to company %s", current_user.company_id)
+                    await manager.broadcast_alert_to_company(
+                        current_user.company_id or 0, alert_data
+                    )
+                    logger.info(
+                        "🚨 Broadcasting alert to company %s", current_user.company_id
+                    )
     except Exception as e:
         logger.warning("Alert processing failed: %s", e)
 
         return {
-        "status": "ok",
-        "id": gps_point.id,
-        "vehicle_id": gps_point.vehicle_id,
-        "coordinates": [gps_point.latitude, gps_point.longitude],
-    }
+            "status": "ok",
+            "id": gps_point.id,
+            "vehicle_id": gps_point.vehicle_id,
+            "coordinates": [gps_point.latitude, gps_point.longitude],
+        }
 
 
-@router.get("/gps/{vehicle_id}", response_model=List[GpsPointRead])
+@router.get("/gps/{vehicle_id}", response_model=list[GpsPointRead])
 def get_vehicle_track(
     vehicle_id: int,
     limit: int = Query(default=1000, ge=1, le=5000),
-    date_from: Optional[datetime] = Query(default=None),
-    date_to: Optional[datetime] = Query(default=None),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
     order: str = Query(default="asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -230,8 +292,6 @@ def get_vehicle_track(
     return db.scalars(stmt).all()
 
 
-
-
 # =========================================
 # === Track Statistics ===
 # =========================================
@@ -240,8 +300,8 @@ def get_vehicle_track(
 @router.get("/gps/{vehicle_id}/stats")
 def get_track_stats(
     vehicle_id: int,
-    date_from: Optional[datetime] = Query(default=None),
-    date_to: Optional[datetime] = Query(default=None),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -285,7 +345,10 @@ def get_track_stats(
         lat2, lon2 = math.radians(p2.latitude), math.radians(p2.longitude)
         dlat = lat2 - lat1
         dlon = lon2 - lon1
-        a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+        a = (
+            math.sin(dlat / 2) ** 2
+            + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+        )
         c = 2 * math.asin(math.sqrt(a))
         distance_km = 6371.0 * c
         total_distance_km += distance_km
@@ -324,7 +387,7 @@ def get_track_stats(
 # =========================================
 
 
-@router.get("/geofences", response_model=List[GeofenceRead])
+@router.get("/geofences", response_model=list[GeofenceRead])
 def list_geofences(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -364,7 +427,7 @@ def delete_geofence(
 # =========================================
 
 
-@router.get("/fuel", response_model=List[FuelTransactionRead])
+@router.get("/fuel", response_model=list[FuelTransactionRead])
 def list_fuel_transactions(
     vehicle_id: int | None = None,
     db: Session = Depends(get_db),
@@ -394,8 +457,6 @@ def create_fuel_transaction(
     db.commit()
     db.refresh(ft)
     return ft
-
-
 
 
 @router.get("/fuel/stats")
@@ -428,7 +489,9 @@ def get_fuel_stats(
 
     # Расчёт среднего расхода если есть одометр
     avg_consumption = None
-    odometer_readings = [(t.odometer, float(t.volume)) for t in refuels if t.odometer is not None]
+    odometer_readings = [
+        (t.odometer, float(t.volume)) for t in refuels if t.odometer is not None
+    ]
     if len(odometer_readings) >= 2:
         odometer_readings.sort(key=lambda x: x[0])
         total_distance = odometer_readings[-1][0] - odometer_readings[0][0]
@@ -444,7 +507,9 @@ def get_fuel_stats(
         "drains_count": len(drains),
         "total_volume": round(total_volume, 2),
         "total_cost": round(total_cost, 2),
-        "avg_price_per_liter": round(total_cost / total_volume, 2) if total_volume > 0 else 0,
+        "avg_price_per_liter": (
+            round(total_cost / total_volume, 2) if total_volume > 0 else 0
+        ),
         "avg_consumption": avg_consumption,
         "last_refuel_at": last_refuel.isoformat() if last_refuel else None,
     }
@@ -476,7 +541,7 @@ class AlertRead(BaseModel):
         return v.value if hasattr(v, "value") else v
 
 
-@router.get("/alerts", response_model=List[AlertRead])
+@router.get("/alerts", response_model=list[AlertRead])
 def list_alerts(
     status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=100, ge=1, le=1000),
@@ -503,8 +568,9 @@ def acknowledge_alert(
         raise HTTPException(status_code=409, detail="Alert not active")
     alert.status = AlertStatus.acknowledged
     alert.acknowledged_by = current_user.id
-    from datetime import datetime, timezone
-    alert.acknowledged_at = datetime.now(timezone.utc)
+    from datetime import datetime
+
+    alert.acknowledged_at = datetime.now(UTC)
     db.commit()
     db.refresh(alert)
     return alert
@@ -515,7 +581,7 @@ def acknowledge_alert(
 # =========================================
 
 
-@router.get("/notifications", response_model=List[NotificationRead])
+@router.get("/notifications", response_model=list[NotificationRead])
 def list_notifications(
     unread_only: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
@@ -542,8 +608,9 @@ def mark_notification_read(
     if not notif or notif.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Notification not found")
     notif.is_read = True
-    from datetime import datetime, timezone
-    notif.read_at = datetime.now(timezone.utc)
+    from datetime import datetime
+
+    notif.read_at = datetime.now(UTC)
     db.commit()
     db.refresh(notif)
     return notif
@@ -555,6 +622,7 @@ def get_unread_count(
     current_user: User = Depends(get_current_user),
 ):
     from sqlalchemy import func
+
     count = db.scalar(
         select(func.count(Notification.id)).where(
             Notification.user_id == current_user.id,
@@ -610,7 +678,7 @@ class AlertRuleRead(BaseModel):
         return v.value if hasattr(v, "value") else v
 
 
-@router.get("/rules", response_model=List[AlertRuleRead])
+@router.get("/rules", response_model=list[AlertRuleRead])
 def list_alert_rules(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -673,12 +741,14 @@ def get_dashboard_summary(
     current_user: User = Depends(get_current_user),
 ):
     """Агрегированная статистика для дашборда."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
+
     from sqlalchemy import func
+
     from app.models.catalog import Vehicle
 
     try:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_ago = now - timedelta(days=7)
 
@@ -687,37 +757,64 @@ def get_dashboard_summary(
 
         # GPS точки
         total_points = db.query(func.count(GpsPoint.id)).scalar() or 0
-        today_points = db.query(func.count(GpsPoint.id)).filter(
-            GpsPoint.recorded_at >= today_start
-        ).scalar() or 0
+        today_points = (
+            db.query(func.count(GpsPoint.id))
+            .filter(GpsPoint.recorded_at >= today_start)
+            .scalar()
+            or 0
+        )
 
         # Алерты
         total_alerts = db.query(func.count(Alert.id)).scalar() or 0
-        
+
         # Активные алерты (фильтруем в Python чтобы избежать проблем с Enum)
         all_alerts = db.query(Alert).all()
-        active_alerts = len([a for a in all_alerts if hasattr(a.status, 'value') and a.status.value == 'active'])
-        critical_alerts = len([a for a in all_alerts if hasattr(a.severity, 'value') and a.severity.value == 'critical' and hasattr(a.status, 'value') and a.status.value == 'active'])
+        active_alerts = len(
+            [
+                a
+                for a in all_alerts
+                if hasattr(a.status, "value") and a.status.value == "active"
+            ]
+        )
+        critical_alerts = len(
+            [
+                a
+                for a in all_alerts
+                if hasattr(a.severity, "value")
+                and a.severity.value == "critical"
+                and hasattr(a.status, "value")
+                and a.status.value == "active"
+            ]
+        )
 
         # Топливо за неделю
-        week_refuels = db.query(FuelTransaction).filter(
-            FuelTransaction.transaction_type == "refuel",
-            FuelTransaction.occurred_at >= week_ago,
-        ).all()
+        week_refuels = (
+            db.query(FuelTransaction)
+            .filter(
+                FuelTransaction.transaction_type == "refuel",
+                FuelTransaction.occurred_at >= week_ago,
+            )
+            .all()
+        )
         week_volume = float(sum(t.volume for t in week_refuels))
         week_cost = float(sum(float(t.total_cost or 0) for t in week_refuels))
 
         # Все топливо
-        all_refuels = db.query(FuelTransaction).filter(
-            FuelTransaction.transaction_type == "refuel"
-        ).all()
+        all_refuels = (
+            db.query(FuelTransaction)
+            .filter(FuelTransaction.transaction_type == "refuel")
+            .all()
+        )
         total_volume = float(sum(t.volume for t in all_refuels))
         total_cost = float(sum(float(t.total_cost or 0) for t in all_refuels))
 
         # Сливы
-        drains_count = db.query(func.count(FuelTransaction.id)).filter(
-            FuelTransaction.transaction_type == "drain"
-        ).scalar() or 0
+        drains_count = (
+            db.query(func.count(FuelTransaction.id))
+            .filter(FuelTransaction.transaction_type == "drain")
+            .scalar()
+            or 0
+        )
 
         return {
             "vehicles": {
@@ -749,6 +846,12 @@ def get_dashboard_summary(
             "vehicles": {"total": 0, "active": 0},
             "gps_points": {"total": 0, "today": 0},
             "alerts": {"total": 0, "active": 0, "critical": 0},
-            "fuel": {"total_volume": 0, "total_cost": 0, "week_volume": 0, "week_cost": 0, "drains_count": 0},
+            "fuel": {
+                "total_volume": 0,
+                "total_cost": 0,
+                "week_volume": 0,
+                "week_cost": 0,
+                "drains_count": 0,
+            },
             "updated_at": None,
         }

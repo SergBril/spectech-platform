@@ -1,6 +1,4 @@
 from datetime import date, datetime
-from decimal import Decimal
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -8,44 +6,44 @@ from pydantic import BaseModel, ConfigDict, Field
 class ContractorCreate(BaseModel):
     type: str = Field(min_length=1, max_length=20)
     name: str = Field(min_length=1, max_length=255)
-    inn: Optional[str] = None
-    kpp: Optional[str] = None
-    ogrn: Optional[str] = None
-    legal_address: Optional[str] = None
-    actual_address: Optional[str] = None
-    bank_details: Optional[dict] = None
-    contact_name: Optional[str] = None
-    contact_phone: Optional[str] = None
-    contact_email: Optional[str] = None
+    inn: str | None = None
+    kpp: str | None = None
+    ogrn: str | None = None
+    legal_address: str | None = None
+    actual_address: str | None = None
+    bank_details: dict | None = None
+    contact_name: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
 
 
 class ContractorUpdate(BaseModel):
-    name: Optional[str] = None
-    inn: Optional[str] = None
-    kpp: Optional[str] = None
-    ogrn: Optional[str] = None
-    legal_address: Optional[str] = None
-    actual_address: Optional[str] = None
-    bank_details: Optional[dict] = None
-    contact_name: Optional[str] = None
-    contact_phone: Optional[str] = None
-    contact_email: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    inn: str | None = None
+    kpp: str | None = None
+    ogrn: str | None = None
+    legal_address: str | None = None
+    actual_address: str | None = None
+    bank_details: dict | None = None
+    contact_name: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
+    is_active: bool | None = None
 
 
 class ContractorRead(BaseModel):
     id: int
     type: str
     name: str
-    inn: Optional[str] = None
-    kpp: Optional[str] = None
-    ogrn: Optional[str] = None
-    legal_address: Optional[str] = None
-    actual_address: Optional[str] = None
-    bank_details: Optional[dict] = None
-    contact_name: Optional[str] = None
-    contact_phone: Optional[str] = None
-    contact_email: Optional[str] = None
+    inn: str | None = None
+    kpp: str | None = None
+    ogrn: str | None = None
+    legal_address: str | None = None
+    actual_address: str | None = None
+    bank_details: dict | None = None
+    contact_name: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
     is_active: bool
     created_at: datetime
 
@@ -54,18 +52,18 @@ class ContractorRead(BaseModel):
 
 class EmployeeCreate(BaseModel):
     contractor_id: int
-    position: Optional[str] = None
-    role_in_system: Optional[str] = None
-    hire_date: Optional[date] = None
-    user_id: Optional[int] = None
+    position: str | None = None
+    role_in_system: str | None = None
+    hire_date: date | None = None
+    user_id: int | None = None
 
 
 class EmployeeRead(BaseModel):
     contractor_id: int
-    position: Optional[str] = None
-    role_in_system: Optional[str] = None
-    hire_date: Optional[date] = None
-    fire_date: Optional[date] = None
-    user_id: Optional[int] = None
+    position: str | None = None
+    role_in_system: str | None = None
+    hire_date: date | None = None
+    fire_date: date | None = None
+    user_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)

@@ -1,6 +1,5 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -19,9 +18,9 @@ from app.services.pdf_service import generate_act_pdf
 router = APIRouter()
 
 
-@router.get("", response_model=List[ActRead])
+@router.get("", response_model=list[ActRead])
 def list_acts(
-    status_filter: Optional[str] = Query(default=None, alias="status"),
+    status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -29,10 +28,10 @@ def list_acts(
 ):
     """Список актов."""
     stmt = select(Act)
-    
+
     if status_filter:
         stmt = stmt.where(Act.status == status_filter)
-    
+
     stmt = stmt.order_by(Act.created_at.desc()).offset(offset).limit(limit)
     return db.scalars(stmt).all()
 
@@ -85,22 +84,24 @@ def sign_act(
     act = db.get(Act, act_id)
     if not act:
         raise HTTPException(status_code=404, detail="Act not found")
-    
-    now = datetime.now(timezone.utc)
-    
+
+    now = datetime.now(UTC)
+
     if payload.signed_by == "client":
         if act.signed_by_client_at:
             raise HTTPException(status_code=409, detail="Act already signed by client")
         act.signed_by_client_at = now
     elif payload.signed_by == "executor":
         if act.signed_by_executor_at:
-            raise HTTPException(status_code=409, detail="Act already signed by executor")
+            raise HTTPException(
+                status_code=409, detail="Act already signed by executor"
+            )
         act.signed_by_executor_at = now
-    
+
     # Если обе стороны подписали — акт завершён
     if act.signed_by_client_at and act.signed_by_executor_at:
         act.status = DocumentStatus.paid
-    
+
     db.commit()
     db.refresh(act)
     return act
@@ -116,18 +117,18 @@ def download_act_pdf(
     act = db.get(Act, act_id)
     if not act:
         raise HTTPException(status_code=404, detail="Act not found")
-    
+
     client = db.get(Contractor, act.client_id)
     client_name = client.name if client else ""
-    
+
     pdf_path = generate_act_pdf(act, client_name=client_name)
-    
+
     # Сохраняем путь к PDF в модели
     relative_path = f"documents/{Path(pdf_path).name}"
     if act.pdf_url != relative_path:
         act.pdf_url = relative_path
         db.commit()
-    
+
     return FileResponse(
         path=pdf_path,
         filename=f"act_{act.document_number}.pdf",

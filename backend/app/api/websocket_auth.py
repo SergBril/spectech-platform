@@ -1,7 +1,8 @@
 """Аутентификация для WebSocket соединений."""
+
 import logging
-from typing import Optional
-from jose import jwt, JWTError
+
+from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -10,7 +11,7 @@ from app.models.auth import User
 logger = logging.getLogger("spectech.websocket.auth")
 
 
-def verify_ws_token(token: str, db: Session) -> Optional[User]:
+def verify_ws_token(token: str, db: Session) -> User | None:
     """Проверяет JWT токен для WebSocket."""
     try:
         payload = jwt.decode(
@@ -22,19 +23,19 @@ def verify_ws_token(token: str, db: Session) -> Optional[User]:
         if user_id is None:
             logger.warning("WS auth: no sub in token")
             return None
-        
+
         # sub может быть строкой — конвертируем в int
         try:
             user_id = int(user_id)
         except (ValueError, TypeError):
             logger.warning(f"WS auth: invalid sub format: {user_id}")
             return None
-        
+
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             logger.warning(f"WS auth: user {user_id} not found")
             return None
-        
+
         return user
     except JWTError as e:
         logger.warning(f"WS auth: JWT error: {e}")

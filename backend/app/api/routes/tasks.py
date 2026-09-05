@@ -1,15 +1,16 @@
 """API для управления Celery задачами."""
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
 
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user
 from app.core.db import get_db
 from app.models.auth import User
-from app.api.deps import get_current_user
 from app.tasks.pdf_tasks import (
-    generate_invoice_pdf_async,
-    generate_act_pdf_async,
     cleanup_old_pdfs,
+    generate_act_pdf_async,
+    generate_invoice_pdf_async,
 )
 
 router = APIRouter()
@@ -29,17 +30,17 @@ def generate_invoice_pdf_background(
 ):
     """Запускает генерацию PDF в фоне через Celery."""
     from app.models.finance import Invoice
-    
+
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    
+
     # Запускаем задачу асинхронно
     task = generate_invoice_pdf_async.delay(
         invoice_id=invoice_id,
         company_id=current_user.company_id or 0,
     )
-    
+
     return TaskResponse(
         task_id=task.id,
         status="queued",
@@ -55,16 +56,16 @@ def generate_act_pdf_background(
 ):
     """Запускает генерацию PDF акта в фоне."""
     from app.models.finance import Act
-    
+
     act = db.query(Act).filter(Act.id == act_id).first()
     if not act:
         raise HTTPException(status_code=404, detail="Act not found")
-    
+
     task = generate_act_pdf_async.delay(
         act_id=act_id,
         company_id=current_user.company_id or 0,
     )
-    
+
     return TaskResponse(
         task_id=task.id,
         status="queued",
@@ -80,9 +81,9 @@ def trigger_pdf_cleanup(
     """Запускает очистку старых PDF."""
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Admin only")
-    
+
     task = cleanup_old_pdfs.delay(days_old=days_old)
-    
+
     return TaskResponse(
         task_id=task.id,
         status="queued",
@@ -94,21 +95,24 @@ def trigger_pdf_cleanup(
 def get_task_status(task_id: str):
     """Возвращает статус Celery задачи."""
     from app.core.celery_app import celery_app
-    
+
     result = celery_app.AsyncResult(task_id)
-    
+
     response = {
         "task_id": task_id,
         "status": result.status,
     }
-    
+
     if result.ready():
         response["result"] = result.result
     elif result.failed():
         response["error"] = str(result.result)
-    
+
     return response
+
+
 # === Email задачи ===
+
 
 @router.post("/emails/send", response_model=TaskResponse)
 def send_email_task(
@@ -119,13 +123,13 @@ def send_email_task(
 ):
     """Отправляет email через Celery."""
     from app.tasks.email_tasks import send_email_async
-    
+
     task = send_email_async.delay(
         to_email=to_email,
         subject=subject,
         body_html=body,
     )
-    
+
     return TaskResponse(
         task_id=task.id,
         status="queued",
@@ -142,18 +146,18 @@ def notify_alert(
     """Отправляет уведомление об алерте."""
     from app.models.telematics import Alert
     from app.tasks.email_tasks import send_alert_notification
-    
+
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    
+
     task = send_alert_notification.delay(
         user_id=current_user.id,
         alert_id=alert_id,
         title=alert.title,
         description=alert.description or alert.title,
     )
-    
+
     return TaskResponse(
         task_id=task.id,
         status="queued",
@@ -163,7 +167,10 @@ def notify_alert(
 
 # === Telematics задачи ===
 
-@router.post("/telematics/aggregate-engine-hours/{vehicle_id}", response_model=TaskResponse)
+
+@router.post(
+    "/telematics/aggregate-engine-hours/{vehicle_id}", response_model=TaskResponse
+)
 def aggregate_engine_hours(
     vehicle_id: int,
     date: str = None,
@@ -171,9 +178,9 @@ def aggregate_engine_hours(
 ):
     """Агрегирует моточасы для техники за день."""
     from app.tasks.telematics_tasks import aggregate_engine_hours as task_func
-    
+
     task = task_func.delay(vehicle_id=vehicle_id, date_str=date)
-    
+
     return TaskResponse(
         task_id=task.id,
         status="queued",
@@ -189,11 +196,11 @@ def cleanup_gps(
     """Удаляет старые GPS точки."""
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Admin only")
-    
+
     from app.tasks.telematics_tasks import cleanup_old_gps_points
-    
+
     task = cleanup_old_gps_points.delay(days_old=days_old)
-    
+
     return TaskResponse(
         task_id=task.id,
         status="queued",
@@ -208,26 +215,29 @@ def detect_offline_vehicles(
 ):
     """Определяет offline технику."""
     from app.tasks.telematics_tasks import detect_offline_vehicles as task_func
-    
+
     task = task_func.delay(minutes_threshold=minutes_threshold)
-    
+
     return TaskResponse(
         task_id=task.id,
         status="queued",
         message=f"Offline detection queued (>{minutes_threshold} min)",
     )
+
+
 # === Ручной запуск периодических задач ===
+
 
 @router.post("/scheduled/morning-digest", response_model=TaskResponse)
 def trigger_morning_digest(current_user: User = Depends(get_current_user)):
     """Ручной запуск утреннего дайджеста."""
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Admin only")
-    
+
     from app.tasks.scheduled_tasks import send_morning_digest
-    
+
     task = send_morning_digest.delay()
-    
+
     return TaskResponse(
         task_id=task.id,
         status="queued",
@@ -239,9 +249,9 @@ def trigger_morning_digest(current_user: User = Depends(get_current_user)):
 def trigger_health_check(current_user: User = Depends(get_current_user)):
     """Ручной запуск проверки здоровья."""
     from app.tasks.scheduled_tasks import system_health_check
-    
+
     task = system_health_check.delay()
-    
+
     return TaskResponse(
         task_id=task.id,
         status="queued",
@@ -253,9 +263,9 @@ def trigger_health_check(current_user: User = Depends(get_current_user)):
 def trigger_engine_hours_aggregation(current_user: User = Depends(get_current_user)):
     """Ручной запуск агрегации моточасов."""
     from app.tasks.scheduled_tasks import aggregate_all_vehicles_engine_hours
-    
+
     task = aggregate_all_vehicles_engine_hours.delay()
-    
+
     return TaskResponse(
         task_id=task.id,
         status="queued",

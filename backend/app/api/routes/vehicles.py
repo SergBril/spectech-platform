@@ -1,6 +1,6 @@
-from typing import List, Optional
+from datetime import UTC
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,10 +13,10 @@ from app.schemas.vehicle import VehicleCreate, VehicleRead, VehicleUpdate
 router = APIRouter()
 
 
-@router.get("", response_model=List[VehicleRead])
+@router.get("", response_model=list[VehicleRead])
 def list_vehicles(
-    category_id: Optional[int] = None,
-    status_filter: Optional[str] = Query(default=None, alias="status"),
+    category_id: int | None = None,
+    status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -40,7 +40,9 @@ def create_vehicle(
 ):
     existing = db.scalar(select(Vehicle).where(Vehicle.id_value == payload.id_value))
     if existing:
-        raise HTTPException(status_code=409, detail="Vehicle with this ID already exists")
+        raise HTTPException(
+            status_code=409, detail="Vehicle with this ID already exists"
+        )
 
     vehicle = Vehicle(**payload.model_dump(), company_id=current_user.company_id)
     db.add(vehicle)
@@ -88,12 +90,12 @@ def delete_vehicle(
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_permission("vehicles", "delete")),
 ):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     vehicle = db.get(Vehicle, vehicle_id)
     if not vehicle or vehicle.is_deleted:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
     vehicle.is_deleted = True
-    vehicle.deleted_at = datetime.now(timezone.utc)
+    vehicle.deleted_at = datetime.now(UTC)
     db.commit()

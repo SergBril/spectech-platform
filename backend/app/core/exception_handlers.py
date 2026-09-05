@@ -1,9 +1,11 @@
 """Глобальные обработчики ошибок."""
+
 import logging
+
 from fastapi import Request, status
-from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 logger = logging.getLogger("spectech.errors")
 
@@ -13,18 +15,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     errors = []
     for error in exc.errors():
         field = " -> ".join(str(loc) for loc in error["loc"])
-        errors.append({
-            "field": field,
-            "message": error["msg"],
-            "type": error["type"],
-        })
+        errors.append(
+            {
+                "field": field,
+                "message": error["msg"],
+                "type": error["type"],
+            }
+        )
 
     logger.warning(
         "VALIDATION ERROR",
         extra={
             "path": request.url.path,
             "errors": errors,
-        }
+        },
     )
 
     return JSONResponse(
@@ -45,7 +49,7 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
             "path": request.url.path,
             "error": str(exc),
         },
-        exc_info=True
+        exc_info=True,
     )
 
     # Определяем тип ошибки
@@ -76,7 +80,7 @@ async def general_exception_handler(request: Request, exc: Exception):
             "error": str(exc),
             "error_type": type(exc).__name__,
         },
-        exc_info=True
+        exc_info=True,
     )
 
     return JSONResponse(

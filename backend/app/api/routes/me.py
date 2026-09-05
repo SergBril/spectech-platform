@@ -28,20 +28,20 @@ def get_my_roles(
     """Возвращает коды ролей текущего пользователя."""
     if current_user.is_superuser:
         return ["admin", "superuser"]
-    
+
     user_roles = db.scalars(
         select(UserRole).where(
             UserRole.user_id == current_user.id,
             UserRole.is_active == True,
         )
     ).all()
-    
+
     codes = []
     for ur in user_roles:
         role = db.get(Role, ur.role_id)
         if role:
             codes.append(role.code)
-    
+
     return codes
 
 
@@ -52,4 +52,4 @@ def get_my_permissions(
 ):
     """Возвращает права текущего пользователя."""
     perms = get_user_permissions(db, current_user)
-    return sorted(list(perms))
+    return sorted(perms)

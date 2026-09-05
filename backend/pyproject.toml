@@ -1,0 +1,40 @@
+[tool.black]
+line-length = 88
+target-version = ['py312']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults (FastAPI Depends)
+    "B006",  # mutable default arguments (FastAPI)
+    "B904",  # raise without from (acceptable in FastAPI)
+    "E712",  # comparison to True/False (SQLAlchemy needs this!)
+    "E402",  # module level import not at top (acceptable for logging setup)
+    "B018",  # useless expression (acceptable for debug)
+    "F811",  # redefinition of unused (SQLAlchemy func)
+    "F821",  # undefined name (temporary in tasks)
+    "F823",  # local variable referenced before assignment
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"tests/**/*.py" = ["B011"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
