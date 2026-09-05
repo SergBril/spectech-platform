@@ -1,7 +1,6 @@
 # Production Docker Compose
 # Запуск: docker-compose -f docker-compose.prod.yaml --env-file .env.prod up -d
 
-version: '3.8'
 
 services:
   # ═══════════════════════════════════════════════════════════════
