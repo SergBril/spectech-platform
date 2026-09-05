@@ -75,3 +75,5 @@ def mock_user():
         "is_superuser": True,
         "company_id": 1,
     }
+
+# Импортируем интеграционные фикстуры
