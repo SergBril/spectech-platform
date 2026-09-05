@@ -19,15 +19,6 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
 @pytest.fixture(scope="session")
-def event_loop():
-    """Переопределяем event_loop на session scope для совместимости с test_engine."""
-    import asyncio
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="session")
 def anyio_backend():
     return "asyncio"
 
