@@ -9,7 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import (
+    IntegrityError,
+    OperationalError,
+    RequestValidationError,
+    SQLAlchemyError,
+)
 
 from app.api.routes import (
     acts,
@@ -99,10 +104,19 @@ init_sentry()
 # Добавляем Request ID middleware (ПЕРВЫМ!)
 # app.add_middleware(RequestIDMiddleware)  # временно отключено
 
-# 2. Создаём таблицы в БД (для dev-режима)
+from sqlalchemy.exc import IntegrityError, OperationalError
+
+# ... (остальной код)
+
+# Создаём таблицы в БД при старте (для dev-режима)
 try:
     Base.metadata.create_all(bind=engine)
     print("✅ Таблицы БД созданы/проверены")
+except IntegrityError:
+    # Таблицы уже существуют — это нормально для production
+    print("✅ Таблицы БД уже существуют (используются существующие)")
+except OperationalError as e:
+    print(f"⚠️  БД недоступна: {type(e).__name__}. Приложение работает без БД.")
 except Exception as e:
     print(f"⚠️  БД недоступна: {type(e).__name__}. Приложение работает без БД.")
 
