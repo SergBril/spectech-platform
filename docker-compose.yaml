@@ -57,7 +57,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_SECRET_KEY: change-this-to-secure-random-string-in-production
-      CORS_ORIGINS: http://localhost:3000
+      CORS_ORIGINS: http://localhost:3001,http://localhost:3000
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,7 +72,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
       NEXT_PUBLIC_WS_URL: ws://localhost:8000/api/v1/ws

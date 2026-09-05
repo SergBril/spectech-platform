@@ -6,6 +6,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
+    fonts-dejavu-core \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем requirements.txt
