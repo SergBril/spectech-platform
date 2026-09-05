@@ -12,7 +12,6 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
-    RequestValidationError,
     SQLAlchemyError,
 )
 
