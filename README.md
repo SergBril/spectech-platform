@@ -332,3 +332,76 @@ docker-compose up --build
 # Frontend: http://localhost:3000
 # Backend API: http://localhost:8000/docs
 # MinIO Console: http://localhost:9001
+
+## 🎉 Неделя 6 — ЗАВЕРШЕНА! (01-05.09.2026)
+
+### Реализовано за 7 дней:
+
+**День 1: WebSocket + GPS приём**
+- WebSocket сервер на FastAPI
+- Приём GPS точек в реальном времени
+- Аутентификация через JWT токен
+- Подписки на каналы (gps, alerts)
+
+**День 2: Живая карта с маркерами**
+- Интеграция Leaflet с Next.js 16
+- Реалтайм обновление маркеров
+- Цветные иконки по статусу машины
+- Popup с информацией
+
+**День 3: Алерты в реальном времени**
+- Правила (скорость, слив топлива, моточасы)
+- Дедупликация алертов (10 минут кулдаун)
+- Toast уведомления в браузере
+- Подтверждение алертов
+
+**День 4: История треков + экспорт**
+- Полилинии на карте с цветовой кодировкой
+- Статистика (расстояние, скорость, время)
+- Фильтры по дате
+- Экспорт в CSV и GeoJSON
+
+**День 5: Топливные отчёты**
+- CRUD транзакций (заправки/сливы)
+- Форма добавления с валидацией
+- Статистика (всего литров, стоимость)
+- Алерты на слив топлива
+
+**День 6: Интеграция + полировка**
+- Дашборд с 4 метриками
+- Клик по алерту → трек
+- Клик по заправке → трек
+- Поиск по машинам
+- Сохранение вкладок в sessionStorage
+
+**День 7: Docker деплой**
+- 5 контейнеров (postgres, redis, minio, backend, frontend)
+- Кириллические шрифты для PDF
+- Production build Next.js standalone
+- Полная документация
+
+### Технологический стек:
+- **Backend:** FastAPI 0.115, SQLAlchemy 2.0, Alembic, Uvicorn, Celery
+- **Frontend:** Next.js 16.3, React 19.2, Tailwind CSS, Leaflet
+- **Database:** PostgreSQL 16, Redis 7
+- **Storage:** MinIO (S3-совместимый)
+- **Deployment:** Docker Compose
+
+### Запуск проекта:
+```bash
+# 1. Клонировать репозиторий
+git clone <repo-url>
+cd spectech-platform
+
+# 2. Запустить через Docker
+docker-compose up -d
+
+# 3. Создать admin пользователя
+curl -X POST "http://localhost:8000/api/v1/auth/register" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"email\":\"admin@spectech.dev\",\"password\":\"admin123\",\"full_name\":\"Admin User\"}"
+
+# 4. Открыть приложение
+# Frontend: http://localhost:3001
+# Backend API: http://localhost:8000/docs
+# MinIO Console: http://localhost:9001 (spectech/spectech123)

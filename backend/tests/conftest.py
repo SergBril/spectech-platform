@@ -1,35 +1,86 @@
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+"""
+Базовые фикстуры для всех тестов.
+"""
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from app.core.db import Base, get_db
+import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+
 from app.main import app
-from app.models import *
-from app.models.dispatch import Request
-engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-S = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-@pytest.fixture(scope="function")
-def db():
-    Base.metadata.create_all(bind=engine); s = S()
-    try: yield s
-    finally: s.close(); Base.metadata.drop_all(bind=engine)
-@pytest.fixture(scope="function")
-def client(db):
-    def ov():
-        try: yield db
-        finally: pass
-    app.dependency_overrides[get_db] = ov
-    with TestClient(app) as c: yield c
+from app.core.db import Base, get_db
+from app.core.config import settings
+
+# Используем in-memory SQLite для unit тестов
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+
+
+
+
+@pytest.fixture(scope="session")
+def event_loop():
+    """Переопределяем event_loop на session scope для совместимости с test_engine."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest.fixture(scope="session")
+def anyio_backend():
+    return "asyncio"
+
+
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
+async def test_engine():
+    """Создаём тестовый движок БД."""
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield engine
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def db_session(test_engine):
+    """Сессия БД для тестов."""
+    session_factory = async_sessionmaker(
+        test_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    async with session_factory() as session:
+        yield session
+        await session.rollback()
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def client(db_session):
+    """HTTP клиент для тестирования API."""
+    async def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
     app.dependency_overrides.clear()
-def make_test_request(db, client_id, category_id, company_id, **kw):
-    now = datetime.now(timezone.utc)
-    d = dict(client_id=client_id, status="completed", request_type="one_time",
-        vehicle_category_id=category_id, work_type="T", object_address="M",
-        planned_start=now, planned_end=now + timedelta(hours=8),
-        shift_duration_hours=8, client_rate=Decimal("15000"),
-        rate_type="per_shift", estimated_amount=Decimal("15000"),
-        source_channel="phone", priority="normal", company_id=company_id)
-    d.update(kw); return Request(**d)
+
+
+@pytest.fixture
+def auth_headers():
+    """Заголовки авторизации для тестов."""
+    return {"Authorization": "Bearer test_token"}
+
+
+@pytest.fixture
+def mock_user():
+    """Мок пользователя."""
+    return {
+        "id": 1,
+        "email": "test@spectech.dev",
+        "full_name": "Test User",
+        "is_superuser": True,
+        "company_id": 1,
+    }
