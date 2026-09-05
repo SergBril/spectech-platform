@@ -1,56 +1,79 @@
-"""Структурированное логирование в JSON формате."""
+"""Конфигурация structured logging с structlog."""
 
-import json
 import logging
 import sys
-from datetime import UTC, datetime
+from typing import Any
+
+import structlog
 
 
-class JSONFormatter(logging.Formatter):
-    """Форматтер который выводит логи в JSON."""
+def setup_logging(log_level: str = "INFO"):
+    """Настраивает structured logging с JSON форматом."""
 
-    def format(self, record: logging.LogRecord) -> str:
-        log_data = {
-            "timestamp": datetime.now(UTC).isoformat(),
-            "level": record.levelname,
-            "logger": record.name,
-            "message": record.getMessage(),
-        }
+    # Определяем формат в зависимости от окружения
+    import os
 
-        # Добавляем request_id если есть
-        if hasattr(record, "request_id"):
-            log_data["request_id"] = record.request_id
+    is_production = os.getenv("ENVIRONMENT", "development") == "production"
 
-        # Добавляем дополнительные поля
-        if record.exc_info:
-            log_data["exception"] = self.formatException(record.exc_info)
+    # Общие processors
+    shared_processors: list[Any] = [
+        structlog.contextvars.merge_contextvars,  # Добавляем context vars
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),  # ISO формат времени
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.UnicodeDecoder(),
+    ]
 
-        if hasattr(record, "extra_data"):
-            log_data["data"] = record.extra_data
+    if is_production:
+        # Production: JSON формат
+        renderer = structlog.processors.JSONRenderer()
+    else:
+        # Development: цветной консольный вывод
+        renderer = structlog.dev.ConsoleRenderer(
+            colors=True,
+            pad_event=35,
+        )
 
-        return json.dumps(log_data, ensure_ascii=False)
+    # Конфигурируем structlog
+    structlog.configure(
+        processors=[
+            *shared_processors,
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
 
+    # Конфигурируем стандартный logging
+    formatter = structlog.stdlib.ProcessorFormatter(
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            renderer,
+        ],
+    )
 
-def setup_logging(level: str = "INFO"):
-    """Настраивает корневой логгер с JSON-форматом."""
-    logger = logging.getLogger()
-    logger.setLevel(getattr(logging, level.upper()))
-
-    # Удаляем старые хэндлеры
-    logger.handlers.clear()
-
-    # Создаём хэндлер для stdout
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JSONFormatter())
-    logger.addHandler(handler)
+    handler.setFormatter(formatter)
 
-    # Отключаем многословные логи
+    # Настраиваем root logger
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.addHandler(handler)
+    root_logger.setLevel(getattr(logging, log_level.upper()))
+
+    # Уменьшаем шум от библиотек
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    return logger
+    print(
+        f"✅ Structured logging настроен (level={log_level}, format={'JSON' if is_production else 'console'})"
+    )
 
 
-def get_logger(name: str) -> logging.Logger:
-    """Возвращает логгер с указанным именем."""
-    return logging.getLogger(f"spectech.{name}")
+def get_logger(name: str = "spectech.app") -> structlog.stdlib.BoundLogger:
+    """Возвращает logger с привязкой к контексту."""
+    return structlog.get_logger(name)

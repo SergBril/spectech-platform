@@ -1,32 +1,23 @@
+"""Главный файл приложения FastAPI."""
+
 import logging
-
-from fastapi.exceptions import RequestValidationError
-from sqlalchemy.exc import SQLAlchemyError
-
-from app.api.routes import files, tasks
-from app.api.routes import websocket as ws_routes
-from app.core.db import Base, engine
-from app.core.exception_handlers import (
-    general_exception_handler,
-    sqlalchemy_exception_handler,
-    validation_exception_handler,
-)
-from app.core.logging_config import setup_logging
-from app.models import *  # noqa: F401, F403 — импортирует ВСЕ модели
-
-# Настраиваем логирование
-setup_logging("INFO")
-logger = logging.getLogger("spectech.app")
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import HTMLResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.routes import (
     acts,
     auth,
     categories,
     contractors,
+    debug,
+    files,
     invoices,
     me,
     payments,
@@ -35,93 +26,91 @@ from app.api.routes import (
     requests,
     shifts,
     system,
+    tasks,
     telematics,
     vehicles,
 )
+from app.api.routes import websocket as ws_routes
 from app.core.config import settings
+from app.core.db import Base, engine
+from app.core.exception_handlers import (
+    general_exception_handler,
+    sqlalchemy_exception_handler,
+    validation_exception_handler,
+)
+from app.core.logging_config import setup_logging
 from app.core.middleware import RequestLoggingMiddleware
+from app.core.sentry_config import init_sentry
+from app.models import *  # noqa: F401, F403
+
+# Настройка логирования
+setup_logging("INFO")
+logger = logging.getLogger("spectech.app")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Lifecycle manager."""
     print(f"🚀 {settings.app_name} v{settings.app_version} starting...")
     yield
     print("👋 Shutting down...")
-    # Создаём таблицы если их нет
 
 
-from app.models import *  # noqa: F401, F403 — импортируем все модели
-
-Base.metadata.create_all(bind=engine)
-
-
-# 1. Создаём приложение
+# 1. Создание приложения
 app = FastAPI(
-    title="SpectechPlatform",
-    version="0.5.0-dev",
-    description="Платформа управления спецтехникой",
+    title="СпецТехника Про API",
+    description="""
+    # 🚜 Платформа управления спецтехникой
+
+    Полнофункциональная система для управления парком спецтехники,
+    учёта топлива, отслеживания GPS и управления заявками.
+
+    ## Возможности
+
+    * 🔐 **Аутентификация** — JWT токены, RBAC
+    * 🚗 **Транспорт** — каталог, статусы, история
+    * 📍 **GPS трекинг** — реальное время, геозоны
+    * ⛽ **Топливо** — учёт заправок и сливов
+    * 📋 **Заявки** — управление работами
+    * 💰 **Финансы** — счета, акты, выплаты
+    * 🔔 **Алерты** — уведомления в реальном времени
+    """,
+    version="1.0.0",
+    terms_of_service="https://spectech.pro/terms",
+    contact={
+        "name": "СпецТехника Про",
+        "url": "https://spectech.pro",
+        "email": "support@spectech.pro",
+    },
+    license_info={
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT",
+    },
+    openapi_url="/api/v1/openapi.json",
+    docs_url=None,  # Отключаем стандартный /docs
+    redoc_url=None,  # Отключаем стандартный /redoc
+    lifespan=lifespan,
 )
-# Создаём все таблицы в БД при старте (для dev-режима)
-# В production использовать Alembic миграции
-Base.metadata.create_all(bind=engine)
-# Регистрируем обработчики ошибок
+
+# Инициализируем Sentry
+init_sentry()
+
+# Добавляем Request ID middleware (ПЕРВЫМ!)
+# app.add_middleware(RequestIDMiddleware)  # временно отключено
+
+# 2. Создаём таблицы в БД (для dev-режима)
+try:
+    Base.metadata.create_all(bind=engine)
+    print("✅ Таблицы БД созданы/проверены")
+except Exception as e:
+    print(f"⚠️  БД недоступна: {type(e).__name__}. Приложение работает без БД.")
+
+# 3. Регистрируем обработчики ошибок
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(SQLAlchemyError, sqlalchemy_exception_handler)
 app.add_exception_handler(Exception, general_exception_handler)
-# 2. CORS middleware (если есть)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-# 3. Наш middleware логирования (ПОСЛЕДНИМ!)
-
-app.add_middleware(RequestLoggingMiddleware)
-
-# 4. Роутеры
-# Auth
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
-
-# Catalog
-app.include_router(categories.router, prefix="/api/v1/categories", tags=["catalog"])
-app.include_router(vehicles.router, prefix="/api/v1/vehicles", tags=["catalog"])
-
-# Dispatch
-app.include_router(requests.router, prefix="/api/v1/requests", tags=["dispatch"])
-app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["dispatch"])
-
-# Contractors
-app.include_router(
-    contractors.router, prefix="/api/v1/contractors", tags=["contractors"]
-)
-
-# RBAC
-app.include_router(rbac.router, prefix="/api/v1/rbac", tags=["rbac"])
-app.include_router(me.router, prefix="/api/v1/me", tags=["me"])
-
-# Finance
-app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["finance"])
-app.include_router(acts.router, prefix="/api/v1/acts", tags=["finance"])
-app.include_router(payouts.router, prefix="/api/v1/payouts", tags=["finance"])
-app.include_router(payments.router, prefix="/api/v1/payments", tags=["finance"])
-
-# Telematics
-app.include_router(telematics.router, prefix="/api/v1/telematics", tags=["telematics"])
-
-# Tasks (Celery)
-app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
-
-# System (новый из Дня 1 Недели 4)
-app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
-# Files (storage)
-app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
-# WebSocket
-app.include_router(ws_routes.router, prefix="/api/v1", tags=["websocket"])
-1
-
+# 4. Middleware
 allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 
 app.add_middleware(
@@ -132,14 +121,158 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(RequestLoggingMiddleware)
 
-@app.get("/health")
+# 5. Роутеры API
+# Debug endpoints
+
+# Debug endpoints (без префикса - он уже в router)
+app.include_router(debug.router, prefix="/api/v1", tags=["debug"])
+
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(categories.router, prefix="/api/v1/categories", tags=["catalog"])
+app.include_router(vehicles.router, prefix="/api/v1/vehicles", tags=["catalog"])
+app.include_router(requests.router, prefix="/api/v1/requests", tags=["dispatch"])
+app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["dispatch"])
+app.include_router(
+    contractors.router, prefix="/api/v1/contractors", tags=["contractors"]
+)
+app.include_router(rbac.router, prefix="/api/v1/rbac", tags=["rbac"])
+app.include_router(me.router, prefix="/api/v1/me", tags=["me"])
+app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["finance"])
+app.include_router(acts.router, prefix="/api/v1/acts", tags=["finance"])
+app.include_router(payouts.router, prefix="/api/v1/payouts", tags=["finance"])
+app.include_router(payments.router, prefix="/api/v1/payments", tags=["finance"])
+app.include_router(telematics.router, prefix="/api/v1/telematics", tags=["telematics"])
+app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
+app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
+app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
+app.include_router(ws_routes.router, prefix="/api/v1", tags=["websocket"])
+
+
+# 6. Кастомизация OpenAPI
+def custom_openapi():
+    """Custom OpenAPI schema."""
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title="СпецТехника Про API",
+        version="1.0.0",
+        description=app.description,
+        routes=app.routes,
+    )
+    openapi_schema["servers"] = [
+        {"url": "http://localhost:8000", "description": "Development server"},
+        {"url": "https://api.spectech.pro", "description": "Production server"},
+    ]
+    openapi_schema["tags"] = [
+        {"name": "auth", "description": "Аутентификация и авторизация"},
+        {"name": "catalog", "description": "Каталог транспорта"},
+        {"name": "telematics", "description": "GPS трекинг и телематика"},
+        {"name": "finance", "description": "Финансовые операции"},
+        {"name": "dispatch", "description": "Заявки и смены"},
+        {"name": "system", "description": "Системные endpoints"},
+    ]
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
+
+# 7. Документация: главная страница
+@app.get("/", include_in_schema=False, response_class=HTMLResponse)
+async def root_landing():
+    """Главная страница документации."""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>СпецТехника Про API</title>
+        <meta charset="utf-8">
+        <style>
+            body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; background: #f5f5f5; }
+            .container { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+            h2 { color: #34495e; }
+            .card { background: #ecf0f1; padding: 20px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #3498db; }
+            a { display: inline-block; background: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 10px 10px 10px 0; }
+            a:hover { background: #2980b9; }
+            code { background: #2c3e50; color: #ecf0f1; padding: 2px 6px; border-radius: 3px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🚜 СпецТехника Про API</h1>
+            <p><strong>Версия:</strong> 1.0.0 | <strong>Статус:</strong> Production</p>
+
+            <h2>📚 Документация</h2>
+            <div class="card">
+                <a href="/docs">🔵 Swagger UI</a>
+                <a href="/redoc">🔴 ReDoc</a>
+                <a href="/api/v1/openapi.json">📄 OpenAPI JSON</a>
+            </div>
+
+            <h2>🚀 Быстрый старт</h2>
+            <div class="card">
+                <h3>1. Аутентификация</h3>
+                <pre><code>POST /api/v1/auth/login
+{
+  "email": "admin@spectech.dev",
+  "password": "admin123"
+}</code></pre>
+            </div>
+
+            <h2>📋 Основные модули</h2>
+            <ul>
+                <li><strong>auth</strong> — аутентификация, JWT</li>
+                <li><strong>catalog</strong> — каталог транспорта</li>
+                <li><strong>telematics</strong> — GPS, алерты, геозоны</li>
+                <li><strong>finance</strong> — счета, акты, выплаты</li>
+                <li><strong>dispatch</strong> — заявки на работы</li>
+            </ul>
+
+            <h2>🔧 Среда</h2>
+            <p>Base URL: <code>http://localhost:8000</code></p>
+            <p>WebSocket: <code>ws://localhost:8000/ws</code></p>
+        </div>
+    </body>
+    </html>
+    """
+
+
+# 8. Документация: Swagger UI
+@app.get("/docs", include_in_schema=False, response_class=HTMLResponse)
+async def custom_swagger_ui_html():
+    """Swagger UI документация."""
+    return get_swagger_ui_html(
+        openapi_url="/api/v1/openapi.json",
+        title="СпецТехника Про API - Swagger UI",
+        swagger_favicon_url="https://fastapi.tiangolo.com/img/favicon.png",
+    )
+
+
+# 9. Документация: ReDoc
+@app.get("/redoc", include_in_schema=False, response_class=HTMLResponse)
+async def redoc_html():
+    """ReDoc документация."""
+    return get_redoc_html(
+        title="СпецТехника Про API",
+        openapi_url="/api/v1/openapi.json",
+        redoc_favicon_url="https://redocly.github.io/redoc/favicon.png",
+    )
+
+
+# 10. Health check endpoints
+@app.get("/health", tags=["system"])
 def health_check():
+    """Проверка здоровья сервиса."""
     return {"status": "healthy", "version": settings.app_version}
 
 
-@app.get("/ready")
+@app.get("/ready", tags=["system"])
 def readiness_check():
+    """Проверка готовности (БД)."""
     from sqlalchemy import text
 
     from app.core.db import SessionLocal
@@ -152,4 +285,13 @@ def readiness_check():
     except Exception:
         db_ok = False
 
-    return {"status": "ready" if db_ok else "not_ready", "checks": {"database": db_ok}}
+    return {
+        "status": "ready" if db_ok else "not_ready",
+        "checks": {"database": db_ok},
+    }
+
+
+@app.get("/api/v1/debug/simple")
+async def simple_debug():
+    """Simple debug endpoint without router."""
+    return {"message": "Simple debug works", "status": "ok"}

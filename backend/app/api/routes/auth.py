@@ -12,7 +12,7 @@ from app.services.auth_service import (
     hash_password,
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserRead, status_code=201)
