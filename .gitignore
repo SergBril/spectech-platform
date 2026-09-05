@@ -81,3 +81,5 @@ fix_everything.py
 # Случайные файлы
 код*.txt
 openapi*.json
+.env.prod
+.env.prod.example
