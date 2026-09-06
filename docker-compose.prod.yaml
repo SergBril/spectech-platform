@@ -121,6 +121,7 @@ services:
     networks:
       - backend
       - database
+      - monitoring
     # NO direct port exposure - only through Nginx
 
   # ═══════════════════════════════════════════════════════════════
@@ -141,6 +142,52 @@ services:
       - frontend
       - backend
 
+  # ═══════════════════════════════════════════════════════════════
+  # Prometheus - Metrics Collection
+  # ═══════════════════════════════════════════════════════════════
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: spectech-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    depends_on:
+      - backend
+    restart: always
+    networks:
+      - backend
+      - monitoring
+
+  # ═══════════════════════════════════════════════════════════════
+  # Grafana - Metrics Visualization
+  # ═══════════════════════════════════════════════════════════════
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: spectech-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3002:3000"
+    depends_on:
+      - prometheus
+    restart: always
+    networks:
+      - monitoring
+      - backend
+
 volumes:
   postgres_data:
   redis_data:
@@ -148,6 +195,8 @@ volumes:
   backend_uploads:
   backend_logs:
   nginx_logs:
+  prometheus_data:
+  grafana_data:
 
 networks:
   frontend:
@@ -155,4 +204,6 @@ networks:
   backend:
     driver: bridge
   database:
+    driver: bridge
+  monitoring:
     driver: bridge
