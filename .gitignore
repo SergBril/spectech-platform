@@ -91,3 +91,12 @@ nginx/ssl/*.key
 nginx/ssl/*.pem
 nginx/ssl/*.crt
 !nginx/ssl/.gitkeep
+# Environment files with secrets
+.env.prod
+.env.local
+backend/.env
+backend/.env.prod
+backup_*.sql
+.env.prod
+backend/.env.production
+backup_*.sql
