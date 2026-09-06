@@ -10,7 +10,7 @@ requests==2.34.2
 black==24.8.0
 ruff==0.6.9
 mypy==1.11.2
-pre-commit==4.0.1
+pre-commit==4.6.2
 
 # Testing extras
 factory_boy==3.3.1
