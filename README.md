@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/SergBril/spectech-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/SergBril/spectech-platform/actions/workflows/ci.yml)
 [![CD](https://github.com/SergBril/spectech-platform/actions/workflows/cd.yml/badge.svg)](https://github.com/SergBril/spectech-platform/actions/workflows/cd.yml)
-[![codecov](https://codecov.io/gh/SergBril/spectech-platform/branch/main/graph/badge.svg)](https://codecov.io/gh/SergBril/spectech-platform)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](https://www.docker.com/)
@@ -417,3 +416,19 @@ curl -X POST "http://localhost:8000/api/v1/auth/register" ^
 # Frontend: http://localhost:3001
 # Backend API: http://localhost:8000/docs
 # MinIO Console: http://localhost:9001 (spectech/spectech123)
+## 📊 Viewing Coverage Reports
+
+Coverage reports are automatically generated on every CI run and available as GitHub Actions artifacts.
+
+### Option 1: Download from GitHub Actions
+1. Go to **Actions** tab
+2. Click on latest successful run
+3. Scroll to **Artifacts** section
+4. Download `coverage-report`
+5. Extract and open `index.html` in browser
+
+### Option 2: Generate locally
+```powershell
+cd backend
+pytest tests/ --cov=app --cov-report=html --cov-report=term-missing
+Start-Process htmlcov\index.html
