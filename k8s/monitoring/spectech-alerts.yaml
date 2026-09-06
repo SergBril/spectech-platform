@@ -1,0 +1,63 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: spectech-alerts
+  namespace: spectech
+  labels:
+    app: spectech
+    release: kube-prometheus
+spec:
+  groups:
+  - name: spectech.rules
+    rules:
+    - alert: BackendHighErrorRate
+      expr: |
+        (
+          sum(rate(http_requests_total{namespace="spectech", app="backend", status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total{namespace="spectech", app="backend"}[5m]))
+        ) > 0.05
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Backend has high error rate (>5%)"
+        description: "Backend is returning 5xx errors for more than 5% of requests"
+
+    - alert: BackendPodRestarting
+      expr: |
+        increase(kube_pod_container_status_restarts_total{namespace="spectech", container="backend"}[1h]) > 3
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Backend pod is restarting frequently"
+        description: "Backend pod {{ $labels.pod }} restarted {{ $value }} times in the last hour"
+
+    - alert: BackendHighLatency
+      expr: |
+        histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace="spectech", app="backend"}[5m])) by (le)) > 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Backend P95 latency > 1s"
+        description: "95th percentile latency is {{ $value }}s"
+
+    - alert: PostgresDown
+      expr: up{namespace="spectech", service="postgres"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "PostgreSQL is down"
+        description: "PostgreSQL service in spectech namespace is unreachable"
+
+    - alert: RedisDown
+      expr: up{namespace="spectech", service="redis"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Redis is down"
+        description: "Redis service in spectech namespace is unreachable"
