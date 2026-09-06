@@ -1,0 +1,16 @@
+{{- if .Values.minio.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc
+  labels:
+    app: minio
+    {{- include "spectech.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.minio.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.minio.storage }}
+{{- end }}
