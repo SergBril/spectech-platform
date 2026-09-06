@@ -85,3 +85,9 @@ openapi*.json
 load_tests/results_*.csv
 load_tests/report.html
 load_tests/*.html
+
+# SSL certificates (never commit private keys)
+nginx/ssl/*.key
+nginx/ssl/*.pem
+nginx/ssl/*.crt
+!nginx/ssl/.gitkeep
