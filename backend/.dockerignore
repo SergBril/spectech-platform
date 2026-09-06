@@ -55,3 +55,6 @@ profile.svg
 # OS
 .DS_Store
 Thumbs.db
+
+# But keep entrypoint script
+!scripts/entrypoint.sh

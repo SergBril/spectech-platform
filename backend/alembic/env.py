@@ -1,27 +1,41 @@
+"""Alembic environment configuration for PostgreSQL."""
+
 import os
-import sys
 from logging.config import fileConfig
 
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
-# Добавляем путь к приложению
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Импортируем Base и все модели
+# Import Base and all models to register them with metadata
 from app.core.db import Base
+from app.models import *  # noqa: F401, F403
 
+# Alembic Config object
 config = context.config
+
+# Interpret the config file for Python logging
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Метаданные всех моделей
+# Override sqlalchemy.url from environment variable
+database_url = os.environ.get("DATABASE_URL")
+if database_url:
+    # Заменяем postgresql+psycopg на postgresql для Alembic (использует psycopg напрямую)
+    if database_url.startswith("postgresql+psycopg://"):
+        database_url = database_url.replace("postgresql+psycopg://", "postgresql://", 1)
+    config.set_main_option("sqlalchemy.url", database_url)
+else:
+    # Fallback для локальной разработки без Docker
+    config.set_main_option(
+        "sqlalchemy.url", "postgresql://spectech:spectech@localhost:5432/spectech"
+    )
+
+# Model metadata for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Отладочный вывод
-print(f"📊 Found {len(target_metadata.tables)} tables in Base.metadata:")
-for table_name in target_metadata.tables.keys():
+print(f"📊 Found {len(Base.metadata.tables)} tables in Base.metadata:")
+for table_name in Base.metadata.tables.keys():
     print(f"   - {table_name}")
 
 
@@ -40,11 +54,10 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode with async engine."""
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    connectable = create_async_engine(
-        config.get_main_option("sqlalchemy.url"),
+    """Run migrations in 'online' mode."""
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
 
