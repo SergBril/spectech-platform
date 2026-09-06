@@ -101,3 +101,7 @@ Pygments==2.21.0
 wrapt==2.4.0
 cffi==2.1.1
 pycparser==3.0
+
+# Day 5: Observability - Prometheus Metrics
+prometheus-fastapi-instrumentator==7.0.0
+prometheus-client==0.20.0

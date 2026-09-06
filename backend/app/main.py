@@ -44,9 +44,12 @@ from app.core.exception_handlers import (
     validation_exception_handler,
 )
 from app.core.logging_config import setup_logging
+from app.core.metrics import setup_metrics
 from app.core.middleware import RequestLoggingMiddleware
 from app.core.sentry_config import init_sentry
 from app.models import *  # noqa: F401, F403
+
+app = FastAPI
 
 # Настройка логирования
 setup_logging("INFO")
@@ -96,6 +99,12 @@ app = FastAPI(
     redoc_url=None,  # Отключаем стандартный /redoc
     lifespan=lifespan,
 )
+
+#
+
+# Setup Prometheus metrics
+if settings.environment != "testing":
+    setup_metrics(app)
 
 # Инициализируем Sentry
 init_sentry()
