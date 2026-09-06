@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: backend-monitor
+  namespace: spectech
+  labels:
+    app: backend
+    release: kube-prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - spectech
+  selector:
+    matchLabels:
+      app: backend
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s
