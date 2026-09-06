@@ -100,3 +100,4 @@ backup_*.sql
 .env.prod
 backend/.env.production
 backup_*.sql
+backups/
