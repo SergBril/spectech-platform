@@ -24,3 +24,6 @@ psutil==6.0.0
 
 # Coverage reporting
 coverage==7.16.0
+
+# Load Testing
+locust==2.29.1

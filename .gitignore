@@ -82,3 +82,6 @@ fix_everything.py
 код*.txt
 openapi*.json
 .env.prod.example
+load_tests/results_*.csv
+load_tests/report.html
+load_tests/*.html
