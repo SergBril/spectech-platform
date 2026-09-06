@@ -19,6 +19,12 @@ psycopg-binary==3.2.1
 alembic==1.13.2
 greenlet==3.5.5
 
+# Database migrations (sync driver for Alembic)
+psycopg2-binary==2.9.9
+
+# Database migrations
+alembic==1.13.2
+
 # Validation & Settings
 pydantic==2.9.2
 pydantic-settings==2.5.2

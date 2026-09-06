@@ -60,9 +60,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app
 
 # Запуск через uvicorn с 4 workers для production
-CMD ["uvicorn", "app.main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--workers", "4", \
-     "--log-level", "info", \
-     "--access-log"]
+# Apply migrations on startup, then run the app
+# Copy entrypoint script (owned by spectech user)
+COPY --chown=spectech:spectech scripts/entrypoint.sh /app/scripts/entrypoint.sh
+
+# Run through sh - no chmod needed
+ENTRYPOINT ["sh", "/app/scripts/entrypoint.sh"]

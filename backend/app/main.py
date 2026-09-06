@@ -10,8 +10,6 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
 from sqlalchemy.exc import (
-    IntegrityError,
-    OperationalError,
     SQLAlchemyError,
 )
 
@@ -37,7 +35,6 @@ from app.api.routes import (
 )
 from app.api.routes import websocket as ws_routes
 from app.core.config import settings
-from app.core.db import Base, engine
 from app.core.exception_handlers import (
     general_exception_handler,
     sqlalchemy_exception_handler,
@@ -113,17 +110,8 @@ init_sentry()
 # app.add_middleware(RequestIDMiddleware)  # временно отключено
 
 
-# Создаём таблицы в БД при старте (для dev-режима)
-try:
-    Base.metadata.create_all(bind=engine)
-    print("✅ Таблицы БД созданы/проверены")
-except IntegrityError:
-    # Таблицы уже существуют — это нормально для production
-    print("✅ Таблицы БД уже существуют (используются существующие)")
-except OperationalError as e:
-    print(f"⚠️  БД недоступна: {type(e).__name__}. Приложение работает без БД.")
-except Exception as e:
-    print(f"⚠️  БД недоступна: {type(e).__name__}. Приложение работает без БД.")
+# Таблицы создаются через Alembic миграции при старте контейнера
+print("✅ Database migrations managed by Alembic")
 
 # 3. Регистрируем обработчики ошибок
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
