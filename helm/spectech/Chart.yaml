@@ -1,0 +1,17 @@
+apiVersion: v2
+name: spectech
+description: SpectechPlatform - Enterprise fleet management system
+type: application
+version: 0.1.0
+appVersion: "0.5.0"
+keywords:
+  - spectech
+  - fleet-management
+  - fastapi
+  - nextjs
+  - postgresql
+  - redis
+  - minio
+maintainers:
+  - name: Serg Bril
+    email: serega-vumo@mail.ru

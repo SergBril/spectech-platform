@@ -101,3 +101,7 @@ backup_*.sql
 backend/.env.production
 backup_*.sql
 backups/
+helm/*/values-prod.yaml
+helm/*/values-*.local.yaml
+helm/*/values-prod.yaml
+helm/*/values-*.local.yaml
