@@ -1,0 +1,25 @@
+# Production values - DO NOT COMMIT REAL SECRETS
+# Copy this file to values-prod.yaml and fill in real values
+# cp values-prod.yaml.example values-prod.yaml
+
+credentials:
+  postgres:
+    password: CHANGE_ME_PRODUCTION_PASSWORD  # pragma: allowlist secret
+  minio:
+    rootPassword: CHANGE_ME_MINIO_PASSWORD  # pragma: allowlist secret
+
+# Use existing K8s Secret instead of creating new one
+# existingSecret: prod-db-credentials
+
+ingress:
+  host: api.spectech.pro
+  tls:
+    enabled: true
+    secretName: spectech-prod-tls  # pragma: allowlist secret
+
+backend:
+  replicaCount: 3
+  resources:
+    limits:
+      memory: "4Gi"
+      cpu: "2000m"

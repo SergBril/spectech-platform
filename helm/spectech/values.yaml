@@ -1,0 +1,126 @@
+# ═══════════════════════════════════════════════════════════
+# SpectechPlatform Helm Chart Configuration
+# ═══════════════════════════════════════════════════════════
+
+# Global settings
+global:
+  imagePullPolicy: Never
+
+# ───────────────────────────────────────────────────────────
+# Backend (FastAPI)
+# ───────────────────────────────────────────────────────────
+backend:
+  replicaCount: 2
+  image:
+    repository: spectech-backend
+    tag: latest
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "200m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  env:
+    ENVIRONMENT: "production"
+    DEBUG: "false"
+    LOG_LEVEL: "INFO"
+    UVICORN_WORKERS: "2"
+
+# ───────────────────────────────────────────────────────────
+# Frontend (Next.js)
+# ───────────────────────────────────────────────────────────
+frontend:
+  replicaCount: 2
+  image:
+    repository: spectech-frontend
+    tag: latest
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# ───────────────────────────────────────────────────────────
+# PostgreSQL
+# ───────────────────────────────────────────────────────────
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+  storage: 5Gi
+  storageClassName: hostpath
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+# ───────────────────────────────────────────────────────────
+# Redis
+# ───────────────────────────────────────────────────────────
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+# ───────────────────────────────────────────────────────────
+# MinIO (S3 storage)
+# ───────────────────────────────────────────────────────────
+minio:
+  enabled: true
+  image:
+    repository: minio/minio
+    tag: latest
+  storage: 10Gi
+  storageClassName: hostpath
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+# ───────────────────────────────────────────────────────────
+# Ingress
+# ───────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  host: localhost
+  tls:
+    enabled: true
+    secretName: spectech-tls
+
+# ───────────────────────────────────────────────────────────
+# Credentials (override via --set in production!)
+# ───────────────────────────────────────────────────────────
+credentials:
+  postgres:
+    user: spectech
+    password: Sp3ctech_Pr0d_2026_Secure_X9fK  # pragma: allowlist secret
+    database: spectech
+  minio:
+    rootUser: spectech
+    rootPassword: Sp3ctech_Mini0_2026  # pragma: allowlist secret
