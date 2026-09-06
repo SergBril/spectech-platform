@@ -1,3 +1,15 @@
+# 🏆 СпецТехника Про - Platform
+
+[![CI](https://github.com/SergBril/spectech-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/SergBril/spectech-platform/actions/workflows/ci.yml)
+[![CD](https://github.com/SergBril/spectech-platform/actions/workflows/cd.yml/badge.svg)](https://github.com/SergBril/spectech-platform/actions/workflows/cd.yml)
+[![codecov](https://codecov.io/gh/SergBril/spectech-platform/branch/main/graph/badge.svg)](https://codecov.io/gh/SergBril/spectech-platform)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](https://www.docker.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+---
+
 # 🚛 СпецТехника Про — Платформа управления спецтехникой
 
 Полноценная веб-платформа для диспетчеризации и управления парком спецтехники.
