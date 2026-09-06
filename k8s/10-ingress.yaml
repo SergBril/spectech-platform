@@ -21,6 +21,7 @@ spec:
   - host: localhost
     http:
       paths:
+      # Backend API (must come BEFORE catch-all)
       - path: /api
         pathType: Prefix
         backend:
@@ -28,6 +29,7 @@ spec:
             name: backend
             port:
               number: 8000
+      # WebSocket
       - path: /ws
         pathType: Prefix
         backend:
@@ -35,6 +37,7 @@ spec:
             name: backend
             port:
               number: 8000
+      # Health check
       - path: /api/v1/system/health
         pathType: Exact
         backend:
@@ -42,10 +45,11 @@ spec:
             name: backend
             port:
               number: 8000
+      # Frontend (catch-all - must be LAST)
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: backend
+            name: frontend
             port:
-              number: 8000
+              number: 80
