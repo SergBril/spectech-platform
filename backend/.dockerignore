@@ -1,60 +1,60 @@
 # Python
-.venv
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
+__pycache__/
+*.py[cod]
+*$py.class
 *.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
 *.egg
-*.egg-info
-dist
-build
-.pytest_cache
-.coverage
-htmlcov
-*.log
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
 
 # IDE
-.idea
-.vscode
+.vscode/
+.idea/
 *.swp
 *.swo
+*~
 
-# Git
-.git
-.gitignore
-
-# Testing
+# Tests
 tests/
 .pytest_cache/
 .coverage
 htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # Documentation
 *.md
+!README.md
 docs/
-WEEK7_SUMMARY.md
-README.md
 
-# Environment
-.env
-.env.*
-!.env.example
-
-# Docker
-docker-compose*.yml
-Dockerfile*
-
-# Scripts and tools
-scripts/
-debug.py
-openapi*.json
-profile.svg
+# Git
+.git/
+.gitignore
 
 # OS
 .DS_Store
 Thumbs.db
 
-# But keep entrypoint script
-!scripts/entrypoint.sh
+# Local config
+.env.local
+.env.*.local

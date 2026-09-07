@@ -106,3 +106,5 @@ helm/*/values-*.local.yaml
 helm/*/values-prod.yaml
 helm/*/values-*.local.yaml
 components.yaml
+cloudflared/
+*.exe
