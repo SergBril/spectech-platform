@@ -114,7 +114,7 @@ minio:
 ingress:
   enabled: true
   className: nginx
-  host: localhost
+  host: spectehpro.ru
   tls:
     enabled: true
     secretName: spectech-tls
