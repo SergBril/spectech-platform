@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-test
+  namespace: spectech
+spec:
+  parallelism: 5
+  completions: 100
+  template:
+    spec:
+      containers:
+      - name: load-test
+        image: curlimages/curl:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            for i in $(seq 1 1000); do
+              curl -s http://backend:8000/api/v1/system/health > /dev/null
+              sleep 0.1
+            done
+      restartPolicy: Never
