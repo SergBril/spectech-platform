@@ -8,8 +8,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE: ${{ github.repository }}/backend
-  FRONTEND_IMAGE: ${{ github.repository }}/frontend
+  BACKEND_IMAGE: sergbril/spectech-platform/backend
+  FRONTEND_IMAGE: sergbril/spectech-platform/frontend
 
 jobs:
   # ═══════════════════════════════════════════════════════════
