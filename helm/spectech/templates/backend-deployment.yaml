@@ -16,6 +16,10 @@ spec:
         {{- include "spectech.backend.selectorLabels" . | nindent 8 }}
     spec:
       enableServiceLinks: false
+      {{- if .Values.backend.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.backend.imagePullSecrets | nindent 8 }}
+      {{- end }}
       containers:
       - name: backend
         image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
