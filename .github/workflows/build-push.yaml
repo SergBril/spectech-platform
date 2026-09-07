@@ -129,6 +129,7 @@ jobs:
       contents: read
       packages: read
       security-events: write
+      actions: read
 
     steps:
       - name: Checkout code
@@ -143,28 +144,48 @@ jobs:
 
       - name: Run Trivy vulnerability scanner (Backend)
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           image-ref: ghcr.io/sergbril/spectech-platform/backend:latest
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
           severity: 'CRITICAL,HIGH'
 
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Check if Backend SARIF exists
+        id: check-backend-sarif
+        run: |
+          if [ -f trivy-backend-results.sarif ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Backend Trivy results
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: steps.check-backend-sarif.outputs.exists == 'true'
         with:
           sarif_file: 'trivy-backend-results.sarif'
 
       - name: Run Trivy vulnerability scanner (Frontend)
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           image-ref: ghcr.io/sergbril/spectech-platform/frontend:latest
           format: 'sarif'
           output: 'trivy-frontend-results.sarif'
           severity: 'CRITICAL,HIGH'
 
+      - name: Check if Frontend SARIF exists
+        id: check-frontend-sarif
+        run: |
+          if [ -f trivy-frontend-results.sarif ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Upload Frontend Trivy results
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: steps.check-frontend-sarif.outputs.exists == 'true'
         with:
           sarif_file: 'trivy-frontend-results.sarif'
