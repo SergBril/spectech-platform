@@ -5,7 +5,12 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
-        exclude: ^(helm/.*/templates/|components\.yaml)$
+        args: ['--unsafe']
+        exclude: |
+         (?x)^(
+           helm/.*/templates/.*|
+           components\.yaml
+         )$
       - id: check-added-large-files
       - id: check-merge-conflict
 

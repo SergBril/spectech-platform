@@ -12,8 +12,11 @@ global:
 backend:
   replicaCount: 2
   image:
-    repository: spectech-backend
+    repository: ghcr.io/sergbril/spectech-platform/backend
     tag: latest
+  imagePullPolicy: Always
+  imagePullSecrets:
+    - name: ghcr-secret
   service:
     type: ClusterIP
     port: 8000
@@ -36,8 +39,11 @@ backend:
 frontend:
   replicaCount: 2
   image:
-    repository: spectech-frontend
+    repository: ghcr.io/sergbril/spectech-platform/frontend
     tag: latest
+  imagePullPolicy: Always
+  imagePullSecrets:
+    - name: ghcr-secret
   service:
     type: ClusterIP
     port: 80
