@@ -1,66 +1,70 @@
-# ═══════════════════════════════════════════════════════════════
-# STAGE 1: Builder - установка зависимостей
-# ═══════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
+# Multi-stage Dockerfile for SpectechPlatform Backend
+# ═══════════════════════════════════════════════════════════
+
+# ───────────────────────────────────────────────────────────
+# Stage 1: Builder (compile dependencies)
+# ───────────────────────────────────────────────────────────
 FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-# Устанавливаем системные зависимости для СБОРКИ (не попадут в финальный образ)
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    postgresql-client \
-    curl \
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Копируем только requirements.txt (кэширование слоёв)
+# Copy requirements first for better layer caching
 COPY requirements.txt .
 
-# Устанавливаем Python зависимости в изолированную папку
+# Install Python dependencies in isolated prefix
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# ═══════════════════════════════════════════════════════════════
-# STAGE 2: Runtime - минимальный production образ
-# ═══════════════════════════════════════════════════════════════
+# ───────────────────────────────────────────────────────────
+# Stage 2: Runtime (minimal production image)
+# ───────────────────────────────────────────────────────────
 FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
-# Устанавливаем ТОЛЬКО runtime зависимости (без gcc!)
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    gcc \
-    libpq-dev \
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -r spectech \
     && useradd -r -g spectech -d /app -s /sbin/nologin spectech
 
-# Копируем установленные зависимости из builder stage
+# Copy installed Python packages from builder
 COPY --from=builder /install /usr/local
 
-# Копируем код приложения
+# Copy application code
 COPY --chown=spectech:spectech . .
 
-# Создаём папку для загрузок
+# Create necessary directories
 RUN mkdir -p /app/uploads /app/logs \
     && chown -R spectech:spectech /app
 
-# Health check - Docker будет проверять что приложение живо
+# Copy entrypoint script
+COPY --chown=spectech:spectech scripts/entrypoint.sh /app/scripts/entrypoint.sh
+RUN chmod +x /app/scripts/entrypoint.sh
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    PORT=8000
+
+# Expose port
+EXPOSE 8000
+
+# Switch to non-root user
+USER spectech
+
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/system/health || exit 1
 
-# Переключаемся на non-root пользователя (БЕЗОПАСНОСТЬ!)
-USER spectech
-
-# Открываем порт
-EXPOSE 8000
-
-# Production settings: 4 workers, graceful timeout
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
-
-# Запуск через uvicorn с 4 workers для production
-# Apply migrations on startup, then run the app
-# Copy entrypoint script (owned by spectech user)
-COPY --chown=spectech:spectech scripts/entrypoint.sh /app/scripts/entrypoint.sh
-
-# Run through sh - no chmod needed
-ENTRYPOINT ["sh", "/app/scripts/entrypoint.sh"]
+# Start application
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
