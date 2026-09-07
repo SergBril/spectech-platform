@@ -1,8 +1,8 @@
-# Prometheus Adapter configuration
+# Prometheus Adapter configuration for custom metrics
 # Maps Prometheus metrics to Kubernetes custom metrics API
 
 prometheus:
-  url: http://kube-prometheus-kube-prome-prometheus.monitoring.svc
+  url: http://kube-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local
   port: 9090
 
 rules:
@@ -40,13 +40,3 @@ rules:
           )
         ) by (le, <<.GroupBy>>)
       )
-
-  # Resource metrics (CPU/Memory from node-exporter)
-  resource:
-    rules:
-    - containerLabel: container
-      resources:
-        overrides:
-          namespace: {resource: "namespace"}
-          pod: {resource: "pod"}
-          node: {resource: "node"}
