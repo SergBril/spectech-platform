@@ -1,0 +1,52 @@
+# Prometheus Adapter configuration
+# Maps Prometheus metrics to Kubernetes custom metrics API
+
+prometheus:
+  url: http://kube-prometheus-kube-prome-prometheus.monitoring.svc
+  port: 9090
+
+rules:
+  default: false
+  custom:
+  # Custom metric: HTTP requests per second for backend
+  - seriesQuery: 'http_requests_total{namespace!="",pod!=""}'
+    resources:
+      overrides:
+        namespace: {resource: "namespace"}
+        pod: {resource: "pod"}
+    name:
+      matches: "^(.*)_total"
+      as: "${1}_per_second"
+    metricsQuery: |
+      sum(
+        rate(
+          <<.Series>>{<<.LabelMatchers>>}[2m]
+        )
+      ) by (<<.GroupBy>>)
+
+  # Custom metric: HTTP request duration P95
+  - seriesQuery: 'http_request_duration_seconds_bucket{namespace!="",pod!=""}'
+    resources:
+      overrides:
+        namespace: {resource: "namespace"}
+        pod: {resource: "pod"}
+    name:
+      as: "http_request_duration_p95"
+    metricsQuery: |
+      histogram_quantile(0.95,
+        sum(
+          rate(
+            http_request_duration_seconds_bucket{<<.LabelMatchers>>}[5m]
+          )
+        ) by (le, <<.GroupBy>>)
+      )
+
+  # Resource metrics (CPU/Memory from node-exporter)
+  resource:
+    rules:
+    - containerLabel: container
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+          node: {resource: "node"}
