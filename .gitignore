@@ -108,3 +108,4 @@ helm/*/values-*.local.yaml
 components.yaml
 cloudflared/
 *.exe
+cf-token.txt
