@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: test-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    app: kube-prometheus-stack
+spec:
+  groups:
+    - name: test.rules
+      rules:
+        - alert: TestTelegramAlert
+          expr: vector(1)
+          for: 30s
+          labels:
+            severity: warning
+          annotations:
+            summary: "Тестовый алерт для проверки Telegram"
+            description: "Если вы видите это сообщение в Telegram — Alertmanager работает!"
