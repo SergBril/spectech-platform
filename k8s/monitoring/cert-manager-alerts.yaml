@@ -4,10 +4,8 @@ metadata:
   name: cert-manager-alerts
   namespace: monitoring
   labels:
-    app: cert-manager
     release: kube-prometheus-stack
-    prometheus: kube-prometheus-stack-prometheus
-    role: alert-rules
+    app: kube-prometheus-stack
 spec:
   groups:
     - name: cert-manager.rules
@@ -20,7 +18,7 @@ spec:
             severity: warning
           annotations:
             summary: "Сертификат {{ $labels.name }} истекает менее чем через 14 дней"
-            description: "Сертификат {{ $labels.name }} в namespace {{ $labels.namespace }}."
+            description: "Сертификат в namespace {{ $labels.namespace }}."
 
         - alert: CertificateNotReady
           expr: |

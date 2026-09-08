@@ -4,8 +4,8 @@ metadata:
   name: loki-alerts
   namespace: monitoring
   labels:
-    prometheus: kube-prometheus-stack-prometheus
-    role: alert-rules
+    release: kube-prometheus-stack
+    app: kube-prometheus-stack
 spec:
   groups:
     - name: loki.rules
@@ -19,7 +19,7 @@ spec:
             severity: warning
           annotations:
             summary: "Loki request errors > 10%"
-            description: "Loki {{ $labels.job }} возвращает более 10% 5xx ошибок."
+            description: "Loki возвращает более 10% 5xx ошибок."
 
         - alert: LokiRequestPanic
           expr: |
@@ -29,14 +29,4 @@ spec:
             severity: critical
           annotations:
             summary: "Loki panic detected"
-            description: "Loki {{ $labels.job }} имел panic за последние 10 минут."
-
-        - alert: PromtailNotSendingLogs
-          expr: |
-            sum(rate(promtail_sent_entries_total[5m])) == 0
-          for: 10m
-          labels:
-            severity: warning
-          annotations:
-            summary: "Promtail не отправляет логи"
-            description: "Promtail не отправил ни одного лога за последние 10 минут."
+            description: "Loki имел panic за последние 10 минут."
