@@ -1,0 +1,42 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: telegram-notifications
+  namespace: monitoring
+  labels:
+    alertmanagerConfig: telegram
+spec:
+  route:
+    receiver: 'telegram'
+    groupBy: ['alertname', 'namespace']
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+    routes:
+      - matchers:
+          - name: severity
+            value: critical
+        receiver: 'telegram-critical'
+        repeatInterval: 1h
+      - matchers:
+          - name: severity
+            value: warning
+        receiver: 'telegram'
+        repeatInterval: 4h
+  receivers:
+    - name: 'telegram'
+      webhookConfigs:
+        - url: 'http://telegram-bot:9087/alert'
+          sendResolved: true
+    - name: 'telegram-critical'
+      webhookConfigs:
+        - url: 'http://telegram-bot:9087/alert'
+          sendResolved: true
+  inhibitRules:
+    - sourceMatch:
+        - name: severity
+          value: critical
+      targetMatch:
+        - name: severity
+          value: warning
+      equal: ['alertname', 'namespace']
