@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
-from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy.exc import (
     SQLAlchemyError,
 )
@@ -107,15 +106,14 @@ if settings.environment != "testing":
 # Инициализируем Sentry
 init_sentry()
 
+# Add Prometheus metrics
+
+
 # Добавляем Request ID middleware (ПЕРВЫМ!)
 # app.add_middleware(RequestIDMiddleware)  # временно отключено
 
-
 # Таблицы создаются через Alembic миграции при старте контейнера
 print("✅ Database migrations managed by Alembic")
-
-# Add Prometheus metrics
-Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 # 3. Регистрируем обработчики ошибок
 app.add_exception_handler(RequestValidationError, validation_exception_handler)

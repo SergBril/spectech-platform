@@ -9,7 +9,7 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-# Install build dependencies
+# Install build dependencies (fonts NOT needed for compilation)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
@@ -28,13 +28,23 @@ FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
-# Install runtime dependencies only
+# Install runtime dependencies + Cyrillic fonts for PDF generation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
+    fonts-dejavu-core \
+    fonts-dejavu-extra \
+    fonts-freefont-ttf \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -r spectech \
     && useradd -r -g spectech -d /app -s /sbin/nologin spectech
+
+# Update font cache
+RUN fc-cache -fv
+
+# Update font cache
+RUN fc-cache -fv
 
 # Copy installed Python packages from builder
 COPY --from=builder /install /usr/local
