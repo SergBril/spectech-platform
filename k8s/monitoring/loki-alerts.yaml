@@ -1,0 +1,42 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loki-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus-stack-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: loki.rules
+      rules:
+        - alert: LokiRequestErrors
+          expr: |
+            100 * sum(rate(loki_request_duration_seconds_count{status_code=~"5.."}[5m])) by (namespace, job, route)
+            / sum(rate(loki_request_duration_seconds_count[5m])) by (namespace, job, route) > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki request errors > 10%"
+            description: "Loki {{ $labels.job }} возвращает более 10% 5xx ошибок."
+
+        - alert: LokiRequestPanic
+          expr: |
+            sum(increase(loki_panic_total[10m])) by (namespace, job) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Loki panic detected"
+            description: "Loki {{ $labels.job }} имел panic за последние 10 минут."
+
+        - alert: PromtailNotSendingLogs
+          expr: |
+            sum(rate(promtail_sent_entries_total[5m])) == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Promtail не отправляет логи"
+            description: "Promtail не отправил ни одного лога за последние 10 минут."
