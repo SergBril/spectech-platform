@@ -109,3 +109,5 @@ components.yaml
 cloudflared/
 *.exe
 cf-token.txt
+project_overview.txt
+tree_output.txt
