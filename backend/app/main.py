@@ -139,7 +139,7 @@ app.add_middleware(RequestLoggingMiddleware)
 # Debug endpoints (без префикса - он уже в router)
 app.include_router(debug.router, prefix="/api/v1", tags=["debug"])
 
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
 app.include_router(categories.router, prefix="/api/v1/categories", tags=["catalog"])
 app.include_router(vehicles.router, prefix="/api/v1/vehicles", tags=["catalog"])
 app.include_router(requests.router, prefix="/api/v1/requests", tags=["dispatch"])

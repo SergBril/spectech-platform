@@ -1,0 +1,96 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisBorderShow": false, "axisLabel": "req/s"}, "mappings": []}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "title": "📊 HTTP Requests Rate (by status)",
+      "type": "timeseries",
+      "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"spectech\", app=\"backend\"}[5m])) by (status)", "legendFormat": "status {{status}}", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisBorderShow": false, "axisLabel": "seconds"}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "title": "⚡ Response Latency (p95)",
+      "type": "timeseries",
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace=\"spectech\", app=\"backend\"}[5m])) by (le))", "legendFormat": "p95", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 10}]}}, "overrides": []},
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 8},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "title": "🚗 Active Vehicles",
+      "type": "stat",
+      "targets": [{"expr": "spectech_vehicles_active{namespace=\"spectech\", app=\"backend\"}", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []},
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 8},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "area"},
+      "title": "⏳ Pending Requests",
+      "type": "stat",
+      "targets": [{"expr": "spectech_requests_pending{namespace=\"spectech\", app=\"backend\"}", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 8},
+      "id": 5,
+      "options": {"colorMode": "value", "graphMode": "area"},
+      "title": "🚨 Active Alerts",
+      "type": "stat",
+      "targets": [{"expr": "spectech_alerts_active{namespace=\"spectech\", app=\"backend\"}", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []},
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 8},
+      "id": 6,
+      "options": {"colorMode": "value", "graphMode": "area"},
+      "title": "💾 DB Connections",
+      "type": "stat",
+      "targets": [{"expr": "spectech_db_connections_active{namespace=\"spectech\", app=\"backend\"}", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisBorderShow": false, "axisLabel": "MB"}, "unit": "decmbytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "id": 7,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "title": "🧠 Memory Usage (MB)",
+      "type": "timeseries",
+      "targets": [{"expr": "process_resident_memory_bytes{namespace=\"spectech\", app=\"backend\"} / 1024 / 1024", "legendFormat": "Backend Memory", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisBorderShow": false, "axisLabel": "%"}, "unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "id": 8,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "title": "⚙️ CPU Usage",
+      "type": "timeseries",
+      "targets": [{"expr": "rate(process_cpu_seconds_total{namespace=\"spectech\", app=\"backend\"}[5m])", "legendFormat": "CPU Usage", "refId": "A"}]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["spectech", "backend", "fastapi"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "Spectech Backend Overview",
+  "uid": "spectech-backend",
+  "version": 1
+}
