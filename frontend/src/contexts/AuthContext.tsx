@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authApi } from '../api/auth';
-import type { AuthResponse } from '../api/auth';
+import apiClient from '../api/client';
 
 interface User {
   id: number;
@@ -11,11 +11,13 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
+  permissions: string[];
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName: string, phone?: string) => Promise<void>;
   logout: () => void;
+  hasPermission: (entity: string, action: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -34,18 +36,36 @@ interface AuthProviderProps {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Проверяем есть ли токен при загрузке
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      // TODO: получить данные пользователя через /auth/me
-      // Пока просто устанавливаем isAuthenticated
-      setIsLoading(false);
-    } else {
-      setIsLoading(false);
+  const loadUserData = async () => {
+    try {
+      // ВАЖНО: правильный путь /me/me (префикс роутера + эндпоинт)
+      const meResponse = await apiClient.get('/me/me');
+      setUser(meResponse.data);
+
+      // Правильный путь /me/me/permissions
+      const permsResponse = await apiClient.get('/me/me/permissions');
+      setPermissions(permsResponse.data);
+    } catch (error) {
+      console.error('Ошибка загрузки профиля:', error);
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      setUser(null);
+      setPermissions([]);
     }
+  };
+
+  useEffect(() => {
+    const initAuth = async () => {
+      const token = localStorage.getItem('access_token');
+      if (token) {
+        await loadUserData();
+      }
+      setIsLoading(false);
+    };
+    initAuth();
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -55,13 +75,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.setItem('access_token', access_token);
     localStorage.setItem('refresh_token', refresh_token);
 
-    // TODO: получить данные пользователя
-    setUser({ id: 1, email, full_name: email, is_superuser: false });
+    await loadUserData();
   };
 
   const register = async (email: string, password: string, fullName: string, phone?: string) => {
     await authApi.register({ email, password, full_name: fullName, phone });
-    // После регистрации автоматически логинимся
     await login(email, password);
   };
 
@@ -69,12 +87,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     setUser(null);
+    setPermissions([]);
+  };
+
+  const hasPermission = (entity: string, action: string) => {
+    if (user?.is_superuser) {
+      return true;
+    }
+    return permissions.includes(`${entity}:${action}`);
   };
 
   const isAuthenticated = !!user;
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{
+      user,
+      permissions,
+      isAuthenticated,
+      isLoading,
+      login,
+      register,
+      logout,
+      hasPermission
+    }}>
       {children}
     </AuthContext.Provider>
   );
