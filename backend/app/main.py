@@ -142,7 +142,9 @@ app.include_router(debug.router, prefix="/api/v1", tags=["debug"])
 
 app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
 app.include_router(categories.router, prefix="/api/v1/categories", tags=["catalog"])
-app.include_router(vehicles.router, prefix="/api/v1/vehicles", tags=["catalog"])
+app.include_router(
+    vehicles.router, prefix="/api/v1", tags=["🚜 Vehicles (Спецтехника)"]
+)
 app.include_router(requests.router, prefix="/api/v1/requests", tags=["dispatch"])
 app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["dispatch"])
 app.include_router(
