@@ -126,10 +126,14 @@ allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.stri
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=[
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:3000",  # Альтернативный порт
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Все HTTP методы
+    allow_headers=["*"],  # Все заголовки
 )
 
 app.add_middleware(RequestLoggingMiddleware)
