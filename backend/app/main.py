@@ -27,6 +27,7 @@ from app.api.routes import (
     payouts,
     rbac,
     requests,
+    secure_test,
     shifts,
     system,
     tasks,
@@ -159,6 +160,7 @@ app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
 app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(ws_routes.router, prefix="/api/v1", tags=["websocket"])
 app.include_router(benchmark.router, prefix="/api/v1", tags=["benchmark"])
+app.include_router(secure_test.router, prefix="/api/v1", tags=["🔒 Secure Test (RBAC)"])
 
 
 # 6. Кастомизация OpenAPI
