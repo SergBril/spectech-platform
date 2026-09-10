@@ -32,11 +32,18 @@ class Settings(BaseSettings):
 
     redis_password: str = ""
 
-    # JWT
-    jwt_secret_key: str = "dev-secret-key-change-in-production"
-    jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 15
-    refresh_token_expire_days: int = 30
+    # JWT Settings
+    jwt_secret_key: str = Field(
+        default="CHANGE-ME-IN-PRODUCTION-use-openssl-rand-hex-32",
+        alias="JWT_SECRET_KEY",
+    )
+    jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
+    access_token_expire_minutes: int = Field(
+        default=60 * 24, alias="ACCESS_TOKEN_EXPIRE_MINUTES"
+    )  # 24 часа
+    refresh_token_expire_days: int = Field(
+        default=30, alias="REFRESH_TOKEN_EXPIRE_DAYS"
+    )
 
     # CORS
     cors_origins: str = "http://localhost:3000"
