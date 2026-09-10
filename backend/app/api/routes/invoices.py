@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_permission
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.contractor import Contractor
@@ -42,6 +42,7 @@ def create_invoice_endpoint(
     payload: InvoiceCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_permission("invoices", "create")),
 ):
     """Создать новый счёт."""
     invoice = create_invoice(
@@ -79,6 +80,7 @@ def update_invoice(
     payload: InvoiceUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_permission("invoices", "update")),
 ):
     """Обновить счёт."""
     invoice = db.get(Invoice, invoice_id)
@@ -98,6 +100,7 @@ def send_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_permission("invoices", "update")),
 ):
     """Отправить счёт клиенту (меняет статус на 'sent')."""
     invoice = db.get(Invoice, invoice_id)
@@ -121,6 +124,7 @@ def cancel_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_permission("invoices", "delete")),
 ):
     """Отменить счёт."""
     invoice = db.get(Invoice, invoice_id)
