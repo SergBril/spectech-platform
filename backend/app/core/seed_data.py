@@ -1,5 +1,6 @@
 """Seed script для создания начальных данных (роли, permissions, пользователи)."""
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.auth import User, UserStatus
@@ -212,6 +213,55 @@ def seed_users(db: Session, roles: dict[str, Role]) -> None:
     print("   - Operator: operator@spectech.dev / operator123")
 
 
+def seed_vehicles(db: Session) -> None:
+    """Создать тестовую технику."""
+    from app.models.catalog import Vehicle
+
+    vehicles_data = [
+        {
+            "id_type": "license_plate",
+            "id_value": "А123БВ777",
+            "name": "Экскаватор CAT 320D",
+            "year": 2020,
+            "status": "free",
+            "fuel_norm_per_hour": 15.50,
+        },
+        {
+            "id_type": "VIN",
+            "id_value": "XTA21099042512345",
+            "name": "Самосвал КАМАЗ 65115",
+            "year": 2019,
+            "status": "busy",
+            "fuel_norm_per_100km": 35.00,
+        },
+        {
+            "id_type": "inventory",
+            "id_value": "INV-001-2021",
+            "name": "Автокран Liebherr LTM 1100",
+            "year": 2021,
+            "status": "maintenance",
+            "fuel_norm_per_hour": 25.00,
+        },
+    ]
+
+    created_count = 0
+    for vehicle_data in vehicles_data:
+        existing = db.scalar(
+            select(Vehicle).where(Vehicle.id_value == vehicle_data["id_value"])
+        )
+
+        if not existing:
+            vehicle = Vehicle(**vehicle_data)
+            db.add(vehicle)
+            created_count += 1
+
+    if created_count > 0:
+        db.commit()
+        print(f"✅ Created {created_count} test vehicles")
+    else:
+        print("ℹ️  Test vehicles already exist")
+
+
 def run_seed(db: Session) -> None:
     """Запустить полный seed процесс."""
     print("🌱 Starting seed data creation...")
@@ -222,4 +272,7 @@ def run_seed(db: Session) -> None:
     print(f"✅ Created {len(roles)} roles")
 
     seed_users(db, roles)
+    print("✅ Seed data created successfully!")
+
+    seed_vehicles(db)
     print("✅ Seed data creation completed!")
