@@ -1,5 +1,6 @@
 """Конфигурация приложения через pydantic-settings."""
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,10 +18,18 @@ class Settings(BaseSettings):
         "postgresql+psycopg://spectech:spectech_dev_password@localhost:5432/spectech"
     )
 
-    # Redis
-    redis_host: str = "localhost"
-    redis_port_number: int = 6379
+    # Redis settings
+    redis_host: str = "redis"
+    redis_port_number: int = Field(
+        default=6379, alias="REDIS_PORT_NUMBER"
+    )  # ✅ НЕ конфликтует с K8s
     redis_db: int = 0
+
+    @property
+    def redis_url(self) -> str:
+        """URL для подключения к Redis."""
+        return f"redis://{self.redis_host}:{self.redis_port_number}/{self.redis_db}"
+
     redis_password: str = ""
 
     # JWT
