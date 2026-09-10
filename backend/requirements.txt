@@ -120,3 +120,5 @@ Werkzeug==3.1.8
 wrapt==2.4.0
 zope.event==6.2
 zope.interface==8.6
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.32
