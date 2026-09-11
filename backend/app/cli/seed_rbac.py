@@ -1,5 +1,5 @@
 """
-CLI-скрипт для создания/обновления тестовых пользователей и назначения ролей.
+CLI-скрипт для наполнения БД: роли, пользователи, права, техника.
 Запуск: cd backend && python -m app.cli.seed_rbac
 """
 
@@ -24,12 +24,28 @@ def hash_password(password: str) -> str:
 
 
 ROLES = [
-    {"code": "admin", "name": "Администратор"},
-    {"code": "dispatcher", "name": "Диспетчер"},
-    {"code": "operator", "name": "Оператор"},
-    {"code": "client", "name": "Клиент"},
-    {"code": "owner", "name": "Собственник"},
-    {"code": "mechanic", "name": "Механик"},
+    {"code": "admin", "name": "Администратор", "description": "Полный доступ ко всему"},
+    {
+        "code": "dispatcher",
+        "name": "Диспетчер",
+        "description": "Управление заявками и техникой",
+    },
+    {
+        "code": "operator",
+        "name": "Оператор",
+        "description": "Работа со сменными заданиями",
+    },
+    {
+        "code": "client",
+        "name": "Клиент",
+        "description": "Просмотр своих заявок и документов",
+    },
+    {
+        "code": "owner",
+        "name": "Собственник",
+        "description": "Просмотр доходов и техники",
+    },
+    {"code": "mechanic", "name": "Механик", "description": "Осмотр и ремонт техники"},
 ]
 
 TEST_USERS = [
@@ -70,7 +86,7 @@ def seed():
     db = SessionLocal()
 
     try:
-        print("🚀 Начинаем seed...")
+        print("🚀 Начинаем seed пользователей и ролей...")
 
         # 1. Создаём роли
         role_objects = {}
@@ -79,7 +95,11 @@ def seed():
                 select(rbac.Role).where(rbac.Role.code == role_data["code"])
             ).scalar_one_or_none()
             if not role:
-                role = rbac.Role(code=role_data["code"], name=role_data["name"])
+                role = rbac.Role(
+                    code=role_data["code"],
+                    name=role_data["name"],
+                    description=role_data.get("description", ""),
+                )
                 db.add(role)
                 db.flush()
                 print(f"  ➕ Роль: {role_data['code']}")
@@ -105,23 +125,24 @@ def seed():
                 db.flush()
                 print(f"  👤 Создан: {u['email']}")
             else:
-                # Обновляем пароль и данные
                 user.password_hash = hash_password(u["password"])
                 user.full_name = u["name"]
                 user.status = UserStatus.active
                 user.is_superuser = u["is_superuser"]
                 print(f"  🔄 Обновлён: {u['email']}")
 
-            # 3. Удаляем старые роли и назначаем новую
+            # 3. Удаляем старые связи с ролями и назначаем новую
             db.execute(delete(rbac.UserRole).where(rbac.UserRole.user_id == user.id))
             user_role = rbac.UserRole(
-                user_id=user.id, role_id=role_objects[u["role_code"]].id, is_active=True
+                user_id=user.id,
+                role_id=role_objects[u["role_code"]].id,
+                is_active=True,
             )
             db.add(user_role)
             print(f"     └─ Роль: {u['role_code']}")
 
         db.commit()
-        print("\n✅ Seed завершён успешно!")
+        print("\n✅ Пользователи и роли обновлены!")
         print("\n📋 Тестовые аккаунты:")
         for u in TEST_USERS:
             print(f"   {u['email']:30s} | {u['password']:10s} | {u['role_code']}")
@@ -137,25 +158,152 @@ def seed():
         db.close()
 
 
-if __name__ == "__main__":
-    seed()
+def seed_permissions():
+    """Создать права и назначить их ролям."""
+    db = SessionLocal()
+    try:
+        print("\n🔐 Начинаем seed прав...")
+
+        # Определяем все необходимые права
+        permissions_data = [
+            ("vehicles", "view"),
+            ("vehicles", "create"),
+            ("vehicles", "update"),
+            ("vehicles", "delete"),
+            ("requests", "view"),
+            ("requests", "create"),
+            ("requests", "update"),
+            ("requests", "delete"),
+            ("finance", "view"),
+            ("finance", "create"),
+            ("finance", "update"),
+            ("finance", "delete"),
+        ]
+
+        # Создаём права (если их нет)
+        permission_objects = {}
+        for entity, action in permissions_data:
+            perm = db.execute(
+                select(rbac.Permission).where(
+                    rbac.Permission.entity == entity,
+                    rbac.Permission.action == action,
+                )
+            ).scalar_one_or_none()
+
+            if not perm:
+                perm = rbac.Permission(entity=entity, action=action)
+                db.add(perm)
+                db.flush()
+                print(f"  ➕ Право: {entity}:{action}")
+            else:
+                print(f"  ✅ Право: {entity}:{action} (уже есть)")
+
+            permission_objects[f"{entity}:{action}"] = perm
+
+        # Получаем все роли
+        roles = db.execute(select(rbac.Role)).scalars().all()
+        role_objects = {r.code: r for r in roles}
+
+        # Матрица прав для каждой роли
+        role_permissions_map = {
+            "admin": [
+                "vehicles:view",
+                "vehicles:create",
+                "vehicles:update",
+                "vehicles:delete",
+                "requests:view",
+                "requests:create",
+                "requests:update",
+                "requests:delete",
+                "finance:view",
+                "finance:create",
+                "finance:update",
+                "finance:delete",
+            ],
+            "dispatcher": [
+                "vehicles:view",
+                "vehicles:create",
+                "vehicles:update",
+                "requests:view",
+                "requests:create",
+                "requests:update",
+                "finance:view",
+            ],
+            "mechanic": [
+                "vehicles:view",
+                "vehicles:update",
+                "requests:view",
+            ],
+            "operator": [
+                "vehicles:view",
+                "requests:view",
+            ],
+            "client": [
+                "vehicles:view",
+                "requests:view",
+                "finance:view",
+            ],
+            "owner": [
+                "vehicles:view",
+                "requests:view",
+                "finance:view",
+            ],
+        }
+
+        # Назначаем права ролям
+        links_added = 0
+        for role_code, perm_keys in role_permissions_map.items():
+            role = role_objects.get(role_code)
+            if not role:
+                print(f"  ⚠️  Роль {role_code} не найдена, пропускаем")
+                continue
+
+            for perm_key in perm_keys:
+                perm = permission_objects.get(perm_key)
+                if not perm:
+                    continue
+
+                # Проверяем, есть ли уже такая связь
+                existing = db.execute(
+                    select(rbac.RolePermission).where(
+                        rbac.RolePermission.role_id == role.id,
+                        rbac.RolePermission.permission_id == perm.id,
+                    )
+                ).scalar_one_or_none()
+
+                if not existing:
+                    rp = rbac.RolePermission(role_id=role.id, permission_id=perm.id)
+                    db.add(rp)
+                    links_added += 1
+                    print(f"  🔗 {role_code} ← {perm_key}")
+
+        db.commit()
+        print(f"\n✅ Права назначены ролям! (добавлено {links_added} связей)")
+
+    except Exception as e:
+        db.rollback()
+        print(f"\n❌ Ошибка: {e}")
+        import traceback
+
+        traceback.print_exc()
+        raise
+    finally:
+        db.close()
 
 
 def seed_vehicles():
-    """Создать тестовую технику с правильной структурой полей."""
+    """Создать тестовую технику."""
     from app.models.catalog import Category, Vehicle
 
     db = SessionLocal()
     try:
         print("\n🚜 Начинаем seed техники...")
 
-        # Проверяем, есть ли уже техника
         existing_count = db.execute(select(func.count(Vehicle.id))).scalar()
         if existing_count > 0:
             print(f"  ⚠️  В базе уже есть {existing_count} единиц техники, пропускаем")
             return
 
-        # Создаём категории (если их нет)
         categories_data = [
             {"name": "Экскаватор", "code": "excavator"},
             {"name": "Самосвал", "code": "dump_truck"},
@@ -178,7 +326,6 @@ def seed_vehicles():
                 print(f"  ✅ Категория: {cat_data['name']} (уже есть)")
             category_objects[cat_data["code"]] = cat
 
-        # ✅ ПРАВИЛЬНАЯ структура Vehicle (id_type + id_value)
         vehicles_data = [
             {
                 "id_type": "license_plate",
@@ -240,6 +387,6 @@ def seed_vehicles():
 
 
 if __name__ == "__main__":
-    # Вызываем только один раз!
     seed()
+    seed_permissions()
     seed_vehicles()
