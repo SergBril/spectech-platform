@@ -11,7 +11,7 @@ sys.path.insert(
 )
 
 import bcrypt
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from app.core.db import Base, SessionLocal, engine
 from app.models import auth, rbac
@@ -139,3 +139,107 @@ def seed():
 
 if __name__ == "__main__":
     seed()
+
+
+def seed_vehicles():
+    """Создать тестовую технику с правильной структурой полей."""
+    from app.models.catalog import Category, Vehicle
+
+    db = SessionLocal()
+    try:
+        print("\n🚜 Начинаем seed техники...")
+
+        # Проверяем, есть ли уже техника
+        existing_count = db.execute(select(func.count(Vehicle.id))).scalar()
+        if existing_count > 0:
+            print(f"  ⚠️  В базе уже есть {existing_count} единиц техники, пропускаем")
+            return
+
+        # Создаём категории (если их нет)
+        categories_data = [
+            {"name": "Экскаватор", "code": "excavator"},
+            {"name": "Самосвал", "code": "dump_truck"},
+            {"name": "Автокран", "code": "crane"},
+            {"name": "Бульдозер", "code": "bulldozer"},
+            {"name": "Погрузчик", "code": "loader"},
+        ]
+
+        category_objects = {}
+        for cat_data in categories_data:
+            cat = db.execute(
+                select(Category).where(Category.code == cat_data["code"])
+            ).scalar_one_or_none()
+            if not cat:
+                cat = Category(**cat_data)
+                db.add(cat)
+                db.flush()
+                print(f"  ➕ Категория: {cat_data['name']}")
+            else:
+                print(f"  ✅ Категория: {cat_data['name']} (уже есть)")
+            category_objects[cat_data["code"]] = cat
+
+        # ✅ ПРАВИЛЬНАЯ структура Vehicle (id_type + id_value)
+        vehicles_data = [
+            {
+                "id_type": "license_plate",
+                "id_value": "А123БВ777",
+                "name": "Экскаватор CAT 320D",
+                "category_id": category_objects["excavator"].id,
+                "status": "free",
+                "year": 2020,
+                "fuel_norm_per_hour": 15.50,
+            },
+            {
+                "id_type": "VIN",
+                "id_value": "XTA21099042512345",
+                "name": "Самосвал КАМАЗ 65115",
+                "category_id": category_objects["dump_truck"].id,
+                "status": "busy",
+                "year": 2019,
+                "fuel_norm_per_100km": 35.00,
+            },
+            {
+                "id_type": "inventory",
+                "id_value": "INV-001-2021",
+                "name": "Автокран Liebherr LTM 1100",
+                "category_id": category_objects["crane"].id,
+                "status": "maintenance",
+                "year": 2021,
+                "fuel_norm_per_hour": 25.00,
+            },
+            {
+                "id_type": "license_plate",
+                "id_value": "Е456ГД777",
+                "name": "Бульдозер Komatsu D65",
+                "category_id": category_objects["bulldozer"].id,
+                "status": "free",
+                "year": 2022,
+                "fuel_norm_per_hour": 20.00,
+            },
+        ]
+
+        for v_data in vehicles_data:
+            vehicle = Vehicle(**v_data)
+            db.add(vehicle)
+            print(
+                f"  🚜 Техника: {v_data['name']} ({v_data['id_type']}: {v_data['id_value']})"
+            )
+
+        db.commit()
+        print(f"\n✅ Создано {len(vehicles_data)} единиц техники")
+
+    except Exception as e:
+        db.rollback()
+        print(f"\n❌ Ошибка: {e}")
+        import traceback
+
+        traceback.print_exc()
+        raise
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    # Вызываем только один раз!
+    seed()
+    seed_vehicles()
