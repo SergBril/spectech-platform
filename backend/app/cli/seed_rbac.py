@@ -11,7 +11,7 @@ sys.path.insert(
 )
 
 import bcrypt
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 
 from app.core.db import Base, SessionLocal, engine
 from app.models import auth, rbac
@@ -386,7 +386,200 @@ def seed_vehicles():
         db.close()
 
 
+def seed_finances():
+    """Создать тестовые счета, акты и выплаты."""
+    from app.models.catalog import Vehicle
+    from app.models.dispatch import Request
+    from app.models.finance import Act, Invoice, Payout
+
+    db = SessionLocal()
+    try:
+        print("\n💰 Начинаем seed финансовых данных...")
+
+        # Проверяем, есть ли уже финансовые данные
+        existing_invoices = db.execute(select(func.count(Invoice.id))).scalar()
+        if existing_invoices > 0:
+            print(f"  ⚠️  В базе уже есть {existing_invoices} счетов, пропускаем")
+            return
+
+        # Получаем заявки, контрагента и технику
+        requests_list = db.execute(select(Request).order_by(Request.id)).scalars().all()
+        if not requests_list:
+            print("  ⚠️  В базе нет заявок")
+            return
+
+        contractor_result = db.execute(
+            text("SELECT id FROM contractors WHERE inn = '7700000000' LIMIT 1")
+        ).fetchone()
+        if not contractor_result:
+            print("  ⚠️  Контрагент не найден")
+            return
+
+        # Получаем первую доступную технику (для выплат)
+        vehicle = db.execute(select(Vehicle).order_by(Vehicle.id)).scalars().first()
+        if not vehicle:
+            print("  ⚠️  В базе нет техники")
+            return
+
+        contractor_id = contractor_result[0]
+        request_ids = [r.id for r in requests_list]
+        vehicle_id = vehicle.id
+        print(
+            f"  📋 Заявки: {request_ids}, Контрагент: {contractor_id}, Техника: #{vehicle_id}"
+        )
+
+        # === Счета (Invoices) ===
+        invoices_data = [
+            {
+                "document_number": "СЧ-001",
+                "request_id": request_ids[0],
+                "client_id": contractor_id,
+                "subtotal": "40000.00",
+                "vat_amount": "8000.00",
+                "vat_rate": "20.00",
+                "total": "48000.00",
+                "paid_amount": "48000.00",
+                "invoice_date": "2026-09-10",
+                "due_date": "2026-09-20",
+                "status": "paid",
+                "comment": "Оплачен: земляные работы",
+            },
+            {
+                "document_number": "СЧ-002",
+                "request_id": request_ids[0],
+                "client_id": contractor_id,
+                "subtotal": "62900.00",
+                "vat_amount": "12580.00",
+                "vat_rate": "20.00",
+                "total": "75480.00",
+                "paid_amount": "0.00",
+                "invoice_date": "2026-09-11",
+                "due_date": "2026-09-25",
+                "status": "sent",
+                "comment": "Ожидает оплаты",
+            },
+            {
+                "document_number": "СЧ-003",
+                "request_id": request_ids[0],
+                "client_id": contractor_id,
+                "subtotal": "25000.00",
+                "vat_amount": "5000.00",
+                "vat_rate": "20.00",
+                "total": "30000.00",
+                "paid_amount": "0.00",
+                "invoice_date": "2026-09-01",
+                "due_date": "2026-09-10",
+                "status": "overdue",
+                "comment": "Просрочен",
+            },
+            {
+                "document_number": "СЧ-004",
+                "request_id": request_ids[-1],
+                "client_id": contractor_id,
+                "subtotal": "50000.00",
+                "vat_amount": "10000.00",
+                "vat_rate": "20.00",
+                "total": "60000.00",
+                "paid_amount": "30000.00",
+                "invoice_date": "2026-09-08",
+                "due_date": "2026-09-18",
+                "status": "partially_paid",
+                "comment": "Частичная оплата",
+            },
+        ]
+
+        for inv_data in invoices_data:
+            db.add(Invoice(**inv_data))
+            print(
+                f"  💰 Счёт: {inv_data['document_number']} ({inv_data['total']} ₽, {inv_data['status']})"
+            )
+
+        # === Акты (Acts) ===
+        # Поле суммы: total_amount (НЕ total)
+        acts_data = [
+            {
+                "document_number": "АКТ-001",
+                "request_id": request_ids[0],
+                "client_id": contractor_id,
+                "total_amount": "48000.00",  # ← ПРАВИЛЬНОЕ имя поля
+                "act_date": "2026-09-10",
+                "status": "paid",
+                "comment": "Работы выполнены",
+            },
+            {
+                "document_number": "АКТ-002",
+                "request_id": request_ids[0],
+                "client_id": contractor_id,
+                "total_amount": "75480.00",
+                "act_date": "2026-09-11",
+                "status": "sent",
+                "comment": "Ожидает подписи",
+            },
+        ]
+
+        for act_data in acts_data:
+            db.add(Act(**act_data))
+            print(
+                f"  📄 Акт: {act_data['document_number']} ({act_data['total_amount']} ₽, {act_data['status']})"
+            )
+
+        # === Выплаты (Payouts) ===
+        # Обязательные поля: owner_id, vehicle_id, gross_amount, platform_commission, net_amount, commission_rate
+        payouts_data = [
+            {
+                "document_number": "ВП-001",
+                "owner_id": contractor_id,  # ← НЕ contractor_id!
+                "vehicle_id": vehicle_id,
+                "request_id": request_ids[0],
+                "gross_amount": "25000.00",
+                "platform_commission": "5000.00",  # 20% комиссия платформы
+                "net_amount": "20000.00",
+                "commission_rate": "20.00",
+                "payout_date": "2026-09-10",
+                "status": "paid",
+                "comment": "Выплачено оператору",
+            },
+            {
+                "document_number": "ВП-002",
+                "owner_id": contractor_id,
+                "vehicle_id": vehicle_id,
+                "request_id": (
+                    request_ids[-1] if len(request_ids) > 1 else request_ids[0]
+                ),
+                "gross_amount": "18750.00",
+                "platform_commission": "3750.00",
+                "net_amount": "15000.00",
+                "commission_rate": "20.00",
+                "payout_date": "2026-09-11",
+                "status": "draft",
+                "comment": "Ожидает одобрения",
+            },
+        ]
+
+        for pay_data in payouts_data:
+            db.add(Payout(**pay_data))
+            print(
+                f"  💸 Выплата: {pay_data['document_number']} (net: {pay_data['net_amount']} ₽)"
+            )
+
+        db.commit()
+        print(
+            f"\n✅ Создано: {len(invoices_data)} счетов, {len(acts_data)} актов, {len(payouts_data)} выплат"
+        )
+
+    except Exception as e:
+        db.rollback()
+        print(f"\n❌ Ошибка: {e}")
+        import traceback
+
+        traceback.print_exc()
+        raise
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     seed()
     seed_permissions()
     seed_vehicles()
+    seed_finances()

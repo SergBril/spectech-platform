@@ -1,19 +1,29 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
-import { telematicsApi, type DashboardSummary } from '../api/telematics';
 import { useAuth } from '../contexts/AuthContext';
 
 interface DashboardMetrics {
-  total_vehicles: number;
-  active_vehicles: number;
-  total_gps_points: number;
-  today_gps_points: number;
-  active_alerts: number;
-  critical_alerts: number;
-  total_fuel_volume: number;
-  total_fuel_cost: number;
-  fuel_drains: number;
+  vehicles: {
+    total: number;
+    active: number;
+  };
+  gps_points: {
+    total: number;
+    today: number;
+  };
+  alerts: {
+    total: number;
+    active: number;
+    critical: number;
+  };
+  fuel: {
+    total_volume: number;
+    total_cost: number;
+    week_volume: number;
+    week_cost: number;
+    drains_count: number;
+  };
 }
 
 export default function DashboardPage() {
@@ -82,6 +92,7 @@ export default function DashboardPage() {
           <h2 className="text-2xl font-bold text-gray-900 mb-6">
             Добро пожаловать, {user?.full_name || user?.email}!
           </h2>
+
           {/* Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {/* Vehicles Card */}
@@ -186,13 +197,13 @@ export default function DashboardPage() {
               </button>
 
               <button
-                disabled
-                className="flex items-center p-4 border-2 border-gray-200 rounded-lg opacity-50 cursor-not-allowed"
+                onClick={() => navigate('/finance')}
+                className="flex items-center p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
               >
                 <span className="text-2xl mr-3">💰</span>
                 <div className="text-left">
                   <div className="font-medium text-gray-900">Финансы</div>
-                  <div className="text-sm text-gray-500">Скоро будет доступно</div>
+                  <div className="text-sm text-gray-500">Счета, акты, выплаты</div>
                 </div>
               </button>
             </div>
