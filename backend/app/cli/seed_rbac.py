@@ -1,31 +1,28 @@
 """
-CLI-скрипт для наполнения БД базовыми ролями RBAC и тестовыми пользователями.
-Запуск: python -m app.cli.seed_rbac
+CLI-скрипт для создания/обновления тестовых пользователей и назначения ролей.
+Запуск: cd backend && python -m app.cli.seed_rbac
 """
 
 import os
 import sys
 
-# Добавляем корень backend в PATH для корректного импорта
 sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
-from passlib.context import CryptContext
-from sqlalchemy import select
+import bcrypt
+from sqlalchemy import delete, select
 
 from app.core.db import Base, SessionLocal, engine
+from app.models import auth, rbac
+from app.models.auth import UserStatus
 
-# Импортируем ВСЕ модели, чтобы они зарегистрировались в Base.metadata
-from app.models import (
-    auth,
-    rbac,
-)
-from app.models.auth import UserStatus  # ← импорт enum'а статусов
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def hash_password(password: str) -> str:
+    """Хеширование через bcrypt (совместимо с auth_service.py)."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
-# 6 ролей из README
+
 ROLES = [
     {"code": "admin", "name": "Администратор"},
     {"code": "dispatcher", "name": "Диспетчер"},
@@ -41,86 +38,97 @@ TEST_USERS = [
         "password": "admin123",
         "role_code": "admin",
         "name": "Главный Админ",
+        "is_superuser": True,
     },
     {
         "email": "dispatcher@spectech.dev",
         "password": "pass123",
         "role_code": "dispatcher",
         "name": "Иван Диспетчеров",
+        "is_superuser": False,
     },
     {
         "email": "mechanic@spectech.dev",
         "password": "pass123",
         "role_code": "mechanic",
         "name": "Петр Механиков",
+        "is_superuser": False,
+    },
+    {
+        "email": "operator@spectech.dev",
+        "password": "pass123",
+        "role_code": "operator",
+        "name": "Ольга Операторова",
+        "is_superuser": False,
     },
 ]
 
 
-def ensure_tables_exist():
-    """Создаёт таблицы, если их нет (fallback для случаев, когда Alembic не отработал)."""
-    print("🔧 Проверяем существование таблиц...")
+def seed():
+    """Создать/обновить пользователей и назначить роли."""
     Base.metadata.create_all(bind=engine)
-    print("✅ Таблицы готовы")
-
-
-def seed_roles_and_users():
-    """Синхронное сидирование БД."""
-    ensure_tables_exist()
-
     db = SessionLocal()
-    try:
-        print("🚀 Начинаем сидирование RBAC...")
 
-        # 1. Создаем роли
+    try:
+        print("🚀 Начинаем seed...")
+
+        # 1. Создаём роли
         role_objects = {}
         for role_data in ROLES:
-            stmt = select(rbac.Role).where(rbac.Role.code == role_data["code"])
-            role = db.execute(stmt).scalar_one_or_none()
-
+            role = db.execute(
+                select(rbac.Role).where(rbac.Role.code == role_data["code"])
+            ).scalar_one_or_none()
             if not role:
                 role = rbac.Role(code=role_data["code"], name=role_data["name"])
                 db.add(role)
                 db.flush()
-                print(f"  ➕ Создана роль: {role_data['code']} ({role_data['name']})")
+                print(f"  ➕ Роль: {role_data['code']}")
             else:
-                print(f"  ✅ Роль {role_data['code']} уже существует")
+                print(f"  ✅ Роль: {role_data['code']} (уже есть)")
             role_objects[role_data["code"]] = role
 
-        # 2. Создаем тестовых пользователей
+        # 2. Создаём/обновляем пользователей
         for u in TEST_USERS:
-            stmt = select(auth.User).where(auth.User.email == u["email"])
-            user = db.execute(stmt).scalar_one_or_none()
+            user = db.execute(
+                select(auth.User).where(auth.User.email == u["email"])
+            ).scalar_one_or_none()
 
             if not user:
-                # ✅ Используем правильные поля модели User
                 user = auth.User(
                     email=u["email"],
-                    password_hash=pwd_context.hash(u["password"]),  # ✅ правильное поле
+                    password_hash=hash_password(u["password"]),
                     full_name=u["name"],
-                    status=UserStatus.active,  # ✅ вместо is_active
-                    is_superuser=(u["role_code"] == "admin"),  # ✅ это поле есть
+                    status=UserStatus.active,
+                    is_superuser=u["is_superuser"],
                 )
                 db.add(user)
                 db.flush()
-
-                # Назначаем роль (UserRole имеет is_active)
-                user_role = rbac.UserRole(
-                    user_id=user.id,
-                    role_id=role_objects[u["role_code"]].id,
-                    is_active=True,  # ← это поле в таблице user_roles, не в users
-                )
-                db.add(user_role)
-                print(f"  👤 Создан пользователь: {u['email']} ({u['role_code']})")
+                print(f"  👤 Создан: {u['email']}")
             else:
-                print(f"  ⚠️  Пользователь {u['email']} уже существует, пропускаем")
+                # Обновляем пароль и данные
+                user.password_hash = hash_password(u["password"])
+                user.full_name = u["name"]
+                user.status = UserStatus.active
+                user.is_superuser = u["is_superuser"]
+                print(f"  🔄 Обновлён: {u['email']}")
+
+            # 3. Удаляем старые роли и назначаем новую
+            db.execute(delete(rbac.UserRole).where(rbac.UserRole.user_id == user.id))
+            user_role = rbac.UserRole(
+                user_id=user.id, role_id=role_objects[u["role_code"]].id, is_active=True
+            )
+            db.add(user_role)
+            print(f"     └─ Роль: {u['role_code']}")
 
         db.commit()
-        print("\n✅ RBAC роли и тестовые пользователи успешно добавлены в БД!")
+        print("\n✅ Seed завершён успешно!")
+        print("\n📋 Тестовые аккаунты:")
+        for u in TEST_USERS:
+            print(f"   {u['email']:30s} | {u['password']:10s} | {u['role_code']}")
 
     except Exception as e:
         db.rollback()
-        print(f"\n❌ Ошибка при сидировании: {e}")
+        print(f"\n❌ Ошибка: {e}")
         import traceback
 
         traceback.print_exc()
@@ -130,4 +138,4 @@ def seed_roles_and_users():
 
 
 if __name__ == "__main__":
-    seed_roles_and_users()
+    seed()
