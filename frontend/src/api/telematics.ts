@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+import apiClient from './client';
 
 export interface DashboardSummary {
   vehicles: {
@@ -31,15 +29,7 @@ export interface DashboardSummary {
 
 export const telematicsApi = {
   async getDashboardSummary(): Promise<DashboardSummary> {
-    const token = localStorage.getItem('access_token');
-    const response = await axios.get<DashboardSummary>(
-      `${API_URL}/telematics/dashboard/summary`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+    const response = await apiClient.get<DashboardSummary>('/telematics/dashboard/summary');
     return response.data;
   },
 };

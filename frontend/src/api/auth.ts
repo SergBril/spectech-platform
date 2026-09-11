@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+import apiClient from './client';
 
 export interface AuthResponse {
   access_token: string;
@@ -9,15 +7,19 @@ export interface AuthResponse {
 }
 
 export const loginApi = async (email: string, password: string): Promise<AuthResponse> => {
-  const response = await axios.post<AuthResponse>(
-    `${API_URL}/auth/login`,
+  const response = await apiClient.post<AuthResponse>(
+    '/auth/login',
     {
       email: email,
-      password: password
-    },
-    {
-      headers: { 'Content-Type': 'application/json' }
+      password: password,
     }
   );
+  return response.data;
+};
+
+export const refreshApi = async (refreshToken: string): Promise<AuthResponse> => {
+  const response = await apiClient.post<AuthResponse>('/auth/refresh', {
+    refresh_token: refreshToken,
+  });
   return response.data;
 };
