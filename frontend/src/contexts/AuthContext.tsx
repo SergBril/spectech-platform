@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { loginApi } from '../api/auth';
-import axios from 'axios';
+import apiClient from '../api/client';
 
 interface User {
   id: number;
@@ -21,8 +21,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(
     localStorage.getItem('access_token')
@@ -30,19 +28,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
 
-  // Функция для загрузки данных пользователя
   const loadUserData = async (accessToken: string) => {
     try {
-      // Загружаем профиль пользователя
-      const meResponse = await axios.get(`${API_URL}/me/me`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
+      const meResponse = await apiClient.get('/me/me');
       setUser(meResponse.data);
 
-      // Загружаем права пользователя
-      const permsResponse = await axios.get(`${API_URL}/me/me/permissions`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
+      const permsResponse = await apiClient.get('/me/me/permissions');
       setPermissions(permsResponse.data || []);
 
       console.log('✅ User data loaded:', meResponse.data);
@@ -51,35 +42,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // При инициализации загружаем данные, если есть токен
   useEffect(() => {
     if (token) {
       loadUserData(token);
     }
   }, [token]);
 
-const login = async (email: string, password: string) => {
-  console.log('🔄 Attempting login for:', email);
+  const login = async (email: string, password: string) => {
+    console.log('🔄 Attempting login for:', email);
 
-  try {
-    const res = await loginApi(email, password);
-    console.log('✅ Login API response:', res);
+    try {
+      const res = await loginApi(email, password);
+      console.log('✅ Login API response:', res);
 
-    // Сохраняем токены
-    localStorage.setItem('access_token', res.access_token);
-    localStorage.setItem('refresh_token', res.refresh_token);
+      localStorage.setItem('access_token', res.access_token);
+      localStorage.setItem('refresh_token', res.refresh_token);
 
-    console.log('💾 Tokens saved to localStorage');
+      console.log('💾 Tokens saved to localStorage');
 
-    // Обновляем состояние токена (useEffect вызовет loadUserData автоматически)
-    setToken(res.access_token);
+      setToken(res.access_token);
 
-    console.log('✅ Login complete');
-  } catch (error) {
-    console.error('❌ Login failed:', error);
-    throw error;
-  }
-};
+      console.log('✅ Login complete');
+    } catch (error) {
+      console.error('❌ Login failed:', error);
+      throw error;
+    }
+  };
 
   const logout = () => {
     localStorage.removeItem('access_token');
@@ -90,13 +78,10 @@ const login = async (email: string, password: string) => {
     console.log('🚪 Logged out');
   };
 
-  // Функция проверки прав
   const hasPermission = (entity: string, action: string): boolean => {
-    // Superuser имеет все права
     if (user?.is_superuser) {
       return true;
     }
-    // Проверяем, есть ли право в списке
     return permissions.includes(`${entity}:${action}`);
   };
 
