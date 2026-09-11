@@ -82,7 +82,6 @@ export default function DashboardPage() {
           <h2 className="text-2xl font-bold text-gray-900 mb-6">
             Добро пожаловать, {user?.full_name || user?.email}!
           </h2>
-
           {/* Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {/* Vehicles Card */}
@@ -92,12 +91,12 @@ export default function DashboardPage() {
                 <span className="text-3xl">🚜</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 mb-2">
-                {metrics?.total_vehicles || 0}
+                {metrics?.vehicles?.total || 0}
               </div>
               <div className="text-sm text-gray-600">
                 <div className="flex justify-between">
                   <span>Активных:</span>
-                  <span className="font-semibold">{metrics?.active_vehicles || 0}</span>
+                  <span className="font-semibold">{metrics?.vehicles?.active || 0}</span>
                 </div>
               </div>
             </div>
@@ -109,13 +108,13 @@ export default function DashboardPage() {
                 <span className="text-3xl">📍</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 mb-2">
-                {metrics?.today_gps_points || 0}
+                {metrics?.gps_points?.today || 0}
               </div>
               <div className="text-sm text-gray-600">
                 <div className="flex justify-between">
                   <span>За сегодня</span>
                   <span className="text-xs text-gray-400">
-                    Всего: {metrics?.total_gps_points || 0}
+                    Всего: {metrics?.gps_points?.total || 0}
                   </span>
                 </div>
               </div>
@@ -128,13 +127,13 @@ export default function DashboardPage() {
                 <span className="text-3xl">⚠️</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 mb-2">
-                {metrics?.active_alerts || 0}
+                {metrics?.alerts?.active || 0}
               </div>
               <div className="text-sm text-gray-600">
                 <div className="flex justify-between">
                   <span>Активных</span>
-                  <span className={`text-xs ${metrics?.critical_alerts ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
-                    Критических: {metrics?.critical_alerts || 0}
+                  <span className={`text-xs ${metrics?.alerts?.critical ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
+                    Критических: {metrics?.alerts?.critical || 0}
                   </span>
                 </div>
               </div>
@@ -147,13 +146,13 @@ export default function DashboardPage() {
                 <span className="text-3xl">⛽</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 mb-2">
-                {metrics?.total_fuel_volume?.toFixed(0) || 0} л
+                {metrics?.fuel?.week_volume?.toFixed(0) || 0} л
               </div>
               <div className="text-sm text-gray-600">
                 <div className="flex justify-between">
-                  <span>Всего</span>
+                  <span>За неделю</span>
                   <span className="text-xs text-gray-400">
-                    {metrics?.total_fuel_cost?.toFixed(0) || 0} ₽
+                    {metrics?.fuel?.week_cost?.toFixed(0) || 0} ₽
                   </span>
                 </div>
               </div>
