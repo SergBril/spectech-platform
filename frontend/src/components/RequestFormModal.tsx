@@ -42,12 +42,17 @@ const PRIORITIES: { value: Priority; label: string }[] = [
 ];
 
 const STATUSES: { value: RequestStatus; label: string }[] = [
-  { value: 'draft', label: 'Черновик' },
-  { value: 'pending', label: 'На рассмотрении' },
-  { value: 'approved', label: 'Одобрено' },
+  { value: 'new', label: 'Новая' },
+  { value: 'processing', label: 'В обработке' },
+  { value: 'assigned', label: 'Назначена' },
+  { value: 'confirmed', label: 'Подтверждена' },
+  { value: 'released', label: 'Выпущена' },
   { value: 'in_progress', label: 'В работе' },
-  { value: 'completed', label: 'Завершено' },
-  { value: 'cancelled', label: 'Отменено' },
+  { value: 'completed', label: 'Завершена' },
+  { value: 'signed', label: 'Подписана' },
+  { value: 'closed', label: 'Закрыта' },
+  { value: 'cancelled', label: 'Отменена' },
+  { value: 'disputed', label: 'Спорная' },
 ];
 
 const toLocalDatetime = (iso: string | null | undefined) => {
@@ -69,7 +74,7 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
   const [estimatedAmount, setEstimatedAmount] = useState(request?.estimated_amount?.toString() || '');
   const [sourceChannel, setSourceChannel] = useState<SourceChannel>((request?.source_channel as SourceChannel) || 'phone');
   const [priority, setPriority] = useState<Priority>((request?.priority as Priority) || 'normal');
-  const [status, setStatus] = useState<RequestStatus>(request?.status || 'draft');
+  const [status, setStatus] = useState<RequestStatus>(request?.status || 'new');
   const [comment, setComment] = useState(request?.comment || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -137,12 +142,9 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Основная информация */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Тип заявки *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Тип заявки *</label>
                 <select
                   value={requestType}
                   onChange={(e) => setRequestType(e.target.value as RequestType)}
@@ -154,9 +156,7 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Приоритет *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Приоритет *</label>
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as Priority)}
@@ -170,39 +170,32 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Тип работы *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Тип работы *</label>
               <input
                 type="text"
                 value={workType}
                 onChange={(e) => setWorkType(e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                placeholder="Например: Земляные работы, Погрузка, Монтаж"
+                placeholder="Например: Земляные работы"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Адрес объекта *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Адрес объекта *</label>
               <input
                 type="text"
                 value={objectAddress}
                 onChange={(e) => setObjectAddress(e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                placeholder="Например: г. Москва, ул. Ленина, д. 1"
+                placeholder="Например: Москва, Красная площадь"
                 required
               />
             </div>
 
-            {/* Период */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Плановое начало *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Плановое начало *</label>
                 <input
                   type="datetime-local"
                   value={plannedStart}
@@ -212,9 +205,7 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Плановое окончание *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Плановое окончание *</label>
                 <input
                   type="datetime-local"
                   value={plannedEnd}
@@ -225,12 +216,9 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
               </div>
             </div>
 
-            {/* Финансы */}
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Длительность смены (ч)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Длительность смены (ч)</label>
                 <input
                   type="number"
                   step="0.5"
@@ -242,9 +230,7 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ставка клиента
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ставка клиента</label>
                 <input
                   type="number"
                   step="100"
@@ -256,9 +242,7 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Тип ставки
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Тип ставки</label>
                 <select
                   value={rateType}
                   onChange={(e) => setRateType(e.target.value as RateType)}
@@ -272,9 +256,7 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Ожидаемая сумма (₽)
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ожидаемая сумма (₽)</label>
               <input
                 type="number"
                 step="100"
@@ -282,16 +264,13 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
                 value={estimatedAmount}
                 onChange={(e) => setEstimatedAmount(e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                placeholder="50000"
+                placeholder="40000"
               />
             </div>
 
-            {/* Источник */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Источник заявки
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Источник заявки</label>
                 <select
                   value={sourceChannel}
                   onChange={(e) => setSourceChannel(e.target.value as SourceChannel)}
@@ -304,9 +283,7 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
               </div>
               {request && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Статус
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Статус</label>
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as RequestStatus)}
@@ -321,9 +298,7 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Комментарий
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Комментарий</label>
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}

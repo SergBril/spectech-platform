@@ -6,12 +6,17 @@ import RequestFormModal from '../components/RequestFormModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 
 const STATUS_LABELS: Record<RequestStatus, { label: string; color: string }> = {
-  draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
-  pending: { label: 'На рассмотрении', color: 'bg-yellow-100 text-yellow-800' },
-  approved: { label: 'Одобрено', color: 'bg-blue-100 text-blue-800' },
-  in_progress: { label: 'В работе', color: 'bg-indigo-100 text-indigo-800' },
-  completed: { label: 'Завершено', color: 'bg-green-100 text-green-800' },
-  cancelled: { label: 'Отменено', color: 'bg-red-100 text-red-800' },
+  new: { label: 'Новая', color: 'bg-blue-100 text-blue-800' },
+  processing: { label: 'В обработке', color: 'bg-yellow-100 text-yellow-800' },
+  assigned: { label: 'Назначена', color: 'bg-indigo-100 text-indigo-800' },
+  confirmed: { label: 'Подтверждена', color: 'bg-green-100 text-green-800' },
+  released: { label: 'Выпущена', color: 'bg-purple-100 text-purple-800' },
+  in_progress: { label: 'В работе', color: 'bg-cyan-100 text-cyan-800' },
+  completed: { label: 'Завершена', color: 'bg-emerald-100 text-emerald-800' },
+  signed: { label: 'Подписана', color: 'bg-teal-100 text-teal-800' },
+  closed: { label: 'Закрыта', color: 'bg-gray-100 text-gray-800' },
+  cancelled: { label: 'Отменена', color: 'bg-red-100 text-red-800' },
+  disputed: { label: 'Спорная', color: 'bg-orange-100 text-orange-800' },
 };
 
 const PRIORITY_LABELS: Record<string, { label: string; color: string }> = {

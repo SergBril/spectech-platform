@@ -37,7 +37,9 @@ class Request(Base):
     __tablename__ = "requests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    client_id: Mapped[int] = mapped_column(ForeignKey("contractors.id"), nullable=False)
+    client_id: Mapped[int | None] = mapped_column(
+        ForeignKey("contractors.id"), nullable=True
+    )
     status: Mapped[RequestStatus] = mapped_column(
         SqlEnum(RequestStatus, name="request_status"),
         default=RequestStatus.new,

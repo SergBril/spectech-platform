@@ -1,6 +1,18 @@
 import apiClient from './client';
 
-export type RequestStatus = 'draft' | 'pending' | 'approved' | 'in_progress' | 'completed' | 'cancelled';
+export type RequestStatus =
+  | 'new'
+  | 'processing'
+  | 'assigned'
+  | 'confirmed'
+  | 'released'
+  | 'in_progress'
+  | 'completed'
+  | 'signed'
+  | 'closed'
+  | 'cancelled'
+  | 'disputed';
+
 export type RequestType = 'one_time' | 'recurring';
 export type RateType = 'hourly' | 'daily' | 'shift' | 'fixed';
 export type SourceChannel = 'phone' | 'web' | 'mobile' | 'email';
@@ -32,7 +44,7 @@ export interface Request {
 }
 
 export interface RequestCreate {
-  client_id?: number | null;
+  client_id?: number;
   request_type: RequestType;
   vehicle_category_id?: number | null;
   work_type: string;
@@ -66,10 +78,35 @@ export const requestsApi = {
     return response.data;
   },
 
-  async create(data: RequestCreate): Promise<Request> {
-    const response = await apiClient.post<Request>('/requests', data);
-    return response.data;
-  },
+async create(data: RequestCreate): Promise<Request> {
+  const payload: any = {
+    client_id: 1,  // Тестовый контрагент "ООО ТестКлиент"
+    request_type: data.request_type,
+    vehicle_category_id: 6,  // ← ID=6 это "Экскаватор" (подходит для земляных работ)
+    work_type: data.work_type,
+    object_address: data.object_address,
+    planned_start: new Date(data.planned_start).toISOString(),
+    planned_end: new Date(data.planned_end).toISOString(),
+    rate_type: data.rate_type,
+    source_channel: data.source_channel,
+    priority: data.priority,
+  };
+
+  if (data.shift_duration_hours !== undefined && data.shift_duration_hours !== null) {
+    payload.shift_duration_hours = parseFloat(String(data.shift_duration_hours));
+  }
+  if (data.client_rate !== undefined && data.client_rate !== null) {
+    payload.client_rate = parseFloat(String(data.client_rate));
+  }
+  if (data.estimated_amount !== undefined && data.estimated_amount !== null) {
+    payload.estimated_amount = parseFloat(String(data.estimated_amount));
+  }
+  if (data.comment) payload.comment = data.comment;
+
+  console.log('📤 Creating request:', payload);
+  const response = await apiClient.post<Request>('/requests', payload);
+  return response.data;
+},
 
   async update(id: number, data: RequestUpdate): Promise<Request> {
     const response = await apiClient.put<Request>(`/requests/${id}`, data);
