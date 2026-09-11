@@ -230,3 +230,4 @@ export const VehiclesPage: React.FC = () => {
     </div>
   );
 };
+export default VehiclesPage;

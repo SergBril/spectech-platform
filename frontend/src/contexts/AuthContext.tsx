@@ -1,116 +1,81 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authApi } from '../api/auth';
-import apiClient from '../api/client';
-
-interface User {
-  id: number;
-  email: string;
-  full_name: string;
-  is_superuser: boolean;
-}
+import { loginApi } from '../api/auth';
 
 interface AuthContextType {
-  user: User | null;
-  permissions: string[];
+  token: string | null;
+  refreshToken: string | null;
   isAuthenticated: boolean;
-  isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, fullName: string, phone?: string) => Promise<void>;
   logout: () => void;
-  hasPermission: (entity: string, action: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
-};
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [token, setToken] = useState<string | null>(
+    localStorage.getItem('access_token')
+  );
+  const [refreshToken, setRefreshToken] = useState<string | null>(
+    localStorage.getItem('refresh_token')
+  );
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [permissions, setPermissions] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const loadUserData = async () => {
-    try {
-      // ВАЖНО: правильный путь /me/me (префикс роутера + эндпоинт)
-      const meResponse = await apiClient.get('/me/me');
-      setUser(meResponse.data);
-
-      // Правильный путь /me/me/permissions
-      const permsResponse = await apiClient.get('/me/me/permissions');
-      setPermissions(permsResponse.data);
-    } catch (error) {
-      console.error('Ошибка загрузки профиля:', error);
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      setUser(null);
-      setPermissions([]);
-    }
-  };
-
+  // Логируем начальное состояние
   useEffect(() => {
-    const initAuth = async () => {
-      const token = localStorage.getItem('access_token');
-      if (token) {
-        await loadUserData();
-      }
-      setIsLoading(false);
-    };
-    initAuth();
+    console.log('🔐 AuthContext initialized:', {
+      hasToken: !!token,
+      hasRefreshToken: !!refreshToken
+    });
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await authApi.login({ email, password });
-    const { access_token, refresh_token } = response.data;
+    console.log('🔄 Attempting login for:', email);
 
-    localStorage.setItem('access_token', access_token);
-    localStorage.setItem('refresh_token', refresh_token);
+    try {
+      const res = await loginApi(email, password);
+      console.log('✅ Login API response:', res);
 
-    await loadUserData();
-  };
+      // Сохраняем в localStorage
+      localStorage.setItem('access_token', res.access_token);
+      localStorage.setItem('refresh_token', res.refresh_token);
 
-  const register = async (email: string, password: string, fullName: string, phone?: string) => {
-    await authApi.register({ email, password, full_name: fullName, phone });
-    await login(email, password);
+      console.log('💾 Tokens saved to localStorage');
+
+      // Обновляем состояние
+      setToken(res.access_token);
+      setRefreshToken(res.refresh_token);
+
+      console.log('✅ State updated, isAuthenticated will be true');
+    } catch (error) {
+      console.error('❌ Login failed:', error);
+      throw error;
+    }
   };
 
   const logout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
-    setUser(null);
-    setPermissions([]);
+    setToken(null);
+    setRefreshToken(null);
+    console.log('🚪 Logged out');
   };
-
-  const hasPermission = (entity: string, action: string) => {
-    if (user?.is_superuser) {
-      return true;
-    }
-    return permissions.includes(`${entity}:${action}`);
-  };
-
-  const isAuthenticated = !!user;
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      permissions,
-      isAuthenticated,
-      isLoading,
-      login,
-      register,
-      logout,
-      hasPermission
-    }}>
+    <AuthContext.Provider
+      value={{
+        token,
+        refreshToken,
+        isAuthenticated: !!token,
+        login,
+        logout
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  return context;
 };
