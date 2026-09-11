@@ -1,32 +1,42 @@
-import React, { useEffect, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../api/client';
 import { telematicsApi, type DashboardSummary } from '../api/telematics';
+import { useAuth } from '../contexts/AuthContext';
 
-export const DashboardPage: React.FC = () => {
-  const { user, logout } = useAuth();
+interface DashboardMetrics {
+  total_vehicles: number;
+  active_vehicles: number;
+  total_gps_points: number;
+  today_gps_points: number;
+  active_alerts: number;
+  critical_alerts: number;
+  total_fuel_volume: number;
+  total_fuel_cost: number;
+  fuel_drains: number;
+}
+
+export default function DashboardPage() {
   const navigate = useNavigate();
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const { user, logout, hasPermission } = useAuth();
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        setLoading(true);
-        const data = await telematicsApi.getDashboardSummary();
-        setSummary(data);
-        setError('');
-      } catch (err: any) {
-        console.error('Failed to load dashboard:', err);
-        setError('Не удалось загрузить данные дашборда');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadDashboardData();
+    loadMetrics();
   }, []);
+
+  const loadMetrics = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.get('/telematics/dashboard/summary');
+      setMetrics(response.data);
+    } catch (error) {
+      console.error('Failed to load metrics:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -73,12 +83,6 @@ export const DashboardPage: React.FC = () => {
             Добро пожаловать, {user?.full_name || user?.email}!
           </h2>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
-              {error}
-            </div>
-          )}
-
           {/* Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {/* Vehicles Card */}
@@ -88,12 +92,12 @@ export const DashboardPage: React.FC = () => {
                 <span className="text-3xl">🚜</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 mb-2">
-                {summary?.vehicles?.total || 0}
+                {metrics?.total_vehicles || 0}
               </div>
               <div className="text-sm text-gray-600">
                 <div className="flex justify-between">
                   <span>Активных:</span>
-                  <span className="font-semibold">{summary?.vehicles?.active || 0}</span>
+                  <span className="font-semibold">{metrics?.active_vehicles || 0}</span>
                 </div>
               </div>
             </div>
@@ -105,13 +109,13 @@ export const DashboardPage: React.FC = () => {
                 <span className="text-3xl">📍</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 mb-2">
-                {summary?.gps_points?.today || 0}
+                {metrics?.today_gps_points || 0}
               </div>
               <div className="text-sm text-gray-600">
                 <div className="flex justify-between">
                   <span>За сегодня</span>
                   <span className="text-xs text-gray-400">
-                    Всего: {summary?.gps_points?.total || 0}
+                    Всего: {metrics?.total_gps_points || 0}
                   </span>
                 </div>
               </div>
@@ -124,13 +128,13 @@ export const DashboardPage: React.FC = () => {
                 <span className="text-3xl">⚠️</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 mb-2">
-                {summary?.alerts?.active || 0}
+                {metrics?.active_alerts || 0}
               </div>
               <div className="text-sm text-gray-600">
                 <div className="flex justify-between">
                   <span>Активных</span>
-                  <span className={`text-xs ${summary?.alerts?.critical ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
-                    Критических: {summary?.alerts?.critical || 0}
+                  <span className={`text-xs ${metrics?.critical_alerts ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
+                    Критических: {metrics?.critical_alerts || 0}
                   </span>
                 </div>
               </div>
@@ -143,13 +147,13 @@ export const DashboardPage: React.FC = () => {
                 <span className="text-3xl">⛽</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 mb-2">
-                {summary?.fuel?.week_volume?.toFixed(0) || 0} л
+                {metrics?.total_fuel_volume?.toFixed(0) || 0} л
               </div>
               <div className="text-sm text-gray-600">
                 <div className="flex justify-between">
-                  <span>За неделю</span>
+                  <span>Всего</span>
                   <span className="text-xs text-gray-400">
-                    {summary?.fuel?.week_cost?.toFixed(0) || 0} ₽
+                    {metrics?.total_fuel_cost?.toFixed(0) || 0} ₽
                   </span>
                 </div>
               </div>
@@ -172,13 +176,13 @@ export const DashboardPage: React.FC = () => {
               </button>
 
               <button
-                disabled
-                className="flex items-center p-4 border-2 border-gray-200 rounded-lg opacity-50 cursor-not-allowed"
+                onClick={() => navigate('/requests')}
+                className="flex items-center p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
               >
                 <span className="text-2xl mr-3">📋</span>
                 <div className="text-left">
                   <div className="font-medium text-gray-900">Заявки</div>
-                  <div className="text-sm text-gray-500">Скоро будет доступно</div>
+                  <div className="text-sm text-gray-500">Управление заявками</div>
                 </div>
               </button>
 
@@ -221,6 +225,4 @@ export const DashboardPage: React.FC = () => {
       </main>
     </div>
   );
-};
-
-export default DashboardPage;
+}

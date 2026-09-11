@@ -4,7 +4,7 @@ import { vehiclesApi } from '../api/vehicles';
 import type { Vehicle } from '../api/vehicles';
 import { useAuth } from '../contexts/AuthContext';
 import { VehicleFormModal } from '../components/VehicleFormModal';
-import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog';
+import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 
 export const VehiclesPage: React.FC = () => {
   const { user, logout, hasPermission } = useAuth();
