@@ -153,20 +153,26 @@ def calculate_payout(gross_amount: Decimal, commission_rate: Decimal) -> dict:
     }
 
 
-def get_finance_dashboard(db: Session, company_id: int) -> dict:
-    """Собирает статистику для финансового дашборда."""
+def get_finance_dashboard(db: Session, company_id: int | None) -> dict:
+    """
+    Собирает статистику для финансового дашборда.
+    Если company_id = None, показывает все данные (без фильтрации).
+    """
+    # Базовые фильтры (пустые, если company_id = None)
+    invoice_filter = (
+        Invoice.company_id == company_id if company_id is not None else True
+    )
+    act_filter = Act.company_id == company_id if company_id is not None else True
+    payout_filter = Payout.company_id == company_id if company_id is not None else True
+
     # Сумма всех счетов
     total_revenue = db.scalar(
-        select(func.coalesce(func.sum(Invoice.total), 0)).where(
-            Invoice.company_id == company_id
-        )
+        select(func.coalesce(func.sum(Invoice.total), 0)).where(invoice_filter)
     ) or Decimal("0")
 
     # Сумма оплаченных счетов
     total_paid = db.scalar(
-        select(func.coalesce(func.sum(Invoice.paid_amount), 0)).where(
-            Invoice.company_id == company_id
-        )
+        select(func.coalesce(func.sum(Invoice.paid_amount), 0)).where(invoice_filter)
     ) or Decimal("0")
 
     # Задолженность
@@ -175,26 +181,18 @@ def get_finance_dashboard(db: Session, company_id: int) -> dict:
     # Комиссия, заработанная платформой
     total_commission = db.scalar(
         select(func.coalesce(func.sum(Payout.platform_commission), 0)).where(
-            Payout.company_id == company_id
+            payout_filter
         )
     ) or Decimal("0")
 
     # Количество документов
     invoices_count = (
-        db.scalar(
-            select(func.count(Invoice.id)).where(Invoice.company_id == company_id)
-        )
-        or 0
+        db.scalar(select(func.count(Invoice.id)).where(invoice_filter)) or 0
     )
 
-    acts_count = (
-        db.scalar(select(func.count(Act.id)).where(Act.company_id == company_id)) or 0
-    )
+    acts_count = db.scalar(select(func.count(Act.id)).where(act_filter)) or 0
 
-    payouts_count = (
-        db.scalar(select(func.count(Payout.id)).where(Payout.company_id == company_id))
-        or 0
-    )
+    payouts_count = db.scalar(select(func.count(Payout.id)).where(payout_filter)) or 0
 
     return {
         "total_revenue": total_revenue,

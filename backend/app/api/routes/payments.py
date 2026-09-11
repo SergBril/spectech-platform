@@ -72,9 +72,13 @@ def get_dashboard(
 ):
     """
     Финансовый дашборд: доходы, выплаты, комиссии.
+    Для суперпользователей показывает все данные (без фильтрации по компании).
     """
-    # require_permission(db, current_user, "finance", "dashboard")
+    # Для суперпользователей и админов без компании - показываем все данные
+    if current_user.is_superuser or not current_user.company_id:
+        company_id = None
+    else:
+        company_id = current_user.company_id
 
-    company_id = current_user.company_id or 0
     stats = get_finance_dashboard(db, company_id)
     return FinanceDashboard(**stats)
