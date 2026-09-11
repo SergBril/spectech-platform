@@ -1,4 +1,5 @@
-import axios, { AxiosError, AxiosRequestConfig } from 'axios';
+import axios from 'axios';
+import type { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
@@ -12,14 +13,14 @@ const apiClient = axios.create({
 
 // Request interceptor - добавляем токен ко всем запросам
 apiClient.interceptors.request.use(
-  (config) => {
+  (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem('access_token');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error: AxiosError) => Promise.reject(error)
 );
 
 // Response interceptor - обрабатываем ошибки
@@ -41,9 +42,9 @@ const processQueue = (error: Error | null, token: string | null = null) => {
 };
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response: AxiosResponse) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     // Если 401 и это не повторная попытка
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -109,7 +110,6 @@ apiClient.interceptors.response.use(
     const errorMessage =
       (error.response?.data as any)?.detail || error.message || 'Произошла ошибка';
 
-    // Можно добавить toast-уведомления здесь
     console.error('API Error:', errorMessage);
 
     return Promise.reject(error);

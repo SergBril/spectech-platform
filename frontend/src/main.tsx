@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 // ✅ Все импорты БЕЗ фигурных скобок (default export)
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import RequestsPage from './pages/RequestsPage';
 import DashboardPage from './pages/DashboardPage';
 import VehiclesPage from './pages/VehiclesPage';
 
@@ -62,6 +63,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <VehiclesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/requests"
+        element={
+          <ProtectedRoute>
+            <RequestsPage />
           </ProtectedRoute>
         }
       />
