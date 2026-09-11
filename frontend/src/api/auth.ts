@@ -1,16 +1,6 @@
-import apiClient from './client';
+import axios from 'axios';
 
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface RegisterRequest {
-  email: string;
-  password: string;
-  full_name: string;
-  phone?: string;
-}
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 export interface AuthResponse {
   access_token: string;
@@ -18,13 +8,16 @@ export interface AuthResponse {
   token_type: string;
 }
 
-export const authApi = {
-  login: (data: LoginRequest) =>
-    apiClient.post<AuthResponse>('/auth/login', data),
-
-  register: (data: RegisterRequest) =>
-    apiClient.post<AuthResponse>('/auth/register', data),
-
-  getMe: () =>
-    apiClient.get('/auth/me'),
+export const loginApi = async (email: string, password: string): Promise<AuthResponse> => {
+  const response = await axios.post<AuthResponse>(
+    `${API_URL}/auth/login`,
+    {
+      email: email,
+      password: password
+    },
+    {
+      headers: { 'Content-Type': 'application/json' }
+    }
+  );
+  return response.data;
 };
