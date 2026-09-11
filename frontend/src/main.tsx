@@ -9,6 +9,7 @@ import RegisterPage from './pages/RegisterPage';
 import RequestsPage from './pages/RequestsPage';
 import DashboardPage from './pages/DashboardPage';
 import VehiclesPage from './pages/VehiclesPage';
+import FinancePage from './pages/FinancePage';
 
 import './index.css';
 
@@ -74,6 +75,14 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
+<Route
+  path="/finance"
+  element={
+    <ProtectedRoute>
+      <FinancePage />
+    </ProtectedRoute>
+  }
+/>
 
       {/* 404 - редирект на главную */}
       <Route path="*" element={<Navigate to="/" replace />} />
