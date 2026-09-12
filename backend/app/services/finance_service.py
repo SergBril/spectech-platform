@@ -158,41 +158,40 @@ def get_finance_dashboard(db: Session, company_id: int | None) -> dict:
     Собирает статистику для финансового дашборда.
     Если company_id = None, показывает все данные (без фильтрации).
     """
-    # Базовые фильтры (пустые, если company_id = None)
-    invoice_filter = (
-        Invoice.company_id == company_id if company_id is not None else True
-    )
-    act_filter = Act.company_id == company_id if company_id is not None else True
-    payout_filter = Payout.company_id == company_id if company_id is not None else True
+    # === Счета ===
+    invoice_query = select(func.coalesce(func.sum(Invoice.total), 0))
+    invoice_paid_query = select(func.coalesce(func.sum(Invoice.paid_amount), 0))
+    invoice_count_query = select(func.count(Invoice.id))
 
-    # Сумма всех счетов
-    total_revenue = db.scalar(
-        select(func.coalesce(func.sum(Invoice.total), 0)).where(invoice_filter)
-    ) or Decimal("0")
+    if company_id is not None:
+        invoice_query = invoice_query.where(Invoice.company_id == company_id)
+        invoice_paid_query = invoice_paid_query.where(Invoice.company_id == company_id)
+        invoice_count_query = invoice_count_query.where(
+            Invoice.company_id == company_id
+        )
 
-    # Сумма оплаченных счетов
-    total_paid = db.scalar(
-        select(func.coalesce(func.sum(Invoice.paid_amount), 0)).where(invoice_filter)
-    ) or Decimal("0")
+    total_revenue = db.scalar(invoice_query) or Decimal("0")
+    total_paid = db.scalar(invoice_paid_query) or Decimal("0")
+    invoices_count = db.scalar(invoice_count_query) or 0
 
     # Задолженность
     total_outstanding = total_revenue - total_paid
 
-    # Комиссия, заработанная платформой
-    total_commission = db.scalar(
-        select(func.coalesce(func.sum(Payout.platform_commission), 0)).where(
-            payout_filter
-        )
-    ) or Decimal("0")
+    # === Акты ===
+    acts_query = select(func.count(Act.id))
+    if company_id is not None:
+        acts_query = acts_query.where(Act.company_id == company_id)
+    acts_count = db.scalar(acts_query) or 0
 
-    # Количество документов
-    invoices_count = (
-        db.scalar(select(func.count(Invoice.id)).where(invoice_filter)) or 0
-    )
+    # === Выплаты ===
+    payout_query = select(func.count(Payout.id))
+    commission_query = select(func.coalesce(func.sum(Payout.platform_commission), 0))
+    if company_id is not None:
+        payout_query = payout_query.where(Payout.company_id == company_id)
+        commission_query = commission_query.where(Payout.company_id == company_id)
 
-    acts_count = db.scalar(select(func.count(Act.id)).where(act_filter)) or 0
-
-    payouts_count = db.scalar(select(func.count(Payout.id)).where(payout_filter)) or 0
+    payouts_count = db.scalar(payout_query) or 0
+    total_commission = db.scalar(commission_query) or Decimal("0")
 
     return {
         "total_revenue": total_revenue,
