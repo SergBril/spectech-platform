@@ -244,6 +244,12 @@ export const FinancePage: React.FC = () => {
                 <div>
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">Последние счета</h3>
+                    <button
+                      onClick={() => navigate('/invoices')}
+                      className="text-sm text-blue-600 hover:text-blue-900 font-medium"
+                    >
+                      Все счета →
+                    </button>
                   </div>
                   {invoices.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">
