@@ -11,6 +11,7 @@ import DashboardPage from './pages/DashboardPage';
 import VehiclesPage from './pages/VehiclesPage';
 import FinancePage from './pages/FinancePage';
 import InvoicesPage from './pages/InvoicesPage';
+import RequestDetailPage from './pages/RequestDetailPage';
 
 import './index.css';
 
@@ -89,6 +90,14 @@ const AppRoutes = () => {
   element={
     <ProtectedRoute>
       <InvoicesPage />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/requests/:id"
+  element={
+    <ProtectedRoute>
+      <RequestDetailPage />
     </ProtectedRoute>
   }
 />

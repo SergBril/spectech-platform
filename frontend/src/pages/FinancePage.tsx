@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { financeApi, type Invoice, type Act, type Payout, type PaymentsDashboard } from '../api/finance';
+import InvoiceFormModal from '../components/InvoiceFormModal';
+import PaymentModal from '../components/PaymentModal';
+import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 
 const INVOICE_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
@@ -51,7 +54,14 @@ export const FinancePage: React.FC = () => {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'invoices' | 'acts' | 'payouts'>('invoices');
 
+  // Модальные окна
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [paymentTarget, setPaymentTarget] = useState<Invoice | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
+
   const canView = hasPermission('finance', 'view');
+  const canEdit = hasPermission('finance', 'update');
+  const canDelete = hasPermission('finance', 'delete');
 
   useEffect(() => {
     if (!canView) return;
@@ -63,9 +73,9 @@ export const FinancePage: React.FC = () => {
       setLoading(true);
       const [dashData, invoicesData, actsData, payoutsData] = await Promise.allSettled([
         financeApi.getDashboard(),
-        financeApi.getInvoices({ limit: 10 }),
-        financeApi.getActs({ limit: 10 }),
-        financeApi.getPayouts({ limit: 10 }),
+        financeApi.getInvoices({ limit: 100 }),
+        financeApi.getActs({ limit: 100 }),
+        financeApi.getPayouts({ limit: 100 }),
       ]);
 
       if (dashData.status === 'fulfilled') setDashboard(dashData.value);
@@ -82,6 +92,83 @@ export const FinancePage: React.FC = () => {
     }
   };
 
+  const handleGoToRequest = (requestId: number | null) => {
+    if (requestId) {
+      navigate(`/requests/${requestId}`);
+    }
+  };
+
+  const handleEditInvoice = (inv: Invoice) => {
+    setEditingInvoice(inv);
+  };
+
+  const handleDeleteInvoice = async () => {
+    if (!deleteTarget) return;
+    try {
+      await financeApi.deleteInvoice(deleteTarget.id);
+      setInvoices(invoices.filter((i) => i.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      loadData();
+    } catch (err: any) {
+      alert('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+const handleCancelInvoice = async (inv: Invoice) => {
+  if (!confirm(`Отменить счёт ${inv.document_number}? Это действие нельзя отменить.`)) return;
+  try {
+    const updated = await financeApi.updateInvoice(inv.id, { status: 'cancelled' } as any);
+    setInvoices(invoices.map((i) => (i.id === inv.id ? updated : i)));
+  } catch (err: any) {
+    alert('Ошибка: ' + (err?.response?.data?.detail || err.message));
+  }
+};
+
+  const handleDownloadPdf = async (type: 'invoice' | 'act' | 'payout', id: number, docNumber: string) => {
+    try {
+      let blob: Blob;
+      if (type === 'invoice') {
+        blob = await financeApi.downloadInvoicePdf(id);
+      } else {
+        alert('PDF для актов и выплат пока не поддерживается фронтендом');
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${docNumber}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert('Ошибка скачивания: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleSaveInvoice = async (data: any) => {
+    try {
+      if (editingInvoice) {
+        const updated = await financeApi.updateInvoice(editingInvoice.id, data);
+        setInvoices(invoices.map((i) => (i.id === editingInvoice.id ? updated : i)));
+      }
+      setEditingInvoice(null);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        alert('Ошибка валидации: ' + detail.map((d: any) => `${d.loc?.join('.')}: ${d.msg}`).join(', '));
+      } else {
+        alert('Ошибка: ' + (detail || err.message));
+      }
+      throw err;
+    }
+  };
+
+  const handlePaymentSuccess = () => {
+    setPaymentTarget(null);
+    loadData();
+  };
+
   if (!canView) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -89,10 +176,7 @@ export const FinancePage: React.FC = () => {
           <div className="text-5xl mb-4">🔒</div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Доступ запрещён</h2>
           <p className="text-gray-600 mb-4">У вас нет прав для просмотра финансового раздела</p>
-          <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
+          <button onClick={() => navigate('/')} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
             На главную
           </button>
         </div>
@@ -138,12 +222,18 @@ export const FinancePage: React.FC = () => {
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Финансы</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Финансы</h2>
+            <button
+              onClick={() => navigate('/invoices')}
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            >
+              Управление счетами →
+            </button>
+          </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
-              {error}
-            </div>
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">{error}</div>
           )}
 
           {/* Metrics Cards */}
@@ -239,18 +329,9 @@ export const FinancePage: React.FC = () => {
             </div>
 
             <div className="p-6">
-              {/* Invoices Tab */}
+              {/* === ВКЛАДКА СЧЕТА === */}
               {activeTab === 'invoices' && (
                 <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Последние счета</h3>
-                    <button
-                      onClick={() => navigate('/invoices')}
-                      className="text-sm text-blue-600 hover:text-blue-900 font-medium"
-                    >
-                      Все счета →
-                    </button>
-                  </div>
                   {invoices.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">
                       <div className="text-5xl mb-4">💰</div>
@@ -267,33 +348,107 @@ export const FinancePage: React.FC = () => {
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Оплачено</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {invoices.map((inv) => (
-                            <tr key={inv.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-gray-900">
-                                {inv.document_number || `#${inv.id}`}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-                                {formatDate(inv.invoice_date)}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-                                {formatDate(inv.due_date)}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                                {formatMoney(inv.total)}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-                                {formatMoney(inv.paid_amount)}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>
-                                  {INVOICE_STATUS_LABELS[inv.status]?.label || inv.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
+                          {invoices.map((inv) => {
+                            const paid = parseFloat(inv.paid_amount || '0');
+                            const total = parseFloat(inv.total || '0');
+                            const canAcceptPayment = inv.status !== 'paid' && inv.status !== 'cancelled' && paid < total;
+
+                            return (
+                              <tr key={inv.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <button
+                                    onClick={() => handleGoToRequest(inv.request_id)}
+                                    className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline"
+                                    title="Перейти к заявке"
+                                  >
+                                    {inv.document_number || `#${inv.id}`}
+                                  </button>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                                  {formatDate(inv.invoice_date)}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                                  {formatDate(inv.due_date)}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
+                                  {formatMoney(inv.total)}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">
+                                  {formatMoney(inv.paid_amount)}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>
+                                    {INVOICE_STATUS_LABELS[inv.status]?.label || inv.status}
+                                  </span>
+                                </td>
+<td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
+  {/* PDF — всегда доступен */}
+  <button
+    onClick={() => handleDownloadPdf('invoice', inv.id, inv.document_number)}
+    className="text-purple-600 hover:text-purple-900"
+    title="Скачать PDF"
+  >
+    📄 PDF
+  </button>
+
+  {/* Действия для draft */}
+  {inv.status === 'draft' && canEdit && (
+    <>
+      <button
+        onClick={() => handleSendInvoice(inv)}
+        className="text-blue-600 hover:text-blue-900"
+        title="Отправить клиенту"
+      >
+        ✉️
+      </button>
+      <button
+        onClick={() => handleEditInvoice(inv)}
+        className="text-gray-600 hover:text-gray-900"
+        title="Редактировать"
+      >
+        ✏️
+      </button>
+      {canDelete && (
+        <button
+          onClick={() => setDeleteTarget(inv)}
+          className="text-red-600 hover:text-red-900"
+          title="Удалить"
+        >
+          🗑️
+        </button>
+      )}
+    </>
+  )}
+
+  {/* Принять оплату — для неоплаченных полностью */}
+  {canAcceptPayment && canEdit && (
+    <button
+      onClick={() => setPaymentTarget(inv)}
+      className="text-green-600 hover:text-green-900 font-medium"
+      title="Принять оплату"
+    >
+      💳
+    </button>
+  )}
+
+  {/* Отменить — для sent/overdue/partially_paid */}
+  {['sent', 'overdue', 'partially_paid'].includes(inv.status) && canEdit && (
+    <button
+      onClick={() => handleCancelInvoice(inv)}
+      className="text-orange-600 hover:text-orange-900"
+      title="Отменить счёт"
+    >
+      ❌
+    </button>
+  )}
+</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -301,12 +456,9 @@ export const FinancePage: React.FC = () => {
                 </div>
               )}
 
-              {/* Acts Tab */}
+              {/* === ВКЛАДКА АКТЫ === */}
               {activeTab === 'acts' && (
                 <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Последние акты</h3>
-                  </div>
                   {acts.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">
                       <div className="text-5xl mb-4">📄</div>
@@ -321,13 +473,20 @@ export const FinancePage: React.FC = () => {
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {acts.map((act) => (
                             <tr key={act.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-gray-900">
-                                {act.document_number || `#${act.id}`}
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <button
+                                  onClick={() => handleGoToRequest(act.request_id)}
+                                  className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline"
+                                  title="Перейти к заявке"
+                                >
+                                  {act.document_number || `#${act.id}`}
+                                </button>
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
                                 {formatDate(act.act_date)}
@@ -340,6 +499,9 @@ export const FinancePage: React.FC = () => {
                                   {ACT_STATUS_LABELS[act.status]?.label || act.status}
                                 </span>
                               </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
+                                <span className="text-gray-400 italic">PDF в разработке</span>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -349,12 +511,9 @@ export const FinancePage: React.FC = () => {
                 </div>
               )}
 
-              {/* Payouts Tab */}
+              {/* === ВКЛАДКА ВЫПЛАТЫ === */}
               {activeTab === 'payouts' && (
                 <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Последние выплаты</h3>
-                  </div>
                   {payouts.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">
                       <div className="text-5xl mb-4">💸</div>
@@ -368,14 +527,22 @@ export const FinancePage: React.FC = () => {
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Комиссия</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {payouts.map((p) => (
                             <tr key={p.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-gray-900">
-                                {p.document_number || `#${p.id}`}
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <button
+                                  onClick={() => handleGoToRequest(p.request_id)}
+                                  className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline"
+                                  title="Перейти к заявке"
+                                >
+                                  {p.document_number || `#${p.id}`}
+                                </button>
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
                                 {formatDate(p.payout_date)}
@@ -383,10 +550,16 @@ export const FinancePage: React.FC = () => {
                               <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                                 {formatMoney(p.net_amount)}
                               </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-orange-600">
+                                {formatMoney(p.platform_commission)}
+                              </td>
                               <td className="px-4 py-3 whitespace-nowrap">
                                 <span className={`px-2 py-1 text-xs font-semibold rounded-full ${PAYOUT_STATUS_LABELS[p.status]?.color || 'bg-gray-100'}`}>
                                   {PAYOUT_STATUS_LABELS[p.status]?.label || p.status}
                                 </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
+                                <span className="text-gray-400 italic">PDF в разработке</span>
                               </td>
                             </tr>
                           ))}
@@ -400,6 +573,30 @@ export const FinancePage: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {editingInvoice && (
+        <InvoiceFormModal
+          invoice={editingInvoice}
+          onClose={() => setEditingInvoice(null)}
+          onSave={handleSaveInvoice}
+        />
+      )}
+
+      {paymentTarget && (
+        <PaymentModal
+          invoice={paymentTarget}
+          onClose={() => setPaymentTarget(null)}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteConfirmDialog
+          vehicleName={`счёт ${deleteTarget.document_number}`}
+          onConfirm={handleDeleteInvoice}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 };
