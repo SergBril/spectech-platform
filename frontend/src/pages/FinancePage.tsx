@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { financeApi, type Invoice, type Act, type Payout, type PaymentsDashboard, type ActCreate } from '../api/finance';
+import { exportApi, downloadBlob } from '../api/export';
 import InvoiceFormModal from '../components/InvoiceFormModal';
 import PaymentModal from '../components/PaymentModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
@@ -146,14 +147,7 @@ export const FinancePage: React.FC = () => {
         alert('PDF для выплат пока не поддерживается');
         return;
       }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${docNumber}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `${docNumber}.pdf`);
     } catch (err: any) {
       alert('Ошибка скачивания: ' + (err?.response?.data?.detail || err.message));
     }
@@ -226,6 +220,25 @@ export const FinancePage: React.FC = () => {
       setActs(acts.map((a) => (a.id === act.id ? updated : a)));
     } catch (err: any) {
       alert('Ошибка: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  // === ЭКСПОРТ ===
+  const handleExportInvoicesCsv = async () => {
+    try {
+      const blob = await exportApi.invoicesCsv({});
+      downloadBlob(blob, `invoices_${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (err: any) {
+      alert('Ошибка экспорта: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleExportActsCsv = async () => {
+    try {
+      const blob = await exportApi.actsCsv({});
+      downloadBlob(blob, `acts_${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (err: any) {
+      alert('Ошибка экспорта: ' + (err?.response?.data?.detail || err.message));
     }
   };
 
@@ -345,7 +358,14 @@ export const FinancePage: React.FC = () => {
               {/* === СЧЕТА === */}
               {activeTab === 'invoices' && (
                 <div>
-                  <div className="flex justify-end mb-4">
+                  <div className="flex justify-end mb-4 gap-2">
+                    <button
+                      onClick={handleExportInvoicesCsv}
+                      className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-sm"
+                      title="Экспорт всех счетов в CSV"
+                    >
+                      📥 Экспорт CSV
+                    </button>
                     {canCreate && (
                       <button
                         onClick={() => { setEditingInvoice(null); setIsInvoiceFormOpen(true); }}
@@ -424,7 +444,14 @@ export const FinancePage: React.FC = () => {
               {/* === АКТЫ === */}
               {activeTab === 'acts' && (
                 <div>
-                  <div className="flex justify-end mb-4">
+                  <div className="flex justify-end mb-4 gap-2">
+                    <button
+                      onClick={handleExportActsCsv}
+                      className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-sm"
+                      title="Экспорт всех актов в CSV"
+                    >
+                      📥 Экспорт CSV
+                    </button>
                     {canCreate && (
                       <button
                         onClick={() => { setEditingAct(null); setIsActFormOpen(true); }}
@@ -469,28 +496,27 @@ export const FinancePage: React.FC = () => {
                               <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
                                 <button onClick={() => handleDownloadPdf('act', act.id, act.document_number)} className="text-purple-600 hover:text-purple-900" title="PDF">📄</button>
                                 {act.status === 'draft' && canEdit && (
-  <>
-    <button onClick={() => setEditingAct(act)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
-    <button
-      onClick={() => handleSignAct(act, 'client')}
-      className={`${act.signed_by_client_at ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:text-green-900'}`}
-      title={act.signed_by_client_at ? 'Уже подписан клиентом' : 'Подписать (клиент)'}
-      disabled={!!act.signed_by_client_at}
-    >
-      {act.signed_by_client_at ? '✅' : '✍️👤'}
-    </button>
-    <button
-      onClick={() => handleSignAct(act, 'executor')}
-      className={`${act.signed_by_executor_at ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-900'}`}
-      title={act.signed_by_executor_at ? 'Уже подписан исполнителем' : 'Подписать (исполнитель)'}
-      disabled={!!act.signed_by_executor_at}
-    >
-      {act.signed_by_executor_at ? '✅' : '✍️🏢'}
-    </button>
-    {canDelete && <button onClick={() => setDeleteActTarget(act)} className="text-red-600 hover:text-red-900" title="Удалить">🗑️</button>}
-  </>
-)}
-
+                                  <>
+                                    <button onClick={() => setEditingAct(act)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
+                                    <button
+                                      onClick={() => handleSignAct(act, 'client')}
+                                      className={act.signed_by_client_at ? 'text-gray-400' : 'text-green-600 hover:text-green-900'}
+                                      title={act.signed_by_client_at ? 'Уже подписан клиентом' : 'Подписать (клиент)'}
+                                      disabled={!!act.signed_by_client_at}
+                                    >
+                                      {act.signed_by_client_at ? '✅' : '✍️👤'}
+                                    </button>
+                                    <button
+                                      onClick={() => handleSignAct(act, 'executor')}
+                                      className={act.signed_by_executor_at ? 'text-gray-400' : 'text-blue-600 hover:text-blue-900'}
+                                      title={act.signed_by_executor_at ? 'Уже подписан исполнителем' : 'Подписать (исполнитель)'}
+                                      disabled={!!act.signed_by_executor_at}
+                                    >
+                                      {act.signed_by_executor_at ? '✅' : '✍️🏢'}
+                                    </button>
+                                    {canDelete && <button onClick={() => setDeleteActTarget(act)} className="text-red-600 hover:text-red-900" title="Удалить">🗑️</button>}
+                                  </>
+                                )}
                               </td>
                             </tr>
                           ))}

@@ -21,6 +21,7 @@ from app.api.routes import (
     categories,
     contractors,
     debug,
+    export,
     files,
     invoices,
     me,
@@ -170,6 +171,7 @@ app.include_router(ws_routes.router, prefix="/api/v1", tags=["websocket"])
 app.include_router(benchmark.router, prefix="/api/v1", tags=["benchmark"])
 app.include_router(secure_test.router, prefix="/api/v1", tags=["🔒 Secure Test (RBAC)"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
+app.include_router(export.router, prefix="/api/v1/export", tags=["export"])
 
 
 # 6. Кастомизация OpenAPI
