@@ -469,12 +469,28 @@ export const FinancePage: React.FC = () => {
                               <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
                                 <button onClick={() => handleDownloadPdf('act', act.id, act.document_number)} className="text-purple-600 hover:text-purple-900" title="PDF">📄</button>
                                 {act.status === 'draft' && canEdit && (
-                                  <>
-                                    <button onClick={() => setEditingAct(act)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
-                                    <button onClick={() => handleSignAct(act, 'client')} className="text-green-600 hover:text-green-900" title="Подписать (клиент)">✍️</button>
-                                    {canDelete && <button onClick={() => setDeleteActTarget(act)} className="text-red-600 hover:text-red-900" title="Удалить">🗑️</button>}
-                                  </>
-                                )}
+  <>
+    <button onClick={() => setEditingAct(act)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
+    <button
+      onClick={() => handleSignAct(act, 'client')}
+      className={`${act.signed_by_client_at ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:text-green-900'}`}
+      title={act.signed_by_client_at ? 'Уже подписан клиентом' : 'Подписать (клиент)'}
+      disabled={!!act.signed_by_client_at}
+    >
+      {act.signed_by_client_at ? '✅' : '✍️👤'}
+    </button>
+    <button
+      onClick={() => handleSignAct(act, 'executor')}
+      className={`${act.signed_by_executor_at ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-900'}`}
+      title={act.signed_by_executor_at ? 'Уже подписан исполнителем' : 'Подписать (исполнитель)'}
+      disabled={!!act.signed_by_executor_at}
+    >
+      {act.signed_by_executor_at ? '✅' : '✍️🏢'}
+    </button>
+    {canDelete && <button onClick={() => setDeleteActTarget(act)} className="text-red-600 hover:text-red-900" title="Удалить">🗑️</button>}
+  </>
+)}
+
                               </td>
                             </tr>
                           ))}
