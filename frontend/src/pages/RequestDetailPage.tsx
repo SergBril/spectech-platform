@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { requestsApi, type Request, type StatusLogEntry } from '../api/requests';
 import { financeApi, type Invoice, type Act } from '../api/finance';
+import { exportApi, downloadBlob } from '../api/export';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   new: { label: 'Новая', color: 'bg-blue-100 text-blue-800', icon: '🆕' },
@@ -135,14 +136,7 @@ export const RequestDetailPage: React.FC = () => {
   const handleDownloadInvoicePdf = async (inv: Invoice) => {
     try {
       const blob = await financeApi.downloadInvoicePdf(inv.id);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${inv.document_number || `invoice-${inv.id}`}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `${inv.document_number || `invoice-${inv.id}`}.pdf`);
     } catch (err: any) {
       alert('Ошибка: ' + (err?.response?.data?.detail || err.message));
     }
@@ -150,6 +144,16 @@ export const RequestDetailPage: React.FC = () => {
 
   const handleCreateInvoice = () => {
     navigate(`/invoices?new=1&request_id=${request?.id}`);
+  };
+
+  const handleExportReport = async () => {
+    if (!request) return;
+    try {
+      const blob = await exportApi.requestReport(request.id);
+      downloadBlob(blob, `request_${request.id}_report.pdf`);
+    } catch (err: any) {
+      alert('Ошибка экспорта: ' + (err?.response?.data?.detail || err.message));
+    }
   };
 
   if (loading) {
@@ -232,7 +236,14 @@ export const RequestDetailPage: React.FC = () => {
                 </div>
               </div>
               {canEdit && (
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 flex-wrap gap-2">
+                  <button
+                    onClick={handleExportReport}
+                    className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
+                    title="Скачать PDF-отчёт по заявке"
+                  >
+                    📥 PDF-отчёт
+                  </button>
                   <label className="text-sm text-gray-600">Статус:</label>
                   <select
                     value={request.status}
