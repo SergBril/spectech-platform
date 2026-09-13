@@ -27,10 +27,12 @@ class RequestUpdate(BaseModel):
     object_address: str | None = None
     planned_start: datetime | None = None
     planned_end: datetime | None = None
+    shift_duration_hours: Decimal | None = None
     client_rate: Decimal | None = None
+    rate_type: str | None = None
     estimated_amount: Decimal | None = None
-    final_amount: Decimal | None = None
     priority: str | None = None
+    source_channel: str | None = None
     comment: str | None = None
 
 
