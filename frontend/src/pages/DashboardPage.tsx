@@ -1,64 +1,58 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import apiClient from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { vehiclesApi, type Vehicle } from '../api/vehicles';
+import { requestsApi, type Request } from '../api/requests';
+import { financeApi, type PaymentsDashboard } from '../api/finance';
+import { RevenueChart, StatusPieChart, TopRequestsChart, Sparkline } from '../components/AnalyticsCharts';
 
-interface DashboardMetrics {
-  vehicles: {
-    total: number;
-    active: number;
-  };
-  gps_points: {
-    total: number;
-    today: number;
-  };
-  alerts: {
-    total: number;
-    active: number;
-    critical: number;
-  };
-  fuel: {
-    total_volume: number;
-    total_cost: number;
-    week_volume: number;
-    week_cost: number;
-    drains_count: number;
-  };
-}
-
-export default function DashboardPage() {
+export const DashboardPage: React.FC = () => {
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const { user, logout, hasPermission } = useAuth();
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [requests, setRequests] = useState<Request[]>([]);
+  const [financeData, setFinanceData] = useState<PaymentsDashboard | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadMetrics();
+    loadData();
   }, []);
 
-  const loadMetrics = async () => {
-    try {
-      setLoading(true);
-      const response = await apiClient.get('/telematics/dashboard/summary');
-      setMetrics(response.data);
-    } catch (error) {
-      console.error('Failed to load metrics:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+const loadData = async () => {
+  try {
+    setLoading(true);
+    console.log('🔄 Loading dashboard data...');
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+    const [vehiclesData, requestsData, financeRes] = await Promise.allSettled([
+      vehiclesApi.getAll({ limit: 100 }),
+      requestsApi.getAll({ limit: 100 }),
+      financeApi.getDashboard(),
+    ]);
+
+    console.log('📦 Vehicles:', vehiclesData.status, vehiclesData.status === 'fulfilled' ? vehiclesData.value : vehiclesData.reason);
+    console.log('📦 Requests:', requestsData.status, requestsData.status === 'fulfilled' ? requestsData.value : requestsData.reason);
+    console.log('📦 Finance:', financeRes.status, financeRes.status === 'fulfilled' ? financeRes.value : financeRes.reason);
+
+    if (vehiclesData.status === 'fulfilled') setVehicles(vehiclesData.value);
+    if (requestsData.status === 'fulfilled') setRequests(requestsData.value);
+    if (financeRes.status === 'fulfilled') setFinanceData(financeRes.value);
+  } catch (err) {
+    console.error('❌ Failed to load dashboard:', err);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  const activeVehicles = vehicles.filter((v) => v.status === 'free' || v.status === 'working').length;
+  const pendingRequests = requests.filter((r) => r.status === 'new' || r.status === 'processing').length;
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Загрузка данных...</p>
+          <p className="mt-4 text-gray-600">Загрузка...</p>
         </div>
       </div>
     );
@@ -66,17 +60,17 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
+      {/* === NAVBAR === */}
       <nav className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
-            <div className="flex items-center">
+            <div className="flex items-center space-x-6">
               <h1 className="text-xl font-bold text-gray-900">🚜 СпецТехника Про</h1>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">{user?.email}</span>
               <button
-                onClick={handleLogout}
+                onClick={() => { logout(); navigate('/login'); }}
                 className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
               >
                 Выйти
@@ -86,153 +80,155 @@ export default function DashboardPage() {
         </div>
       </nav>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">
-            Добро пожаловать, {user?.full_name || user?.email}!
-          </h2>
+      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 space-y-8">
+        {/* === ПРИВЕТСТВИЕ === */}
+        <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-lg p-6 text-white">
+          <h2 className="text-2xl font-bold mb-2">Добро пожаловать, {user?.email?.split('@')[0]}!</h2>
+          <p className="text-blue-100">Обзор вашей спецтехники и финансов на сегодня</p>
+        </div>
 
-          {/* Metrics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {/* Vehicles Card */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-gray-500">Техника</h3>
-                <span className="text-3xl">🚜</span>
+        {/* === КЛЮЧЕВЫЕ МЕТРИКИ === */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Техника</p>
+                <p className="text-3xl font-bold text-gray-900">{vehicles.length}</p>
+                <p className="text-xs text-green-600">Активных: {activeVehicles}</p>
               </div>
-              <div className="text-3xl font-bold text-gray-900 mb-2">
-                {metrics?.vehicles?.total || 0}
-              </div>
-              <div className="text-sm text-gray-600">
-                <div className="flex justify-between">
-                  <span>Активных:</span>
-                  <span className="font-semibold">{metrics?.vehicles?.active || 0}</span>
-                </div>
-              </div>
+              <span className="text-4xl">🚜</span>
             </div>
+          </div>
 
-            {/* GPS Points Card */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-gray-500">GPS Точки</h3>
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Заявки</p>
+                <p className="text-3xl font-bold text-gray-900">{requests.length}</p>
+                <p className="text-xs text-orange-600">В обработке: {pendingRequests}</p>
+              </div>
+              <span className="text-4xl">📋</span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Общий доход</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {financeData ? `${parseFloat(financeData.total_revenue).toLocaleString('ru-RU')} ₽` : '—'}
+                </p>
+                <p className="text-xs text-gray-600">Счетов: {financeData?.invoices_count || 0}</p>
+              </div>
+              <span className="text-4xl">💰</span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Оплачено</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {financeData ? `${parseFloat(financeData.total_paid).toLocaleString('ru-RU')} ₽` : '—'}
+                </p>
+                <p className="text-xs text-gray-600">Актов: {financeData?.acts_count || 0}</p>
+              </div>
+              <span className="text-4xl">✅</span>
+            </div>
+          </div>
+        </div>
+
+        {/* === ГРАФИКИ АНАЛИТИКИ (2 колонки) === */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <RevenueChart />
+          <StatusPieChart />
+        </div>
+
+        {/* === ТОП ЗАЯВОК + SPARKLINE === */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <TopRequestsChart />
+          </div>
+          <div className="space-y-6">
+            <Sparkline />
+            {/* Мини-метрики telematics (если нет данных — просто заглушки) */}
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase font-semibold">GPS точки</p>
+                  <p className="text-xl font-bold text-gray-900">0</p>
+                  <p className="text-xs text-gray-600">Всего</p>
+                </div>
                 <span className="text-3xl">📍</span>
               </div>
-              <div className="text-3xl font-bold text-gray-900 mb-2">
-                {metrics?.gps_points?.today || 0}
-              </div>
-              <div className="text-sm text-gray-600">
-                <div className="flex justify-between">
-                  <span>За сегодня</span>
-                  <span className="text-xs text-gray-400">
-                    Всего: {metrics?.gps_points?.total || 0}
-                  </span>
-                </div>
-              </div>
             </div>
-
-            {/* Alerts Card */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-gray-500">Алерты</h3>
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase font-semibold">Алерты</p>
+                  <p className="text-xl font-bold text-orange-600">0</p>
+                  <p className="text-xs text-gray-600">Активных</p>
+                </div>
                 <span className="text-3xl">⚠️</span>
               </div>
-              <div className="text-3xl font-bold text-gray-900 mb-2">
-                {metrics?.alerts?.active || 0}
-              </div>
-              <div className="text-sm text-gray-600">
-                <div className="flex justify-between">
-                  <span>Активных</span>
-                  <span className={`text-xs ${metrics?.alerts?.critical ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
-                    Критических: {metrics?.alerts?.critical || 0}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Fuel Card */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-gray-500">Топливо</h3>
-                <span className="text-3xl">⛽</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 mb-2">
-                {metrics?.fuel?.week_volume?.toFixed(0) || 0} л
-              </div>
-              <div className="text-sm text-gray-600">
-                <div className="flex justify-between">
-                  <span>За неделю</span>
-                  <span className="text-xs text-gray-400">
-                    {metrics?.fuel?.week_cost?.toFixed(0) || 0} ₽
-                  </span>
-                </div>
-              </div>
             </div>
           </div>
+        </div>
 
-          {/* Quick Actions */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Быстрые действия</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <button
-                onClick={() => navigate('/vehicles')}
-                className="flex items-center p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
-              >
-                <span className="text-2xl mr-3">🚜</span>
-                <div className="text-left">
-                  <div className="font-medium text-gray-900">Управление техникой</div>
-                  <div className="text-sm text-gray-500">Просмотр и редактирование</div>
-                </div>
-              </button>
+        {/* === БЫСТРЫЕ ДЕЙСТВИЯ === */}
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Быстрые действия</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <button
+              onClick={() => navigate('/vehicles')}
+              className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow text-left"
+            >
+              <span className="text-4xl">🚜</span>
+              <h4 className="mt-3 text-lg font-semibold text-gray-900">Управление техникой</h4>
+              <p className="text-sm text-gray-600">Просмотр и редактирование</p>
+            </button>
 
-              <button
-                onClick={() => navigate('/requests')}
-                className="flex items-center p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
-              >
-                <span className="text-2xl mr-3">📋</span>
-                <div className="text-left">
-                  <div className="font-medium text-gray-900">Заявки</div>
-                  <div className="text-sm text-gray-500">Управление заявками</div>
-                </div>
-              </button>
+            <button
+              onClick={() => navigate('/requests')}
+              className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow text-left"
+            >
+              <span className="text-4xl">📋</span>
+              <h4 className="mt-3 text-lg font-semibold text-gray-900">Заявки</h4>
+              <p className="text-sm text-gray-600">Управление заявками</p>
+            </button>
 
-              <button
-                onClick={() => navigate('/finance')}
-                className="flex items-center p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
-              >
-                <span className="text-2xl mr-3">💰</span>
-                <div className="text-left">
-                  <div className="font-medium text-gray-900">Финансы</div>
-                  <div className="text-sm text-gray-500">Счета, акты, выплаты</div>
-                </div>
-              </button>
+            <button
+              onClick={() => navigate('/finance')}
+              className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow text-left"
+            >
+              <span className="text-4xl">💰</span>
+              <h4 className="mt-3 text-lg font-semibold text-gray-900">Финансы</h4>
+              <p className="text-sm text-gray-600">Счета, акты, выплаты</p>
+            </button>
+          </div>
+        </div>
+
+        {/* === ИНФО О ПОЛЬЗОВАТЕЛЕ === */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Информация о пользователе</h3>
+          <dl className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div>
+              <dt className="text-gray-500">Email</dt>
+              <dd className="font-medium text-gray-900">{user?.email}</dd>
             </div>
-          </div>
-
-          {/* User Info */}
-          <div className="mt-8 bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Информация о пользователе</h3>
-            <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <dt className="text-sm text-gray-500">Email</dt>
-                <dd className="text-gray-900">{user?.email}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-gray-500">Имя</dt>
-                <dd className="text-gray-900">{user?.full_name || '-'}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-gray-500">Роль</dt>
-                <dd className="text-gray-900">{user?.role || 'user'}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-gray-500">Superuser</dt>
-                <dd className="text-gray-900">{user?.is_superuser ? 'Да' : 'Нет'}</dd>
-              </div>
-            </dl>
-          </div>
+            <div>
+              <dt className="text-gray-500">Роль</dt>
+              <dd className="font-medium text-gray-900">user</dd>
+            </div>
+            <div>
+              <dt className="text-gray-500">Superuser</dt>
+              <dd className="font-medium text-gray-900">Да</dd>
+            </div>
+          </dl>
         </div>
       </main>
     </div>
   );
-}
+};
+
+export default DashboardPage;
