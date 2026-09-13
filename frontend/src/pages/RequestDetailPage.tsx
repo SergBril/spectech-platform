@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { requestsApi, type Request } from '../api/requests';
+import { requestsApi, type Request, type StatusLogEntry } from '../api/requests';
 import { financeApi, type Invoice, type Act } from '../api/finance';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
@@ -63,6 +63,7 @@ export const RequestDetailPage: React.FC = () => {
   const [request, setRequest] = useState<Request | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [acts, setActs] = useState<Act[]>([]);
+  const [history, setHistory] = useState<StatusLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
@@ -77,10 +78,11 @@ export const RequestDetailPage: React.FC = () => {
   const loadData = async (requestId: number) => {
     try {
       setLoading(true);
-      const [reqData, allInvoices, allActs] = await Promise.allSettled([
+      const [reqData, allInvoices, allActs, historyData] = await Promise.allSettled([
         requestsApi.getById(requestId),
         financeApi.getInvoices({ limit: 500 }),
         financeApi.getActs({ limit: 500 }),
+        requestsApi.getHistory(requestId),
       ]);
 
       if (reqData.status === 'fulfilled') {
@@ -96,6 +98,9 @@ export const RequestDetailPage: React.FC = () => {
       if (allActs.status === 'fulfilled') {
         setActs(allActs.value.filter((a) => a.request_id === requestId));
       }
+      if (historyData.status === 'fulfilled') {
+        setHistory(historyData.value);
+      }
       setError('');
     } catch (err: any) {
       console.error('Failed to load request:', err);
@@ -109,7 +114,6 @@ export const RequestDetailPage: React.FC = () => {
     if (!request) return;
     const config = WORKFLOW.find((w) => w.value === newStatus);
     if (!confirm(`Изменить статус на "${config?.icon} ${config?.label}"?`)) {
-      // Откатываем селект
       window.location.reload();
       return;
     }
@@ -117,6 +121,9 @@ export const RequestDetailPage: React.FC = () => {
       setStatusUpdating(true);
       const updated = await requestsApi.update(request.id, { status: newStatus as any });
       setRequest(updated);
+      // Перезагружаем историю после смены статуса
+      const historyData = await requestsApi.getHistory(request.id);
+      setHistory(historyData);
     } catch (err: any) {
       alert('Ошибка: ' + (err?.response?.data?.detail || err.message));
       window.location.reload();
@@ -142,7 +149,6 @@ export const RequestDetailPage: React.FC = () => {
   };
 
   const handleCreateInvoice = () => {
-    // Переходим на страницу счетов с параметром request_id
     navigate(`/invoices?new=1&request_id=${request?.id}`);
   };
 
@@ -176,7 +182,6 @@ export const RequestDetailPage: React.FC = () => {
 
   const statusConfig = STATUS_CONFIG[request.status] || { label: request.status, color: 'bg-gray-100', icon: '📋' };
 
-  // Считаем итоги по счетам
   const invoicesTotal = invoices.reduce((sum, i) => sum + parseFloat(i.total || '0'), 0);
   const invoicesPaid = invoices.reduce((sum, i) => sum + parseFloat(i.paid_amount || '0'), 0);
   const invoicesProgress = invoicesTotal > 0 ? (invoicesPaid / invoicesTotal) * 100 : 0;
@@ -447,6 +452,72 @@ export const RequestDetailPage: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+
+          {/* === ИСТОРИЯ СТАТУСОВ === */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              📜 История изменений ({history.length})
+            </h3>
+
+            {history.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <div className="text-4xl mb-2">📜</div>
+                <p>История изменений пуста</p>
+              </div>
+            ) : (
+              <div className="relative">
+                <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+
+                <div className="space-y-4">
+                  {history.map((entry, idx) => {
+                    const toConfig = STATUS_CONFIG[entry.to_status] || { label: entry.to_status, color: 'bg-gray-100', icon: '📋' };
+                    const fromConfig = entry.from_status ? (STATUS_CONFIG[entry.from_status] || { label: entry.from_status, color: 'bg-gray-100', icon: '📋' }) : null;
+                    const isLast = idx === history.length - 1;
+
+                    return (
+                      <div key={entry.id} className="relative flex items-start gap-4 pl-14">
+                        <div className={`absolute left-4 top-2 w-5 h-5 rounded-full border-4 border-white flex items-center justify-center text-xs ${
+                          isLast ? 'bg-blue-500' : 'bg-gray-400'
+                        }`}>
+                          <span className="text-white text-[10px]">{toConfig.icon}</span>
+                        </div>
+
+                        <div className={`flex-1 ${isLast ? 'bg-blue-50 border-2 border-blue-200' : 'bg-gray-50'} rounded-lg p-4`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {fromConfig && (
+                                <>
+                                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${fromConfig.color}`}>
+                                    {fromConfig.icon} {fromConfig.label}
+                                  </span>
+                                  <span className="text-gray-400">→</span>
+                                </>
+                              )}
+                              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${toConfig.color}`}>
+                                {toConfig.icon} {toConfig.label}
+                              </span>
+                            </div>
+                            <span className="text-xs text-gray-500">
+                              {entry.changed_at ? new Date(entry.changed_at).toLocaleString('ru-RU') : '—'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-700">
+                              👤 <span className="font-medium">{entry.changed_by_email}</span>
+                            </span>
+                            {entry.comment && (
+                              <span className="text-gray-500 italic text-xs ml-2">"{entry.comment}"</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

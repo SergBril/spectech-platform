@@ -7,7 +7,7 @@ from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
 from app.models.dispatch import Request, RequestAssignment, RequestStatusLog
-from app.schemas.request import RequestAssign, RequestCreate, RequestRead
+from app.schemas.request import RequestAssign, RequestCreate, RequestRead, RequestUpdate
 
 router = APIRouter()
 
@@ -142,3 +142,75 @@ def assign_request(
     db.commit()
     db.refresh(request)
     return request
+
+
+from app.schemas.request import RequestUpdate
+
+
+@router.patch("/{request_id}", response_model=RequestRead)
+def update_request(
+    request_id: int,
+    payload: RequestUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_permission("requests", "update")),
+):
+    """Обновить заявку (включая смену статуса с логированием)."""
+    request = db.get(Request, request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+    old_status = request.status
+
+    # Если меняется статус — логируем переход
+    if "status" in update_data and update_data["status"] != old_status:
+        new_status = update_data["status"]
+        db.add(
+            RequestStatusLog(
+                request_id=request.id,
+                from_status=old_status,
+                to_status=new_status,
+                changed_by_user_id=current_user.id,
+                comment=f"Статус изменён вручную: {old_status} → {new_status}",
+            )
+        )
+
+    for field, value in update_data.items():
+        setattr(request, field, value)
+
+    db.commit()
+    db.refresh(request)
+    return request
+
+
+@router.get("/{request_id}/history")
+def get_request_history(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Получить историю изменений статуса заявки."""
+    request = db.get(Request, request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    stmt = (
+        select(RequestStatusLog, User.email)
+        .outerjoin(User, User.id == RequestStatusLog.changed_by_user_id)
+        .where(RequestStatusLog.request_id == request_id)
+        .order_by(RequestStatusLog.changed_at.asc())
+    )
+    results = db.execute(stmt).all()
+
+    return [
+        {
+            "id": log.id,
+            "from_status": log.from_status,
+            "to_status": log.to_status,
+            "changed_by_email": email or "system",
+            "comment": log.comment,
+            "changed_at": log.changed_at.isoformat() if log.changed_at else None,
+        }
+        for log, email in results
+    ]
