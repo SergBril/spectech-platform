@@ -44,6 +44,10 @@ const processQueue = (error: Error | null, token: string | null = null) => {
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
+    // Пропускаем blob-запросы (PDF скачивание)
+    if (error.config?.responseType === 'blob') {
+      return Promise.reject(error);
+    }
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     // Если 401 и это не повторная попытка

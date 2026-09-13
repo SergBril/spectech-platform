@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; }
+        h1 { color: #333; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Счёт {{ invoice.document_number }}</h1>
+    <p><strong>Дата:</strong> {{ invoice.invoice_date }}</p>
+    <p><strong>Срок оплаты:</strong> {{ invoice.due_date }}</p>
+
+    <h2>Позиции</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Описание</th>
+                <th>Кол-во</th>
+                <th>Цена</th>
+                <th>Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in invoice.items %}
+            <tr>
+                <td>{{ item.description }}</td>
+                <td>{{ item.quantity }}</td>
+                <td>{{ item.unit_price }} ₽</td>
+                <td>{{ item.amount }} ₽</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h3>Итого: {{ invoice.total }} ₽</h3>
+    <p>НДС ({{ invoice.vat_rate }}%): {{ invoice.vat_amount }} ₽</p>
+</body>
+</html>

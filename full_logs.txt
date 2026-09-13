@@ -1,0 +1,7 @@
+  File "/usr/local/lib/python3.12/site-packages/starlette/responses.py", line 49, in render
+    return content.encode(self.charset)  # type: ignore
+           ^^^^^^^^^^^^^^
+AttributeError: 'bytearray' object has no attribute 'encode'. Did you mean: 'decode'?
+[1mREQUEST                            [0m
+[1mREQUEST                            [0m
+[1mREQUEST                            [0m

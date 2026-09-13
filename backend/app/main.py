@@ -127,13 +127,14 @@ allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.stri
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:3000",  # Альтернативный порт
+        "http://localhost:5173",
+        "http://localhost:3001",
         "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
-    allow_methods=["*"],  # Все HTTP методы
-    allow_headers=["*"],  # Все заголовки
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition"],  # ← ВАЖНО для скачивания файлов!
 )
 
 app.add_middleware(RequestLoggingMiddleware)
