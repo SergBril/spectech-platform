@@ -23,6 +23,7 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
   const [totalAmount, setTotalAmount] = useState(act?.total_amount || '');
   const [actDate, setActDate] = useState(toDateString(act?.act_date));
   const [comment, setComment] = useState(act?.comment || '');
+  const [userEditedAmount, setUserEditedAmount] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -32,15 +33,20 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
       .catch(() => setRequests([]));
   }, []);
 
-  // Автоподстановка данных из заявки
+  // ✅ Автозаполнение суммы при смене заявки (только в режиме создания и если пользователь не редактировал вручную)
   useEffect(() => {
-    if (requestId && !act) {
+    if (requestId && !act && !userEditedAmount) {
       const req = requests.find((r) => r.id === parseInt(requestId));
-      if (req && !totalAmount) {
-        setTotalAmount(req.estimated_amount?.toString() || '');
+      if (req?.estimated_amount) {
+        setTotalAmount(req.estimated_amount.toString());
       }
     }
-  }, [requestId, requests]);
+  }, [requestId, requests, act, userEditedAmount]);
+
+  const handleAmountChange = (value: string) => {
+    setTotalAmount(value);
+    setUserEditedAmount(true); // Пользователь начал редактировать вручную
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,7 +103,7 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
                 <option value="">— Выберите заявку —</option>
                 {requests.map((req) => (
                   <option key={req.id} value={req.id}>
-                    #{req.id} — {req.work_type} ({req.object_address})
+                    #{req.id} — {req.work_type} ({req.object_address}) — {req.estimated_amount} ₽
                   </option>
                 ))}
               </select>
@@ -121,7 +127,7 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
                   step="0.01"
                   min="0"
                   value={totalAmount}
-                  onChange={(e) => setTotalAmount(e.target.value)}
+                  onChange={(e) => handleAmountChange(e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
                   required
                 />
