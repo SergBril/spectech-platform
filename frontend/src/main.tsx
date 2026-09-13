@@ -101,6 +101,14 @@ const AppRoutes = () => {
     </ProtectedRoute>
   }
 />
+<Route
+  path="/requests"
+  element={
+    <ProtectedRoute>
+      <RequestsPage />
+    </ProtectedRoute>
+  }
+/>
 
       {/* 404 - редирект на главную */}
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -202,7 +202,13 @@ export const RequestsPage: React.FC = () => {
                   {requests.map((req) => (
                     <tr key={req.id} className="hover:bg-gray-50">
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
-                        #{req.id}
+                        <button
+                          onClick={() => navigate(`/requests/${req.id}`)}
+                          className="text-blue-600 hover:text-blue-900 hover:underline font-medium"
+                          title="Открыть детали заявки"
+                        >
+                          #{req.id}
+                        </button>
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-900">
                         <div className="font-medium">{req.work_type || '—'}</div>
