@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { financeApi, type Invoice, type Act, type Payout, type PaymentsDashboard } from '../api/finance';
+import { financeApi, type Invoice, type Act, type Payout, type PaymentsDashboard, type ActCreate } from '../api/finance';
 import InvoiceFormModal from '../components/InvoiceFormModal';
 import PaymentModal from '../components/PaymentModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
+import ActFormModal from '../components/ActFormModal';
 
 const INVOICE_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
@@ -56,12 +57,17 @@ export const FinancePage: React.FC = () => {
 
   // Модальные окна
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
+  const [editingAct, setEditingAct] = useState<Act | null>(null);
+  const [isActFormOpen, setIsActFormOpen] = useState(false);
   const [paymentTarget, setPaymentTarget] = useState<Invoice | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
+  const [deleteActTarget, setDeleteActTarget] = useState<Act | null>(null);
 
   const canView = hasPermission('finance', 'view');
   const canEdit = hasPermission('finance', 'update');
   const canDelete = hasPermission('finance', 'delete');
+  const canCreate = hasPermission('finance', 'create');
 
   useEffect(() => {
     if (!canView) return;
@@ -93,14 +99,11 @@ export const FinancePage: React.FC = () => {
   };
 
   const handleGoToRequest = (requestId: number | null) => {
-    if (requestId) {
-      navigate(`/requests/${requestId}`);
-    }
+    if (requestId) navigate(`/requests/${requestId}`);
   };
 
-  const handleEditInvoice = (inv: Invoice) => {
-    setEditingInvoice(inv);
-  };
+  // === ИНВОЙСЫ ===
+  const handleEditInvoice = (inv: Invoice) => setEditingInvoice(inv);
 
   const handleDeleteInvoice = async () => {
     if (!deleteTarget) return;
@@ -114,23 +117,33 @@ export const FinancePage: React.FC = () => {
     }
   };
 
-const handleCancelInvoice = async (inv: Invoice) => {
-  if (!confirm(`Отменить счёт ${inv.document_number}? Это действие нельзя отменить.`)) return;
-  try {
-    const updated = await financeApi.updateInvoice(inv.id, { status: 'cancelled' } as any);
-    setInvoices(invoices.map((i) => (i.id === inv.id ? updated : i)));
-  } catch (err: any) {
-    alert('Ошибка: ' + (err?.response?.data?.detail || err.message));
-  }
-};
+  const handleSendInvoice = async (inv: Invoice) => {
+    if (!confirm(`Отправить счёт ${inv.document_number} клиенту?`)) return;
+    try {
+      const updated = await financeApi.sendInvoice(inv.id);
+      setInvoices(invoices.map((i) => (i.id === inv.id ? updated : i)));
+    } catch (err: any) {
+      alert('Ошибка отправки: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleCancelInvoice = async (inv: Invoice) => {
+    if (!confirm(`Отменить счёт ${inv.document_number}?`)) return;
+    try {
+      const updated = await financeApi.updateInvoice(inv.id, { status: 'cancelled' } as any);
+      setInvoices(invoices.map((i) => (i.id === inv.id ? updated : i)));
+    } catch (err: any) {
+      alert('Ошибка: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
 
   const handleDownloadPdf = async (type: 'invoice' | 'act' | 'payout', id: number, docNumber: string) => {
     try {
       let blob: Blob;
-      if (type === 'invoice') {
-        blob = await financeApi.downloadInvoicePdf(id);
-      } else {
-        alert('PDF для актов и выплат пока не поддерживается фронтендом');
+      if (type === 'invoice') blob = await financeApi.downloadInvoicePdf(id);
+      else if (type === 'act') blob = await financeApi.downloadActPdf(id);
+      else {
+        alert('PDF для выплат пока не поддерживается');
         return;
       }
       const url = URL.createObjectURL(blob);
@@ -153,6 +166,7 @@ const handleCancelInvoice = async (inv: Invoice) => {
         setInvoices(invoices.map((i) => (i.id === editingInvoice.id ? updated : i)));
       }
       setEditingInvoice(null);
+      setIsInvoiceFormOpen(false);
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
       if (Array.isArray(detail)) {
@@ -169,13 +183,58 @@ const handleCancelInvoice = async (inv: Invoice) => {
     loadData();
   };
 
+  // === АКТЫ ===
+  const handleSaveAct = async (data: ActCreate) => {
+    try {
+      if (editingAct) {
+        const updated = await financeApi.updateAct(editingAct.id, data);
+        setActs(acts.map((a) => (a.id === editingAct.id ? updated : a)));
+      } else {
+        const created = await financeApi.createAct(data);
+        setActs([created, ...acts]);
+      }
+      setEditingAct(null);
+      setIsActFormOpen(false);
+      loadData();
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        alert('Ошибка валидации: ' + detail.map((d: any) => `${d.loc?.join('.')}: ${d.msg}`).join(', '));
+      } else {
+        alert('Ошибка: ' + (detail || err.message));
+      }
+      throw err;
+    }
+  };
+
+  const handleDeleteAct = async () => {
+    if (!deleteActTarget) return;
+    try {
+      await financeApi.deleteAct(deleteActTarget.id);
+      setActs(acts.filter((a) => a.id !== deleteActTarget.id));
+      setDeleteActTarget(null);
+      loadData();
+    } catch (err: any) {
+      alert('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleSignAct = async (act: Act, role: 'client' | 'executor') => {
+    if (!confirm(`Подписать акт ${act.document_number} как ${role}?`)) return;
+    try {
+      const updated = await financeApi.signAct(act.id, role);
+      setActs(acts.map((a) => (a.id === act.id ? updated : a)));
+    } catch (err: any) {
+      alert('Ошибка: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
   if (!canView) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white rounded-lg shadow p-8 max-w-md text-center">
           <div className="text-5xl mb-4">🔒</div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Доступ запрещён</h2>
-          <p className="text-gray-600 mb-4">У вас нет прав для просмотра финансового раздела</p>
           <button onClick={() => navigate('/')} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
             На главную
           </button>
@@ -187,10 +246,7 @@ const handleCancelInvoice = async (inv: Invoice) => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Загрузка финансовых данных...</p>
-        </div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -224,17 +280,12 @@ const handleCancelInvoice = async (inv: Invoice) => {
         <div className="px-4 py-6 sm:px-0">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">Финансы</h2>
-            <button
-              onClick={() => navigate('/invoices')}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-            >
+            <button onClick={() => navigate('/invoices')} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
               Управление счетами →
             </button>
           </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">{error}</div>
-          )}
+          {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">{error}</div>}
 
           {/* Metrics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -243,51 +294,32 @@ const handleCancelInvoice = async (inv: Invoice) => {
                 <h3 className="text-sm font-medium text-gray-500">Общий доход</h3>
                 <span className="text-3xl">💰</span>
               </div>
-              <div className="text-3xl font-bold text-gray-900 mb-2">
-                {formatMoney(dashboard?.total_revenue)}
-              </div>
-              <div className="text-sm text-gray-600">
-                Счетов: {dashboard?.invoices_count || 0}
-              </div>
+              <div className="text-3xl font-bold text-gray-900 mb-2">{formatMoney(dashboard?.total_revenue)}</div>
+              <div className="text-sm text-gray-600">Счетов: {dashboard?.invoices_count || 0}</div>
             </div>
-
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-medium text-gray-500">Оплачено</h3>
                 <span className="text-3xl">✅</span>
               </div>
-              <div className="text-3xl font-bold text-green-600 mb-2">
-                {formatMoney(dashboard?.total_paid)}
-              </div>
-              <div className="text-sm text-gray-600">
-                Актов: {dashboard?.acts_count || 0}
-              </div>
+              <div className="text-3xl font-bold text-green-600 mb-2">{formatMoney(dashboard?.total_paid)}</div>
+              <div className="text-sm text-gray-600">Актов: {dashboard?.acts_count || 0}</div>
             </div>
-
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-medium text-gray-500">Комиссия</h3>
                 <span className="text-3xl">📊</span>
               </div>
-              <div className="text-3xl font-bold text-blue-600 mb-2">
-                {formatMoney(dashboard?.total_commission_earned)}
-              </div>
-              <div className="text-sm text-gray-600">
-                Заработано
-              </div>
+              <div className="text-3xl font-bold text-blue-600 mb-2">{formatMoney(dashboard?.total_commission_earned)}</div>
+              <div className="text-sm text-gray-600">Заработано</div>
             </div>
-
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-medium text-gray-500">Задолженность</h3>
                 <span className="text-3xl">⚠️</span>
               </div>
-              <div className="text-3xl font-bold text-orange-600 mb-2">
-                {formatMoney(dashboard?.total_outstanding)}
-              </div>
-              <div className="text-sm text-gray-600">
-                Выплат: {dashboard?.payouts_count || 0}
-              </div>
+              <div className="text-3xl font-bold text-orange-600 mb-2">{formatMoney(dashboard?.total_outstanding)}</div>
+              <div className="text-sm text-gray-600">Выплат: {dashboard?.payouts_count || 0}</div>
             </div>
           </div>
 
@@ -295,43 +327,34 @@ const handleCancelInvoice = async (inv: Invoice) => {
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="border-b border-gray-200">
               <nav className="flex">
-                <button
-                  onClick={() => setActiveTab('invoices')}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 ${
-                    activeTab === 'invoices'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Счета ({invoices.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('acts')}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 ${
-                    activeTab === 'acts'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Акты ({acts.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('payouts')}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 ${
-                    activeTab === 'payouts'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Выплаты ({payouts.length})
-                </button>
+                {(['invoices', 'acts', 'payouts'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-6 py-3 text-sm font-medium border-b-2 ${
+                      activeTab === tab ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {tab === 'invoices' ? `Счета (${invoices.length})` : tab === 'acts' ? `Акты (${acts.length})` : `Выплаты (${payouts.length})`}
+                  </button>
+                ))}
               </nav>
             </div>
 
             <div className="p-6">
-              {/* === ВКЛАДКА СЧЕТА === */}
+              {/* === СЧЕТА === */}
               {activeTab === 'invoices' && (
                 <div>
+                  <div className="flex justify-end mb-4">
+                    {canCreate && (
+                      <button
+                        onClick={() => { setEditingInvoice(null); setIsInvoiceFormOpen(true); }}
+                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+                      >
+                        + Новый счёт
+                      </button>
+                    )}
+                  </div>
                   {invoices.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">
                       <div className="text-5xl mb-4">💰</div>
@@ -356,96 +379,38 @@ const handleCancelInvoice = async (inv: Invoice) => {
                             const paid = parseFloat(inv.paid_amount || '0');
                             const total = parseFloat(inv.total || '0');
                             const canAcceptPayment = inv.status !== 'paid' && inv.status !== 'cancelled' && paid < total;
-
                             return (
                               <tr key={inv.id} className="hover:bg-gray-50">
                                 <td className="px-4 py-3 whitespace-nowrap">
-                                  <button
-                                    onClick={() => handleGoToRequest(inv.request_id)}
-                                    className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline"
-                                    title="Перейти к заявке"
-                                  >
+                                  <button onClick={() => handleGoToRequest(inv.request_id)} className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline">
                                     {inv.document_number || `#${inv.id}`}
                                   </button>
                                 </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-                                  {formatDate(inv.invoice_date)}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-                                  {formatDate(inv.due_date)}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                                  {formatMoney(inv.total)}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">
-                                  {formatMoney(inv.paid_amount)}
-                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(inv.invoice_date)}</td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(inv.due_date)}</td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(inv.total)}</td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">{formatMoney(inv.paid_amount)}</td>
                                 <td className="px-4 py-3 whitespace-nowrap">
                                   <span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>
                                     {INVOICE_STATUS_LABELS[inv.status]?.label || inv.status}
                                   </span>
                                 </td>
-<td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-  {/* PDF — всегда доступен */}
-  <button
-    onClick={() => handleDownloadPdf('invoice', inv.id, inv.document_number)}
-    className="text-purple-600 hover:text-purple-900"
-    title="Скачать PDF"
-  >
-    📄 PDF
-  </button>
-
-  {/* Действия для draft */}
-  {inv.status === 'draft' && canEdit && (
-    <>
-      <button
-        onClick={() => handleSendInvoice(inv)}
-        className="text-blue-600 hover:text-blue-900"
-        title="Отправить клиенту"
-      >
-        ✉️
-      </button>
-      <button
-        onClick={() => handleEditInvoice(inv)}
-        className="text-gray-600 hover:text-gray-900"
-        title="Редактировать"
-      >
-        ✏️
-      </button>
-      {canDelete && (
-        <button
-          onClick={() => setDeleteTarget(inv)}
-          className="text-red-600 hover:text-red-900"
-          title="Удалить"
-        >
-          🗑️
-        </button>
-      )}
-    </>
-  )}
-
-  {/* Принять оплату — для неоплаченных полностью */}
-  {canAcceptPayment && canEdit && (
-    <button
-      onClick={() => setPaymentTarget(inv)}
-      className="text-green-600 hover:text-green-900 font-medium"
-      title="Принять оплату"
-    >
-      💳
-    </button>
-  )}
-
-  {/* Отменить — для sent/overdue/partially_paid */}
-  {['sent', 'overdue', 'partially_paid'].includes(inv.status) && canEdit && (
-    <button
-      onClick={() => handleCancelInvoice(inv)}
-      className="text-orange-600 hover:text-orange-900"
-      title="Отменить счёт"
-    >
-      ❌
-    </button>
-  )}
-</td>
+                                <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
+                                  <button onClick={() => handleDownloadPdf('invoice', inv.id, inv.document_number)} className="text-purple-600 hover:text-purple-900" title="PDF">📄</button>
+                                  {inv.status === 'draft' && canEdit && (
+                                    <>
+                                      <button onClick={() => handleSendInvoice(inv)} className="text-blue-600 hover:text-blue-900" title="Отправить">✉️</button>
+                                      <button onClick={() => handleEditInvoice(inv)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
+                                      {canDelete && <button onClick={() => setDeleteTarget(inv)} className="text-red-600 hover:text-red-900" title="Удалить">🗑️</button>}
+                                    </>
+                                  )}
+                                  {canAcceptPayment && canEdit && (
+                                    <button onClick={() => setPaymentTarget(inv)} className="text-green-600 hover:text-green-900 font-medium" title="Принять оплату">💳</button>
+                                  )}
+                                  {['sent', 'overdue', 'partially_paid'].includes(inv.status) && canEdit && (
+                                    <button onClick={() => handleCancelInvoice(inv)} className="text-orange-600 hover:text-orange-900" title="Отменить">❌</button>
+                                  )}
+                                </td>
                               </tr>
                             );
                           })}
@@ -456,9 +421,19 @@ const handleCancelInvoice = async (inv: Invoice) => {
                 </div>
               )}
 
-              {/* === ВКЛАДКА АКТЫ === */}
+              {/* === АКТЫ === */}
               {activeTab === 'acts' && (
                 <div>
+                  <div className="flex justify-end mb-4">
+                    {canCreate && (
+                      <button
+                        onClick={() => { setEditingAct(null); setIsActFormOpen(true); }}
+                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+                      >
+                        + Новый акт
+                      </button>
+                    )}
+                  </div>
                   {acts.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">
                       <div className="text-5xl mb-4">📄</div>
@@ -480,27 +455,26 @@ const handleCancelInvoice = async (inv: Invoice) => {
                           {acts.map((act) => (
                             <tr key={act.id} className="hover:bg-gray-50">
                               <td className="px-4 py-3 whitespace-nowrap">
-                                <button
-                                  onClick={() => handleGoToRequest(act.request_id)}
-                                  className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline"
-                                  title="Перейти к заявке"
-                                >
+                                <button onClick={() => handleGoToRequest(act.request_id)} className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline">
                                   {act.document_number || `#${act.id}`}
                                 </button>
                               </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-                                {formatDate(act.act_date)}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                                {formatMoney(act.total_amount)}
-                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(act.act_date)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(act.total_amount)}</td>
                               <td className="px-4 py-3 whitespace-nowrap">
                                 <span className={`px-2 py-1 text-xs font-semibold rounded-full ${ACT_STATUS_LABELS[act.status]?.color || 'bg-gray-100'}`}>
                                   {ACT_STATUS_LABELS[act.status]?.label || act.status}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
-                                <span className="text-gray-400 italic">PDF в разработке</span>
+                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
+                                <button onClick={() => handleDownloadPdf('act', act.id, act.document_number)} className="text-purple-600 hover:text-purple-900" title="PDF">📄</button>
+                                {act.status === 'draft' && canEdit && (
+                                  <>
+                                    <button onClick={() => setEditingAct(act)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
+                                    <button onClick={() => handleSignAct(act, 'client')} className="text-green-600 hover:text-green-900" title="Подписать (клиент)">✍️</button>
+                                    {canDelete && <button onClick={() => setDeleteActTarget(act)} className="text-red-600 hover:text-red-900" title="Удалить">🗑️</button>}
+                                  </>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -511,7 +485,7 @@ const handleCancelInvoice = async (inv: Invoice) => {
                 </div>
               )}
 
-              {/* === ВКЛАДКА ВЫПЛАТЫ === */}
+              {/* === ВЫПЛАТЫ === */}
               {activeTab === 'payouts' && (
                 <div>
                   {payouts.length === 0 ? (
@@ -529,37 +503,23 @@ const handleCancelInvoice = async (inv: Invoice) => {
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Комиссия</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {payouts.map((p) => (
                             <tr key={p.id} className="hover:bg-gray-50">
                               <td className="px-4 py-3 whitespace-nowrap">
-                                <button
-                                  onClick={() => handleGoToRequest(p.request_id)}
-                                  className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline"
-                                  title="Перейти к заявке"
-                                >
+                                <button onClick={() => handleGoToRequest(p.request_id)} className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline">
                                   {p.document_number || `#${p.id}`}
                                 </button>
                               </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-                                {formatDate(p.payout_date)}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                                {formatMoney(p.net_amount)}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-orange-600">
-                                {formatMoney(p.platform_commission)}
-                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(p.payout_date)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(p.net_amount)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-orange-600">{formatMoney(p.platform_commission)}</td>
                               <td className="px-4 py-3 whitespace-nowrap">
                                 <span className={`px-2 py-1 text-xs font-semibold rounded-full ${PAYOUT_STATUS_LABELS[p.status]?.color || 'bg-gray-100'}`}>
                                   {PAYOUT_STATUS_LABELS[p.status]?.label || p.status}
                                 </span>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
-                                <span className="text-gray-400 italic">PDF в разработке</span>
                               </td>
                             </tr>
                           ))}
@@ -575,27 +535,31 @@ const handleCancelInvoice = async (inv: Invoice) => {
       </main>
 
       {editingInvoice && (
-        <InvoiceFormModal
-          invoice={editingInvoice}
-          onClose={() => setEditingInvoice(null)}
-          onSave={handleSaveInvoice}
-        />
+        <InvoiceFormModal invoice={editingInvoice} onClose={() => setEditingInvoice(null)} onSave={handleSaveInvoice} />
+      )}
+
+      {isInvoiceFormOpen && !editingInvoice && (
+        <InvoiceFormModal invoice={null} onClose={() => setIsInvoiceFormOpen(false)} onSave={handleSaveInvoice} />
+      )}
+
+      {editingAct !== null && (
+        <ActFormModal act={editingAct} onClose={() => setEditingAct(null)} onSave={handleSaveAct} />
+      )}
+
+      {isActFormOpen && editingAct === null && (
+        <ActFormModal act={null} onClose={() => setIsActFormOpen(false)} onSave={handleSaveAct} />
       )}
 
       {paymentTarget && (
-        <PaymentModal
-          invoice={paymentTarget}
-          onClose={() => setPaymentTarget(null)}
-          onSuccess={handlePaymentSuccess}
-        />
+        <PaymentModal invoice={paymentTarget} onClose={() => setPaymentTarget(null)} onSuccess={handlePaymentSuccess} />
       )}
 
       {deleteTarget && (
-        <DeleteConfirmDialog
-          vehicleName={`счёт ${deleteTarget.document_number}`}
-          onConfirm={handleDeleteInvoice}
-          onCancel={() => setDeleteTarget(null)}
-        />
+        <DeleteConfirmDialog vehicleName={`счёт ${deleteTarget.document_number}`} onConfirm={handleDeleteInvoice} onCancel={() => setDeleteTarget(null)} />
+      )}
+
+      {deleteActTarget && (
+        <DeleteConfirmDialog vehicleName={`акт ${deleteActTarget.document_number}`} onConfirm={handleDeleteAct} onCancel={() => setDeleteActTarget(null)} />
       )}
     </div>
   );
