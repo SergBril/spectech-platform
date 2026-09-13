@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -141,7 +141,7 @@ def cancel_invoice(
     db.commit()
 
 
-@router.get("/{invoice_id}/pdf", response_class=FileResponse)
+@router.get("/{invoice_id}/pdf")
 def download_invoice_pdf(
     invoice_id: int,
     db: Session = Depends(get_db),
@@ -152,13 +152,21 @@ def download_invoice_pdf(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
-    client = db.get(Contractor, invoice.client_id)
-    client_name = client.name if client else ""
+    client = db.get(Contractor, invoice.client_id) if invoice.client_id else None
+    client_name = client.name if client else "Клиент"
 
-    pdf_path = generate_invoice_pdf(invoice, client_name=client_name)
+    try:
+        pdf_bytes = generate_invoice_pdf(invoice, client_name=client_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка генерации PDF: {str(e)}")
 
-    return FileResponse(
-        path=pdf_path,
-        filename=f"invoice_{invoice.document_number}.pdf",
+    filename = f"{invoice.document_number or f'invoice-{invoice_id}'}.pdf"
+
+    return Response(
+        content=bytes(pdf_bytes),  # ← Конвертируем bytearray в bytes
         media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
     )
