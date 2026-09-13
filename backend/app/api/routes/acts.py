@@ -1,8 +1,7 @@
 from datetime import UTC, datetime
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -107,7 +106,57 @@ def sign_act(
     return act
 
 
-@router.get("/{act_id}/pdf", response_class=FileResponse)
+@router.patch("/{act_id}", response_model=ActRead)
+def update_act(
+    act_id: int,
+    payload: ActCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Обновить акт (только если статус draft)."""
+    act = db.get(Act, act_id)
+    if not act:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    if act.status != DocumentStatus.draft:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Only draft acts can be edited. Current status: {act.status}",
+        )
+
+    act.request_id = payload.request_id
+    act.client_id = payload.client_id
+    act.act_date = payload.act_date
+    act.total_amount = payload.total_amount
+    act.comment = payload.comment
+
+    db.commit()
+    db.refresh(act)
+    return act
+
+
+@router.delete("/{act_id}", status_code=204)
+def delete_act(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Удалить акт (только если статус draft)."""
+    act = db.get(Act, act_id)
+    if not act:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    if act.status != DocumentStatus.draft:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Only draft acts can be deleted. Current status: {act.status}",
+        )
+
+    db.delete(act)
+    db.commit()
+
+
+@router.get("/{act_id}/pdf")
 def download_act_pdf(
     act_id: int,
     db: Session = Depends(get_db),
@@ -118,19 +167,21 @@ def download_act_pdf(
     if not act:
         raise HTTPException(status_code=404, detail="Act not found")
 
-    client = db.get(Contractor, act.client_id)
-    client_name = client.name if client else ""
+    client = db.get(Contractor, act.client_id) if act.client_id else None
+    client_name = client.name if client else "Клиент"
 
-    pdf_path = generate_act_pdf(act, client_name=client_name)
+    try:
+        pdf_bytes = generate_act_pdf(act, client_name=client_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation error: {str(e)}")
 
-    # Сохраняем путь к PDF в модели
-    relative_path = f"documents/{Path(pdf_path).name}"
-    if act.pdf_url != relative_path:
-        act.pdf_url = relative_path
-        db.commit()
+    filename = f"{act.document_number or f'act-{act_id}'}.pdf"
 
-    return FileResponse(
-        path=pdf_path,
-        filename=f"act_{act.document_number}.pdf",
+    return Response(
+        content=pdf_bytes,
         media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
     )

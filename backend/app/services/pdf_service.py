@@ -195,8 +195,80 @@ def generate_invoice_pdf(
     return bytes(pdf.output())
 
 
-def generate_act_pdf(*args, **kwargs):
-    return b""
+def generate_act_pdf(act, client_name: str = "", local_path: str = None) -> bytes:
+    """Генерирует PDF для акта выполненных работ."""
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.add_page()
+    font_family = "Helvetica"
+
+    # === Заголовок ===
+    pdf.set_font(font_family, "B", 16)
+    pdf.cell(0, 10, f"ACT #{act.document_number}", 0, 1, "C")
+    pdf.ln(5)
+
+    # === Информация ===
+    pdf.set_font(font_family, "", 10)
+    pdf.cell(95, 7, f"Date: {act.act_date}", 0, 0)
+    pdf.cell(95, 7, f"Status: {_to_str(act.status).upper()}", 0, 1)
+    pdf.ln(3)
+
+    # === Клиент ===
+    pdf.set_font(font_family, "B", 11)
+    pdf.cell(0, 7, "Client:", 0, 1)
+    pdf.set_font(font_family, "", 10)
+    safe_client = _transliterate(client_name or "Not specified")
+    pdf.cell(0, 7, safe_client, 0, 1)
+    pdf.ln(5)
+
+    # === Сумма ===
+    pdf.set_font(font_family, "B", 12)
+    pdf.cell(0, 8, "Total amount of work performed:", 0, 1)
+    pdf.set_font(font_family, "B", 14)
+    total = _to_float(act.total_amount)
+    pdf.cell(0, 10, f"{total:.2f} RUB", 0, 1, "R")
+    pdf.ln(5)
+
+    # === Подписи ===
+    pdf.set_font(font_family, "B", 11)
+    pdf.cell(0, 7, "Signatures:", 0, 1)
+    pdf.set_font(font_family, "", 10)
+
+    client_signed = "Yes" if act.signed_by_client_at else "No"
+    executor_signed = "Yes" if act.signed_by_executor_at else "No"
+
+    client_date = (
+        act.signed_by_client_at.strftime("%d.%m.%Y %H:%M")
+        if act.signed_by_client_at
+        else "—"
+    )
+    executor_date = (
+        act.signed_by_executor_at.strftime("%d.%m.%Y %H:%M")
+        if act.signed_by_executor_at
+        else "—"
+    )
+
+    pdf.cell(95, 7, f"Client: {client_signed}", 0, 0)
+    pdf.cell(95, 7, f"Date: {client_date}", 0, 1)
+    pdf.cell(95, 7, f"Executor: {executor_signed}", 0, 0)
+    pdf.cell(95, 7, f"Date: {executor_date}", 0, 1)
+
+    # === Комментарий ===
+    if act.comment:
+        pdf.ln(5)
+        pdf.set_font(font_family, "B", 10)
+        pdf.cell(0, 7, "Comment:", 0, 1)
+        pdf.set_font(font_family, "", 9)
+        pdf.multi_cell(0, 6, _transliterate(str(act.comment)))
+
+    # === Футер ===
+    pdf.ln(10)
+    pdf.set_font(font_family, "I", 8)
+    pdf.cell(0, 5, f'Generated: {datetime.now().strftime("%d.%m.%Y %H:%M")}', 0, 1, "C")
+    pdf.cell(0, 5, "SpecTech Pro System", 0, 1, "C")
+
+    return bytes(pdf.output())
 
 
 def generate_payout_pdf(*args, **kwargs):

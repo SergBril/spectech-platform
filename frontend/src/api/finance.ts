@@ -5,16 +5,6 @@ export type ActStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
 export type PayoutStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
 export type PaymentMethod = 'bank_transfer' | 'cash' | 'card' | 'other';
 
-export interface ActCreate {
-  document_number?: string;
-  request_id: number;
-  client_id: number;
-  total_amount: number;
-  act_date: string;
-  status?: ActStatus;
-  comment?: string;
-}
-
 export interface InvoiceItem {
   id?: number;
   description: string;
@@ -57,6 +47,16 @@ export interface InvoiceCreate {
   vat_rate: number;
   comment?: string;
   items: InvoiceItemCreate[];
+}
+
+export interface ActCreate {
+  document_number?: string;
+  request_id: number;
+  client_id: number;
+  total_amount: number;
+  act_date: string;
+  status?: ActStatus;
+  comment?: string;
 }
 
 export interface Act {
@@ -141,7 +141,7 @@ export const financeApi = {
 
   async createInvoice(data: InvoiceCreate): Promise<Invoice> {
     const payload = {
-      request_id: data.request_id ?? 7,  // ← По умолчанию заявка #7 (Земляные работы)
+      request_id: data.request_id ?? 7,
       client_id: data.client_id,
       invoice_date: data.invoice_date,
       due_date: data.due_date,
@@ -153,37 +153,6 @@ export const financeApi = {
         unit_price: item.unit_price,
         amount: item.quantity * item.unit_price,
       })),
-  // === Acts CRUD ===
-  async getAct(id: number): Promise<Act> {
-    const response = await apiClient.get<Act>(`/acts/${id}`);
-    return response.data;
-  },
-
-  async createAct(data: ActCreate): Promise<Act> {
-    const response = await apiClient.post<Act>('/acts', data);
-    return response.data;
-  },
-
-  async updateAct(id: number, data: Partial<ActCreate>): Promise<Act> {
-    const response = await apiClient.patch<Act>(`/acts/${id}`, data);
-    return response.data;
-  },
-
-  async deleteAct(id: number): Promise<void> {
-    await apiClient.delete(`/acts/${id}`);
-  },
-
-  async signAct(id: number, role: 'client' | 'executor'): Promise<Act> {
-    const response = await apiClient.post<Act>(`/acts/${id}/sign`, { role });
-    return response.data;
-  },
-
-  async downloadActPdf(id: number): Promise<Blob> {
-    const response = await apiClient.get(`/acts/${id}/pdf`, {
-      responseType: 'blob',
-    });
-    return response.data;
-  },
     };
 
     console.log('📤 Creating invoice:', payload);
@@ -215,6 +184,39 @@ export const financeApi = {
   // === Acts ===
   async getActs(params?: { status?: ActStatus; limit?: number; offset?: number }): Promise<Act[]> {
     const response = await apiClient.get<Act[]>('/acts', { params });
+    return response.data;
+  },
+
+  async getAct(id: number): Promise<Act> {
+    const response = await apiClient.get<Act>(`/acts/${id}`);
+    return response.data;
+  },
+
+  async createAct(data: ActCreate): Promise<Act> {
+    const response = await apiClient.post<Act>('/acts', data);
+    return response.data;
+  },
+
+  async updateAct(id: number, data: Partial<ActCreate>): Promise<Act> {
+    const response = await apiClient.patch<Act>(`/acts/${id}`, data);
+    return response.data;
+  },
+
+  async deleteAct(id: number): Promise<void> {
+    await apiClient.delete(`/acts/${id}`);
+  },
+
+  async signAct(id: number, signedBy: 'client' | 'executor'): Promise<Act> {
+    const response = await apiClient.post<Act>(`/acts/${id}/sign`, {
+      signed_by: signedBy,
+    });
+    return response.data;
+  },
+
+  async downloadActPdf(id: number): Promise<Blob> {
+    const response = await apiClient.get(`/acts/${id}/pdf`, {
+      responseType: 'blob',
+    });
     return response.data;
   },
 
