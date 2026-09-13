@@ -1,74 +1,74 @@
 import apiClient from './client';
 
+export type VehicleStatus = 'free' | 'working' | 'maintenance' | 'out_of_service';
+export type IdType = 'VIN' | 'chassis' | 'body' | 'custom';
+
 export interface Vehicle {
   id: number;
-  id_type: string;
+  id_type: IdType;
   id_value: string;
   name: string;
-  year?: number;
-  status: string;
-  fuel_norm_per_hour?: string;
-  fuel_norm_per_100km?: string;
-  psm_number?: string;
-  osago_expiry_date?: string;
-  category_id?: number;
-  owner_id?: number;
-  company_id?: number;
+  year: number | null;
+  status: VehicleStatus;
+  fuel_norm_per_hour: string | null;
+  fuel_norm_per_100km: string | null;
+  psm_number: string | null;
+  osago_expiry_date: string | null;
+  category_id: number | null;
+  owner_id: number | null;
+  company_id: number | null;
   is_custom_number: boolean;
   created_at: string;
   updated_at: string;
 }
 
 export interface VehicleCreate {
-  id_type: string;
+  id_type: IdType;
   id_value: string;
   name: string;
   year?: number;
-  status?: string;
+  status?: VehicleStatus;
   fuel_norm_per_hour?: number;
   fuel_norm_per_100km?: number;
   psm_number?: string;
   osago_expiry_date?: string;
   category_id?: number;
   owner_id?: number;
-  company_id?: number;
+  is_custom_number?: boolean;
 }
 
-export interface VehicleUpdate {
-  id_type?: string;
-  id_value?: string;
-  name?: string;
-  year?: number;
-  status?: string;
-  fuel_norm_per_hour?: number;
-  fuel_norm_per_100km?: number;
-  psm_number?: string;
-  osago_expiry_date?: string;
-  category_id?: number;
-  owner_id?: number;
-  company_id?: number;
-}
-
-export interface VehicleListResponse {
-  items: Vehicle[];
-  total: number;
-}
+export interface VehicleUpdate extends Partial<VehicleCreate> {}
 
 export const vehiclesApi = {
-  list: (skip = 0, limit = 100, status?: string) =>
-    apiClient.get<VehicleListResponse>('/vehicles', {
-      params: { skip, limit, status },
-    }),
+  async getAll(params?: {
+    status?: VehicleStatus;
+    limit?: number;
+    skip?: number;
+  }): Promise<Vehicle[]> {
+    const response = await apiClient.get<Vehicle[] | { items: Vehicle[]; total: number }>('/vehicles', {
+      params,
+    });
+    // API может возвращать либо массив, либо объект с пагинацией
+    const data = response.data;
+    return Array.isArray(data) ? data : (data as any).items || [];
+  },
 
-  getById: (id: number) =>
-    apiClient.get<Vehicle>(`/vehicles/${id}`),
+  async getById(id: number): Promise<Vehicle> {
+    const response = await apiClient.get<Vehicle>(`/vehicles/${id}`);
+    return response.data;
+  },
 
-  create: (data: VehicleCreate) =>
-    apiClient.post<Vehicle>('/vehicles', data),
+  async create(data: VehicleCreate): Promise<Vehicle> {
+    const response = await apiClient.post<Vehicle>('/vehicles', data);
+    return response.data;
+  },
 
-  update: (id: number, data: VehicleUpdate) =>
-    apiClient.put<Vehicle>(`/vehicles/${id}`, data),
+  async update(id: number, data: VehicleUpdate): Promise<Vehicle> {
+    const response = await apiClient.patch<Vehicle>(`/vehicles/${id}`, data);
+    return response.data;
+  },
 
-  delete: (id: number) =>
-    apiClient.delete(`/vehicles/${id}`),
+  async delete(id: number): Promise<void> {
+    await apiClient.delete(`/vehicles/${id}`);
+  },
 };

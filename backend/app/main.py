@@ -15,6 +15,7 @@ from sqlalchemy.exc import (
 
 from app.api.routes import (
     acts,
+    analytics,
     auth,
     benchmark,
     categories,
@@ -168,6 +169,7 @@ app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(ws_routes.router, prefix="/api/v1", tags=["websocket"])
 app.include_router(benchmark.router, prefix="/api/v1", tags=["benchmark"])
 app.include_router(secure_test.router, prefix="/api/v1", tags=["🔒 Secure Test (RBAC)"])
+app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
 
 
 # 6. Кастомизация OpenAPI
