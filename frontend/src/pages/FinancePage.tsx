@@ -159,25 +159,32 @@ const handleDownloadPdf = async (type: 'invoice' | 'act' | 'payout', id: number,
   }
 };
 
-  const handleSaveInvoice = async (data: any) => {
-    try {
-      if (editingInvoice) {
-        const updated = await financeApi.updateInvoice(editingInvoice.id, data);
-        setInvoices(invoices.map((i) => (i.id === editingInvoice.id ? updated : i)));
-      }
-      showToast.success(editingInvoice ? 'Счёт обновлён' : 'Счёт создан');
-      setEditingInvoice(null);
-      setIsInvoiceFormOpen(false);
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail;
-      if (Array.isArray(detail)) {
-        showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
-      } else {
-        alert('Ошибка: ' + (detail || err.message));
-      }
-      throw err;
+const handleSaveInvoice = async (data: any) => {
+  try {
+    if (editingInvoice) {
+      // Обновление существующего счёта
+      const updated = await financeApi.updateInvoice(editingInvoice.id, data);
+      setInvoices(invoices.map((i) => (i.id === editingInvoice.id ? updated : i)));
+      showToast.success('Счёт обновлён');
+    } else {
+      // ✅ Создание нового счёта
+      const created = await financeApi.createInvoice(data);
+      setInvoices([created, ...invoices]);
+      showToast.success('Счёт создан');
     }
-  };
+    setEditingInvoice(null);
+    setIsInvoiceFormOpen(false);
+    loadData(); // Обновляем метрики dashboard
+  } catch (err: any) {
+    const detail = err?.response?.data?.detail;
+    if (Array.isArray(detail)) {
+      showToast.error('Ошибка валидации: ' + detail.map((d: any) => `${d.loc?.join('.')}: ${d.msg}`).join(', '));
+    } else {
+      showToast.error('Ошибка: ' + (detail || err.message));
+    }
+    throw err;
+  }
+};
 
   const handlePaymentSuccess = () => {
     setPaymentTarget(null);
