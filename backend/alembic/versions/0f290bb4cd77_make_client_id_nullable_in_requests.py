@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0f290bb4cd77"  # pragma: allowlist secret
-down_revision: Union[str, None] = "b7ad0b1816f1"  # pragma: allowlist secret
+down_revision: str | None = "b7ad0b1816f1"  # pragma: allowlist secret
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
