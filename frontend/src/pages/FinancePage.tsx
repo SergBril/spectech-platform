@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { financeApi, type Invoice, type Act, type Payout, type PaymentsDashboard, type ActCreate } from '../api/finance';
 import { exportApi, downloadBlob } from '../api/export';
 import { showToast } from '../utils/toast';
+import { TableSkeleton, MetricCardSkeleton } from '../components/Skeleton';
 import InvoiceFormModal from '../components/InvoiceFormModal';
 import PaymentModal from '../components/PaymentModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
@@ -273,13 +274,66 @@ const handleSignAct = async (act: Act, role: 'client' | 'executor') => {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+if (loading) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center space-x-6">
+              <h1 className="text-xl font-bold text-gray-900">🚜 СпецТехника Про</h1>
+              <button onClick={() => navigate('/')} className="text-gray-600 hover:text-gray-900">Dashboard</button>
+              <button onClick={() => navigate('/vehicles')} className="text-gray-600 hover:text-gray-900">Техника</button>
+              <button onClick={() => navigate('/requests')} className="text-gray-600 hover:text-gray-900">Заявки</button>
+              <span className="text-blue-600 font-medium">Финансы</span>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-700">{user?.email}</span>
+              <button
+                onClick={() => { logout(); navigate('/login'); }}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+              >
+                Выйти
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
+          {/* Skeleton заголовка */}
+          <div className="flex justify-between items-center mb-6">
+            <div className="w-40 h-8 bg-gray-200 rounded animate-pulse" />
+            <div className="w-48 h-10 bg-gray-200 rounded animate-pulse" />
+          </div>
+
+          {/* Skeleton метрик */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+          </div>
+
+          {/* Skeleton таблицы */}
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="border-b border-gray-200">
+              <div className="flex space-x-2 p-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="w-32 h-10 bg-gray-100 rounded animate-pulse" />
+                ))}
+              </div>
+            </div>
+            <div className="p-6">
+              <TableSkeleton rows={5} columns={7} />
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
 
   return (
     <div className="min-h-screen bg-gray-50">

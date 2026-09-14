@@ -5,6 +5,7 @@ import { vehiclesApi, type Vehicle } from '../api/vehicles';
 import { requestsApi, type Request } from '../api/requests';
 import { financeApi, type PaymentsDashboard } from '../api/finance';
 import { RevenueChart, StatusPieChart, TopRequestsChart, Sparkline } from '../components/AnalyticsCharts';
+import { MetricCardSkeleton, ChartSkeleton } from '../components/Skeleton';
 import NotificationBell from '../components/NotificationBell';
 
 export const DashboardPage: React.FC = () => {
@@ -48,16 +49,64 @@ const loadData = async () => {
   const activeVehicles = vehicles.filter((v) => v.status === 'free' || v.status === 'working').length;
   const pendingRequests = requests.filter((r) => r.status === 'new' || r.status === 'processing').length;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Загрузка...</p>
+if (loading) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Navbar остается */}
+      <nav className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center space-x-6">
+              <h1 className="text-xl font-bold text-gray-900">🚜 СпецТехника Про</h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-700">{user?.email}</span>
+              <button
+                onClick={() => { logout(); navigate('/login'); }}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+              >
+                Выйти
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-    );
-  }
+      </nav>
+
+      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 space-y-8">
+        {/* Skeleton приветствия */}
+        <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-lg p-6 animate-pulse">
+          <div className="w-64 h-8 bg-blue-400 rounded mb-2 opacity-50" />
+          <div className="w-96 h-5 bg-blue-400 rounded opacity-50" />
+        </div>
+
+        {/* Skeleton метрик */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+        </div>
+
+        {/* Skeleton графиков */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ChartSkeleton />
+          <ChartSkeleton />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <ChartSkeleton height={250} />
+          </div>
+          <div className="space-y-6">
+            <ChartSkeleton height={100} />
+            <ChartSkeleton height={80} />
+            <ChartSkeleton height={80} />
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
 
   return (
     <div className="min-h-screen bg-gray-50">

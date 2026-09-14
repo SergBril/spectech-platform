@@ -5,6 +5,7 @@ import { requestsApi, type Request, type StatusLogEntry } from '../api/requests'
 import { financeApi, type Invoice, type Act } from '../api/finance';
 import { exportApi, downloadBlob } from '../api/export';
 import { showToast } from '../utils/toast';
+import { RequestHeaderSkeleton, TableSkeleton, TimelineSkeleton } from '../components/Skeleton';
 import NotificationBell from '../components/NotificationBell';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
@@ -164,16 +165,63 @@ const handleStatusChange = async (newStatus: string) => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Загрузка заявки...</p>
+if (loading) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center space-x-6">
+              <h1 className="text-xl font-bold text-gray-900">🚜 СпецТехника Про</h1>
+              <button onClick={() => navigate('/')} className="text-gray-600 hover:text-gray-900">Dashboard</button>
+              <button onClick={() => navigate('/requests')} className="text-gray-600 hover:text-gray-900">
+                ← К заявкам
+              </button>
+              <div className="w-24 h-6 bg-gray-200 rounded animate-pulse" />
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-700">{user?.email}</span>
+              <button
+                onClick={() => { logout(); navigate('/login'); }}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+              >
+                Выйти
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-    );
-  }
+      </nav>
+
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0 space-y-6">
+          {/* Skeleton шапки заявки */}
+          <RequestHeaderSkeleton />
+
+          {/* Skeleton счетов */}
+          <div className="bg-white rounded-lg shadow p-6 animate-pulse">
+            <div className="flex justify-between items-center mb-4">
+              <div className="w-32 h-6 bg-gray-200 rounded" />
+              <div className="w-32 h-9 bg-gray-200 rounded" />
+            </div>
+            <TableSkeleton rows={3} columns={7} />
+          </div>
+
+          {/* Skeleton актов */}
+          <div className="bg-white rounded-lg shadow p-6 animate-pulse">
+            <div className="flex justify-between items-center mb-4">
+              <div className="w-28 h-6 bg-gray-200 rounded" />
+              <div className="w-40 h-8 bg-gray-200 rounded" />
+            </div>
+            <TableSkeleton rows={2} columns={4} />
+          </div>
+
+          {/* Skeleton timeline */}
+          <TimelineSkeleton />
+        </div>
+      </main>
+    </div>
+  );
+}
 
   if (error || !request) {
     return (
