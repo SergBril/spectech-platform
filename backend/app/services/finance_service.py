@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 from datetime import datetime
 from decimal import Decimal
 
@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.auth import User
+from app.models.contractor import Contractor
 from app.models.finance import (
     Act,
     DocumentStatus,
@@ -20,16 +21,9 @@ logger = logging.getLogger("spectech.finance")
 
 
 def generate_document_number(db: Session, prefix: str) -> str:
-    """Генерирует уникальный номер документа."""
     current_year = datetime.now().year
-
-    model_map = {
-        "INV": Invoice,
-        "ACT": Act,
-        "PAY": Payout,
-    }
+    model_map = {"INV": Invoice, "ACT": Act, "PAY": Payout}
     model = model_map.get(prefix)
-
     if not model:
         raise ValueError(f"Unknown document prefix: {prefix}")
 
@@ -40,7 +34,6 @@ def generate_document_number(db: Session, prefix: str) -> str:
         .order_by(model.document_number.desc())
         .limit(1)
     )
-
     last_number = db.scalar(stmt)
 
     if last_number:
@@ -56,83 +49,66 @@ def generate_document_number(db: Session, prefix: str) -> str:
 
 
 def calculate_invoice_totals(invoice: Invoice) -> None:
-    """Пересчитывает итоговые суммы счёта."""
     subtotal = Decimal("0")
-
     for item in invoice.items:
         item.amount = item.quantity * item.unit_price
         subtotal += item.amount
 
     invoice.subtotal = subtotal
-
     if invoice.vat_rate is not None:
         invoice.vat_amount = (subtotal * invoice.vat_rate / Decimal("100")).quantize(
             Decimal("0.01")
         )
     else:
         invoice.vat_amount = Decimal("0")
-
     invoice.total = subtotal + invoice.vat_amount
 
 
+def _get_field(obj, key, default=None):
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
 def create_invoice(db: Session, payload, current_user: User) -> Invoice:
-    """Создаёт счёт с позициями и отправляет email клиенту."""
     import traceback
 
-    from app.models.contractor import Contractor
-
-    logger.info(f"🔄 Creating invoice with payload type: {type(payload).__name__}")
-    logger.info(
-        f"📝 Payload keys: {list(payload.dict().keys()) if hasattr(payload, 'dict') else list(payload.keys()) if isinstance(payload, dict) else 'unknown'}"
-    )
-
-    # Универсальный getter
-    def get(obj, key, default=None):
-        if obj is None:
-            return default
-        if isinstance(obj, dict):
-            return obj.get(key, default)
-        return getattr(obj, key, default)
+    logger.info(f"🔄 Creating invoice, payload type: {type(payload).__name__}")
 
     try:
         company_id = getattr(current_user, "company_id", None)
-        logger.info(f"👤 User: {current_user.email}, company_id: {company_id}")
 
         invoice = Invoice(
             document_number=generate_document_number(db, "INV"),
-            request_id=get(payload, "request_id"),
-            client_id=get(payload, "client_id"),
+            request_id=_get_field(payload, "request_id"),
+            client_id=_get_field(payload, "client_id"),
             company_id=company_id,
-            invoice_date=get(payload, "invoice_date") or datetime.now(),
-            due_date=get(payload, "due_date"),
-            vat_rate=get(payload, "vat_rate"),
-            comment=get(payload, "comment", ""),
+            invoice_date=_get_field(payload, "invoice_date") or datetime.now(),
+            due_date=_get_field(payload, "due_date"),
+            vat_rate=_get_field(payload, "vat_rate"),
+            comment=_get_field(payload, "comment", ""),
             status=DocumentStatus.draft,
             created_by=current_user.id,
         )
         db.add(invoice)
         db.flush()
-        logger.info(f"✅ Invoice #{invoice.id} created, adding items...")
+        logger.info(f"✅ Invoice #{invoice.id} created")
 
-        # Создаём позиции
-        items = get(payload, "items", []) or []
-        logger.info(f"📦 Found {len(items)} items")
+        items = _get_field(payload, "items", []) or []
+        logger.info(f"📦 Adding {len(items)} items")
 
-        for idx, item_data in enumerate(items):
-            try:
-                item = InvoiceItem(
-                    invoice_id=invoice.id,
-                    description=str(get(item_data, "description", "")),
-                    quantity=get(item_data, "quantity", 1),
-                    unit=str(get(item_data, "unit", "шт")),
-                    unit_price=get(item_data, "unit_price", 0),
-                    shift_report_id=get(item_data, "shift_report_id"),
-                )
-                db.add(item)
-            except Exception as item_err:
-                logger.error(f"❌ Failed to add item {idx}: {item_err}")
-                logger.error(traceback.format_exc())
-                raise
+        for item_data in items:
+            item = InvoiceItem(
+                invoice_id=invoice.id,
+                description=str(_get_field(item_data, "description", "")),
+                quantity=_get_field(item_data, "quantity", 1),
+                unit=str(_get_field(item_data, "unit", "шт")),
+                unit_price=_get_field(item_data, "unit_price", 0),
+                shift_report_id=_get_field(item_data, "shift_report_id"),
+            )
+            db.add(item)
 
         db.flush()
         calculate_invoice_totals(invoice)
@@ -142,7 +118,7 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
             f"✅ Invoice {invoice.document_number} saved, total={invoice.total}"
         )
 
-        # 📧 ОТПРАВКА EMAIL
+        # 📧 ОТПРАВЛЯЕМ EMAIL
         try:
             client = (
                 db.get(Contractor, invoice.client_id) if invoice.client_id else None
@@ -151,21 +127,18 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
                 f"👥 Client lookup: id={invoice.client_id}, found={client is not None}"
             )
 
-            if client and hasattr(client, "email") and client.email:
+            if client and hasattr(client, "contact_email") and client.contact_email:
                 client_name = getattr(client, "name", "") or "Клиент"
-                logger.info(f"📧 Sending email to {client.email}")
+                logger.info(f"📧 Sending email to {client.contact_email}")
                 success = email_service.send_invoice_created(
                     invoice=invoice,
-                    client_email=client.email,
+                    client_email=client.contact_email,
                     client_name=client_name,
                 )
-                if success:
-                    logger.info(f"✅ Email sent successfully to {client.email}")
-                else:
-                    logger.warning(f"⚠️ Email service returned False for {client.email}")
+                logger.info(f"📧 Email send result: {success}")
             else:
                 logger.warning(
-                    f"⚠️ Client email not found for invoice #{invoice.document_number}"
+                    f"⚠️ Client contact_email not found for invoice #{invoice.document_number}"
                 )
         except Exception as email_err:
             logger.error(f"❌ Email sending failed: {email_err}")
@@ -181,12 +154,10 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
 
 
 def register_payment(db: Session, payment: Payment) -> None:
-    """Регистрирует платёж и обновляет paid_amount у связанных документов."""
     if payment.invoice_id:
         invoice = db.get(Invoice, payment.invoice_id)
         if invoice:
             invoice.paid_amount += payment.amount
-
             if invoice.paid_amount >= invoice.total:
                 invoice.status = DocumentStatus.paid
             elif invoice.paid_amount > 0:
@@ -201,12 +172,10 @@ def register_payment(db: Session, payment: Payment) -> None:
 
 
 def calculate_payout(gross_amount: Decimal, commission_rate: Decimal) -> dict:
-    """Рассчитывает выплату с учётом комиссии."""
     commission = (gross_amount * commission_rate / Decimal("100")).quantize(
         Decimal("0.01")
     )
     net_amount = gross_amount - commission
-
     return {
         "gross_amount": gross_amount,
         "platform_commission": commission,
@@ -216,7 +185,6 @@ def calculate_payout(gross_amount: Decimal, commission_rate: Decimal) -> dict:
 
 
 def get_finance_dashboard(db: Session, company_id: int | None) -> dict:
-    """Собирает статистику для финансового дашборда."""
     invoice_query = select(func.coalesce(func.sum(Invoice.total), 0))
     invoice_paid_query = select(func.coalesce(func.sum(Invoice.paid_amount), 0))
     invoice_count_query = select(func.count(Invoice.id))
@@ -231,7 +199,6 @@ def get_finance_dashboard(db: Session, company_id: int | None) -> dict:
     total_revenue = db.scalar(invoice_query) or Decimal("0")
     total_paid = db.scalar(invoice_paid_query) or Decimal("0")
     invoices_count = db.scalar(invoice_count_query) or 0
-
     total_outstanding = total_revenue - total_paid
 
     acts_query = select(func.count(Act.id))
