@@ -1,0 +1,30 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<h2>💰 Новый счёт на оплату</h2>
+
+<p>Здравствуйте, {{ client_name }}!</p>
+
+<p>Для вас создан новый счёт:</p>
+
+<div class="info-box">
+    <div class="info-row">
+        <span class="info-label">Номер счёта:</span>
+        <span class="info-value">{{ invoice.document_number }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Дата:</span>
+        <span class="info-value">{{ invoice.invoice_date.strftime('%d.%m.%Y') }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Сумма:</span>
+        <span class="info-value amount">{{ "{:,.2f}".format(invoice.total).replace(',', ' ') }} ₽</span>
+    </div>
+</div>
+
+<center>
+    <a href="{{ frontend_url }}/invoices/{{ invoice.id }}" class="button">
+        Посмотреть счёт
+    </a>
+</center>
+{% endblock %}

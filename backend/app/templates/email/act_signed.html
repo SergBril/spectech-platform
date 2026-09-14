@@ -1,0 +1,26 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<h2>✅ Акт подписан</h2>
+
+<p>Здравствуйте, {{ user_name }}!</p>
+
+<p>Акт выполненных работ был успешно подписан:</p>
+
+<div class="info-box">
+    <div class="info-row">
+        <span class="info-label">Номер акта:</span>
+        <span class="info-value">{{ act.document_number }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Сумма:</span>
+        <span class="info-value amount">{{ "{:,.2f}".format(act.total).replace(',', ' ') }} ₽</span>
+    </div>
+</div>
+
+<center>
+    <a href="{{ frontend_url }}/acts/{{ act.id }}" class="button">
+        Посмотреть акт
+    </a>
+</center>
+{% endblock %}
