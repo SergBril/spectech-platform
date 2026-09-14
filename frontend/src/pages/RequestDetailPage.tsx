@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { requestsApi, type Request, type StatusLogEntry } from '../api/requests';
 import { financeApi, type Invoice, type Act } from '../api/finance';
 import { exportApi, downloadBlob } from '../api/export';
+import { showToast } from '../utils/toast';
 import NotificationBell from '../components/NotificationBell';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
@@ -112,27 +113,33 @@ export const RequestDetailPage: React.FC = () => {
     }
   };
 
-  const handleStatusChange = async (newStatus: string) => {
-    if (!request) return;
-    const config = WORKFLOW.find((w) => w.value === newStatus);
-    if (!confirm(`Изменить статус на "${config?.icon} ${config?.label}"?`)) {
-      window.location.reload();
-      return;
-    }
-    try {
-      setStatusUpdating(true);
-      const updated = await requestsApi.update(request.id, { status: newStatus as any });
-      setRequest(updated);
-      // Перезагружаем историю после смены статуса
-      const historyData = await requestsApi.getHistory(request.id);
-      setHistory(historyData);
-    } catch (err: any) {
-      alert('Ошибка: ' + (err?.response?.data?.detail || err.message));
-      window.location.reload();
-    } finally {
-      setStatusUpdating(false);
-    }
-  };
+const handleStatusChange = async (newStatus: string) => {
+  if (!request) return;
+  const config = WORKFLOW.find((w) => w.value === newStatus);
+
+  // Кастомный confirm
+  if (!window.confirm(`Изменить статус на "${config?.icon} ${config?.label}"?`)) {
+    window.location.reload();
+    return;
+  }
+
+  const loadingToast = showToast.loading('Изменение статуса...');
+  try {
+    setStatusUpdating(true);
+    const updated = await requestsApi.update(request.id, { status: newStatus as any });
+    setRequest(updated);
+    const historyData = await requestsApi.getHistory(request.id);
+    setHistory(historyData);
+    showToast.dismiss(loadingToast);
+    showToast.success(`Статус изменён на "${config?.label}"`);
+  } catch (err: any) {
+    showToast.dismiss(loadingToast);
+    showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
+    window.location.reload();
+  } finally {
+    setStatusUpdating(false);
+  }
+};
 
   const handleDownloadInvoicePdf = async (inv: Invoice) => {
     try {
@@ -153,7 +160,7 @@ export const RequestDetailPage: React.FC = () => {
       const blob = await exportApi.requestReport(request.id);
       downloadBlob(blob, `request_${request.id}_report.pdf`);
     } catch (err: any) {
-      alert('Ошибка экспорта: ' + (err?.response?.data?.detail || err.message));
+      showToast.error('Ошибка экспорта: ' + (err?.response?.data?.detail || err.message));
     }
   };
 

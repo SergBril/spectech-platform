@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { financeApi, type Invoice, type Act, type Payout, type PaymentsDashboard, type ActCreate } from '../api/finance';
 import { exportApi, downloadBlob } from '../api/export';
+import { showToast } from '../utils/toast';
 import InvoiceFormModal from '../components/InvoiceFormModal';
 import PaymentModal from '../components/PaymentModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
@@ -107,52 +108,56 @@ export const FinancePage: React.FC = () => {
   // === ИНВОЙСЫ ===
   const handleEditInvoice = (inv: Invoice) => setEditingInvoice(inv);
 
-  const handleDeleteInvoice = async () => {
-    if (!deleteTarget) return;
-    try {
-      await financeApi.deleteInvoice(deleteTarget.id);
-      setInvoices(invoices.filter((i) => i.id !== deleteTarget.id));
-      setDeleteTarget(null);
-      loadData();
-    } catch (err: any) {
-      alert('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
-    }
-  };
+const handleDeleteInvoice = async () => {
+  if (!deleteTarget) return;
+  try {
+    await financeApi.deleteInvoice(deleteTarget.id);
+    setInvoices(invoices.filter((i) => i.id !== deleteTarget.id));
+    setDeleteTarget(null);
+    showToast.success('Счёт удалён');
+    loadData();
+  } catch (err: any) {
+    showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
+  }
+};
 
-  const handleSendInvoice = async (inv: Invoice) => {
-    if (!confirm(`Отправить счёт ${inv.document_number} клиенту?`)) return;
-    try {
-      const updated = await financeApi.sendInvoice(inv.id);
-      setInvoices(invoices.map((i) => (i.id === inv.id ? updated : i)));
-    } catch (err: any) {
-      alert('Ошибка отправки: ' + (err?.response?.data?.detail || err.message));
-    }
-  };
+const handleSendInvoice = async (inv: Invoice) => {
+  if (!confirm(`Отправить счёт ${inv.document_number} клиенту?`)) return;
+  try {
+    const updated = await financeApi.sendInvoice(inv.id);
+    setInvoices(invoices.map((i) => (i.id === inv.id ? updated : i)));
+    showToast.success(`Счёт ${inv.document_number} отправлен`);
+  } catch (err: any) {
+    showToast.error('Ошибка отправки: ' + (err?.response?.data?.detail || err.message));
+  }
+};
 
-  const handleCancelInvoice = async (inv: Invoice) => {
-    if (!confirm(`Отменить счёт ${inv.document_number}?`)) return;
-    try {
-      const updated = await financeApi.updateInvoice(inv.id, { status: 'cancelled' } as any);
-      setInvoices(invoices.map((i) => (i.id === inv.id ? updated : i)));
-    } catch (err: any) {
-      alert('Ошибка: ' + (err?.response?.data?.detail || err.message));
-    }
-  };
+const handleCancelInvoice = async (inv: Invoice) => {
+  if (!confirm(`Отменить счёт ${inv.document_number}?`)) return;
+  try {
+    const updated = await financeApi.updateInvoice(inv.id, { status: 'cancelled' } as any);
+    setInvoices(invoices.map((i) => (i.id === inv.id ? updated : i)));
+    showToast.success(`Счёт ${inv.document_number} отменён`);
+  } catch (err: any) {
+    showToast.error('Ошибка отмены: ' + (err?.response?.data?.detail || err.message));
+  }
+};
 
-  const handleDownloadPdf = async (type: 'invoice' | 'act' | 'payout', id: number, docNumber: string) => {
-    try {
-      let blob: Blob;
-      if (type === 'invoice') blob = await financeApi.downloadInvoicePdf(id);
-      else if (type === 'act') blob = await financeApi.downloadActPdf(id);
-      else {
-        alert('PDF для выплат пока не поддерживается');
-        return;
-      }
-      downloadBlob(blob, `${docNumber}.pdf`);
-    } catch (err: any) {
-      alert('Ошибка скачивания: ' + (err?.response?.data?.detail || err.message));
+const handleDownloadPdf = async (type: 'invoice' | 'act' | 'payout', id: number, docNumber: string) => {
+  try {
+    let blob: Blob;
+    if (type === 'invoice') blob = await financeApi.downloadInvoicePdf(id);
+    else if (type === 'act') blob = await financeApi.downloadActPdf(id);
+    else {
+      showToast.warning('PDF для выплат пока не поддерживается');
+      return;
     }
-  };
+    downloadBlob(blob, `${docNumber}.pdf`);
+    showToast.success('PDF скачан');
+  } catch (err: any) {
+    showToast.error('Ошибка скачивания: ' + (err?.response?.data?.detail || err.message));
+  }
+};
 
   const handleSaveInvoice = async (data: any) => {
     try {
@@ -160,12 +165,13 @@ export const FinancePage: React.FC = () => {
         const updated = await financeApi.updateInvoice(editingInvoice.id, data);
         setInvoices(invoices.map((i) => (i.id === editingInvoice.id ? updated : i)));
       }
+      showToast.success(editingInvoice ? 'Счёт обновлён' : 'Счёт создан');
       setEditingInvoice(null);
       setIsInvoiceFormOpen(false);
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
       if (Array.isArray(detail)) {
-        alert('Ошибка валидации: ' + detail.map((d: any) => `${d.loc?.join('.')}: ${d.msg}`).join(', '));
+        showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
       } else {
         alert('Ошибка: ' + (detail || err.message));
       }
@@ -188,13 +194,14 @@ export const FinancePage: React.FC = () => {
         const created = await financeApi.createAct(data);
         setActs([created, ...acts]);
       }
+      showToast.success(editingAct ? 'Акт обновлён' : 'Акт создан');
       setEditingAct(null);
       setIsActFormOpen(false);
       loadData();
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
       if (Array.isArray(detail)) {
-        alert('Ошибка валидации: ' + detail.map((d: any) => `${d.loc?.join('.')}: ${d.msg}`).join(', '));
+        showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
       } else {
         alert('Ошибка: ' + (detail || err.message));
       }
@@ -202,27 +209,29 @@ export const FinancePage: React.FC = () => {
     }
   };
 
-  const handleDeleteAct = async () => {
-    if (!deleteActTarget) return;
-    try {
-      await financeApi.deleteAct(deleteActTarget.id);
-      setActs(acts.filter((a) => a.id !== deleteActTarget.id));
-      setDeleteActTarget(null);
-      loadData();
-    } catch (err: any) {
-      alert('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
-    }
-  };
+const handleDeleteAct = async () => {
+  if (!deleteActTarget) return;
+  try {
+    await financeApi.deleteAct(deleteActTarget.id);
+    setActs(acts.filter((a) => a.id !== deleteActTarget.id));
+    setDeleteActTarget(null);
+    showToast.success('Акт удалён');
+    loadData();
+  } catch (err: any) {
+    showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
+  }
+};
 
-  const handleSignAct = async (act: Act, role: 'client' | 'executor') => {
-    if (!confirm(`Подписать акт ${act.document_number} как ${role}?`)) return;
-    try {
-      const updated = await financeApi.signAct(act.id, role);
-      setActs(acts.map((a) => (a.id === act.id ? updated : a)));
-    } catch (err: any) {
-      alert('Ошибка: ' + (err?.response?.data?.detail || err.message));
-    }
-  };
+const handleSignAct = async (act: Act, role: 'client' | 'executor') => {
+  if (!confirm(`Подписать акт ${act.document_number} как ${role}?`)) return;
+  try {
+    const updated = await financeApi.signAct(act.id, role);
+    setActs(acts.map((a) => (a.id === act.id ? updated : a)));
+    showToast.success(`Акт подписан как ${role === 'client' ? 'клиент' : 'исполнитель'}`);
+  } catch (err: any) {
+    showToast.error('Ошибка подписания: ' + (err?.response?.data?.detail || err.message));
+  }
+};
 
   // === ЭКСПОРТ ===
   const handleExportInvoicesCsv = async () => {
@@ -230,7 +239,7 @@ export const FinancePage: React.FC = () => {
       const blob = await exportApi.invoicesCsv({});
       downloadBlob(blob, `invoices_${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (err: any) {
-      alert('Ошибка экспорта: ' + (err?.response?.data?.detail || err.message));
+      showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
     }
   };
 
@@ -239,7 +248,7 @@ export const FinancePage: React.FC = () => {
       const blob = await exportApi.actsCsv({});
       downloadBlob(blob, `acts_${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (err: any) {
-      alert('Ошибка экспорта: ' + (err?.response?.data?.detail || err.message));
+      showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
     }
   };
 

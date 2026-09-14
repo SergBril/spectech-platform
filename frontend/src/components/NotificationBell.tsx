@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { notificationsApi, type Notification } from '../api/notifications';
 import { useWebSocket } from '../contexts/WebSocketContext';
+import { showToast } from '../utils/toast';
 
 export const NotificationBell: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -23,14 +24,15 @@ export const NotificationBell: React.FC = () => {
     }
   }, [lastMessage]);
 
-  const loadUnreadCount = async () => {
-    try {
-      const data = await notificationsApi.getUnreadCount();
-      setUnreadCount(data.count);
-    } catch (err) {
-      console.error('Failed to load unread count:', err);
-    }
-  };
+const loadUnreadCount = async () => {
+  try {
+    const data = await notificationsApi.getUnreadCount();
+    setUnreadCount(data.count);
+  } catch (err) {
+    console.error('Failed to load unread count:', err);
+    // Не показываем toast для фоновых ошибок
+  }
+};
 
   const loadNotifications = async () => {
     try {
