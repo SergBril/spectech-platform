@@ -158,7 +158,7 @@ app.include_router(
     contractors.router, prefix="/api/v1/contractors", tags=["contractors"]
 )
 app.include_router(rbac.router, prefix="/api/v1/rbac", tags=["rbac"])
-app.include_router(me.router, prefix="/api/v1/me", tags=["me"])
+app.include_router(me.router, prefix="/api/v1", tags=["me"])
 app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["finance"])
 app.include_router(acts.router, prefix="/api/v1/acts", tags=["finance"])
 app.include_router(payouts.router, prefix="/api/v1/payouts", tags=["finance"])
