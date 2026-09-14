@@ -24,23 +24,17 @@ export const DashboardPage: React.FC = () => {
 const loadData = async () => {
   try {
     setLoading(true);
-    console.log('🔄 Loading dashboard data...');
-
     const [vehiclesData, requestsData, financeRes] = await Promise.allSettled([
       vehiclesApi.getAll({ limit: 100 }),
       requestsApi.getAll({ limit: 100 }),
       financeApi.getDashboard(),
     ]);
 
-    console.log('📦 Vehicles:', vehiclesData.status, vehiclesData.status === 'fulfilled' ? vehiclesData.value : vehiclesData.reason);
-    console.log('📦 Requests:', requestsData.status, requestsData.status === 'fulfilled' ? requestsData.value : requestsData.reason);
-    console.log('📦 Finance:', financeRes.status, financeRes.status === 'fulfilled' ? financeRes.value : financeRes.reason);
-
     if (vehiclesData.status === 'fulfilled') setVehicles(vehiclesData.value);
     if (requestsData.status === 'fulfilled') setRequests(requestsData.value);
     if (financeRes.status === 'fulfilled') setFinanceData(financeRes.value);
   } catch (err) {
-    console.error('❌ Failed to load dashboard:', err);
+    console.error('Failed to load dashboard:', err);
   } finally {
     setLoading(false);
   }
