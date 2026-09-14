@@ -10,7 +10,8 @@ export const RegisterPage: React.FC = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { register } = useAuth();
+  const { login } = useAuth();
+  // и в вызове: await login(email, password)
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {

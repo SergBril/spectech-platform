@@ -27,20 +27,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
-
-  const loadUserData = async (accessToken: string) => {
-    try {
-      const meResponse = await apiClient.get('/me');
-      setUser(meResponse.data);
-
-      const permsResponse = await apiClient.get('/me/permissions');
-      setPermissions(permsResponse.data || []);
-
-      console.log('✅ User data loaded:', meResponse.data);
-    } catch (error) {
-      console.error('❌ Failed to load user data:', error);
-    }
-  };
+const loadUserData = async (accessToken: string) => {
+  try {
+    const meResponse = await apiClient.get('/me');                    // ✅ /me
+    setUser(meResponse.data);
+    const permsResponse = await apiClient.get('/me/permissions');     // ✅ /me/permissions
+    setPermissions(permsResponse.data || []);
+    console.log('✅ User data loaded:', meResponse.data);
+  } catch (error) {
+    console.error('❌ Failed to load user data:', error);
+  }
+};
 
   useEffect(() => {
     if (token) {
