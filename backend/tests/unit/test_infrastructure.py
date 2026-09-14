@@ -42,8 +42,11 @@ class TestInfrastructure:
         assert True
 
     @pytest.mark.asyncio
-    async def test_client_fixture(self, client):
-        """Проверяем что фикстура клиента работает."""
-        response = await client.get("/")
-        # Главная страница может возвращать 404 или 200
-        assert response.status_code in [200, 404]
+    def test_client_fixture(self, client):
+        """Проверяем, что TestClient работает корректно."""
+        # TestClient синхронный, await НЕ нужен
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "healthy"
+        assert "version" in data

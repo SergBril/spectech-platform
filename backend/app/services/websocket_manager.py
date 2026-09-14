@@ -1,4 +1,5 @@
-"""Менеджер WebSocket подключений."""
+# backend/app/services/websocket_manager.py
+"""Менеджер WebSocket подключений с heartbeat и метриками."""
 
 import logging
 from datetime import UTC, datetime
@@ -11,44 +12,44 @@ logger = logging.getLogger("spectech.websocket")
 class ConnectionManager:
     """
     Управляет WebSocket подключениями с группировкой по компании.
-
-    Структура:
-    - self.company_connections: dict[company_id -> set[websocket]]
-    - self.user_connections: dict[user_id -> websocket]
     """
 
     def __init__(self):
-        # company_id -> множество активных подключений
         self.company_connections: dict[int, set[WebSocket]] = {}
-        # user_id -> websocket (последнее подключение пользователя)
         self.user_connections: dict[int, WebSocket] = {}
-        # websocket -> метаинформация
         self.connection_meta: dict[WebSocket, dict] = {}
+        # Метрики
+        self._stats = {
+            "total_connections_made": 0,
+            "total_disconnections": 0,
+            "total_messages_sent": 0,
+            "total_broadcasts": 0,
+        }
 
     async def connect(self, websocket: WebSocket, user_id: int, company_id: int):
         """Принимает подключение и регистрирует пользователя."""
         await websocket.accept()
 
-        # Регистрируем в company группу
         if company_id not in self.company_connections:
             self.company_connections[company_id] = set()
         self.company_connections[company_id].add(websocket)
 
-        # Сохраняем последнее подключение пользователя (не закрывая старые)
         self.user_connections[user_id] = websocket
 
-        # Сохраняем метаданные
         self.connection_meta[websocket] = {
             "user_id": user_id,
             "company_id": company_id,
             "connected_at": datetime.now(UTC).isoformat(),
+            "last_pong": datetime.now(UTC).isoformat(),
         }
 
+        self._stats["total_connections_made"] += 1
+
         logger.info(
-            "WebSocket connected: user=%s, company=%s, total_company=%s",
+            "✅ WebSocket connected: user=%s, company=%s, total=%s",
             user_id,
             company_id,
-            len(self.company_connections.get(company_id, set())),
+            self.get_stats()["total_connections"],
         )
 
     def disconnect(self, websocket: WebSocket):
@@ -57,17 +58,38 @@ class ConnectionManager:
         user_id = meta.get("user_id")
         company_id = meta.get("company_id")
 
-        # Удаляем из company группы
         if company_id and company_id in self.company_connections:
             self.company_connections[company_id].discard(websocket)
             if not self.company_connections[company_id]:
                 del self.company_connections[company_id]
 
-        # Удаляем из user connections
         if user_id and self.user_connections.get(user_id) == websocket:
             del self.user_connections[user_id]
 
-        logger.info("WebSocket disconnected: user=%s, company=%s", user_id, company_id)
+        self._stats["total_disconnections"] += 1
+
+        logger.info(
+            "❌ WebSocket disconnected: user=%s, company=%s", user_id, company_id
+        )
+
+    async def handle_ping(self, websocket: WebSocket):
+        """Обработка ping от клиента — отправляем pong."""
+        try:
+            await websocket.send_json(
+                {
+                    "type": "pong",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+            )
+            # Обновляем время последнего pong
+            if websocket in self.connection_meta:
+                self.connection_meta[websocket]["last_pong"] = datetime.now(
+                    UTC
+                ).isoformat()
+            return True
+        except Exception as e:
+            logger.error("Failed to send pong: %s", e)
+            return False
 
     async def send_personal(self, user_id: int, message: dict):
         """Отправляет сообщение конкретному пользователю."""
@@ -75,9 +97,11 @@ class ConnectionManager:
         if websocket:
             try:
                 await websocket.send_json(message)
+                self._stats["total_messages_sent"] += 1
                 return True
             except Exception as e:
                 logger.error("Failed to send to user %s: %s", user_id, e)
+                self.disconnect(websocket)
                 return False
         return False
 
@@ -95,12 +119,14 @@ class ConnectionManager:
                 failed.append(websocket)
                 logger.error("Failed to broadcast: %s", e)
 
-        # Удаляем нерабочие подключения
         for ws in failed:
             self.disconnect(ws)
 
+        self._stats["total_messages_sent"] += sent_count
+        self._stats["total_broadcasts"] += 1
+
         logger.info(
-            "Broadcast to company %s: sent=%s, failed=%s",
+            "📡 Broadcast to company %s: sent=%s, failed=%s",
             company_id,
             sent_count,
             len(failed),
@@ -108,16 +134,6 @@ class ConnectionManager:
         return sent_count
 
     async def broadcast_gps_to_company(self, company_id: int, gps_data: dict) -> int:
-        """
-        Отправляет GPS точку всем подписчикам компании на канал 'gps'.
-
-        Args:
-            company_id: ID компании
-            gps_data: Данные GPS точки (vehicle_id, lat, lon, speed, ...)
-
-        Returns:
-            Количество получателей
-        """
         message = {
             "type": "gps_point",
             "data": gps_data,
@@ -128,16 +144,6 @@ class ConnectionManager:
     async def broadcast_alert_to_company(
         self, company_id: int, alert_data: dict
     ) -> int:
-        """
-        Отправляет алерт всем подписчикам компании.
-
-        Args:
-            company_id: ID компании
-            alert_data: Данные алерта (id, title, severity, vehicle_id, ...)
-
-        Returns:
-            Количество получателей
-        """
         message = {
             "type": "alert",
             "data": alert_data,
@@ -151,14 +157,12 @@ class ConnectionManager:
         return await self.broadcast_to_company(company_id, message)
 
     async def broadcast_all(self, message: dict):
-        """Отправляет сообщение всем подключённым пользователям."""
         total = 0
         for company_id in list(self.company_connections.keys()):
             total += await self.broadcast_to_company(company_id, message)
         return total
 
     def get_stats(self) -> dict:
-        """Статистика подключений."""
         return {
             "total_connections": sum(
                 len(conns) for conns in self.company_connections.values()
@@ -169,8 +173,9 @@ class ConnectionManager:
                 company_id: len(conns)
                 for company_id, conns in self.company_connections.items()
             },
+            **self._stats,
         }
 
 
-# Глобальный singleton менеджер
+# Singleton
 manager = ConnectionManager()
