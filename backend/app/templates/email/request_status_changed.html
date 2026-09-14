@@ -1,0 +1,40 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<h2>📋 Статус заявки изменён</h2>
+
+<p>Здравствуйте, {{ user_name }}!</p>
+
+<p>Статус вашей заявки был изменён:</p>
+
+<div class="info-box">
+    <div class="info-row">
+        <span class="info-label">Номер заявки:</span>
+        <span class="info-value">#{{ request.id }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Тип работ:</span>
+        <span class="info-value">{{ request.work_type }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Предыдущий статус:</span>
+        <span class="info-value">{{ old_status }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Новый статус:</span>
+        <span class="info-value" style="color: #28a745; font-weight: bold;">{{ new_status }}</span>
+    </div>
+    {% if comment %}
+    <div class="info-row">
+        <span class="info-label">Комментарий:</span>
+        <span class="info-value">{{ comment }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<center>
+    <a href="{{ frontend_url }}/requests/{{ request.id }}" class="button">
+        Посмотреть заявку
+    </a>
+</center>
+{% endblock %}

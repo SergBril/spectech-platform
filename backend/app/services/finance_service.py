@@ -1,9 +1,11 @@
+import logging
 from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.models.auth import User
 from app.models.finance import (
     Act,
     DocumentStatus,
@@ -12,16 +14,15 @@ from app.models.finance import (
     Payment,
     Payout,
 )
+from app.services.email_service import email_service
+
+logger = logging.getLogger("spectech.finance")
 
 
 def generate_document_number(db: Session, prefix: str) -> str:
-    """
-    Генерирует уникальный номер документа.
-    Формат: PREFIX-YYYY-NNNN (например, INV-2026-0001)
-    """
+    """Генерирует уникальный номер документа."""
     current_year = datetime.now().year
 
-    # Определяем модель по префиксу
     model_map = {
         "INV": Invoice,
         "ACT": Act,
@@ -32,7 +33,6 @@ def generate_document_number(db: Session, prefix: str) -> str:
     if not model:
         raise ValueError(f"Unknown document prefix: {prefix}")
 
-    # Получаем максимальный номер для текущего года
     pattern = f"{prefix}-{current_year}-%"
     stmt = (
         select(model.document_number)
@@ -44,7 +44,6 @@ def generate_document_number(db: Session, prefix: str) -> str:
     last_number = db.scalar(stmt)
 
     if last_number:
-        # Извлекаем номер из последней записи
         try:
             last_seq = int(last_number.split("-")[-1])
             next_seq = last_seq + 1
@@ -76,55 +75,118 @@ def calculate_invoice_totals(invoice: Invoice) -> None:
     invoice.total = subtotal + invoice.vat_amount
 
 
-def create_invoice(db: Session, payload, user_id: int, company_id: int) -> Invoice:
-    """Создаёт счёт с позициями."""
-    invoice = Invoice(
-        document_number=generate_document_number(db, "INV"),
-        request_id=payload.request_id,
-        client_id=payload.client_id,
-        company_id=company_id,
-        invoice_date=payload.invoice_date,
-        due_date=payload.due_date,
-        vat_rate=payload.vat_rate,
-        comment=payload.comment,
-        status=DocumentStatus.draft,
-        created_by=user_id,
+def create_invoice(db: Session, payload, current_user: User) -> Invoice:
+    """Создаёт счёт с позициями и отправляет email клиенту."""
+    import traceback
+
+    from app.models.contractor import Contractor
+
+    logger.info(f"🔄 Creating invoice with payload type: {type(payload).__name__}")
+    logger.info(
+        f"📝 Payload keys: {list(payload.dict().keys()) if hasattr(payload, 'dict') else list(payload.keys()) if isinstance(payload, dict) else 'unknown'}"
     )
-    db.add(invoice)
-    db.flush()
 
-    # Создаём позиции
-    for item_data in payload.items:
-        item = InvoiceItem(
-            invoice_id=invoice.id,
-            description=item_data.description,
-            quantity=item_data.quantity,
-            unit=item_data.unit,
-            unit_price=item_data.unit_price,
-            shift_report_id=item_data.shift_report_id,
+    # Универсальный getter
+    def get(obj, key, default=None):
+        if obj is None:
+            return default
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
+
+    try:
+        company_id = getattr(current_user, "company_id", None)
+        logger.info(f"👤 User: {current_user.email}, company_id: {company_id}")
+
+        invoice = Invoice(
+            document_number=generate_document_number(db, "INV"),
+            request_id=get(payload, "request_id"),
+            client_id=get(payload, "client_id"),
+            company_id=company_id,
+            invoice_date=get(payload, "invoice_date") or datetime.now(),
+            due_date=get(payload, "due_date"),
+            vat_rate=get(payload, "vat_rate"),
+            comment=get(payload, "comment", ""),
+            status=DocumentStatus.draft,
+            created_by=current_user.id,
         )
-        db.add(item)
+        db.add(invoice)
+        db.flush()
+        logger.info(f"✅ Invoice #{invoice.id} created, adding items...")
 
-    db.flush()
+        # Создаём позиции
+        items = get(payload, "items", []) or []
+        logger.info(f"📦 Found {len(items)} items")
 
-    # Пересчитываем итоги
-    calculate_invoice_totals(invoice)
+        for idx, item_data in enumerate(items):
+            try:
+                item = InvoiceItem(
+                    invoice_id=invoice.id,
+                    description=str(get(item_data, "description", "")),
+                    quantity=get(item_data, "quantity", 1),
+                    unit=str(get(item_data, "unit", "шт")),
+                    unit_price=get(item_data, "unit_price", 0),
+                    shift_report_id=get(item_data, "shift_report_id"),
+                )
+                db.add(item)
+            except Exception as item_err:
+                logger.error(f"❌ Failed to add item {idx}: {item_err}")
+                logger.error(traceback.format_exc())
+                raise
 
-    db.commit()
-    db.refresh(invoice)
-    return invoice
+        db.flush()
+        calculate_invoice_totals(invoice)
+        db.commit()
+        db.refresh(invoice)
+        logger.info(
+            f"✅ Invoice {invoice.document_number} saved, total={invoice.total}"
+        )
+
+        # 📧 ОТПРАВКА EMAIL
+        try:
+            client = (
+                db.get(Contractor, invoice.client_id) if invoice.client_id else None
+            )
+            logger.info(
+                f"👥 Client lookup: id={invoice.client_id}, found={client is not None}"
+            )
+
+            if client and hasattr(client, "email") and client.email:
+                client_name = getattr(client, "name", "") or "Клиент"
+                logger.info(f"📧 Sending email to {client.email}")
+                success = email_service.send_invoice_created(
+                    invoice=invoice,
+                    client_email=client.email,
+                    client_name=client_name,
+                )
+                if success:
+                    logger.info(f"✅ Email sent successfully to {client.email}")
+                else:
+                    logger.warning(f"⚠️ Email service returned False for {client.email}")
+            else:
+                logger.warning(
+                    f"⚠️ Client email not found for invoice #{invoice.document_number}"
+                )
+        except Exception as email_err:
+            logger.error(f"❌ Email sending failed: {email_err}")
+            logger.error(traceback.format_exc())
+
+        return invoice
+
+    except Exception as e:
+        logger.error(f"❌ create_invoice FAILED: {e}")
+        logger.error(traceback.format_exc())
+        db.rollback()
+        raise
 
 
 def register_payment(db: Session, payment: Payment) -> None:
-    """
-    Регистрирует платёж и обновляет paid_amount у связанных документов.
-    """
+    """Регистрирует платёж и обновляет paid_amount у связанных документов."""
     if payment.invoice_id:
         invoice = db.get(Invoice, payment.invoice_id)
         if invoice:
             invoice.paid_amount += payment.amount
 
-            # Обновляем статус счёта
             if invoice.paid_amount >= invoice.total:
                 invoice.status = DocumentStatus.paid
             elif invoice.paid_amount > 0:
@@ -154,11 +216,7 @@ def calculate_payout(gross_amount: Decimal, commission_rate: Decimal) -> dict:
 
 
 def get_finance_dashboard(db: Session, company_id: int | None) -> dict:
-    """
-    Собирает статистику для финансового дашборда.
-    Если company_id = None, показывает все данные (без фильтрации).
-    """
-    # === Счета ===
+    """Собирает статистику для финансового дашборда."""
     invoice_query = select(func.coalesce(func.sum(Invoice.total), 0))
     invoice_paid_query = select(func.coalesce(func.sum(Invoice.paid_amount), 0))
     invoice_count_query = select(func.count(Invoice.id))
@@ -174,16 +232,13 @@ def get_finance_dashboard(db: Session, company_id: int | None) -> dict:
     total_paid = db.scalar(invoice_paid_query) or Decimal("0")
     invoices_count = db.scalar(invoice_count_query) or 0
 
-    # Задолженность
     total_outstanding = total_revenue - total_paid
 
-    # === Акты ===
     acts_query = select(func.count(Act.id))
     if company_id is not None:
         acts_query = acts_query.where(Act.company_id == company_id)
     acts_count = db.scalar(acts_query) or 0
 
-    # === Выплаты ===
     payout_query = select(func.count(Payout.id))
     commission_query = select(func.coalesce(func.sum(Payout.platform_commission), 0))
     if company_id is not None:

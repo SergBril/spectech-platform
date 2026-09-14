@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,8 +13,11 @@ from app.models.contractor import Contractor
 from app.models.dispatch import Request
 from app.models.finance import Act, DocumentStatus
 from app.schemas.finance import ActCreate, ActRead, ActSign
+from app.services.email_service import email_service
 from app.services.finance_service import generate_document_number
 from app.services.pdf_service import generate_act_pdf
+
+logger = logging.getLogger("spectech.acts")
 
 router = APIRouter()
 
@@ -110,44 +114,119 @@ async def sign_act(
     current_user: User = Depends(get_current_user),
 ):
     """Подписать акт (со стороны клиента или исполнителя)."""
+    import traceback
+
+    logger.info(
+        f"📝 Sign act request: act_id={act_id}, signed_by={payload.signed_by}, user={current_user.email}"
+    )
+
     act = db.get(Act, act_id)
     if not act:
         raise HTTPException(status_code=404, detail="Act not found")
 
     now = datetime.now(UTC)
 
-    if payload.signed_by == "client":
-        if act.signed_by_client_at:
-            raise HTTPException(status_code=409, detail="Act already signed by client")
-        act.signed_by_client_at = now
-
-        # Уведомляем создателя заявки (исполнителя)
-        if act.request_id:
-            request = db.get(Request, act.request_id)
-            if request and request.created_by and request.created_by != current_user.id:
-                from app.services.notification_service import create_notification
-
-                await create_notification(
-                    db=db,
-                    user_id=request.created_by,
-                    title=f"Акт {act.document_number} подписан клиентом",
-                    body=f"Клиент подписал акт {act.document_number} на сумму {float(act.total_amount):.2f} ₽",
-                    channel="in_app",
+    try:
+        if payload.signed_by == "client":
+            if act.signed_by_client_at:
+                raise HTTPException(
+                    status_code=409, detail="Act already signed by client"
                 )
-    elif payload.signed_by == "executor":
-        if act.signed_by_executor_at:
-            raise HTTPException(
-                status_code=409, detail="Act already signed by executor"
-            )
-        act.signed_by_executor_at = now
+            act.signed_by_client_at = now
+            logger.info(f"✅ Act signed by client at {now}")
 
-    # Если обе стороны подписали — акт завершён
-    if act.signed_by_client_at and act.signed_by_executor_at:
-        act.status = DocumentStatus.paid
+            # Уведомляем создателя заявки (исполнителя) через in-app notification
+            if act.request_id:
+                try:
+                    request = db.get(Request, act.request_id)
+                    logger.info(
+                        f"📋 Request found: id={request.id if request else None}"
+                    )
 
-    db.commit()
-    db.refresh(act)
-    return act
+                    if (
+                        request
+                        and hasattr(request, "created_by")
+                        and request.created_by
+                        and request.created_by != current_user.id
+                    ):
+                        from app.services.notification_service import (
+                            create_notification,
+                        )
+
+                        await create_notification(
+                            db=db,
+                            user_id=request.created_by,
+                            title=f"Акт {act.document_number} подписан клиентом",
+                            body=f"Клиент подписал акт {act.document_number} на сумму {float(act.total_amount):.2f} ₽",
+                            channel="in_app",
+                        )
+                        logger.info(
+                            f"🔔 Notification sent to user {request.created_by}"
+                        )
+                except Exception as notif_err:
+                    logger.error(f"❌ Notification failed: {notif_err}")
+                    logger.error(traceback.format_exc())
+                    # Не прерываем — уведомление не критично
+
+            # 📧 Email клиенту
+            try:
+                client = db.get(Contractor, act.client_id) if act.client_id else None
+                logger.info(
+                    f"👥 Client for email: {client.name if client else None}, email={client.email if client else None}"
+                )
+
+                if client and hasattr(client, "email") and client.email:
+                    success = email_service.send_act_signed(
+                        act=act,
+                        user_email=client.email,
+                        user_name=client.name or "Клиент",
+                    )
+                    logger.info(f"📧 Client email sent: {success}")
+            except Exception as email_err:
+                logger.error(f"❌ Client email failed: {email_err}")
+                logger.error(traceback.format_exc())
+
+        elif payload.signed_by == "executor":
+            if act.signed_by_executor_at:
+                raise HTTPException(
+                    status_code=409, detail="Act already signed by executor"
+                )
+            act.signed_by_executor_at = now
+            logger.info(f"✅ Act signed by executor at {now}")
+
+            # 📧 Email исполнителю (текущему пользователю)
+            try:
+                if current_user.email:
+                    success = email_service.send_act_signed(
+                        act=act,
+                        user_email=current_user.email,
+                        user_name=current_user.full_name or "Исполнитель",
+                    )
+                    logger.info(f"📧 Executor email sent: {success}")
+            except Exception as email_err:
+                logger.error(f"❌ Executor email failed: {email_err}")
+                logger.error(traceback.format_exc())
+
+        # Если обе стороны подписали — акт завершён
+        if act.signed_by_client_at and act.signed_by_executor_at:
+            act.status = DocumentStatus.paid
+            logger.info(f"✅ Act {act.document_number} fully signed, status=paid")
+
+        db.commit()
+        db.refresh(act)
+
+        logger.info(
+            f"✅ Act {act.document_number} signed by {payload.signed_by} — SUCCESS"
+        )
+        return act
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ sign_act FAILED: {e}")
+        logger.error(traceback.format_exc())
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
 @router.delete("/{act_id}", status_code=204)

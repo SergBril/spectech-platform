@@ -1,0 +1,36 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<h2>⏰ Напоминание: счёт просрочен</h2>
+
+<p>Здравствуйте, {{ client_name }}!</p>
+
+<p>Напоминаем, что срок оплаты по следующему счёту истёк:</p>
+
+<div class="info-box">
+    <div class="info-row">
+        <span class="info-label">Номер счёта:</span>
+        <span class="info-value">{{ invoice.document_number }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Срок оплаты был:</span>
+        <span class="info-value" style="color: #dc3545;">{{ invoice.due_date.strftime('%d.%m.%Y') }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Просрочено на:</span>
+        <span class="info-value" style="color: #dc3545;">{{ overdue_days }} дней</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Сумма к оплате:</span>
+        <span class="info-value amount">{{ "{:,.2f}".format(invoice.total).replace(',', ' ') }} ₽</span>
+    </div>
+</div>
+
+<p>Пожалуйста, произведите оплату как можно скорее.</p>
+
+<center>
+    <a href="{{ frontend_url }}/invoices/{{ invoice.id }}" class="button">
+        Оплатить сейчас
+    </a>
+</center>
+{% endblock %}
