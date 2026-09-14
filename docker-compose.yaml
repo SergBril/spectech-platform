@@ -70,6 +70,15 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-production}
       DEBUG: ${DEBUG:-false}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      EMAIL_ENABLED: "true"
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_FROM_EMAIL: noreply@spectech.pro
+      SMTP_FROM_NAME: СпецТехника Про
+      SMTP_USE_TLS: "false"
+      FRONTEND_URL: http://localhost:8080
     volumes:
       - uploads_data:/app/uploads
       - logs_data:/app/logs

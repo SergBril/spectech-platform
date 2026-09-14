@@ -139,6 +139,48 @@ class EmailService:
             },
         )
 
+    def send_invoice_overdue(
+        self, invoice, client_email: str, client_name: str, overdue_days: int
+    ) -> bool:
+        """Уведомление о просроченном счёте."""
+        subject = f"⏰ Напоминание: счёт {invoice.document_number} просрочен"
+        return self.send_email(
+            to_email=client_email,
+            subject=subject,
+            template_name="email/invoice_overdue.html",
+            context={
+                "invoice": invoice,
+                "client_name": client_name,
+                "overdue_days": overdue_days,
+                "subject": subject,
+            },
+        )
+
+    def send_request_status_changed(
+        self,
+        request,
+        user_email: str,
+        user_name: str,
+        old_status: str,
+        new_status: str,
+        comment: str = "",
+    ) -> bool:
+        """Уведомление о смене статуса заявки."""
+        subject = f"📋 Заявка #{request.id}: статус изменён на {new_status}"
+        return self.send_email(
+            to_email=user_email,
+            subject=subject,
+            template_name="email/request_status_changed.html",
+            context={
+                "request": request,
+                "user_name": user_name,
+                "old_status": old_status,
+                "new_status": new_status,
+                "comment": comment,
+                "subject": subject,
+            },
+        )
+
 
 # Singleton instance
 email_service = EmailService()
