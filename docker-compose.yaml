@@ -59,7 +59,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-in-production}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      CORS_ORIGINS: http://localhost:8080,http://localhost:3000,http://localhost:5173
       ENVIRONMENT: ${ENVIRONMENT:-production}
       DEBUG: ${DEBUG:-false}
       SENTRY_DSN: ${SENTRY_DSN:-}
