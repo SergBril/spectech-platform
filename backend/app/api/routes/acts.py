@@ -172,13 +172,14 @@ async def sign_act(
             try:
                 client = db.get(Contractor, act.client_id) if act.client_id else None
                 logger.info(
-                    f"👥 Client for email: {client.name if client else None}, email={client.email if client else None}"
+                    f"👥 Client for email: {client.name if client else None}, contact_email={client.contact_email if client else None}"
                 )
 
-                if client and hasattr(client, "email") and client.email:
+                # ✅ ИСПРАВЛЕНО: поле называется contact_email, а не email
+                if client and hasattr(client, "contact_email") and client.contact_email:
                     success = email_service.send_act_signed(
                         act=act,
-                        user_email=client.email,
+                        user_email=client.contact_email,
                         user_name=client.name or "Клиент",
                     )
                     logger.info(f"📧 Client email sent: {success}")

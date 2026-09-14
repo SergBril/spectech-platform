@@ -45,11 +45,11 @@ def create_invoice_endpoint(
     _: None = Depends(require_permission("invoices", "create")),
 ):
     """Создать новый счёт."""
+    # ✅ ПРАВИЛЬНО: передаем current_user
     invoice = create_invoice(
         db=db,
         payload=payload,
-        user_id=current_user.id,
-        company_id=current_user.company_id,
+        current_user=current_user,
     )
     return invoice
 

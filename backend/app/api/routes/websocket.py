@@ -16,23 +16,31 @@ router = APIRouter()
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str):
     """WebSocket endpoint с аутентификацией."""
+    from app.core.db import SessionLocal
+
     logger.info("🔌 WebSocket connection attempt, token present: %s", bool(token))
 
-    # Аутентификация
-    user_data = await verify_ws_token(token)
-    if not user_data:
+    # Создаём сессию БД для проверки токена
+    db = SessionLocal()
+    try:
+        # ⚠️ ВАЖНО: verify_ws_token — СИНХРОННАЯ функция (def, не async def)
+        # УБИРАЕМ await!
+        user = verify_ws_token(token, db)
+    finally:
+        db.close()
+
+    if not user:
         logger.warning("❌ WebSocket: invalid token")
         await websocket.close(code=4001, reason="Invalid token")
         return
 
-    user_id = user_data.get("user_id")
-    company_id = user_data.get("company_id", 0)
+    user_id = user.id
+    company_id = getattr(user, "company_id", 0) or 0
     logger.info("✅ WebSocket auth OK: user_id=%s, company_id=%s", user_id, company_id)
 
     await manager.connect(websocket, user_id, company_id)
 
     try:
-        # Отправляем приветственное сообщение
         await websocket.send_json(
             {
                 "type": "connected",
@@ -44,8 +52,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
         while True:
             data = await websocket.receive_json()
-
-            # Обработка ping
             if data.get("type") == "ping":
                 await websocket.send_json(
                     {
