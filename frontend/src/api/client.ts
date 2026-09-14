@@ -1,36 +1,31 @@
 import axios from 'axios';
-import type { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 
-// Создаем axios instance
-const apiClient = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor - добавляем токен ко всем запросам
-apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('access_token');
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error: AxiosError) => Promise.reject(error)
-);
+// Request interceptor - добавляем токен
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
-// Response interceptor - обрабатываем ошибки
+// Response interceptor - auto refresh
 let isRefreshing = false;
 let failedQueue: Array<{
-  resolve: (value?: unknown) => void;
-  reject: (reason?: unknown) => void;
+  resolve: (value?: any) => void;
+  reject: (reason?: any) => void;
 }> = [];
 
-const processQueue = (error: Error | null, token: string | null = null) => {
+const processQueue = (error: any, token: string | null = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error);
@@ -42,25 +37,21 @@ const processQueue = (error: Error | null, token: string | null = null) => {
 };
 
 apiClient.interceptors.response.use(
-  (response: AxiosResponse) => response,
-  async (error: AxiosError) => {
-    // Пропускаем blob-запросы (PDF скачивание)
-    if (error.config?.responseType === 'blob') {
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (originalRequest?.responseType === 'blob') {
       return Promise.reject(error);
     }
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    // Если 401 и это не повторная попытка
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
-        // Если уже идет refresh, ставим запрос в очередь
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
           .then((token) => {
-            if (originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-            }
+            originalRequest.headers.Authorization = `Bearer ${token}`;
             return apiClient(originalRequest);
           })
           .catch((err) => Promise.reject(err));
@@ -70,9 +61,7 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       const refreshToken = localStorage.getItem('refresh_token');
-
       if (!refreshToken) {
-        // Нет refresh token - разлогиниваем
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         window.location.href = '/login';
@@ -80,27 +69,17 @@ apiClient.interceptors.response.use(
       }
 
       try {
-        // Пробуем обновить токен
-        const response = await axios.post(`${API_URL}/auth/refresh`, {
-          refresh_token: refreshToken,
-        });
-
+        const response = await axios.post(
+          `${API_BASE_URL}/auth/refresh`,
+          { refresh_token: refreshToken }
+        );
         const { access_token } = response.data;
         localStorage.setItem('access_token', access_token);
-
-        // Обновляем заголовок в оригинальном запросе
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${access_token}`;
-        }
-
+        originalRequest.headers.Authorization = `Bearer ${access_token}`;
         processQueue(null, access_token);
-
-        // Повторяем оригинальный запрос с новым токеном
         return apiClient(originalRequest);
       } catch (refreshError) {
-        processQueue(refreshError as Error, null);
-
-        // Refresh не удался - разлогиниваем
+        processQueue(refreshError, null);
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         window.location.href = '/login';
@@ -110,12 +89,9 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // Обрабатываем другие ошибки
     const errorMessage =
-      (error.response?.data as any)?.detail || error.message || 'Произошла ошибка';
-
+      error.response?.data?.detail || error.message || 'Произошла ошибка';
     console.error('API Error:', errorMessage);
-
     return Promise.reject(error);
   }
 );

@@ -29,9 +29,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [permissions, setPermissions] = useState<string[]>([]);
 const loadUserData = async (accessToken: string) => {
   try {
-    const meResponse = await apiClient.get('/me');                    // ✅ /me
+    const meResponse = await apiClient.get('/me');
     setUser(meResponse.data);
-    const permsResponse = await apiClient.get('/me/permissions');     // ✅ /me/permissions
+    const permsResponse = await apiClient.get('/me/permissions');
     setPermissions(permsResponse.data || []);
     console.log('✅ User data loaded:', meResponse.data);
   } catch (error) {
