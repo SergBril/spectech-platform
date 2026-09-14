@@ -62,9 +62,10 @@ export const NotificationBell: React.FC = () => {
 
   const handleMarkAllRead = async () => {
     try {
-      await notificationsApi.markAllRead();
+      const result = await notificationsApi.markAllRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
+      console.log(`✅ Marked ${result.updated} notifications as read`);
     } catch (err) {
       console.error('Failed to mark all read:', err);
     }

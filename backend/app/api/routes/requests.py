@@ -163,13 +163,22 @@ async def update_request(
     # Если меняется статус — логируем переход
     if "status" in update_data and update_data["status"] != old_status:
         new_status = update_data["status"]
+
+        # Безопасная конвертация enum → string
+        old_status_str = (
+            old_status.value if hasattr(old_status, "value") else str(old_status)
+        )
+        new_status_str = (
+            new_status.value if hasattr(new_status, "value") else str(new_status)
+        )
+
         db.add(
             RequestStatusLog(
                 request_id=request.id,
                 from_status=old_status,
                 to_status=new_status,
                 changed_by_user_id=current_user.id,
-                comment=f"Статус изменён вручную: {old_status} → {new_status}",
+                comment=f"Статус изменён вручную: {old_status_str} → {new_status_str}",
             )
         )
 
@@ -181,7 +190,7 @@ async def update_request(
                 db=db,
                 user_id=request.created_by,
                 title=f"Статус заявки #{request.id} изменён",
-                body=f"Заявка '{request.work_type}' переведена из '{old_status}' в '{new_status}'",
+                body=f"Заявка '{request.work_type}' переведена из '{old_status_str}' в '{new_status_str}'",
                 channel="in_app",
             )
 
