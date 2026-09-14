@@ -1,5 +1,7 @@
 """Конфигурация приложения через pydantic-settings."""
 
+import os
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -55,6 +57,19 @@ class Settings(BaseSettings):
 
     # Rate limiting
     rate_limit_enabled: bool = False
+
+    # Email (SMTP)
+    SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.mailtrap.io")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USER: str = os.getenv("SMTP_USER", "")
+    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
+    SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "noreply@spectech.pro")
+    SMTP_FROM_NAME: str = os.getenv("SMTP_FROM_NAME", "СпецТехника Про")
+    SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+    EMAIL_ENABLED: bool = os.getenv("EMAIL_ENABLED", "false").lower() == "true"
+
+    # Application URLs (для ссылок в письмах)
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:8080")
 
     # Sentry
     sentry_dsn: str | None = None

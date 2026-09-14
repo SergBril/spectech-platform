@@ -58,11 +58,18 @@ VITE_WS_URL=ws://localhost:8000/api/v1/ws
 # SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
 
 # =============================================================================
-# EMAIL (SMTP) - опционально, для email-уведомлений
+# EMAIL (SMTP) - для отправки уведомлений
 # =============================================================================
-# SMTP_HOST=smtp.gmail.com
-# SMTP_PORT=587
-# SMTP_USER=your-email@gmail.com
-# SMTP_PASSWORD=your-app-password
-# SMTP_FROM_EMAIL=noreply@your-domain.com
-# SMTP_FROM_NAME=SpectechPlatform
+# Используем Mailhog (локальный SMTP) - не требует регистрации!
+# Web UI: http://localhost:8025
+EMAIL_ENABLED=true
+SMTP_HOST=mailhog
+SMTP_PORT=1025
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM_EMAIL=noreply@spectech.pro
+SMTP_FROM_NAME=СпецТехника Про
+SMTP_USE_TLS=false
+
+# Frontend URL для ссылок в письмах
+FRONTEND_URL=http://localhost:8080
