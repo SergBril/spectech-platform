@@ -5,6 +5,7 @@ import { vehiclesApi, type Vehicle } from '../api/vehicles';
 import { requestsApi, type Request } from '../api/requests';
 import { financeApi, type PaymentsDashboard } from '../api/finance';
 import { RevenueChart, StatusPieChart, TopRequestsChart, Sparkline } from '../components/AnalyticsCharts';
+import NotificationBell from '../components/NotificationBell';
 
 export const DashboardPage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -69,6 +70,7 @@ const loadData = async () => {
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">{user?.email}</span>
+              <NotificationBell />
               <button
                 onClick={() => { logout(); navigate('/login'); }}
                 className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"

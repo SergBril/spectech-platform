@@ -7,6 +7,7 @@ import InvoiceFormModal from '../components/InvoiceFormModal';
 import PaymentModal from '../components/PaymentModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import ActFormModal from '../components/ActFormModal';
+import NotificationBell from '../components/NotificationBell';
 
 const INVOICE_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
@@ -278,6 +279,7 @@ export const FinancePage: React.FC = () => {
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">{user?.email}</span>
+              <NotificationBell />
               <button
                 onClick={() => { logout(); navigate('/login'); }}
                 className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"

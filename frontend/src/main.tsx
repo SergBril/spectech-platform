@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { WebSocketProvider } from './contexts/WebSocketContext';
 
 // ✅ Все импорты БЕЗ фигурных скобок (default export)
 import LoginPage from './pages/LoginPage';
@@ -119,9 +120,11 @@ const AppRoutes = () => {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+<AuthProvider>
+  <WebSocketProvider>
+    <AppRoutes />
+  </WebSocketProvider>
+</AuthProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { requestsApi, type Request, type StatusLogEntry } from '../api/requests';
 import { financeApi, type Invoice, type Act } from '../api/finance';
 import { exportApi, downloadBlob } from '../api/export';
+import NotificationBell from '../components/NotificationBell';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   new: { label: 'Новая', color: 'bg-blue-100 text-blue-800', icon: '🆕' },
@@ -205,6 +206,7 @@ export const RequestDetailPage: React.FC = () => {
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">{user?.email}</span>
+              <NotificationBell />
               <button
                 onClick={() => { logout(); navigate('/login'); }}
                 className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
