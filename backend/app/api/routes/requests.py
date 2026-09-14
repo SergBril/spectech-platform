@@ -144,11 +144,8 @@ def assign_request(
     return request
 
 
-from app.schemas.request import RequestUpdate
-
-
 @router.patch("/{request_id}", response_model=RequestRead)
-def update_request(
+async def update_request(
     request_id: int,
     payload: RequestUpdate,
     db: Session = Depends(get_db),
@@ -175,6 +172,18 @@ def update_request(
                 comment=f"Статус изменён вручную: {old_status} → {new_status}",
             )
         )
+
+        # Уведомляем создателя заявки (если это не он сам)
+        if request.created_by and request.created_by != current_user.id:
+            from app.services.notification_service import create_notification
+
+            await create_notification(
+                db=db,
+                user_id=request.created_by,
+                title=f"Статус заявки #{request.id} изменён",
+                body=f"Заявка '{request.work_type}' переведена из '{old_status}' в '{new_status}'",
+                channel="in_app",
+            )
 
     for field, value in update_data.items():
         setattr(request, field, value)

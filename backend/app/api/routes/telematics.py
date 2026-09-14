@@ -616,6 +616,18 @@ def mark_notification_read(
     return notif
 
 
+@router.post("/notifications/mark-all-read")
+async def mark_all_notifications_read(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Пометить все уведомления как прочитанные."""
+    from app.services.notification_service import mark_all_read
+
+    count = await mark_all_read(db, current_user.id)
+    return {"updated": count}
+
+
 @router.get("/notifications/unread-count")
 def get_unread_count(
     db: Session = Depends(get_db),

@@ -5,6 +5,7 @@ import type { Vehicle } from '../api/vehicles';
 import { useAuth } from '../contexts/AuthContext';
 import { VehicleFormModal } from '../components/VehicleFormModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
+import NotificationBell from '../components/NotificationBell';
 
 export const VehiclesPage: React.FC = () => {
   const { user, logout, hasPermission } = useAuth();
@@ -115,6 +116,7 @@ export const VehiclesPage: React.FC = () => {
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">{user?.email}</span>
+              <NotificationBell />
               <button
                 onClick={handleLogout}
                 className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"

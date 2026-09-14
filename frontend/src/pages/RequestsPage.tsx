@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { requestsApi, type Request, type RequestStatus } from '../api/requests';
 import RequestFormModal from '../components/RequestFormModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
+import NotificationBell from '../components/NotificationBell';
 
 const STATUS_LABELS: Record<RequestStatus, { label: string; color: string }> = {
   new: { label: 'Новая', color: 'bg-blue-100 text-blue-800' },
@@ -143,6 +144,7 @@ export const RequestsPage: React.FC = () => {
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">{user?.email}</span>
+              <NotificationBell />
               <button onClick={() => { logout(); navigate('/login'); }} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
                 Выйти
               </button>
