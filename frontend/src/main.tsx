@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
+import { Toaster } from 'react-hot-toast';
 
 // ✅ Все импорты БЕЗ фигурных скобок (default export)
 import LoginPage from './pages/LoginPage';
@@ -120,11 +121,36 @@ const AppRoutes = () => {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
-<AuthProvider>
-  <WebSocketProvider>
-    <AppRoutes />
-  </WebSocketProvider>
-</AuthProvider>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+            borderRadius: '8px',
+          },
+          success: {
+            duration: 3000,
+            iconTheme: {
+              primary: '#10B981',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            duration: 5000,
+            iconTheme: {
+              primary: '#EF4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
+      <AuthProvider>
+        <WebSocketProvider>
+          <AppRoutes />
+        </WebSocketProvider>
+      </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>
 );
