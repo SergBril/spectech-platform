@@ -302,11 +302,19 @@ def generate_and_save_invoice_pdf(invoice_id: int, db: Session) -> dict | None:
     """
     Генерирует PDF для счета, сохраняет в MinIO и создаёт запись в uploaded_files.
     """
+    from sqlalchemy.orm import selectinload
+
     from app.services.pdf_generator import generate_invoice_pdf
 
     try:
-        # 1. Получаем счет с items
-        invoice = db.get(Invoice, invoice_id)
+        # 1. Получаем счет С items (важно для шаблона!)
+        stmt = (
+            select(Invoice)
+            .options(selectinload(Invoice.items))
+            .where(Invoice.id == invoice_id)
+        )
+        invoice = db.scalar(stmt)
+
         if not invoice:
             logger.error(f"❌ Invoice #{invoice_id} not found")
             return None
