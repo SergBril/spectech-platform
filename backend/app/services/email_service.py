@@ -139,6 +139,24 @@ class EmailService:
             },
         )
 
+
+def send_act_created(
+    self, act, executor_email: str, executor_name: str, client_name: str
+) -> bool:
+    """Уведомление о создании акта (исполнителю)."""
+    subject = f"📋 Акт {act.document_number} создан и готов к подписанию"
+    return self.send_email(
+        to_email=executor_email,
+        subject=subject,
+        template_name="email/act_created.html",
+        context={
+            "act": act,
+            "executor_name": executor_name,
+            "client_name": client_name,
+            "subject": subject,
+        },
+    )
+
     def send_invoice_overdue(
         self, invoice, client_email: str, client_name: str, overdue_days: int
     ) -> bool:

@@ -14,6 +14,7 @@ import VehiclesPage from './pages/VehiclesPage';
 import FinancePage from './pages/FinancePage';
 import InvoicesPage from './pages/InvoicesPage';
 import RequestDetailPage from './pages/RequestDetailPage';
+import ActCreatePage from './pages/ActCreatePage';
 
 import './index.css';
 
@@ -37,82 +38,21 @@ const AppRoutes = () => {
   return (
     <Routes>
       {/* Публичные страницы */}
-      <Route
-        path="/login"
-        element={
-          <GuestRoute>
-            <LoginPage />
-          </GuestRoute>
-        }
-      />
-      <Route
-        path="/register"
-        element={
-          <GuestRoute>
-            <RegisterPage />
-          </GuestRoute>
-        }
-      />
+      <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
+      <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
 
       {/* Защищённые страницы */}
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/vehicles"
-        element={
-          <ProtectedRoute>
-            <VehiclesPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/requests"
-        element={
-          <ProtectedRoute>
-            <RequestsPage />
-          </ProtectedRoute>
-        }
-      />
-<Route
-  path="/finance"
-  element={
-    <ProtectedRoute>
-      <FinancePage />
-    </ProtectedRoute>
-  }
-/>
-<Route
-  path="/invoices"
-  element={
-    <ProtectedRoute>
-      <InvoicesPage />
-    </ProtectedRoute>
-  }
-/>
-<Route
-  path="/requests/:id"
-  element={
-    <ProtectedRoute>
-      <RequestDetailPage />
-    </ProtectedRoute>
-  }
-/>
-<Route
-  path="/requests"
-  element={
-    <ProtectedRoute>
-      <RequestsPage />
-    </ProtectedRoute>
-  }
-/>
+      <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+      <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
+      <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
+      <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
+      <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
+      <Route path="/requests/:id" element={<ProtectedRoute><RequestDetailPage /></ProtectedRoute>} />
 
-      {/* 404 - редирект на главную */}
+      {/* ✅ НОВЫЙ РОУТ для создания акта */}
+      <Route path="/acts/new" element={<ProtectedRoute><ActCreatePage /></ProtectedRoute>} />
+
+      {/* 404 */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

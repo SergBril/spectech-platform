@@ -156,6 +156,17 @@ class ConnectionManager:
         )
         return await self.broadcast_to_company(company_id, message)
 
+
+async def broadcast_to_user(self, user_id: int, message: dict):
+    """Отправляет сообщение конкретному пользователю через все его соединения."""
+    user_connections = self.active_connections.get(user_id, [])
+    for connection in user_connections:
+        try:
+            await connection.send_json(message)
+            logger.info(f"📨 WebSocket message sent to user {user_id}")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to send WebSocket to user {user_id}: {e}")
+
     async def broadcast_all(self, message: dict):
         total = 0
         for company_id in list(self.company_connections.keys()):

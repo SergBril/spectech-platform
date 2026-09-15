@@ -1,0 +1,68 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    <tr>
+        <td style="background: #3b82f6; padding: 30px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">📋 Акт создан</h1>
+        </td>
+    </tr>
+    <tr>
+        <td style="padding: 30px;">
+            <p style="font-size: 16px; color: #374151; margin-bottom: 20px;">
+                Здравствуйте, <strong>{{ executor_name }}</strong>!
+            </p>
+            <p style="font-size: 16px; color: #374151; margin-bottom: 20px;">
+                Создан новый акт выполненных работ для клиента <strong>{{ client_name }}</strong>:
+            </p>
+
+            <table width="100%" cellpadding="12" cellspacing="0" style="background: #f9fafb; border-radius: 6px; margin-bottom: 20px;">
+                <tr>
+                    <td style="color: #6b7280; width: 40%;">Номер акта:</td>
+                    <td style="color: #111827; font-weight: 600;">{{ act.document_number }}</td>
+                </tr>
+                <tr>
+                    <td style="color: #6b7280;">Дата:</td>
+                    <td style="color: #111827;">{{ act.act_date.strftime('%d.%m.%Y') if act.act_date else '—' }}</td>
+                </tr>
+                <tr>
+                    <td style="color: #6b7280;">Сумма:</td>
+                    <td style="color: #2563eb; font-weight: 700; font-size: 18px;">
+                        {{ "{:,.2f}".format(act.total_amount).replace(',', ' ') }} ₽
+                    </td>
+                </tr>
+                <tr>
+                    <td style="color: #6b7280;">Статус:</td>
+                    <td style="color: #111827;">{{ act.status.value if act.status else 'Черновик' }}</td>
+                </tr>
+                {% if act.comment %}
+                <tr>
+                    <td style="color: #6b7280; vertical-align: top;">Комментарий:</td>
+                    <td style="color: #111827;">{{ act.comment }}</td>
+                </tr>
+                {% endif %}
+            </table>
+
+            <p style="font-size: 16px; color: #374151; margin-bottom: 25px;">
+                Акт готов к подписанию. Нажмите кнопку ниже для просмотра:
+            </p>
+
+            <table cellpadding="0" cellspacing="0" align="center" style="margin: 25px 0;">
+                <tr>
+                    <td style="background: #3b82f6; border-radius: 6px;">
+                        <a href="{{ frontend_url }}/acts/{{ act.id }}"
+                           style="display: inline-block; padding: 14px 30px; color: white; text-decoration: none; font-weight: 600; font-size: 16px;">
+                            📄 Открыть акт
+                        </a>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    <tr>
+        <td style="background: #f3f4f6; padding: 20px; text-align: center; font-size: 12px; color: #6b7280;">
+            © 2026 СпецТехника Про. Все права защищены.
+        </td>
+    </tr>
+</table>
+{% endblock %}

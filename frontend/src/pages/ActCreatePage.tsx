@@ -1,0 +1,189 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { financeApi } from '../api/finance';
+import { requestsApi } from '../api/requests';
+import { showToast } from '../utils/toast';
+import NotificationBell from '../components/NotificationBell';
+
+export const ActCreatePage: React.FC = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestId = searchParams.get('request_id');
+  const { user, logout, hasPermission } = useAuth();
+
+  const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [request, setRequest] = useState<any>(null);
+  const [formData, setFormData] = useState({
+    request_id: requestId ? parseInt(requestId) : 0,
+    client_id: 0,
+    act_date: new Date().toISOString().split('T')[0],
+    total_amount: '0.00',
+    comment: '',
+  });
+
+  const canCreate = hasPermission('finance', 'create');
+
+  useEffect(() => {
+    if (requestId) {
+      loadRequest(parseInt(requestId));
+    } else {
+      setPageLoading(false);
+    }
+  }, [requestId]);
+
+  const loadRequest = async (id: number) => {
+    try {
+      const req = await requestsApi.getById(id);
+      setRequest(req);
+      setFormData((prev) => ({
+        ...prev,
+        request_id: req.id,
+        client_id: (req as any).client_id || 1,
+        total_amount: String((req as any).estimated_amount || '0.00'),
+      }));
+    } catch (err) {
+      showToast.error('Не удалось загрузить заявку');
+      navigate('/requests');
+    } finally {
+      setPageLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canCreate) {
+      showToast.error('Нет прав на создание акта');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const act = await financeApi.createAct({
+        request_id: formData.request_id,
+        client_id: formData.client_id,
+        act_date: formData.act_date,
+        total_amount: parseFloat(formData.total_amount),
+        comment: formData.comment || undefined,
+      });
+      showToast.success(`✅ Акт ${act.document_number} создан!`);
+      navigate(`/requests/${requestId}`);
+    } catch (err: any) {
+      showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (pageLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-5xl mb-4 animate-pulse">⏳</div>
+          <p className="text-gray-600">Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center space-x-6">
+              <h1 className="text-xl font-bold text-gray-900">🚜 СпецТехника Про</h1>
+              <button onClick={() => navigate('/')} className="text-gray-600 hover:text-gray-900">Dashboard</button>
+              <button onClick={() => navigate(`/requests/${requestId}`)} className="text-gray-600 hover:text-gray-900">
+                ← К заявке #{requestId}
+              </button>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-700">{user?.email}</span>
+              <NotificationBell />
+              <button onClick={() => { logout(); navigate('/login'); }} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
+                Выйти
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-3xl mx-auto py-8 px-4">
+        <div className="bg-white rounded-lg shadow p-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-6">📄 Создание акта</h1>
+
+          {request && (
+            <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-6">
+              <h3 className="font-semibold text-blue-900 mb-2">Заявка #{request.id}</h3>
+              <p className="text-sm text-blue-800">🔧 {request.work_type}</p>
+              <p className="text-sm text-blue-700">📍 {request.object_address}</p>
+              <p className="text-sm text-blue-700">💵 Ожидаемая сумма: {(request as any).estimated_amount || '—'} ₽</p>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">📅 Дата акта</label>
+              <input
+                type="date"
+                value={formData.act_date}
+                onChange={(e) => setFormData({ ...formData, act_date: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">💰 Сумма (₽)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.total_amount}
+                onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">💬 Комментарий</label>
+              <textarea
+                value={formData.comment}
+                onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Необязательное поле"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="submit"
+                disabled={loading || !canCreate}
+                className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700 disabled:opacity-50 font-semibold"
+              >
+                {loading ? '⏳ Создание...' : '✅ Создать акт'}
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/requests/${requestId}`)}
+                className="flex-1 bg-gray-200 text-gray-800 py-3 rounded hover:bg-gray-300 font-semibold"
+              >
+                Отмена
+              </button>
+            </div>
+
+            {!canCreate && (
+              <p className="text-red-600 text-sm text-center">⚠️ У вас нет прав на создание актов</p>
+            )}
+          </form>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default ActCreatePage;
