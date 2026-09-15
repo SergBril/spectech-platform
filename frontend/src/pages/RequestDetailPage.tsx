@@ -478,13 +478,14 @@ if (loading) {
               <h3 className="text-lg font-semibold text-gray-900">
                 📄 Акты ({acts.length})
               </h3>
-              <button
-                className="text-sm bg-gray-400 text-white px-3 py-1 rounded cursor-not-allowed"
-                disabled
-                title="В разработке"
-              >
-                + Создать акт (скоро)
-              </button>
+              {canCreateInvoice && (
+                <button
+                  onClick={() => navigate(`/acts/new?request_id=${request?.id}`)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+                >
+                  + Создать акт
+                </button>
+              )}
             </div>
 
             {acts.length === 0 ? (

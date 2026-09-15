@@ -47,6 +47,8 @@ def create_act(
     current_user: User = Depends(get_current_user),
 ):
     """Создать акт выполненных работ."""
+    import traceback
+
     act = Act(
         document_number=generate_document_number(db, "ACT"),
         request_id=payload.request_id,
@@ -61,6 +63,34 @@ def create_act(
     db.add(act)
     db.commit()
     db.refresh(act)
+
+    logger.info(f"✅ Act {act.document_number} created by user {current_user.email}")
+
+    # 📧 Уведомляем исполнителя (создателя заявки) о создании акта
+    try:
+        if act.request_id:
+            request = db.get(Request, act.request_id)
+            if request and request.created_by:
+                executor = db.get(User, request.created_by)
+                client = db.get(Contractor, act.client_id) if act.client_id else None
+
+                if executor and executor.email:
+                    executor_name = executor.full_name or "Исполнитель"
+                    client_name = client.name if client else "Клиент"
+
+                    logger.info(f"📧 Sending act_created email to {executor.email}")
+                    success = email_service.send_act_created(
+                        act=act,
+                        executor_email=executor.email,
+                        executor_name=executor_name,
+                        client_name=client_name,
+                    )
+                    logger.info(f"📧 Act created email sent: {success}")
+    except Exception as email_err:
+        logger.error(f"❌ Failed to send act_created email: {email_err}")
+        logger.error(traceback.format_exc())
+        # Не прерываем — email не критичен
+
     return act
 
 
