@@ -49,7 +49,7 @@ class ConnectionManager:
             "✅ WebSocket connected: user=%s, company=%s, total=%s",
             user_id,
             company_id,
-            self.get_stats()["total_connections"],
+            len(getattr(self, "active_connections", [])),
         )
 
     def disconnect(self, websocket: WebSocket):
