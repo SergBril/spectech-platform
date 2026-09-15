@@ -201,15 +201,29 @@
     <div class="total-section">
         <div class="total-row">
             <span>Итого:</span>
-            <span>{{ "{:,.2f}".format(act.total_amount).replace(',', ' ') }} ₽</span>
+            <span>{{ "{:,.2f}".format((act.total_amount or 0) | float).replace(',', ' ') }} ₽</span>
         </div>
-        <div class="total-row">
-            <span>НДС (20%):</span>
-            <span>{{ "{:,.2f}".format((act.total_amount | float) * 0.2 / 1.2).replace(',', ' ') }} ₽</span>
-        </div>
+
+        {% if act.tax_system == 'osno' %}
+            <div class="total-row">
+                <span>НДС ({{ act.vat_rate or '20' }}%):</span>
+                <span>{{ "{:,.2f}".format((act.total_amount or 0) | float * 0.2 / 1.2).replace(',', ' ') }} ₽</span>
+            </div>
+        {% else %}
+            <div class="total-row">
+                <span>НДС:</span>
+                <span>Без НДС
+                    {% if act.tax_system == 'usn_6' %}(УСН "Доходы"){% endif %}
+                    {% if act.tax_system == 'usn_15' %}(УСН "Доходы-Расходы"){% endif %}
+                    {% if act.tax_system == 'patent' %}(Патент){% endif %}
+                    {% if act.tax_system == 'npd' %}(НПД / Самозанятый){% endif %}
+                </span>
+            </div>
+        {% endif %}
+
         <div class="total-row grand">
             <span>Всего к оплате:</span>
-            <span>{{ "{:,.2f}".format(act.total_amount).replace(',', ' ') }} ₽</span>
+            <span>{{ "{:,.2f}".format((act.total_amount or 0) | float).replace(',', ' ') }} ₽</span>
         </div>
     </div>
 

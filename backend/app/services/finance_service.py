@@ -1,10 +1,11 @@
 ﻿import logging
 from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.constants import TaxSystem
 from app.models.auth import User
 from app.models.contractor import Contractor
 from app.models.dispatch import Request
@@ -53,19 +54,57 @@ def generate_document_number(db: Session, prefix: str) -> str:
 
 
 def calculate_invoice_totals(invoice: Invoice) -> None:
+    """
+    Пересчитывает итоги счёта с учётом системы налогообложения.
+
+    Поддерживает:
+    - ОСНО: с НДС (внутри или сверху)
+    - УСН, Патент, НПД: без НДС
+    """
+    # 1. Считаем сумму позиций
     subtotal = Decimal("0")
     for item in invoice.items:
-        item.amount = item.quantity * item.unit_price
+        item.amount = (item.quantity * item.unit_price).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
         subtotal += item.amount
 
     invoice.subtotal = subtotal
-    if invoice.vat_rate is not None:
-        invoice.vat_amount = (subtotal * invoice.vat_rate / Decimal("100")).quantize(
-            Decimal("0.01")
-        )
-    else:
+
+    # 2. Определяем систему налогообложения
+    tax_system_value = invoice.tax_system or TaxSystem.OSNO.value
+    try:
+        tax_system = TaxSystem(tax_system_value)
+    except ValueError:
+        tax_system = TaxSystem.OSNO
+
+    # 3. Для систем без НДС — обнуляем НДС
+    if not tax_system.has_vat:
+        invoice.vat_rate = Decimal("0")
         invoice.vat_amount = Decimal("0")
-    invoice.total = subtotal + invoice.vat_amount
+        invoice.total = subtotal
+        return
+
+    # 4. Для ОСНО — считаем НДС
+    vat_rate = invoice.vat_rate or Decimal("20.00")
+
+    if invoice.is_vat_included:
+        # НДС "внутри" суммы (например, 120₽ = 100₽ + 20₽ НДС)
+        # Формула: vat = subtotal * rate / (100 + rate)
+        vat_amount = (subtotal * vat_rate / (Decimal("100") + vat_rate)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        invoice.vat_amount = vat_amount
+        invoice.total = subtotal
+    else:
+        # НДС начисляется сверху (например, 100₽ + 20% = 120₽)
+        vat_amount = (subtotal * vat_rate / Decimal("100")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        invoice.vat_amount = vat_amount
+        invoice.total = subtotal + vat_amount
+
+    invoice.vat_rate = vat_rate
 
 
 def _get_field(obj, key, default=None):
