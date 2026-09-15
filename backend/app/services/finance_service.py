@@ -123,6 +123,7 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
     try:
         company_id = getattr(current_user, "company_id", None)
 
+        # 1. Создаём счёт с новыми полями tax_system и is_vat_included
         invoice = Invoice(
             document_number=generate_document_number(db, "INV"),
             request_id=_get_field(payload, "request_id"),
@@ -130,15 +131,21 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
             company_id=company_id,
             invoice_date=_get_field(payload, "invoice_date") or datetime.now(),
             due_date=_get_field(payload, "due_date"),
-            vat_rate=_get_field(payload, "vat_rate"),
+            vat_rate=_get_field(payload, "vat_rate", Decimal("20.00")),
             comment=_get_field(payload, "comment", ""),
             status=DocumentStatus.draft,
             created_by=current_user.id,
+            # 🆕 Новые поля для НДС
+            tax_system=_get_field(payload, "tax_system", "osno"),
+            is_vat_included=_get_field(payload, "is_vat_included", True),
         )
         db.add(invoice)
         db.flush()
-        logger.info(f"✅ Invoice #{invoice.id} created")
+        logger.info(
+            f"✅ Invoice #{invoice.id} created with tax_system={invoice.tax_system}"
+        )
 
+        # 2. Добавляем позиции
         items = _get_field(payload, "items", []) or []
         logger.info(f"📦 Adding {len(items)} items")
 
@@ -154,14 +161,19 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
             db.add(item)
 
         db.flush()
+
+        # 3. Пересчитываем итоги (ВАЖНО: после установки tax_system и is_vat_included!)
         calculate_invoice_totals(invoice)
+
         db.commit()
         db.refresh(invoice)
         logger.info(
-            f"✅ Invoice {invoice.document_number} saved, total={invoice.total}"
+            f"✅ Invoice {invoice.document_number} saved: "
+            f"total={invoice.total}, vat_amount={invoice.vat_amount}, "
+            f"tax_system={invoice.tax_system}"
         )
 
-        # 📧 ОТПРАВЛЯЕМ EMAIL
+        # 4. Отправляем email клиенту
         try:
             client = (
                 db.get(Contractor, invoice.client_id) if invoice.client_id else None
