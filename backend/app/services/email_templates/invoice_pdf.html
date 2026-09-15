@@ -135,9 +135,9 @@
     <div class="header">
         <div class="company-info">
             <h1>ООО "СпецТехника Про"</h1>
-            <p>📍 г. Москва, ул. Примерная, д. 1</p>
-            <p>📞 +7 (999) 123-45-67</p>
-            <p>✉️ info@spectech.pro</p>
+            <p>Адрес: г. Москва, ул. Примерная, д. 1</p>
+            <p>Тел: +7 (999) 123-45-67</p>
+            <p>Email: info@spectech.pro</p>
             <p>ИНН: 7700000000 / КПП: 770001001</p>
         </div>
         <div class="document-title">
@@ -182,16 +182,29 @@
             </tr>
         </thead>
         <tbody>
-            {% for item in invoice.items %}
-            <tr>
-                <td>{{ loop.index }}</td>
-                <td>{{ item.description }}</td>
-                <td style="text-align: center;">{{ item.unit or 'шт' }}</td>
-                <td style="text-align: center;">{{ item.quantity }}</td>
-                <td class="amount">{{ "{:,.2f}".format(item.unit_price | float).replace(',', ' ') }} ₽</td>
-                <td class="amount">{{ "{:,.2f}".format(item.amount | float).replace(',', ' ') }} ₽</td>
-            </tr>
-            {% endfor %}
+            {% if invoice.items and invoice.items|length > 0 %}
+                {# === Есть позиции — показываем их === #}
+                {% for item in invoice.items %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ item.description or 'Услуга' }}</td>
+                    <td style="text-align: center;">{{ item.unit or 'шт' }}</td>
+                    <td style="text-align: center;">{{ item.quantity or 1 }}</td>
+                    <td class="amount">{{ "{:,.2f}".format((item.unit_price or 0) | float).replace(',', ' ') }} ₽</td>
+                    <td class="amount">{{ "{:,.2f}".format((item.amount or 0) | float).replace(',', ' ') }} ₽</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                {# === Позиций нет — создаём синтетическую строку === #}
+                <tr>
+                    <td>1</td>
+                    <td>{{ invoice.comment or 'Услуги по договору' }}</td>
+                    <td style="text-align: center;">шт</td>
+                    <td style="text-align: center;">1</td>
+                    <td class="amount">{{ "{:,.2f}".format((invoice.subtotal or 0) | float).replace(',', ' ') }} ₽</td>
+                    <td class="amount">{{ "{:,.2f}".format((invoice.subtotal or 0) | float).replace(',', ' ') }} ₽</td>
+                </tr>
+            {% endif %}
         </tbody>
     </table>
 
@@ -218,7 +231,7 @@
     </div>
 
     <div class="payment-info">
-        <div class="label">📅 Срок оплаты:</div>
+        <div class="label">Срок оплаты:</div>
         <p>{{ invoice.due_date.strftime('%d.%m.%Y') if invoice.due_date else 'По согласованию' }}</p>
     </div>
 
