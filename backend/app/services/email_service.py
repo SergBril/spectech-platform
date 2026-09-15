@@ -31,6 +31,8 @@ class EmailService:
 
         if not self.enabled:
             logger.warning("⚠️ Email notifications disabled (EMAIL_ENABLED=false)")
+        else:
+            logger.info("✅ Email notifications enabled")
 
     def _render_template(self, template_name: str, context: dict) -> str:
         """Рендерит HTML шаблон и инлайнит CSS."""
@@ -89,7 +91,6 @@ class EmailService:
             html_body = self._render_template(template_name, context_with_defaults)
             msg = self._create_message(to_email, subject, html_body, attachments)
 
-            # Mailhog не требует TLS
             if settings.SMTP_USE_TLS:
                 context_ssl = ssl.create_default_context()
                 with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
@@ -98,7 +99,6 @@ class EmailService:
                         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                     server.send_message(msg)
             else:
-                # Без TLS (для Mailhog)
                 with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
                     server.send_message(msg)
 
@@ -139,23 +139,22 @@ class EmailService:
             },
         )
 
-
-def send_act_created(
-    self, act, executor_email: str, executor_name: str, client_name: str
-) -> bool:
-    """Уведомление о создании акта (исполнителю)."""
-    subject = f"📋 Акт {act.document_number} создан и готов к подписанию"
-    return self.send_email(
-        to_email=executor_email,
-        subject=subject,
-        template_name="email/act_created.html",
-        context={
-            "act": act,
-            "executor_name": executor_name,
-            "client_name": client_name,
-            "subject": subject,
-        },
-    )
+    def send_act_created(
+        self, act, executor_email: str, executor_name: str, client_name: str
+    ) -> bool:
+        """Уведомление о создании акта (исполнителю)."""
+        subject = f"📋 Акт {act.document_number} создан и готов к подписанию"
+        return self.send_email(
+            to_email=executor_email,
+            subject=subject,
+            template_name="email/act_created.html",
+            context={
+                "act": act,
+                "executor_name": executor_name,
+                "client_name": client_name,
+                "subject": subject,
+            },
+        )
 
     def send_invoice_overdue(
         self, invoice, client_email: str, client_name: str, overdue_days: int

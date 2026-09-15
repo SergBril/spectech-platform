@@ -1,7 +1,5 @@
 """Конфигурация приложения через pydantic-settings."""
 
-import os
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -59,17 +57,19 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = False
 
     # Email (SMTP)
-    SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.mailtrap.io")
-    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USER: str = os.getenv("SMTP_USER", "")
-    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
-    SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "noreply@spectech.pro")
-    SMTP_FROM_NAME: str = os.getenv("SMTP_FROM_NAME", "СпецТехника Про")
-    SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
-    EMAIL_ENABLED: bool = os.getenv("EMAIL_ENABLED", "false").lower() == "true"
+    SMTP_HOST: str = Field(default="mailhog", alias="SMTP_HOST")
+    SMTP_PORT: int = Field(default=1025, alias="SMTP_PORT")
+    SMTP_USER: str = Field(default="", alias="SMTP_USER")
+    SMTP_PASSWORD: str = Field(default="", alias="SMTP_PASSWORD")
+    SMTP_FROM_EMAIL: str = Field(
+        default="noreply@spectech.pro", alias="SMTP_FROM_EMAIL"
+    )
+    SMTP_FROM_NAME: str = Field(default="СпецТехника Про", alias="SMTP_FROM_NAME")
+    SMTP_USE_TLS: bool = Field(default=False, alias="SMTP_USE_TLS")
+    EMAIL_ENABLED: bool = Field(default=True, alias="EMAIL_ENABLED")
 
-    # Application URLs (для ссылок в письмах)
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:8080")
+    # Application URLs
+    FRONTEND_URL: str = Field(default="http://localhost:8080", alias="FRONTEND_URL")
 
     # Sentry
     sentry_dsn: str | None = None
