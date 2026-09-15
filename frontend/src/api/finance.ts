@@ -174,8 +174,18 @@ export const financeApi = {
     return response.data;
   },
 
-  async downloadInvoicePdf(id: number): Promise<Blob> {
-    const response = await apiClient.get(`/invoices/${id}/pdf`, {
+  downloadInvoicePdf: async (invoiceId: number): Promise<Blob> => {
+    const response = await apiClient.get(`/invoices/${invoiceId}/pdf`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  /**
+   * Скачать PDF акта
+   */
+  downloadActPdf: async (actId: number): Promise<Blob> => {
+    const response = await apiClient.get(`/acts/${actId}/pdf`, {
       responseType: 'blob',
     });
     return response.data;
@@ -209,13 +219,6 @@ export const financeApi = {
   async signAct(id: number, signedBy: 'client' | 'executor'): Promise<Act> {
     const response = await apiClient.post<Act>(`/acts/${id}/sign`, {
       signed_by: signedBy,
-    });
-    return response.data;
-  },
-
-  async downloadActPdf(id: number): Promise<Blob> {
-    const response = await apiClient.get(`/acts/${id}/pdf`, {
-      responseType: 'blob',
     });
     return response.data;
   },

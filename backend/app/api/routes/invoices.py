@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import select
@@ -13,8 +15,10 @@ from app.schemas.finance import (
     InvoiceRead,
     InvoiceUpdate,
 )
-from app.services.finance_service import create_invoice
-from app.services.pdf_service import generate_invoice_pdf
+from app.services.finance_service import create_invoice, generate_and_save_invoice_pdf
+from app.services.pdf_generator import generate_invoice_pdf
+
+logger = logging.getLogger("spectech.invoices")
 
 router = APIRouter()
 
@@ -51,6 +55,13 @@ def create_invoice_endpoint(
         payload=payload,
         current_user=current_user,
     )
+    # 🎨 АВТОГЕНЕРАЦИЯ PDF И СОХРАНЕНИЕ В MINIO
+    try:
+        generate_and_save_invoice_pdf(invoice.id, db)
+    except Exception as pdf_err:
+        logger.error(
+            f"⚠️ PDF auto-generation failed for {invoice.document_number}: {pdf_err}"
+        )
     return invoice
 
 
@@ -147,26 +158,61 @@ def download_invoice_pdf(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Скачать счёт в формате PDF."""
-    invoice = db.get(Invoice, invoice_id)
+    """Скачать счёт в формате PDF (через WeasyPrint с Unicode шрифтами)."""
+    from sqlalchemy.orm import selectinload
+
+    # Загружаем счёт с items (важно для шаблона!)
+    stmt = (
+        select(Invoice)
+        .options(selectinload(Invoice.items))
+        .where(Invoice.id == invoice_id)
+    )
+    invoice = db.scalar(stmt)
+
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
-    client = db.get(Contractor, invoice.client_id) if invoice.client_id else None
-    client_name = client.name if client else "Клиент"
+    # Получаем контрагента
+    contractor = db.get(Contractor, invoice.client_id) if invoice.client_id else None
 
     try:
-        pdf_bytes = generate_invoice_pdf(invoice, client_name=client_name)
+        # Используем новый сервис с WeasyPrint
+        pdf_bytes = generate_invoice_pdf(
+            invoice=invoice,
+            contractor=contractor,
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка генерации PDF: {str(e)}")
+        logger.error(f"PDF generation error for invoice {invoice_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"PDF generation error: {str(e)}")
 
     filename = f"{invoice.document_number or f'invoice-{invoice_id}'}.pdf"
 
     return Response(
-        content=bytes(pdf_bytes),  # ← Конвертируем bytearray в bytes
+        content=pdf_bytes,
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "Access-Control-Expose-Headers": "Content-Disposition",
         },
     )
+
+
+@router.post("/{invoice_id}/regenerate-pdf", status_code=201)
+def regenerate_invoice_pdf_endpoint(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ручная перегенерация PDF для существующего счета."""
+    from app.services.finance_service import generate_and_save_invoice_pdf
+
+    result = generate_and_save_invoice_pdf(invoice_id, db)
+    if result is None:
+        raise HTTPException(status_code=500, detail="Не удалось сгенерировать PDF")
+
+    logger.info(f"📄 PDF regenerated for invoice #{invoice_id}: {result['path']}")
+    return {
+        "status": "success",
+        "message": "PDF счета успешно перегенерирован",
+        "data": result,
+    }

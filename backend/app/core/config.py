@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     # Application URLs
     FRONTEND_URL: str = Field(default="http://localhost:8080", alias="FRONTEND_URL")
 
+    # ═══════════════════════════════════════════════════════════
+    # MinIO (S3) Storage Settings
+    # ═══════════════════════════════════════════════════════════
+    MINIO_ENDPOINT: str = "http://minio:9000"  # Внутри Docker-сети
+    MINIO_ROOT_USER: str = "minioadmin"  # Должно совпадать с docker-compose
+    MINIO_ROOT_PASSWORD: str = "minioadmin"  # Должно совпадать с docker-compose
+    MINIO_BUCKET: str = "spectech-docs"
+
     # Sentry
     sentry_dsn: str | None = None
     environment: str = "development"

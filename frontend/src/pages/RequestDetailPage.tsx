@@ -7,6 +7,9 @@ import { exportApi, downloadBlob } from '../api/export';
 import { showToast } from '../utils/toast';
 import { RequestHeaderSkeleton, TableSkeleton, TimelineSkeleton } from '../components/Skeleton';
 import NotificationBell from '../components/NotificationBell';
+import { FileUploadButton } from '../components/FileUploadButton';
+import { FileList } from '../components/FileList';
+import type { FileUploadResponse } from '../api/files';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   new: { label: 'Новая', color: 'bg-blue-100 text-blue-800', icon: '🆕' },
@@ -45,11 +48,7 @@ const INVOICE_STATUS_LABELS: Record<string, { label: string; color: string }> = 
 const formatDateTime = (iso: string | null | undefined) => {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 };
 
@@ -71,6 +70,7 @@ export const RequestDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
+  const [filesRefreshTrigger, setFilesRefreshTrigger] = useState(0);
 
   const canEdit = hasPermission('requests', 'update');
   const canCreateInvoice = hasPermission('finance', 'create');
@@ -89,22 +89,13 @@ export const RequestDetailPage: React.FC = () => {
         requestsApi.getHistory(requestId),
       ]);
 
-      if (reqData.status === 'fulfilled') {
-        setRequest(reqData.value);
-      } else {
-        setError('Не удалось загрузить заявку');
-        return;
-      }
+      if (reqData.status === 'fulfilled') setRequest(reqData.value);
+      else { setError('Не удалось загрузить заявку'); return; }
 
-      if (allInvoices.status === 'fulfilled') {
-        setInvoices(allInvoices.value.filter((i) => i.request_id === requestId));
-      }
-      if (allActs.status === 'fulfilled') {
-        setActs(allActs.value.filter((a) => a.request_id === requestId));
-      }
-      if (historyData.status === 'fulfilled') {
-        setHistory(historyData.value);
-      }
+      if (allInvoices.status === 'fulfilled') setInvoices(allInvoices.value.filter((i) => i.request_id === requestId));
+      if (allActs.status === 'fulfilled') setActs(allActs.value.filter((a) => a.request_id === requestId));
+      if (historyData.status === 'fulfilled') setHistory(historyData.value);
+
       setError('');
     } catch (err: any) {
       console.error('Failed to load request:', err);
@@ -114,33 +105,36 @@ export const RequestDetailPage: React.FC = () => {
     }
   };
 
-const handleStatusChange = async (newStatus: string) => {
-  if (!request) return;
-  const config = WORKFLOW.find((w) => w.value === newStatus);
+  const handleFileUploaded = (file: FileUploadResponse) => {
+    console.log('✅ File uploaded:', file);
+    setFilesRefreshTrigger((prev) => prev + 1);
+    showToast.success(`Файл "${file.original_filename}" загружен`);
+  };
 
-  // Кастомный confirm
-  if (!window.confirm(`Изменить статус на "${config?.icon} ${config?.label}"?`)) {
-    window.location.reload();
-    return;
-  }
-
-  const loadingToast = showToast.loading('Изменение статуса...');
-  try {
-    setStatusUpdating(true);
-    const updated = await requestsApi.update(request.id, { status: newStatus as any });
-    setRequest(updated);
-    const historyData = await requestsApi.getHistory(request.id);
-    setHistory(historyData);
-    showToast.dismiss(loadingToast);
-    showToast.success(`Статус изменён на "${config?.label}"`);
-  } catch (err: any) {
-    showToast.dismiss(loadingToast);
-    showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
-    window.location.reload();
-  } finally {
-    setStatusUpdating(false);
-  }
-};
+  const handleStatusChange = async (newStatus: string) => {
+    if (!request) return;
+    const config = WORKFLOW.find((w) => w.value === newStatus);
+    if (!window.confirm(`Изменить статус на "${config?.icon} ${config?.label}"?`)) {
+      window.location.reload();
+      return;
+    }
+    const loadingToast = showToast.loading('Изменение статуса...');
+    try {
+      setStatusUpdating(true);
+      const updated = await requestsApi.update(request.id, { status: newStatus as any });
+      setRequest(updated);
+      const historyData = await requestsApi.getHistory(request.id);
+      setHistory(historyData);
+      showToast.dismiss(loadingToast);
+      showToast.success(`Статус изменён на "${config?.label}"`);
+    } catch (err: any) {
+      showToast.dismiss(loadingToast);
+      showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
+      window.location.reload();
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
 
   const handleDownloadInvoicePdf = async (inv: Invoice) => {
     try {
@@ -151,9 +145,16 @@ const handleStatusChange = async (newStatus: string) => {
     }
   };
 
-  const handleCreateInvoice = () => {
-    navigate(`/invoices?new=1&request_id=${request?.id}`);
+  const handleDownloadActPdf = async (act: Act) => {
+    try {
+      const blob = await financeApi.downloadActPdf(act.id);
+      downloadBlob(blob, `${act.document_number || `act-${act.id}`}.pdf`);
+    } catch (err: any) {
+      alert('Ошибка: ' + (err?.response?.data?.detail || err.message));
+    }
   };
+
+  const handleCreateInvoice = () => navigate(`/invoices?new=1&request_id=${request?.id}`);
 
   const handleExportReport = async () => {
     if (!request) return;
@@ -165,63 +166,35 @@ const handleStatusChange = async (newStatus: string) => {
     }
   };
 
-if (loading) {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center space-x-6">
-              <h1 className="text-xl font-bold text-gray-900">🚜 СпецТехника Про</h1>
-              <button onClick={() => navigate('/')} className="text-gray-600 hover:text-gray-900">Dashboard</button>
-              <button onClick={() => navigate('/requests')} className="text-gray-600 hover:text-gray-900">
-                ← К заявкам
-              </button>
-              <div className="w-24 h-6 bg-gray-200 rounded animate-pulse" />
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-700">{user?.email}</span>
-              <button
-                onClick={() => { logout(); navigate('/login'); }}
-                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-              >
-                Выйти
-              </button>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <nav className="bg-white shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16">
+              <div className="flex items-center space-x-6">
+                <h1 className="text-xl font-bold text-gray-900">🚜 СпецТехника Про</h1>
+                <button onClick={() => navigate('/')} className="text-gray-600 hover:text-gray-900">Dashboard</button>
+                <button onClick={() => navigate('/requests')} className="text-gray-600 hover:text-gray-900">← К заявкам</button>
+              </div>
+              <div className="flex items-center space-x-4">
+                <span className="text-gray-700">{user?.email}</span>
+                <button onClick={() => { logout(); navigate('/login'); }} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Выйти</button>
+              </div>
             </div>
           </div>
-        </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0 space-y-6">
-          {/* Skeleton шапки заявки */}
-          <RequestHeaderSkeleton />
-
-          {/* Skeleton счетов */}
-          <div className="bg-white rounded-lg shadow p-6 animate-pulse">
-            <div className="flex justify-between items-center mb-4">
-              <div className="w-32 h-6 bg-gray-200 rounded" />
-              <div className="w-32 h-9 bg-gray-200 rounded" />
-            </div>
-            <TableSkeleton rows={3} columns={7} />
+        </nav>
+        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          <div className="px-4 py-6 sm:px-0 space-y-6">
+            <RequestHeaderSkeleton />
+            <div className="bg-white rounded-lg shadow p-6 animate-pulse"><TableSkeleton rows={3} columns={7} /></div>
+            <div className="bg-white rounded-lg shadow p-6 animate-pulse"><TableSkeleton rows={2} columns={4} /></div>
+            <TimelineSkeleton />
           </div>
-
-          {/* Skeleton актов */}
-          <div className="bg-white rounded-lg shadow p-6 animate-pulse">
-            <div className="flex justify-between items-center mb-4">
-              <div className="w-28 h-6 bg-gray-200 rounded" />
-              <div className="w-40 h-8 bg-gray-200 rounded" />
-            </div>
-            <TableSkeleton rows={2} columns={4} />
-          </div>
-
-          {/* Skeleton timeline */}
-          <TimelineSkeleton />
-        </div>
-      </main>
-    </div>
-  );
-}
+        </main>
+      </div>
+    );
+  }
 
   if (error || !request) {
     return (
@@ -229,19 +202,13 @@ if (loading) {
         <div className="bg-white rounded-lg shadow p-8 max-w-md text-center">
           <div className="text-5xl mb-4">❌</div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">{error || 'Заявка не найдена'}</h2>
-          <button
-            onClick={() => navigate('/requests')}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            ← К списку заявок
-          </button>
+          <button onClick={() => navigate('/requests')} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">← К списку заявок</button>
         </div>
       </div>
     );
   }
 
   const statusConfig = STATUS_CONFIG[request.status] || { label: request.status, color: 'bg-gray-100', icon: '📋' };
-
   const invoicesTotal = invoices.reduce((sum, i) => sum + parseFloat(i.total || '0'), 0);
   const invoicesPaid = invoices.reduce((sum, i) => sum + parseFloat(i.paid_amount || '0'), 0);
   const invoicesProgress = invoicesTotal > 0 ? (invoicesPaid / invoicesTotal) * 100 : 0;
@@ -254,20 +221,13 @@ if (loading) {
             <div className="flex items-center space-x-6">
               <h1 className="text-xl font-bold text-gray-900">🚜 СпецТехника Про</h1>
               <button onClick={() => navigate('/')} className="text-gray-600 hover:text-gray-900">Dashboard</button>
-              <button onClick={() => navigate('/requests')} className="text-gray-600 hover:text-gray-900">
-                ← К заявкам
-              </button>
+              <button onClick={() => navigate('/requests')} className="text-gray-600 hover:text-gray-900">← К заявкам</button>
               <span className="text-blue-600 font-medium">Заявка #{request.id}</span>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">{user?.email}</span>
               <NotificationBell />
-              <button
-                onClick={() => { logout(); navigate('/login'); }}
-                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-              >
-                Выйти
-              </button>
+              <button onClick={() => { logout(); navigate('/login'); }} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Выйти</button>
             </div>
           </div>
         </div>
@@ -284,9 +244,7 @@ if (loading) {
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{request.work_type}</h2>
                     <div className="flex items-center space-x-2 mt-1">
-                      <span className={`px-3 py-1 text-sm font-semibold rounded-full ${statusConfig.color}`}>
-                        {statusConfig.label}
-                      </span>
+                      <span className={`px-3 py-1 text-sm font-semibold rounded-full ${statusConfig.color}`}>{statusConfig.label}</span>
                       <span className="text-sm text-gray-500">#{request.id}</span>
                     </div>
                   </div>
@@ -294,71 +252,22 @@ if (loading) {
               </div>
               {canEdit && (
                 <div className="flex items-center space-x-2 flex-wrap gap-2">
-                  <button
-                    onClick={handleExportReport}
-                    className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
-                    title="Скачать PDF-отчёт по заявке"
-                  >
-                    📥 PDF-отчёт
-                  </button>
+                  <button onClick={handleExportReport} className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm" title="Скачать PDF-отчёт по заявке">📥 PDF-отчёт</button>
                   <label className="text-sm text-gray-600">Статус:</label>
-                  <select
-                    value={request.status}
-                    onChange={(e) => handleStatusChange(e.target.value)}
-                    disabled={statusUpdating}
-                    className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
-                  >
-                    {WORKFLOW.map((w) => (
-                      <option key={w.value} value={w.value}>
-                        {w.icon} {w.label}
-                      </option>
-                    ))}
+                  <select value={request.status} onChange={(e) => handleStatusChange(e.target.value)} disabled={statusUpdating} className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50">
+                    {WORKFLOW.map((w) => (<option key={w.value} value={w.value}>{w.icon} {w.label}</option>))}
                   </select>
                 </div>
               )}
             </div>
-
             <dl className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-              <div className="bg-gray-50 p-3 rounded">
-                <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">📍 Адрес объекта</dt>
-                <dd className="text-gray-900 font-medium">{request.object_address}</dd>
-              </div>
-              <div className="bg-gray-50 p-3 rounded">
-                <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">📅 Период выполнения</dt>
-                <dd className="text-gray-900">
-                  {formatDateTime(request.planned_start)}
-                  <br />
-                  {formatDateTime(request.planned_end)}
-                </dd>
-              </div>
-              <div className="bg-gray-50 p-3 rounded">
-                <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">⏱️ Тип / Смена</dt>
-                <dd className="text-gray-900">
-                  {(request as any).request_type || 'one_time'} / {request.shift_duration_hours || '—'} ч
-                </dd>
-              </div>
-              <div className="bg-gray-50 p-3 rounded">
-                <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💰 Ставка клиента</dt>
-                <dd className="text-gray-900 font-semibold">
-                  {formatMoney(request.client_rate)} ({request.rate_type})
-                </dd>
-              </div>
-              <div className="bg-gray-50 p-3 rounded">
-                <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💵 Ожидаемая сумма</dt>
-                <dd className="text-gray-900 font-semibold text-green-700">
-                  {formatMoney(request.estimated_amount)}
-                </dd>
-              </div>
-              <div className="bg-gray-50 p-3 rounded">
-                <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">🎯 Приоритет / Источник</dt>
-                <dd className="text-gray-900">{request.priority} / {request.source_channel}</dd>
-              </div>
-              {request.comment && (
-                <div className="bg-gray-50 p-3 rounded md:col-span-2 lg:col-span-3">
-                  <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💬 Комментарий</dt>
-                  <dd className="text-gray-900">{request.comment}</dd>
-                </div>
-              )}
+              <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">📍 Адрес объекта</dt><dd className="text-gray-900 font-medium">{request.object_address}</dd></div>
+              <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">📅 Период выполнения</dt><dd className="text-gray-900">{formatDateTime(request.planned_start)}<br />{formatDateTime(request.planned_end)}</dd></div>
+              <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">⏱️ Тип / Смена</dt><dd className="text-gray-900">{(request as any).request_type || 'one_time'} / {request.shift_duration_hours || '—'} ч</dd></div>
+              <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💰 Ставка клиента</dt><dd className="text-gray-900 font-semibold">{formatMoney(request.client_rate)} ({request.rate_type})</dd></div>
+              <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💵 Ожидаемая сумма</dt><dd className="text-gray-900 font-semibold text-green-700">{formatMoney(request.estimated_amount)}</dd></div>
+              <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">🎯 Приоритет / Источник</dt><dd className="text-gray-900">{request.priority} / {request.source_channel}</dd></div>
+              {request.comment && (<div className="bg-gray-50 p-3 rounded md:col-span-2 lg:col-span-3"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💬 Комментарий</dt><dd className="text-gray-900">{request.comment}</dd></div>)}
             </dl>
           </div>
 
@@ -366,47 +275,26 @@ if (loading) {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  💰 Счета ({invoices.length})
-                </h3>
+                <h3 className="text-lg font-semibold text-gray-900">💰 Счета ({invoices.length})</h3>
                 {invoices.length > 0 && (
                   <div className="mt-2">
                     <div className="flex items-center space-x-3 text-sm">
                       <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-xs">
-                        <div
-                          className={`h-2 rounded-full ${invoicesProgress === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
-                          style={{ width: `${invoicesProgress}%` }}
-                        ></div>
+                        <div className={`h-2 rounded-full ${invoicesProgress === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${invoicesProgress}%` }}></div>
                       </div>
-                      <span className="text-gray-600">
-                        Оплачено {formatMoney(invoicesPaid)} из {formatMoney(invoicesTotal)} ({invoicesProgress.toFixed(0)}%)
-                      </span>
+                      <span className="text-gray-600">Оплачено {formatMoney(invoicesPaid)} из {formatMoney(invoicesTotal)} ({invoicesProgress.toFixed(0)}%)</span>
                     </div>
                   </div>
                 )}
               </div>
-              {canCreateInvoice && (
-                <button
-                  onClick={handleCreateInvoice}
-                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
-                >
-                  + Создать счёт
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {canCreateInvoice && (<button onClick={handleCreateInvoice} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">+ Создать счёт</button>)}
+              </div>
             </div>
-
             {invoices.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 <div className="text-5xl mb-3">💰</div>
                 <p>К этой заявке ещё не привязаны счета</p>
-                {canCreateInvoice && (
-                  <button
-                    onClick={handleCreateInvoice}
-                    className="mt-4 text-blue-600 hover:text-blue-900 text-sm font-medium"
-                  >
-                    + Создать первый счёт
-                  </button>
-                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -415,7 +303,6 @@ if (loading) {
                     <tr>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">№</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Срок</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Оплачено</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
@@ -427,67 +314,49 @@ if (loading) {
                       const paid = parseFloat(inv.paid_amount || '0');
                       const total = parseFloat(inv.total || '0');
                       const progress = total > 0 ? (paid / total) * 100 : 0;
-
                       return (
                         <tr key={inv.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm font-mono text-gray-900">{inv.document_number}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">
-                            {inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString('ru-RU') : '—'}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">
-                            {inv.due_date ? new Date(inv.due_date).toLocaleDateString('ru-RU') : '—'}
-                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString('ru-RU') : '—'}</td>
                           <td className="px-4 py-3 text-sm font-semibold">{formatMoney(inv.total)}</td>
                           <td className="px-4 py-3 text-sm">
                             <div className="flex items-center space-x-2">
-                              <div className="w-20 bg-gray-200 rounded-full h-2">
-                                <div
-                                  className={`h-2 rounded-full ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
-                                  style={{ width: `${progress}%` }}
-                                ></div>
-                              </div>
+                              <div className="w-20 bg-gray-200 rounded-full h-2"><div className={`h-2 rounded-full ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div></div>
                               <span className="text-xs text-gray-600">{formatMoney(inv.paid_amount)}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>
-                              {INVOICE_STATUS_LABELS[inv.status]?.label || inv.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm">
-                            <button
-                              onClick={() => handleDownloadInvoicePdf(inv)}
-                              className="text-purple-600 hover:text-purple-900"
-                              title="Скачать PDF"
-                            >
-                              📄 PDF
-                            </button>
+                          <td className="px-4 py-3"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>{INVOICE_STATUS_LABELS[inv.status]?.label || inv.status}</span></td>
+                          <td className="px-4 py-3 text-right text-sm space-x-2">
+                            <button onClick={() => handleDownloadInvoicePdf(inv)} className="text-purple-600 hover:text-purple-900" title="Скачать PDF">📥 PDF</button>
+                            <FileUploadButton fileCategory="invoice_pdf" options={{ invoice_id: inv.id }} accept=".pdf,.jpg,.png" onUploadSuccess={handleFileUploaded} label="📎" className="text-xs px-2 py-1 inline-block" />
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
+                <div className="mt-4">
+                  <FileList fileCategory="invoice_pdf" refreshTrigger={filesRefreshTrigger} />
+                </div>
               </div>
             )}
           </div>
 
           {/* === АКТЫ === */}
           <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                📄 Акты ({acts.length})
-              </h3>
-              {canCreateInvoice && (
-                <button
-                  onClick={() => navigate(`/acts/new?request_id=${request?.id}`)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
-                >
-                  + Создать акт
-                </button>
-              )}
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">📄 Акты ({acts.length})</h3>
+              <div className="flex items-center gap-2">
+                {canCreateInvoice && (
+                  <button
+                    onClick={() => navigate(`/acts/new?request_id=${request?.id}`)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+                  >
+                    + Создать акт
+                  </button>
+                )}
+              </div>
             </div>
-
             {acts.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <div className="text-4xl mb-2">📄</div>
@@ -502,6 +371,7 @@ if (loading) {
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -517,70 +387,63 @@ if (loading) {
                             {INVOICE_STATUS_LABELS[act.status]?.label || act.status}
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-right text-sm space-x-2">
+                          <button
+                            onClick={() => handleDownloadActPdf(act)}
+                            className="text-purple-600 hover:text-purple-900"
+                            title="Скачать PDF"
+                          >
+                            📥 PDF
+                          </button>
+                          <FileUploadButton
+                            fileCategory="act_pdf"
+                            options={{ act_id: act.id }}
+                            accept=".pdf,.jpg,.png"
+                            onUploadSuccess={handleFileUploaded}
+                            label="📎"
+                            className="text-xs px-2 py-1 inline-block"
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                <div className="mt-4">
+                  <FileList fileCategory="act_pdf" refreshTrigger={filesRefreshTrigger} />
+                </div>
               </div>
             )}
           </div>
 
           {/* === ИСТОРИЯ СТАТУСОВ === */}
           <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              📜 История изменений ({history.length})
-            </h3>
-
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">📜 История изменений ({history.length})</h3>
             {history.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <div className="text-4xl mb-2">📜</div>
-                <p>История изменений пуста</p>
-              </div>
+              <div className="text-center py-8 text-gray-500"><div className="text-4xl mb-2">📜</div><p>История изменений пуста</p></div>
             ) : (
               <div className="relative">
                 <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gray-200"></div>
-
                 <div className="space-y-4">
                   {history.map((entry, idx) => {
                     const toConfig = STATUS_CONFIG[entry.to_status] || { label: entry.to_status, color: 'bg-gray-100', icon: '📋' };
                     const fromConfig = entry.from_status ? (STATUS_CONFIG[entry.from_status] || { label: entry.from_status, color: 'bg-gray-100', icon: '📋' }) : null;
                     const isLast = idx === history.length - 1;
-
                     return (
                       <div key={entry.id} className="relative flex items-start gap-4 pl-14">
-                        <div className={`absolute left-4 top-2 w-5 h-5 rounded-full border-4 border-white flex items-center justify-center text-xs ${
-                          isLast ? 'bg-blue-500' : 'bg-gray-400'
-                        }`}>
+                        <div className={`absolute left-4 top-2 w-5 h-5 rounded-full border-4 border-white flex items-center justify-center text-xs ${isLast ? 'bg-blue-500' : 'bg-gray-400'}`}>
                           <span className="text-white text-[10px]">{toConfig.icon}</span>
                         </div>
-
                         <div className={`flex-1 ${isLast ? 'bg-blue-50 border-2 border-blue-200' : 'bg-gray-50'} rounded-lg p-4`}>
                           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                             <div className="flex items-center gap-2 flex-wrap">
-                              {fromConfig && (
-                                <>
-                                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${fromConfig.color}`}>
-                                    {fromConfig.icon} {fromConfig.label}
-                                  </span>
-                                  <span className="text-gray-400">→</span>
-                                </>
-                              )}
-                              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${toConfig.color}`}>
-                                {toConfig.icon} {toConfig.label}
-                              </span>
+                              {fromConfig && (<><span className={`px-2 py-0.5 text-xs font-medium rounded-full ${fromConfig.color}`}>{fromConfig.icon} {fromConfig.label}</span><span className="text-gray-400">→</span></>)}
+                              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${toConfig.color}`}>{toConfig.icon} {toConfig.label}</span>
                             </div>
-                            <span className="text-xs text-gray-500">
-                              {entry.changed_at ? new Date(entry.changed_at).toLocaleString('ru-RU') : '—'}
-                            </span>
+                            <span className="text-xs text-gray-500">{entry.changed_at ? new Date(entry.changed_at).toLocaleString('ru-RU') : '—'}</span>
                           </div>
-
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-700">
-                              👤 <span className="font-medium">{entry.changed_by_email}</span>
-                            </span>
-                            {entry.comment && (
-                              <span className="text-gray-500 italic text-xs ml-2">"{entry.comment}"</span>
-                            )}
+                            <span className="text-gray-700">👤 <span className="font-medium">{entry.changed_by_email}</span></span>
+                            {entry.comment && (<span className="text-gray-500 italic text-xs ml-2">"{entry.comment}"</span>)}
                           </div>
                         </div>
                       </div>

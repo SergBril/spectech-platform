@@ -12,10 +12,10 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger("spectech.storage")
 
 # Конфигурация (в production — через переменные окружения)
-MINIO_ENDPOINT = "localhost:9000"
-MINIO_ACCESS_KEY = "spectech"
-MINIO_SECRET_KEY = "spectech123"
-MINIO_BUCKET = "spectech-files"
+MINIO_ENDPOINT = "minio:9000"
+MINIO_ACCESS_KEY = "minioadmin"
+MINIO_SECRET_KEY = "minioadmin"
+MINIO_BUCKET = "spectech-docs"
 MINIO_USE_SSL = False
 
 
@@ -94,7 +94,9 @@ def upload_file(
         )
 
         # Публичный URL (если bucket публичный)
-        public_url = f"{'https' if MINIO_USE_SSL else 'http'}://{MINIO_ENDPOINT}/{MINIO_BUCKET}/{storage_path}"
+        # Для генерации URL, доступных из браузера, используем localhost
+        PUBLIC_ENDPOINT = "localhost:9000"  # Минимальное изменение для dev-среды
+        public_url = f"{'https' if MINIO_USE_SSL else 'http'}://{PUBLIC_ENDPOINT}/{MINIO_BUCKET}/{storage_path}"
 
         logger.info(f"File uploaded: {storage_path} ({size} bytes)")
 
@@ -154,16 +156,6 @@ def delete_file(storage_path: str) -> bool:
 
 
 def generate_presigned_url(storage_path: str, expires_in: int = 3600) -> str:
-    """
-    Генерирует временный подписанный URL для скачивания.
-
-    Args:
-        storage_path: Путь в хранилище
-        expires_in: Время жизни URL в секундах (по умолчанию 1 час)
-
-    Returns:
-        Подписанный URL
-    """
     s3 = _get_s3_client()
     try:
         url = s3.generate_presigned_url(
@@ -171,7 +163,8 @@ def generate_presigned_url(storage_path: str, expires_in: int = 3600) -> str:
             Params={"Bucket": MINIO_BUCKET, "Key": storage_path},
             ExpiresIn=expires_in,
         )
-        return url
+        # Заменяем внутренний Docker-адрес на публичный
+        return url.replace("minio:9000", "localhost:9000")
     except ClientError as e:
         logger.error(f"Presigned URL generation failed: {e}")
         raise
@@ -223,3 +216,15 @@ def get_storage_stats() -> dict:
             "total_size_mb": 0,
             "error": str(e),
         }
+
+
+def upload_bytes_with_metadata(
+    content: bytes,
+    filename: str,
+    folder: str = "uploads",
+    content_type: str = "application/pdf",
+) -> dict:
+    """Загружает байты в MinIO и возвращает метаданные."""
+    from io import BytesIO
+
+    return upload_file(BytesIO(content), filename, folder, content_type)

@@ -48,6 +48,7 @@ from app.core.metrics import setup_metrics
 from app.core.middleware import RequestLoggingMiddleware
 from app.core.sentry_config import init_sentry
 from app.models import *  # noqa: F401, F403
+from app.services.minio_service import minio_service
 
 app = FastAPI
 
@@ -58,10 +59,22 @@ logger = logging.getLogger("spectech.app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager."""
-    print(f"🚀 {settings.app_name} v{settings.app_version} starting...")
-    yield
-    print("👋 Shutting down...")
+    # --- Startup ---
+    print("🚀 SpectechPlatform v0.1.0 starting...")
+
+    # Проверка MinIO
+    if minio_service.check_connection():
+        print("✅ MinIO connection successful!")
+    else:
+        print("⚠️ MinIO connection failed. Check credentials and bucket name.")
+
+    yield  # <-- Приложение работает
+
+    # --- Shutdown ---
+    print("👋 SpectechPlatform shutting down...")
+
+
+app = FastAPI(title="SpectechPlatform API", lifespan=lifespan)
 
 
 # 1. Создание приложения

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.auth import User
 from app.models.contractor import Contractor
+from app.models.dispatch import Request
 from app.models.finance import (
     Act,
     DocumentStatus,
@@ -15,7 +16,10 @@ from app.models.finance import (
     Payment,
     Payout,
 )
+from app.models.telematics import UploadedFile
+from app.services import storage_service
 from app.services.email_service import email_service
+from app.services.pdf_generator import generate_act_pdf
 
 logger = logging.getLogger("spectech.finance")
 
@@ -224,3 +228,132 @@ def get_finance_dashboard(db: Session, company_id: int | None) -> dict:
         "acts_count": acts_count,
         "payouts_count": payouts_count,
     }
+
+
+def generate_and_save_act_pdf(act_id: int, db: Session) -> dict | None:
+    """
+    Генерирует PDF для акта, сохраняет в MinIO и создаёт запись в uploaded_files.
+    Возвращает метаданные загруженного файла или None при ошибке.
+    """
+    try:
+        # 1. Получаем акт и связанные данные
+        act = db.get(Act, act_id)
+        if not act:
+            logger.error(f"❌ Act #{act_id} not found")
+            return None
+
+        request = db.get(Request, act.request_id) if act.request_id else None
+        contractor = (
+            db.get(Contractor, act.contractor_id)
+            if hasattr(act, "contractor_id") and act.contractor_id
+            else None
+        )
+
+        # Если contractor_id нет в акте, ищем через заявку
+        if not contractor and request and request.client_id:
+            contractor = db.get(Contractor, request.client_id)
+
+        # 2. Генерируем PDF
+        logger.info(f"🎨 Generating PDF for act {act.document_number}")
+        pdf_bytes = generate_act_pdf(
+            act=act,
+            request=request,
+            contractor=contractor,
+        )
+
+        # 3. Загружаем в MinIO
+        filename = f"{act.document_number}.pdf"
+        upload_result = storage_service.upload_bytes(
+            content=pdf_bytes,
+            filename=filename,
+            folder="finance/acts",
+            content_type="application/pdf",
+        )
+
+        # 4. Сохраняем запись в uploaded_files
+        uploaded_file = UploadedFile(
+            original_filename=filename,
+            storage_path=upload_result["path"],
+            content_type="application/pdf",
+            size_bytes=upload_result["size"],
+            file_category="act_pdf",
+            act_id=act.id,
+            uploaded_by=act.created_by if hasattr(act, "created_by") else None,
+            company_id=act.company_id if hasattr(act, "company_id") else None,
+        )
+        db.add(uploaded_file)
+        db.commit()
+
+        logger.info(
+            f"✅ Auto-generated PDF for act {act.document_number}: {upload_result['path']}"
+        )
+
+        return upload_result
+
+    except Exception as e:
+        logger.error(f"⚠️ PDF auto-generation failed for act #{act_id}: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+        return None
+
+
+def generate_and_save_invoice_pdf(invoice_id: int, db: Session) -> dict | None:
+    """
+    Генерирует PDF для счета, сохраняет в MinIO и создаёт запись в uploaded_files.
+    """
+    from app.services.pdf_generator import generate_invoice_pdf
+
+    try:
+        # 1. Получаем счет с items
+        invoice = db.get(Invoice, invoice_id)
+        if not invoice:
+            logger.error(f"❌ Invoice #{invoice_id} not found")
+            return None
+
+        contractor = (
+            db.get(Contractor, invoice.client_id) if invoice.client_id else None
+        )
+
+        # 2. Генерируем PDF
+        logger.info(f"🎨 Generating PDF for invoice {invoice.document_number}")
+        pdf_bytes = generate_invoice_pdf(
+            invoice=invoice,
+            contractor=contractor,
+        )
+
+        # 3. Загружаем в MinIO
+        filename = f"{invoice.document_number}.pdf"
+        upload_result = storage_service.upload_bytes(
+            content=pdf_bytes,
+            filename=filename,
+            folder="finance/invoices",
+            content_type="application/pdf",
+        )
+
+        # 4. Сохраняем запись в uploaded_files
+        uploaded_file = UploadedFile(
+            original_filename=filename,
+            storage_path=upload_result["path"],
+            content_type="application/pdf",
+            size_bytes=upload_result["size"],
+            file_category="invoice_pdf",
+            invoice_id=invoice.id,
+            uploaded_by=invoice.created_by if hasattr(invoice, "created_by") else None,
+            company_id=invoice.company_id if hasattr(invoice, "company_id") else None,
+        )
+        db.add(uploaded_file)
+        db.commit()
+
+        logger.info(
+            f"✅ Auto-generated PDF for invoice {invoice.document_number}: {upload_result['path']}"
+        )
+
+        return upload_result
+
+    except Exception as e:
+        logger.error(f"⚠️ Invoice PDF auto-generation failed for #{invoice_id}: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+        return None
