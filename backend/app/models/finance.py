@@ -4,6 +4,7 @@ from enum import Enum
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -18,6 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
+from app.core.constants import TaxSystem
 from app.core.db import Base
 
 
@@ -63,6 +65,21 @@ class Invoice(Base):
     total: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0, nullable=False)
     paid_amount: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, nullable=False
+    )
+    # 🆕 Новые поля для систем налогообложения
+    tax_system: Mapped[str] = mapped_column(
+        String(20),
+        default=TaxSystem.OSNO.value,
+        server_default=TaxSystem.OSNO.value,  # Для существующих строк в БД
+        nullable=False,
+        comment="Система налогообложения",
+    )
+    is_vat_included: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default="true",  # PostgreSQL boolean literal
+        nullable=False,
+        comment="НДС включён в сумму (True) или начисляется сверху (False)",
     )
 
     # Даты
@@ -135,6 +152,22 @@ class Act(Base):
 
     total_amount: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, nullable=False
+    )
+
+    # 🆕 Новые поля для систем налогообложения
+    tax_system: Mapped[str] = mapped_column(
+        String(20),
+        default=TaxSystem.OSNO.value,
+        server_default=TaxSystem.OSNO.value,
+        nullable=False,
+        comment="Система налогообложения",
+    )
+    is_vat_included: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default="true",
+        nullable=False,
+        comment="НДС включён в сумму (True) или начисляется сверху (False)",
     )
 
     act_date: Mapped[date] = mapped_column(Date, nullable=False)
