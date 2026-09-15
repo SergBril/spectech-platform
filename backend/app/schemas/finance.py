@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.constants import TaxSystem
+
 # === Invoice Schemas ===
 
 
@@ -32,9 +34,25 @@ class InvoiceCreate(BaseModel):
     client_id: int
     invoice_date: date
     due_date: date | None = None
-    vat_rate: Decimal | None = Field(default=None, ge=0, le=100, decimal_places=2)
     comment: str | None = None
     items: list[InvoiceItemCreate] = []
+
+    # 🆕 Поля для НДС (без дубликатов!)
+    tax_system: str = Field(
+        default=TaxSystem.OSNO.value,
+        description="Система налогообложения (osno, usn_6, usn_15, patent, npd)",
+    )
+    vat_rate: Decimal | None = Field(
+        default=Decimal("20.00"),
+        ge=0,
+        le=100,
+        decimal_places=2,
+        description="Ставка НДС (%)",
+    )
+    is_vat_included: bool = Field(
+        default=True,
+        description="НДС включён в сумму (True) или начисляется сверху (False)",
+    )
 
 
 class InvoiceRead(BaseModel):
@@ -56,6 +74,10 @@ class InvoiceRead(BaseModel):
     updated_at: datetime
     items: list[InvoiceItemRead] = []
 
+    # 🆕 Поля для НДС
+    tax_system: str = TaxSystem.OSNO.value
+    is_vat_included: bool = True
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -75,6 +97,14 @@ class ActCreate(BaseModel):
     act_date: date
     total_amount: Decimal = Field(ge=0, decimal_places=2)
     comment: str | None = None
+    # 🆕 Поля для НДС
+    tax_system: str = Field(
+        default=TaxSystem.OSNO.value, description="Система налогообложения"
+    )
+    vat_rate: Decimal | None = Field(
+        default=Decimal("20.00"), description="Ставка НДС (%)"
+    )
+    is_vat_included: bool = Field(default=True, description="НДС включён в сумму")
 
 
 class ActRead(BaseModel):
@@ -91,6 +121,10 @@ class ActRead(BaseModel):
     comment: str | None = None
     created_at: datetime
     updated_at: datetime
+
+    # 🆕 Поля для НДС
+    tax_system: str = TaxSystem.OSNO.value
+    is_vat_included: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 
