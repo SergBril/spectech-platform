@@ -82,13 +82,18 @@ def upload_file(
         size = len(content)
         file_obj.seek(0)
 
+        # Транслитерируем имя файла для метаданных S3 (S3 требует ASCII)
+        import re
+
+        ascii_filename = re.sub(r"[^\x00-\x7F]+", "", filename) or "file.pdf"
+
         s3.put_object(
             Bucket=MINIO_BUCKET,
             Key=storage_path,
             Body=content,
             ContentType=content_type,
             Metadata={
-                "original-filename": filename,
+                "original-filename": ascii_filename,  # Только ASCII
                 "uploaded-at": datetime.now(UTC).isoformat(),
             },
         )
