@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
@@ -27,9 +27,10 @@ def list_payouts(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Список выплат."""
-    stmt = select(Payout)
+    """Список выплат (только своей компании)."""
+    stmt = select(Payout).where(Payout.company_id == company_id)
 
     if status_filter:
         stmt = stmt.where(Payout.status == status_filter)
@@ -46,8 +47,9 @@ def create_payout(
     payload: PayoutCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Создать выплату собственнику с автоматическим расчётом комиссии."""
+    """Создать выплату собственнику (для своей компании)."""
     calculation = calculate_payout(payload.gross_amount, payload.commission_rate)
 
     payout = Payout(
@@ -55,7 +57,7 @@ def create_payout(
         owner_id=payload.owner_id,
         vehicle_id=payload.vehicle_id,
         request_id=payload.request_id,
-        company_id=current_user.company_id,
+        company_id=company_id,
         gross_amount=calculation["gross_amount"],
         platform_commission=calculation["platform_commission"],
         net_amount=calculation["net_amount"],
@@ -83,10 +85,11 @@ def get_payout(
     payout_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Получить выплату по ID."""
+    """Получить выплату по ID (только своей компании)."""
     payout = db.get(Payout, payout_id)
-    if not payout:
+    if not payout or payout.company_id != company_id:
         raise HTTPException(status_code=404, detail="Payout not found")
     return payout
 
@@ -97,10 +100,11 @@ def update_payout(
     payload: PayoutUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Обновить выплату."""
+    """Обновить выплату (только своей компании)."""
     payout = db.get(Payout, payout_id)
-    if not payout:
+    if not payout or payout.company_id != company_id:
         raise HTTPException(status_code=404, detail="Payout not found")
 
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -116,10 +120,11 @@ def approve_payout(
     payout_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Одобрить выплату (меняет статус на 'sent')."""
+    """Одобрить выплату (только своей компании)."""
     payout = db.get(Payout, payout_id)
-    if not payout:
+    if not payout or payout.company_id != company_id:
         raise HTTPException(status_code=404, detail="Payout not found")
 
     if payout.status != DocumentStatus.draft:
@@ -139,10 +144,11 @@ def download_payout_pdf(
     payout_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Скачать ведомость выплаты в формате PDF."""
+    """Скачать ведомость выплаты в формате PDF (только своей компании)."""
     payout = db.get(Payout, payout_id)
-    if not payout:
+    if not payout or payout.company_id != company_id:
         raise HTTPException(status_code=404, detail="Payout not found")
 
     owner = db.get(Contractor, payout.owner_id)

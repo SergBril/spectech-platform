@@ -6,9 +6,10 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
+from app.models.catalog import Vehicle
 from app.models.telematics import (
     Alert,
     AlertRule,
@@ -34,7 +35,7 @@ from app.services.telematics_service import (
     get_telematics_dashboard,
 )
 
-logger = logging.getLogger("spectech.telematics")  # ← ВАЖНО!
+logger = logging.getLogger("spectech.telematics")
 
 router = APIRouter()
 
@@ -44,17 +45,29 @@ router = APIRouter()
 # =========================================
 
 
+def _check_vehicle_access(db: Session, vehicle_id: int, company_id: int) -> Vehicle:
+    """Проверяет, что техника принадлежит текущей компании."""
+    vehicle = db.get(Vehicle, vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    return vehicle
+
+
 @router.post("/gps", status_code=201)
 async def receive_gps_points(
     points: list[GpsPointCreate],
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Принимает массив GPS точек и транслирует через WebSocket."""
+    """Принимает массив GPS точек (только для техники своей компании)."""
     from app.services.websocket_manager import manager
 
     saved_points = []
     for point in points:
+        # Проверка доступа к технике
+        _check_vehicle_access(db, point.vehicle_id, company_id)
+
         gps_point = GpsPoint(
             vehicle_id=point.vehicle_id,
             latitude=point.latitude,
@@ -72,11 +85,10 @@ async def receive_gps_points(
 
     db.commit()
 
-    # Broadcast каждой точки через WebSocket
     for gps_point in saved_points:
         try:
             await manager.broadcast_gps_to_company(
-                company_id=current_user.company_id or 0,
+                company_id=company_id,
                 gps_data={
                     "vehicle_id": gps_point.vehicle_id,
                     "lat": float(gps_point.latitude),
@@ -115,9 +127,12 @@ async def receive_single_gps_point(
     point: GpsPointCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Принимает одну GPS точку и транслирует через WebSocket."""
+    """Принимает одну GPS точку (только для техники своей компании)."""
     from app.services.websocket_manager import manager
+
+    _check_vehicle_access(db, point.vehicle_id, company_id)
 
     gps_point = GpsPoint(
         vehicle_id=point.vehicle_id,
@@ -135,14 +150,11 @@ async def receive_single_gps_point(
     db.commit()
     db.refresh(gps_point)
 
-    logger.info(
-        "🚀 GPS point saved. Broadcasting to company_id=%s", current_user.company_id
-    )
+    logger.info("🚀 GPS point saved. Broadcasting to company_id=%s", company_id)
 
-    # Broadcast через WebSocket
     try:
         await manager.broadcast_gps_to_company(
-            company_id=current_user.company_id or 0,
+            company_id=company_id,
             gps_data={
                 "vehicle_id": gps_point.vehicle_id,
                 "lat": float(gps_point.latitude),
@@ -169,17 +181,14 @@ async def receive_single_gps_point(
     except Exception as e:
         logger.warning("GPS broadcast failed: %s", e)
 
-    # === Проверка правил алертов (упрощённая, синхронная) ===
+    # Проверка правил алертов
     try:
-        from datetime import datetime
+        from datetime import timedelta
 
-        from app.models.telematics import Alert, AlertRule, AlertStatus
-
-        # Загружаем активные правила для компании
         rules = (
             db.query(AlertRule)
             .filter(
-                AlertRule.company_id == (current_user.company_id or 0),
+                AlertRule.company_id == company_id,
                 AlertRule.is_active == True,
             )
             .all()
@@ -189,7 +198,6 @@ async def receive_single_gps_point(
             triggered = False
             description = None
 
-            # Проверяем превышение скорости
             if (
                 rule.rule_type == "speed_limit"
                 and gps_point.speed
@@ -199,10 +207,7 @@ async def receive_single_gps_point(
                 description = f"Скорость {gps_point.speed:.0f} км/ч превысила лимит {rule.threshold:.0f} км/ч"
 
             if triggered:
-                # Проверяем дедупликацию (не создаём алерт если уже есть за последние 10 минут)
-                from datetime import timedelta
-
-                ten_minutes_ago = datetime.now(UTC) - timedelta(seconds=10)
+                ten_minutes_ago = datetime.now(UTC) - timedelta(seconds=600)
                 existing = (
                     db.query(Alert)
                     .filter(
@@ -215,7 +220,7 @@ async def receive_single_gps_point(
 
                 if not existing:
                     alert = Alert(
-                        company_id=current_user.company_id or 0,
+                        company_id=company_id,
                         vehicle_id=gps_point.vehicle_id,
                         alert_type=rule.rule_type,
                         severity=rule.severity,
@@ -230,7 +235,6 @@ async def receive_single_gps_point(
 
                     logger.info("🚨 Alert created: %s", alert.title)
 
-                    # Отправляем через WebSocket
                     alert_data = {
                         "id": alert.id,
                         "alert_type": alert.alert_type,
@@ -251,21 +255,16 @@ async def receive_single_gps_point(
                             alert.occurred_at.isoformat() if alert.occurred_at else None
                         ),
                     }
-                    await manager.broadcast_alert_to_company(
-                        current_user.company_id or 0, alert_data
-                    )
-                    logger.info(
-                        "🚨 Broadcasting alert to company %s", current_user.company_id
-                    )
+                    await manager.broadcast_alert_to_company(company_id, alert_data)
     except Exception as e:
         logger.warning("Alert processing failed: %s", e)
 
-        return {
-            "status": "ok",
-            "id": gps_point.id,
-            "vehicle_id": gps_point.vehicle_id,
-            "coordinates": [gps_point.latitude, gps_point.longitude],
-        }
+    return {
+        "status": "ok",
+        "id": gps_point.id,
+        "vehicle_id": gps_point.vehicle_id,
+        "coordinates": [gps_point.latitude, gps_point.longitude],
+    }
 
 
 @router.get("/gps/{vehicle_id}", response_model=list[GpsPointRead])
@@ -277,8 +276,11 @@ def get_vehicle_track(
     order: str = Query(default="asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """История GPS-точек по технике."""
+    """История GPS-точек по технике (только своей компании)."""
+    _check_vehicle_access(db, vehicle_id, company_id)
+
     stmt = select(GpsPoint).where(GpsPoint.vehicle_id == vehicle_id)
     if date_from:
         stmt = stmt.where(GpsPoint.recorded_at >= date_from)
@@ -292,11 +294,6 @@ def get_vehicle_track(
     return db.scalars(stmt).all()
 
 
-# =========================================
-# === Track Statistics ===
-# =========================================
-
-
 @router.get("/gps/{vehicle_id}/stats")
 def get_track_stats(
     vehicle_id: int,
@@ -304,9 +301,12 @@ def get_track_stats(
     date_to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Статистика трека: пробег, средняя скорость, время в пути, остановки."""
+    """Статистика трека (только для техники своей компании)."""
     import math
+
+    _check_vehicle_access(db, vehicle_id, company_id)
 
     stmt = (
         select(GpsPoint)
@@ -333,7 +333,6 @@ def get_track_stats(
             "ended_at": None,
         }
 
-    # Расчёт пробега по формуле гаверсинуса
     total_distance_km = 0.0
     speeds = []
     stops_count = 0
@@ -391,8 +390,14 @@ def get_track_stats(
 def list_geofences(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    stmt = select(Geofence).order_by(Geofence.name)
+    """Список геозон (только своей компании)."""
+    stmt = (
+        select(Geofence)
+        .where(Geofence.company_id == company_id)
+        .order_by(Geofence.name)
+    )
     return db.scalars(stmt).all()
 
 
@@ -401,8 +406,10 @@ def create_geofence(
     payload: GeofenceCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    gf = Geofence(**payload.model_dump(), company_id=current_user.company_id)
+    """Создать геозону (для своей компании)."""
+    gf = Geofence(**payload.model_dump(), company_id=company_id)
     db.add(gf)
     db.commit()
     db.refresh(gf)
@@ -414,9 +421,11 @@ def delete_geofence(
     geofence_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
+    """Удалить геозону (только своей компании)."""
     gf = db.get(Geofence, geofence_id)
-    if not gf:
+    if not gf or gf.company_id != company_id:
         raise HTTPException(status_code=404, detail="Geofence not found")
     gf.is_active = False
     db.commit()
@@ -432,9 +441,17 @@ def list_fuel_transactions(
     vehicle_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    stmt = select(FuelTransaction).order_by(FuelTransaction.occurred_at.desc())
+    """Список заправок/сливов (только своей компании)."""
+    stmt = (
+        select(FuelTransaction)
+        .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .order_by(FuelTransaction.occurred_at.desc())
+    )
     if vehicle_id:
+        _check_vehicle_access(db, vehicle_id, company_id)
         stmt = stmt.where(FuelTransaction.vehicle_id == vehicle_id)
     return db.scalars(stmt.limit(100)).all()
 
@@ -444,14 +461,18 @@ def create_fuel_transaction(
     payload: FuelTransactionCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
+    """Создать запись о топливе (для техники своей компании)."""
+    _check_vehicle_access(db, payload.vehicle_id, company_id)
+
     total_cost = None
     if payload.price_per_liter:
         total_cost = payload.volume * payload.price_per_liter
     ft = FuelTransaction(
         **payload.model_dump(),
         total_cost=total_cost,
-        company_id=current_user.company_id,
+        company_id=company_id,
     )
     db.add(ft)
     db.commit()
@@ -464,10 +485,16 @@ def get_fuel_stats(
     vehicle_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Статистика по топливу: объём, стоимость, средний расход."""
-    stmt = select(FuelTransaction)
+    """Статистика по топливу (только для техники своей компании)."""
+    stmt = (
+        select(FuelTransaction)
+        .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+    )
     if vehicle_id:
+        _check_vehicle_access(db, vehicle_id, company_id)
         stmt = stmt.where(FuelTransaction.vehicle_id == vehicle_id)
     transactions = db.scalars(stmt).all()
 
@@ -487,7 +514,6 @@ def get_fuel_stats(
     total_volume = float(sum(t.volume for t in refuels))
     total_cost = float(sum(t.total_cost or 0 for t in refuels))
 
-    # Расчёт среднего расхода если есть одометр
     avg_consumption = None
     odometer_readings = [
         (t.odometer, float(t.volume)) for t in refuels if t.odometer is not None
@@ -495,7 +521,7 @@ def get_fuel_stats(
     if len(odometer_readings) >= 2:
         odometer_readings.sort(key=lambda x: x[0])
         total_distance = odometer_readings[-1][0] - odometer_readings[0][0]
-        total_fuel = sum(v for _, v in odometer_readings[1:])  # кроме первой
+        total_fuel = sum(v for _, v in odometer_readings[1:])
         if total_distance > 0:
             avg_consumption = round(total_fuel / total_distance * 100, 2)
 
@@ -547,8 +573,14 @@ def list_alerts(
     limit: int = Query(default=100, ge=1, le=1000),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    stmt = select(Alert).order_by(Alert.occurred_at.desc())
+    """Список алертов (только своей компании)."""
+    stmt = (
+        select(Alert)
+        .where(Alert.company_id == company_id)
+        .order_by(Alert.occurred_at.desc())
+    )
     if status_filter:
         stmt = stmt.where(Alert.status == status_filter)
     return db.scalars(stmt.limit(limit)).all()
@@ -560,16 +592,16 @@ def acknowledge_alert(
     payload: AlertAck,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
+    """Подтвердить алерт (только своей компании)."""
     alert = db.get(Alert, alert_id)
-    if not alert:
+    if not alert or alert.company_id != company_id:
         raise HTTPException(status_code=404, detail="Alert not found")
     if alert.status != AlertStatus.active:
         raise HTTPException(status_code=409, detail="Alert not active")
     alert.status = AlertStatus.acknowledged
     alert.acknowledged_by = current_user.id
-    from datetime import datetime
-
     alert.acknowledged_at = datetime.now(UTC)
     db.commit()
     db.refresh(alert)
@@ -588,6 +620,7 @@ def list_notifications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Список уведомлений текущего пользователя (уже изолировано по user_id)."""
     stmt = (
         select(Notification)
         .where(Notification.user_id == current_user.id)
@@ -608,8 +641,6 @@ def mark_notification_read(
     if not notif or notif.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Notification not found")
     notif.is_read = True
-    from datetime import datetime
-
     notif.read_at = datetime.now(UTC)
     db.commit()
     db.refresh(notif)
@@ -653,8 +684,10 @@ def get_unread_count(
 def get_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    stats = get_telematics_dashboard(db, current_user.company_id or 0)
+    """Дашборд телематики (только своей компании)."""
+    stats = get_telematics_dashboard(db, company_id)
     return TelematicsDashboard(**stats)
 
 
@@ -694,11 +727,10 @@ class AlertRuleRead(BaseModel):
 def list_alert_rules(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Список правил алертов компании."""
-    stmt = select(AlertRule).where(
-        AlertRule.company_id == (current_user.company_id or 0)
-    )
+    """Список правил алертов (только своей компании)."""
+    stmt = select(AlertRule).where(AlertRule.company_id == company_id)
     return db.scalars(stmt).all()
 
 
@@ -707,10 +739,11 @@ def create_alert_rule(
     payload: AlertRuleCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Создать правило алерта."""
+    """Создать правило алерта (для своей компании)."""
     rule = AlertRule(
-        company_id=current_user.company_id or 0,
+        company_id=company_id,
         **payload.model_dump(),
     )
     db.add(rule)
@@ -723,9 +756,10 @@ def create_alert_rule(
 def seed_defaults(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
     """Создать правила по умолчанию для компании."""
-    seed_default_rules(db, current_user.company_id or 0)
+    seed_default_rules(db, company_id)
     return {"detail": "Default rules created"}
 
 
@@ -734,9 +768,11 @@ def delete_alert_rule(
     rule_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
+    """Удалить правило алерта (только своей компании)."""
     rule = db.get(AlertRule, rule_id)
-    if not rule:
+    if not rule or rule.company_id != company_id:
         raise HTTPException(status_code=404, detail="Rule not found")
     rule.is_active = False
     db.commit()
@@ -751,36 +787,54 @@ def delete_alert_rule(
 def get_dashboard_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Агрегированная статистика для дашборда."""
-    from datetime import datetime, timedelta
+    """Агрегированная статистика для дашборда (только своей компании)."""
+    from datetime import timedelta
 
     from sqlalchemy import func
-
-    from app.models.catalog import Vehicle
 
     try:
         now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_ago = now - timedelta(days=7)
 
-        # Машины (простой подсчёт без фильтра по статусу)
-        total_vehicles = db.query(func.count(Vehicle.id)).scalar() or 0
-
-        # GPS точки
-        total_points = db.query(func.count(GpsPoint.id)).scalar() or 0
-        today_points = (
-            db.query(func.count(GpsPoint.id))
-            .filter(GpsPoint.recorded_at >= today_start)
+        # Машины (только своей компании)
+        total_vehicles = (
+            db.query(func.count(Vehicle.id))
+            .filter(Vehicle.company_id == company_id)
             .scalar()
             or 0
         )
 
-        # Алерты
-        total_alerts = db.query(func.count(Alert.id)).scalar() or 0
+        # GPS точки (только для техники своей компании)
+        total_points = (
+            db.query(func.count(GpsPoint.id))
+            .join(Vehicle, GpsPoint.vehicle_id == Vehicle.id)
+            .filter(Vehicle.company_id == company_id)
+            .scalar()
+            or 0
+        )
+        today_points = (
+            db.query(func.count(GpsPoint.id))
+            .join(Vehicle, GpsPoint.vehicle_id == Vehicle.id)
+            .filter(
+                Vehicle.company_id == company_id,
+                GpsPoint.recorded_at >= today_start,
+            )
+            .scalar()
+            or 0
+        )
 
-        # Активные алерты (фильтруем в Python чтобы избежать проблем с Enum)
-        all_alerts = db.query(Alert).all()
+        # Алерты (только своей компании)
+        total_alerts = (
+            db.query(func.count(Alert.id))
+            .filter(Alert.company_id == company_id)
+            .scalar()
+            or 0
+        )
+
+        all_alerts = db.query(Alert).filter(Alert.company_id == company_id).all()
         active_alerts = len(
             [
                 a
@@ -799,10 +853,12 @@ def get_dashboard_summary(
             ]
         )
 
-        # Топливо за неделю
+        # Топливо за неделю (только для техники своей компании)
         week_refuels = (
             db.query(FuelTransaction)
+            .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
             .filter(
+                Vehicle.company_id == company_id,
                 FuelTransaction.transaction_type == "refuel",
                 FuelTransaction.occurred_at >= week_ago,
             )
@@ -811,10 +867,14 @@ def get_dashboard_summary(
         week_volume = float(sum(t.volume for t in week_refuels))
         week_cost = float(sum(float(t.total_cost or 0) for t in week_refuels))
 
-        # Все топливо
+        # Всё топливо
         all_refuels = (
             db.query(FuelTransaction)
-            .filter(FuelTransaction.transaction_type == "refuel")
+            .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
+            .filter(
+                Vehicle.company_id == company_id,
+                FuelTransaction.transaction_type == "refuel",
+            )
             .all()
         )
         total_volume = float(sum(t.volume for t in all_refuels))
@@ -823,20 +883,18 @@ def get_dashboard_summary(
         # Сливы
         drains_count = (
             db.query(func.count(FuelTransaction.id))
-            .filter(FuelTransaction.transaction_type == "drain")
+            .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
+            .filter(
+                Vehicle.company_id == company_id,
+                FuelTransaction.transaction_type == "drain",
+            )
             .scalar()
             or 0
         )
 
         return {
-            "vehicles": {
-                "total": total_vehicles,
-                "active": total_vehicles,  # упрощённо
-            },
-            "gps_points": {
-                "total": total_points,
-                "today": today_points,
-            },
+            "vehicles": {"total": total_vehicles, "active": total_vehicles},
+            "gps_points": {"total": total_points, "today": today_points},
             "alerts": {
                 "total": total_alerts,
                 "active": active_alerts,
