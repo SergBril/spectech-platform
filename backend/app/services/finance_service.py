@@ -21,8 +21,17 @@ from app.models.telematics import UploadedFile
 from app.services import storage_service
 from app.services.email_service import email_service
 from app.services.pdf_generator import generate_act_pdf
+from app.services.translations import translate_unit
 
 logger = logging.getLogger("spectech.finance")
+
+
+def translate_unit(unit: str) -> str:
+    """Перевод единицы измерения с английского на русский."""
+    if not unit:
+        return "шт"
+    unit_lower = str(unit).strip().lower()
+    return UNIT_TRANSLATIONS.get(unit_lower, unit)
 
 
 def generate_document_number(db: Session, prefix: str) -> str:
