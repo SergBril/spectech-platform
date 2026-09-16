@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { requestsApi, type Request } from '../api/requests';
 import type { Act, ActCreate } from '../api/finance';
+import { TaxSystemSelector } from './TaxSystemSelector';
 
 interface Props {
   act: Act | null;
@@ -27,13 +28,18 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // 🆕 Состояния для системы налогообложения и НДС
+  const [taxSystem, setTaxSystem] = useState(act?.tax_system || 'osno');
+  const [vatRate, setVatRate] = useState(act?.vat_rate?.toString() || '20');
+  const [isVatIncluded, setIsVatIncluded] = useState(act?.is_vat_included ?? true);
+
   useEffect(() => {
     requestsApi.getAll({ limit: 500 })
       .then(setRequests)
       .catch(() => setRequests([]));
   }, []);
 
-  // ✅ Автозаполнение суммы при смене заявки (только в режиме создания и если пользователь не редактировал вручную)
+  // Автозаполнение суммы при смене заявки
   useEffect(() => {
     if (requestId && !act && !userEditedAmount) {
       const req = requests.find((r) => r.id === parseInt(requestId));
@@ -45,7 +51,17 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
 
   const handleAmountChange = (value: string) => {
     setTotalAmount(value);
-    setUserEditedAmount(true); // Пользователь начал редактировать вручную
+    setUserEditedAmount(true);
+  };
+
+  // 🆕 Обработчик смены системы налогообложения
+  const handleTaxSystemChange = (newSystem: string) => {
+    setTaxSystem(newSystem);
+    if (newSystem !== 'osno') {
+      setVatRate('0');
+    } else if (vatRate === '0') {
+      setVatRate('20');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -64,6 +80,10 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
         total_amount: parseFloat(totalAmount),
         act_date: actDate,
         comment: comment.trim() || undefined,
+        // 🆕 Новые поля для НДС
+        tax_system: taxSystem,
+        vat_rate: parseFloat(vatRate || '0'),
+        is_vat_included: isVatIncluded,
       });
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
@@ -78,7 +98,7 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">
@@ -109,25 +129,13 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
               </select>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Клиент ID *</label>
                 <input
                   type="number"
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Сумма (₽) *</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={totalAmount}
-                  onChange={(e) => handleAmountChange(e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
                   required
                 />
@@ -142,6 +150,43 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
                   required
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Сумма (₽) *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={totalAmount}
+                onChange={(e) => handleAmountChange(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                required
+              />
+            </div>
+
+            {/* 🆕 БЛОК СИСТЕМЫ НАЛОГООБЛОЖЕНИЯ */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <TaxSystemSelector
+                value={taxSystem}
+                onChange={handleTaxSystemChange}
+                onVatRateChange={(rate) => setVatRate(rate)}
+              />
+
+              {taxSystem === 'osno' && (
+                <div className="mt-3 flex items-center">
+                  <input
+                    id="actVatIncluded"
+                    type="checkbox"
+                    checked={isVatIncluded}
+                    onChange={(e) => setIsVatIncluded(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="actVatIncluded" className="ml-2 text-sm text-gray-700">
+                    НДС включён в сумму (иначе — начисляется сверху)
+                  </label>
+                </div>
+              )}
             </div>
 
             <div>
