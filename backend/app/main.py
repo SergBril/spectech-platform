@@ -19,6 +19,7 @@ from app.api.routes import (
     auth,
     benchmark,
     categories,
+    companies,
     contractors,
     debug,
     export,
@@ -187,6 +188,7 @@ app.include_router(secure_test.router, prefix="/api/v1", tags=["🔒 Secure Test
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
 app.include_router(export.router, prefix="/api/v1/export", tags=["export"])
 app.include_router(tax.router, prefix="/api/v1", tags=["📊 Tax & VAT (НДС)"])
+app.include_router(companies.router, prefix="/api/v1", tags=["companies"])
 
 
 # 6. Кастомизация OpenAPI
