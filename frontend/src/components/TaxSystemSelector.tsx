@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { taxApi } from '../api/finance';
+import React, { useState } from 'react';
 
 interface TaxSystemSelectorProps {
   value: string;
@@ -8,46 +7,40 @@ interface TaxSystemSelectorProps {
   disabled?: boolean;
 }
 
+// 📋 Захардкоженные значения (всегда доступны, не зависят от API)
+const TAX_SYSTEMS = [
+  { value: 'osno', label: 'ОСНО (с НДС)', has_vat: true },
+  { value: 'usn_6', label: 'УСН Доходы (6%)', has_vat: false },
+  { value: 'usn_15', label: 'УСН Доходы-Расходы (15%)', has_vat: false },
+  { value: 'patent', label: 'Патент', has_vat: false },
+  { value: 'npd', label: 'НПД / Самозанятый', has_vat: false },
+];
+
+const VAT_RATES = [
+  { value: '0', label: 'Без НДС' },
+  { value: '5', label: '5%' },
+  { value: '7', label: '7%' },
+  { value: '10', label: '10%' },
+  { value: '20', label: '20%' },
+  { value: '22', label: '22%' },
+];
+
 export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
   value,
   onChange,
   onVatRateChange,
   disabled = false,
 }) => {
-  const [systems, setSystems] = useState<Array<{ value: string; label: string; has_vat: boolean }>>([]);
-  const [vatRates, setVatRates] = useState<Array<{ value: string; label: string }>>([]);
   const [selectedVatRate, setSelectedVatRate] = useState('20');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadConfig();
-  }, []);
-
-  const loadConfig = async () => {
-    try {
-      setLoading(true);
-      const config = await taxApi.getConfig();
-      setSystems(config.systems);
-      setVatRates(config.vat_rates);
-      setSelectedVatRate(config.default_vat_rate);
-    } catch (error) {
-      console.error('Failed to load tax config:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSystemChange = (newSystem: string) => {
     onChange(newSystem);
-    const system = systems.find((s) => s.value === newSystem);
+    const system = TAX_SYSTEMS.find((s) => s.value === newSystem);
 
-    // Если система без НДС — автоматически ставим 0%
     if (system && !system.has_vat) {
       setSelectedVatRate('0');
       onVatRateChange?.('0');
-    }
-    // Если это ОСНО и ставка была 0 — ставим 20%
-    else if (system?.has_vat && selectedVatRate === '0') {
+    } else if (system?.has_vat && selectedVatRate === '0') {
       setSelectedVatRate('20');
       onVatRateChange?.('20');
     }
@@ -58,19 +51,15 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
     onVatRateChange?.(newRate);
   };
 
-  const currentSystem = systems.find((s) => s.value === value);
+  const currentSystem = TAX_SYSTEMS.find((s) => s.value === value);
   const showVatRateSelector = currentSystem?.has_vat ?? true;
-
-  if (loading) {
-    return <div className="text-gray-500 text-sm">Загрузка...</div>;
-  }
 
   return (
     <div className="space-y-3">
       {/* Система налогообложения */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Система налогообложения
+          💼 Система налогообложения
         </label>
         <select
           value={value}
@@ -78,7 +67,7 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
           disabled={disabled}
           className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100"
         >
-          {systems.map((system) => (
+          {TAX_SYSTEMS.map((system) => (
             <option key={system.value} value={system.value}>
               {system.label}
             </option>
@@ -90,7 +79,7 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
       {showVatRateSelector && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Ставка НДС
+            🧾 Ставка НДС
           </label>
           <select
             value={selectedVatRate}
@@ -98,7 +87,7 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
             disabled={disabled}
             className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100"
           >
-            {vatRates.map((rate) => (
+            {VAT_RATES.map((rate) => (
               <option key={rate.value} value={rate.value}>
                 {rate.label}
               </option>
@@ -107,13 +96,15 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
         </div>
       )}
 
-      {/* Подсказка для не-ОСНО систем */}
+      {/* Информационная подсказка для не-ОСНО систем */}
       {!showVatRateSelector && (
         <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
           💡 При данной системе налогообложения НДС не начисляется.
-          В счёте будет указано "Без НДС".
+          В документе будет указано "Без НДС".
         </div>
       )}
     </div>
   );
 };
+
+export default TaxSystemSelector;
