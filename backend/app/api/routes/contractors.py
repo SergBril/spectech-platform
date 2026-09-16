@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.contractor import Contractor, Employee
@@ -25,12 +25,10 @@ def list_contractors(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Список контрагентов."""
-    # Временно убираем проверку прав чтобы обычный пользователь мог видеть
-    # require_permission(db, current_user, "contractors", "view")
-
-    stmt = select(Contractor)
+    """Список контрагентов (только своей компании)."""
+    stmt = select(Contractor).where(Contractor.company_id == company_id)
 
     if type_filter:
         stmt = stmt.where(Contractor.type == type_filter)
@@ -47,11 +45,9 @@ def create_contractor(
     payload: ContractorCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Создать контрагента."""
-    # require_permission(db, current_user, "contractors", "create")
-
-    # Валидация типа
+    """Создать контрагента (для своей компании)."""
     valid_types = ["client", "owner", "employee"]
     if payload.type not in valid_types:
         raise HTTPException(
@@ -61,7 +57,7 @@ def create_contractor(
 
     contractor = Contractor(
         **payload.model_dump(),
-        company_id=current_user.company_id,
+        company_id=company_id,  # 🆕 Используем company_id из зависимости
     )
     db.add(contractor)
     db.commit()
@@ -74,12 +70,11 @@ def get_contractor(
     contractor_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Получить контрагента по ID."""
-    # require_permission(db, current_user, "contractors", "view")
-
+    """Получить контрагента по ID (только своей компании)."""
     contractor = db.get(Contractor, contractor_id)
-    if not contractor:
+    if not contractor or contractor.company_id != company_id:
         raise HTTPException(status_code=404, detail="Contractor not found")
     return contractor
 
@@ -90,12 +85,11 @@ def update_contractor(
     payload: ContractorUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Обновить контрагента."""
-    # require_permission(db, current_user, "contractors", "update")
-
+    """Обновить контрагента (только своей компании)."""
     contractor = db.get(Contractor, contractor_id)
-    if not contractor:
+    if not contractor or contractor.company_id != company_id:
         raise HTTPException(status_code=404, detail="Contractor not found")
 
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -111,12 +105,11 @@ def delete_contractor(
     contractor_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Удалить контрагента (деактивировать)."""
-    # require_permission(db, current_user, "contractors", "update")
-
+    """Удалить контрагента (только своей компании)."""
     contractor = db.get(Contractor, contractor_id)
-    if not contractor:
+    if not contractor or contractor.company_id != company_id:
         raise HTTPException(status_code=404, detail="Contractor not found")
 
     contractor.is_active = False
@@ -131,9 +124,12 @@ def list_employees(
     contractor_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Список сотрудников контрагента."""
-    # require_permission(db, current_user, "contractors", "view")
+    """Список сотрудников контрагента (только своей компании)."""
+    contractor = db.get(Contractor, contractor_id)
+    if not contractor or contractor.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Contractor not found")
 
     stmt = select(Employee).where(Employee.contractor_id == contractor_id)
     return db.scalars(stmt).all()
@@ -149,15 +145,13 @@ def create_employee(
     payload: EmployeeCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Создать сотрудника для contractor-типа employee."""
-    # require_permission(db, current_user, "contractors", "update")
-
+    """Создать сотрудника (только для employee-типа контрагента своей компании)."""
     contractor = db.get(Contractor, contractor_id)
-    if not contractor:
+    if not contractor or contractor.company_id != company_id:
         raise HTTPException(status_code=404, detail="Contractor not found")
 
-    # Проверка что contractor является employee-типом
     if contractor.type != "employee":
         raise HTTPException(
             status_code=409,

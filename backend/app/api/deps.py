@@ -59,3 +59,19 @@ def require_permission(entity: str, action: str):
         return None
 
     return checker
+
+
+def get_current_company_id(
+    user: User = Depends(get_current_user),
+) -> int:
+    """
+    Возвращает company_id текущего пользователя.
+
+    Если у пользователя нет компании — возвращает 403.
+    """
+    if not user.company_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not assigned to any company",
+        )
+    return user.company_id
