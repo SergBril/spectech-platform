@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { Toaster } from 'react-hot-toast';
 import { CompanySettingsPage } from './pages/CompanySettingsPage';
+import { ContractorsPage } from './pages/ContractorsPage';
 
 // ✅ Все импорты БЕЗ фигурных скобок (default export)
 import LoginPage from './pages/LoginPage';
@@ -48,6 +49,7 @@ const AppRoutes = () => {
       <Route path="/requests/:id" element={<ProtectedRoute><RequestDetailPage /></ProtectedRoute>} />
       <Route path="/acts/new" element={<ProtectedRoute><ActCreatePage /></ProtectedRoute>} />
       <Route path="/settings/company" element={<ProtectedRoute><CompanySettingsPage /></ProtectedRoute>} />
+      <Route path="/contractors" element={<ProtectedRoute><ContractorsPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
