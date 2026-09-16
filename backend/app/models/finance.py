@@ -70,14 +70,14 @@ class Invoice(Base):
     tax_system: Mapped[str] = mapped_column(
         String(20),
         default=TaxSystem.OSNO.value,
-        server_default=TaxSystem.OSNO.value,  # Для существующих строк в БД
+        server_default=TaxSystem.OSNO.value,
         nullable=False,
         comment="Система налогообложения",
     )
     is_vat_included: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
-        server_default="true",  # PostgreSQL boolean literal
+        server_default="true",
         nullable=False,
         comment="НДС включён в сумму (True) или начисляется сверху (False)",
     )
@@ -128,7 +128,6 @@ class InvoiceItem(Base):
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0, nullable=False)
 
-    # Связь со сменой (если позиция основана на смене)
     shift_report_id: Mapped[int | None] = mapped_column(
         ForeignKey("shift_reports.id"), nullable=True
     )
@@ -161,6 +160,11 @@ class Act(Base):
         server_default=TaxSystem.OSNO.value,
         nullable=False,
         comment="Система налогообложения",
+    )
+    vat_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 2),
+        nullable=True,
+        comment="Ставка НДС (0 для УСН/Патент/НПД)",
     )
     is_vat_included: Mapped[bool] = mapped_column(
         Boolean,
@@ -212,7 +216,6 @@ class Payout(Base):
         String(50), unique=True, nullable=False
     )
 
-    # Кому платим
     owner_id: Mapped[int] = mapped_column(ForeignKey("contractors.id"), nullable=False)
     vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), nullable=False)
     request_id: Mapped[int | None] = mapped_column(
@@ -220,22 +223,20 @@ class Payout(Base):
     )
     company_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # Суммы
     gross_amount: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, nullable=False
-    )  # До выплаты комиссии
+    )
     platform_commission: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, nullable=False
-    )  # Комиссия платформы
+    )
     net_amount: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, nullable=False
-    )  # К выплате собственнику
+    )
 
     commission_rate: Mapped[Decimal] = mapped_column(
         Numeric(5, 2), default=0, nullable=False
-    )  # % комиссии
+    )
 
-    # Даты и статус
     payout_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[DocumentStatus] = mapped_column(
         SqlEnum(DocumentStatus, name="document_status", create_type=False),
@@ -243,7 +244,6 @@ class Payout(Base):
         nullable=False,
     )
 
-    # Детали расчёта
     calculation_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -266,7 +266,6 @@ class Payment(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    # Связь с документом
     invoice_id: Mapped[int | None] = mapped_column(
         ForeignKey("invoices.id"), nullable=True
     )
@@ -284,7 +283,6 @@ class Payment(Base):
 
     payment_date: Mapped[date] = mapped_column(Date, nullable=False)
 
-    # Внешний ID (для интеграции с банком)
     external_transaction_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
