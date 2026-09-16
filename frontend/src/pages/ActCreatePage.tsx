@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { financeApi } from '../api/finance';
 import { requestsApi } from '../api/requests';
 import { companiesApi } from '../api/companies';
+import { contractorsApi, type Contractor } from '../api/contractors';
 import { showToast } from '../utils/toast';
 import NotificationBell from '../components/NotificationBell';
 import { TaxSystemSelector } from '../components/TaxSystemSelector';
@@ -17,6 +18,10 @@ export const ActCreatePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [request, setRequest] = useState<any>(null);
+  const [contractors, setContractors] = useState<Contractor[]>([]);
+  const [searchContractor, setSearchContractor] = useState('');
+  const [isManualTaxOverride, setIsManualTaxOverride] = useState(false);
+
   const [formData, setFormData] = useState({
     request_id: requestId ? parseInt(requestId) : 0,
     client_id: 0,
@@ -30,6 +35,7 @@ export const ActCreatePage: React.FC = () => {
 
   const canCreate = hasPermission('finance', 'create');
 
+  // Загрузка заявки
   useEffect(() => {
     if (requestId) {
       loadRequest(parseInt(requestId));
@@ -38,31 +44,34 @@ export const ActCreatePage: React.FC = () => {
     }
   }, [requestId]);
 
-  // 🆕 АВТОЗАГРУЗКА настроек компании
-useEffect(() => {
-  console.log('🔍 ActCreatePage useEffect:', {
-    user: user?.email,
-    companyId: user?.company_id
-  });
-
-  if (user?.company_id) {
-    console.log('📥 Loading tax settings for company:', user.company_id);
-    companiesApi
-      .getTaxSettings(user.company_id)
-      .then((settings) => {
-        console.log('✅ Tax settings loaded:', settings);
-        setFormData((prev) => ({
-          ...prev,
-          tax_system: settings.default_tax_system,
-          vat_rate: settings.default_vat_rate.toString(),
-          is_vat_included: settings.default_is_vat_included,
-        }));
-      })
+  // Загрузка клиентов
+  useEffect(() => {
+    contractorsApi
+      .getAll({ type: 'client', is_active: true, limit: 500 })
+      .then(setContractors)
       .catch((err) => {
-        console.warn('❌ Failed to load tax settings:', err);
+        console.error('Ошибка загрузки клиентов:', err);
       });
-  }
-}, [user]);
+  }, []);
+
+  // АВТОЗАГРУЗКА настроек компании
+  useEffect(() => {
+    if (user?.company_id && !isManualTaxOverride) {
+      companiesApi
+        .getTaxSettings(user.company_id)
+        .then((settings) => {
+          setFormData((prev) => ({
+            ...prev,
+            tax_system: settings.default_tax_system,
+            vat_rate: settings.default_vat_rate.toString(),
+            is_vat_included: settings.default_is_vat_included,
+          }));
+        })
+        .catch((err) => {
+          console.warn('Не удалось загрузить настройки компании:', err);
+        });
+    }
+  }, [user]);
 
   const loadRequest = async (id: number) => {
     try {
@@ -83,6 +92,7 @@ useEffect(() => {
   };
 
   const handleTaxSystemChange = (newSystem: string) => {
+    setIsManualTaxOverride(true);
     setFormData((prev) => ({
       ...prev,
       tax_system: newSystem,
@@ -90,10 +100,36 @@ useEffect(() => {
     }));
   };
 
+  // 🆕 Обработчик выбора клиента с автоподстановкой tax_system
+  const handleContractorChange = (contractorId: string) => {
+    const id = parseInt(contractorId) || 0;
+    setSearchContractor('');
+
+    setFormData((prev) => {
+      const newData = { ...prev, client_id: id };
+
+      // Автоматически подставляем систему налогов клиента
+      if (id && !isManualTaxOverride) {
+        const contractor = contractors.find((c) => c.id === id);
+        if (contractor?.tax_system) {
+          newData.tax_system = contractor.tax_system;
+          newData.vat_rate = contractor.tax_system !== 'osno' ? '0' : '20';
+        }
+      }
+
+      return newData;
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canCreate) {
       showToast.error('Нет прав на создание акта');
+      return;
+    }
+
+    if (!formData.client_id) {
+      showToast.error('Выберите заказчика');
       return;
     }
 
@@ -118,6 +154,11 @@ useEffect(() => {
     }
   };
 
+  // Получаем выбранного клиента для превью
+  const selectedContractor = formData.client_id
+    ? contractors.find((c) => c.id === formData.client_id)
+    : null;
+
   if (pageLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -136,15 +177,26 @@ useEffect(() => {
           <div className="flex justify-between h-16">
             <div className="flex items-center space-x-6">
               <h1 className="text-xl font-bold text-gray-900">🚜 СпецТехника Про</h1>
-              <button onClick={() => navigate('/')} className="text-gray-600 hover:text-gray-900">Dashboard</button>
-              <button onClick={() => navigate(`/requests/${requestId}`)} className="text-gray-600 hover:text-gray-900">
+              <button onClick={() => navigate('/')} className="text-gray-600 hover:text-gray-900">
+                Dashboard
+              </button>
+              <button
+                onClick={() => navigate(`/requests/${requestId}`)}
+                className="text-gray-600 hover:text-gray-900"
+              >
                 ← К заявке #{requestId}
               </button>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">{user?.email}</span>
               <NotificationBell />
-              <button onClick={() => { logout(); navigate('/login'); }} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
+              <button
+                onClick={() => {
+                  logout();
+                  navigate('/login');
+                }}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+              >
                 Выйти
               </button>
             </div>
@@ -161,7 +213,9 @@ useEffect(() => {
               <h3 className="font-semibold text-blue-900 mb-2">Заявка #{request.id}</h3>
               <p className="text-sm text-blue-800">🔧 {request.work_type}</p>
               <p className="text-sm text-blue-700">📍 {request.object_address}</p>
-              <p className="text-sm text-blue-700">💵 Ожидаемая сумма: {(request as any).estimated_amount || '—'} ₽</p>
+              <p className="text-sm text-blue-700">
+                💵 Ожидаемая сумма: {(request as any).estimated_amount || '—'} ₽
+              </p>
             </div>
           )}
 
@@ -190,11 +244,82 @@ useEffect(() => {
               />
             </div>
 
+            {/* 🆕 Блок выбора заказчика */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">👤 Заказчик *</label>
+              <input
+                type="text"
+                placeholder="Поиск по названию или ИНН..."
+                value={searchContractor}
+                onChange={(e) => setSearchContractor(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none mb-2"
+              />
+              <select
+                value={formData.client_id || ''}
+                onChange={(e) => handleContractorChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                required
+              >
+                <option value="">— Выберите заказчика —</option>
+                {contractors
+                  .filter(
+                    (c) =>
+                      !searchContractor ||
+                      c.name.toLowerCase().includes(searchContractor.toLowerCase()) ||
+                      c.inn?.toLowerCase().includes(searchContractor.toLowerCase()),
+                  )
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.inn ? `(ИНН: ${c.inn})` : ''}
+                    </option>
+                  ))}
+              </select>
+
+              {/* Превью реквизитов выбранного заказчика */}
+              {selectedContractor && (
+                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900">
+                  <div className="font-semibold mb-1">{selectedContractor.name}</div>
+                  {selectedContractor.inn && (
+                    <div>
+                      ИНН: {selectedContractor.inn}
+                      {selectedContractor.kpp ? ` / КПП: ${selectedContractor.kpp}` : ''}
+                    </div>
+                  )}
+                  {selectedContractor.legal_address && (
+                    <div className="truncate">Адрес: {selectedContractor.legal_address}</div>
+                  )}
+                  {selectedContractor.tax_system && (
+                    <div>
+                      Система налогов:{' '}
+                      <span className="font-medium">
+                        {selectedContractor.tax_system === 'osno' && 'ОСНО'}
+                        {selectedContractor.tax_system === 'usn_6' && 'УСН "Доходы"'}
+                        {selectedContractor.tax_system === 'usn_15' && 'УСН "Доходы-Расходы"'}
+                        {selectedContractor.tax_system === 'patent' && 'Патент'}
+                        {selectedContractor.tax_system === 'npd' && 'НПД'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => window.open('/contractors', '_blank')}
+                className="mt-2 text-xs text-blue-600 hover:text-blue-800"
+              >
+                + Добавить нового клиента
+              </button>
+            </div>
+
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <TaxSystemSelector
                 value={formData.tax_system}
                 onChange={handleTaxSystemChange}
-                onVatRateChange={(rate) => setFormData({ ...formData, vat_rate: rate })}
+                onVatRateChange={(rate) => {
+                  setIsManualTaxOverride(true);
+                  setFormData({ ...formData, vat_rate: rate });
+                }}
               />
 
               {formData.tax_system === 'osno' && (
@@ -203,7 +328,10 @@ useEffect(() => {
                     id="actVatIncluded"
                     type="checkbox"
                     checked={formData.is_vat_included}
-                    onChange={(e) => setFormData({ ...formData, is_vat_included: e.target.checked })}
+                    onChange={(e) => {
+                      setIsManualTaxOverride(true);
+                      setFormData({ ...formData, is_vat_included: e.target.checked });
+                    }}
                     className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                   />
                   <label htmlFor="actVatIncluded" className="ml-2 text-sm text-gray-700">
@@ -242,7 +370,9 @@ useEffect(() => {
             </div>
 
             {!canCreate && (
-              <p className="text-red-600 text-sm text-center">⚠️ У вас нет прав на создание актов</p>
+              <p className="text-red-600 text-sm text-center">
+                ⚠️ У вас нет прав на создание актов
+              </p>
             )}
           </form>
         </div>

@@ -3,6 +3,7 @@ import type { Invoice, InvoiceCreate, InvoiceItemCreate } from '../api/finance';
 import { requestsApi, type Request } from '../api/requests';
 import { TaxSystemSelector } from './TaxSystemSelector';
 import { companiesApi } from '../api/companies';
+import { contractorsApi, type Contractor } from '../api/contractors';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Props {
@@ -22,7 +23,7 @@ const toDateString = (iso: string | null | undefined) => {
 
 export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) => {
   const { user } = useAuth();
-  const [clientId, setClientId] = useState(invoice?.client_id?.toString() || '1');
+  const [clientId, setClientId] = useState(invoice?.client_id?.toString() || '');
   const [invoiceDate, setInvoiceDate] = useState(toDateString(invoice?.invoice_date));
   const [dueDate, setDueDate] = useState(toDateString(invoice?.due_date));
   const [comment, setComment] = useState(invoice?.comment || '');
@@ -30,6 +31,9 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
   const [taxSystem, setTaxSystem] = useState(invoice?.tax_system || 'osno');
   const [vatRate, setVatRate] = useState(invoice?.vat_rate?.toString() || '20');
   const [isVatIncluded, setIsVatIncluded] = useState(invoice?.is_vat_included ?? true);
+  const [contractors, setContractors] = useState<Contractor[]>([]);
+  const [searchContractor, setSearchContractor] = useState('');
+  const [isManualTaxOverride, setIsManualTaxOverride] = useState(false);
 
   const [items, setItems] = useState<ItemRow[]>(
     invoice?.items?.length
@@ -44,7 +48,7 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [requests, setRequests] = useState<Request[]>([]);
-  const [requestId, setRequestId] = useState<string>(invoice?.request_id?.toString() || '7');
+  const [requestId, setRequestId] = useState<string>(invoice?.request_id?.toString() || '');
 
   // Загрузка заявок
   useEffect(() => {
@@ -57,33 +61,35 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
         }
       })
       .catch((err) => {
-        console.error("Ошибка загрузки заявок:", err);
+        console.error('Ошибка загрузки заявок:', err);
       });
   }, []);
 
-  // 🆕 АВТОЗАГРУЗКА настроек компании для НОВОГО счёта
-useEffect(() => {
-  console.log('🔍 InvoiceFormModal useEffect:', {
-    invoice: !!invoice,
-    user: user?.email,
-    companyId: user?.company_id
-  });
-
-  if (!invoice && user?.company_id) {
-    console.log('📥 Loading tax settings for company:', user.company_id);
-    companiesApi
-      .getTaxSettings(user.company_id)
-      .then((settings) => {
-        console.log('✅ Tax settings loaded:', settings);
-        setTaxSystem(settings.default_tax_system);
-        setVatRate(settings.default_vat_rate.toString());
-        setIsVatIncluded(settings.default_is_vat_included);
-      })
+  // Загрузка клиентов
+  useEffect(() => {
+    contractorsApi
+      .getAll({ type: 'client', is_active: true, limit: 500 })
+      .then(setContractors)
       .catch((err) => {
-        console.warn('❌ Failed to load tax settings:', err);
+        console.error('Ошибка загрузки клиентов:', err);
       });
-  }
-}, [invoice, user]);
+  }, []);
+
+  // АВТОЗАГРУЗКА настроек компании для НОВОГО счёта
+  useEffect(() => {
+    if (!invoice && user?.company_id && !isManualTaxOverride) {
+      companiesApi
+        .getTaxSettings(user.company_id)
+        .then((settings) => {
+          setTaxSystem(settings.default_tax_system);
+          setVatRate(settings.default_vat_rate.toString());
+          setIsVatIncluded(settings.default_is_vat_included);
+        })
+        .catch((err) => {
+          console.warn('Не удалось загрузить настройки компании:', err);
+        });
+    }
+  }, [invoice, user]);
 
   const updateItem = (key: string, field: keyof InvoiceItemCreate, value: any) => {
     setItems(items.map((it) => (it.key === key ? { ...it, [field]: value } : it)));
@@ -121,6 +127,7 @@ useEffect(() => {
 
   const handleTaxSystemChange = (newSystem: string) => {
     setTaxSystem(newSystem);
+    setIsManualTaxOverride(true);
     if (newSystem !== 'osno') {
       setVatRate('0');
     } else if (vatRate === '0') {
@@ -128,12 +135,43 @@ useEffect(() => {
     }
   };
 
+  // 🆕 Обработчик выбора клиента с автоподстановкой tax_system
+  const handleContractorChange = (contractorId: string) => {
+    setClientId(contractorId);
+    setSearchContractor('');
+
+    if (!contractorId) return;
+
+    // Автоматически подставляем систему налогов клиента (только для новых счетов)
+    if (!invoice && !isManualTaxOverride) {
+      const contractor = contractors.find((c) => c.id === parseInt(contractorId));
+      if (contractor?.tax_system) {
+        setTaxSystem(contractor.tax_system);
+        if (contractor.tax_system !== 'osno') {
+          setVatRate('0');
+        } else {
+          setVatRate('20');
+        }
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!clientId) { setError('Укажите клиента'); return; }
-    if (!invoiceDate || !dueDate) { setError('Укажите даты'); return; }
+    if (!clientId) {
+      setError('Укажите клиента');
+      return;
+    }
+    if (!requestId) {
+      setError('Укажите заявку');
+      return;
+    }
+    if (!invoiceDate || !dueDate) {
+      setError('Укажите даты');
+      return;
+    }
     if (items.length === 0 || items.every((it) => !it.description.trim())) {
       setError('Добавьте хотя бы одну позицию');
       return;
@@ -142,7 +180,7 @@ useEffect(() => {
     setSaving(true);
     try {
       await onSave({
-        request_id: parseInt(requestId) || 7,
+        request_id: parseInt(requestId),
         client_id: parseInt(clientId),
         invoice_date: invoiceDate,
         due_date: dueDate,
@@ -164,6 +202,11 @@ useEffect(() => {
     }
   };
 
+  // Получаем выбранного клиента для превью
+  const selectedContractor = clientId
+    ? contractors.find((c) => c.id === parseInt(clientId))
+    : null;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -172,11 +215,15 @@ useEffect(() => {
             <h2 className="text-2xl font-bold text-gray-900">
               {invoice ? `Редактировать ${invoice.document_number}` : 'Новый счёт'}
             </h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">
+              ×
+            </button>
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">{error}</div>
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+              {error}
+            </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -197,16 +244,72 @@ useEffect(() => {
                   ))}
                 </select>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Клиент ID *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Клиент *</label>
                 <input
-                  type="number"
+                  type="text"
+                  placeholder="Поиск по названию или ИНН..."
+                  value={searchContractor}
+                  onChange={(e) => setSearchContractor(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none mb-2"
+                />
+                <select
                   value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
+                  onChange={(e) => handleContractorChange(e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
                   required
-                />
-                <div className="text-xs text-gray-500 mt-1">ООО ТестКлиент = 1</div>
+                >
+                  <option value="">— Выберите клиента —</option>
+                  {contractors
+                    .filter(
+                      (c) =>
+                        !searchContractor ||
+                        c.name.toLowerCase().includes(searchContractor.toLowerCase()) ||
+                        c.inn?.toLowerCase().includes(searchContractor.toLowerCase()),
+                    )
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.inn ? `(ИНН: ${c.inn})` : ''}
+                      </option>
+                    ))}
+                </select>
+
+                {/* Превью реквизитов выбранного клиента */}
+                {selectedContractor && (
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900">
+                    <div className="font-semibold mb-1">{selectedContractor.name}</div>
+                    {selectedContractor.inn && (
+                      <div>
+                        ИНН: {selectedContractor.inn}
+                        {selectedContractor.kpp ? ` / КПП: ${selectedContractor.kpp}` : ''}
+                      </div>
+                    )}
+                    {selectedContractor.legal_address && (
+                      <div className="truncate">Адрес: {selectedContractor.legal_address}</div>
+                    )}
+                    {selectedContractor.tax_system && (
+                      <div>
+                        Система налогов:{' '}
+                        <span className="font-medium">
+                          {selectedContractor.tax_system === 'osno' && 'ОСНО'}
+                          {selectedContractor.tax_system === 'usn_6' && 'УСН "Доходы"'}
+                          {selectedContractor.tax_system === 'usn_15' && 'УСН "Доходы-Расходы"'}
+                          {selectedContractor.tax_system === 'patent' && 'Патент'}
+                          {selectedContractor.tax_system === 'npd' && 'НПД'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => window.open('/contractors', '_blank')}
+                  className="mt-2 text-xs text-blue-600 hover:text-blue-800"
+                >
+                  + Добавить нового клиента
+                </button>
               </div>
             </div>
 
@@ -222,7 +325,9 @@ useEffect(() => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Срок оплаты *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Срок оплаты *
+                </label>
                 <input
                   type="date"
                   value={dueDate}
@@ -237,7 +342,10 @@ useEffect(() => {
               <TaxSystemSelector
                 value={taxSystem}
                 onChange={handleTaxSystemChange}
-                onVatRateChange={(rate) => setVatRate(rate)}
+                onVatRateChange={(rate) => {
+                  setVatRate(rate);
+                  setIsManualTaxOverride(true);
+                }}
               />
 
               {taxSystem === 'osno' && (
@@ -246,7 +354,10 @@ useEffect(() => {
                     id="isVatIncluded"
                     type="checkbox"
                     checked={isVatIncluded}
-                    onChange={(e) => setIsVatIncluded(e.target.checked)}
+                    onChange={(e) => {
+                      setIsVatIncluded(e.target.checked);
+                      setIsManualTaxOverride(true);
+                    }}
                     className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                   />
                   <label htmlFor="isVatIncluded" className="ml-2 text-sm text-gray-700">
@@ -276,7 +387,9 @@ useEffect(() => {
                   <div className="col-span-2 text-right">Сумма</div>
                 </div>
                 {items.map((it) => {
-                  const amount = (parseFloat(String(it.quantity)) || 0) * (parseFloat(String(it.unit_price)) || 0);
+                  const amount =
+                    (parseFloat(String(it.quantity)) || 0) *
+                    (parseFloat(String(it.unit_price)) || 0);
                   return (
                     <div key={it.key} className="grid grid-cols-12 gap-2 items-center">
                       <input
@@ -324,7 +437,9 @@ useEffect(() => {
             <div className="bg-gray-50 p-4 rounded-lg space-y-1">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Сумма без НДС:</span>
-                <span className="font-medium">{subtotal.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} ₽</span>
+                <span className="font-medium">
+                  {subtotal.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} ₽
+                </span>
               </div>
 
               {isOsno ? (
@@ -332,10 +447,11 @@ useEffect(() => {
                   <span className="text-gray-600">
                     НДС ({vatRate}%)
                     {isVatIncluded && <span className="text-xs text-gray-500"> — включён</span>}
-                    {!isVatIncluded && <span className="text-xs text-gray-500"> — сверху</span>}
-                    :
+                    {!isVatIncluded && <span className="text-xs text-gray-500"> — сверху</span>} :
                   </span>
-                  <span className="font-medium">{vat.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} ₽</span>
+                  <span className="font-medium">
+                    {vat.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} ₽
+                  </span>
                 </div>
               ) : (
                 <div className="flex justify-between text-sm">
@@ -352,7 +468,9 @@ useEffect(() => {
 
               <div className="flex justify-between text-base pt-2 border-t border-gray-300">
                 <span className="font-semibold text-gray-900">ИТОГО:</span>
-                <span className="font-bold text-lg text-blue-600">{total.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} ₽</span>
+                <span className="font-bold text-lg text-blue-600">
+                  {total.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} ₽
+                </span>
               </div>
             </div>
 
@@ -381,7 +499,7 @@ useEffect(() => {
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                 disabled={saving}
               >
-                {saving ? 'Сохранение...' : (invoice ? 'Сохранить' : 'Создать счёт')}
+                {saving ? 'Сохранение...' : invoice ? 'Сохранить' : 'Создать счёт'}
               </button>
             </div>
           </form>
