@@ -47,6 +47,8 @@ export interface InvoiceCreate {
   vat_rate: number;
   comment?: string;
   items: InvoiceItemCreate[];
+  tax_system?: string;
+  is_vat_included?: boolean;
 }
 
 export interface ActCreate {
