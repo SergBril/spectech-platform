@@ -145,26 +145,63 @@
             <div class="number">№ {{ invoice.document_number }}</div>
             <div class="date">от {{ invoice.invoice_date.strftime('%d.%m.%Y') }}</div>
         </div>
-    </div>
+        </div>
 
-    <div class="parties">
-        <table>
-            <tr>
-                <td>
-                    <div class="label">Поставщик:</div>
-                    <p>ООО "СпецТехника Про"</p>
-                    <p>в лице генерального директора</p>
-                </td>
-                <td>
-                    <div class="label">Покупатель:</div>
-                    <p>{{ contractor.name if contractor else 'Не указан' }}</p>
-                    {% if contractor and contractor.inn %}
-                    <p>ИНН: {{ contractor.inn }}</p>
-                    {% endif %}
-                </td>
-            </tr>
-        </table>
-    </div>
+        <div class="parties">
+            <table>
+                <tr>
+                    <td>
+                        <div class="label">Поставщик:</div>
+                        <p><strong>ООО "СпецТехника Про"</strong></p>
+                        <p>Юр. адрес: г. Москва, ул. Примерная, д. 1</p>
+                        <p>ИНН: 7700000000 / КПП: 770001001</p>
+                        <p>р/с: 40702810000000012345</p>
+                        <p>ПАО "Сбербанк"</p>
+                        <p>БИК: 044525225</p>
+                        <p>к/с: 30101810400000000225</p>
+                    </td>
+                    <td>
+                        <div class="label">Покупатель:</div>
+                        {% if contractor %}
+                            <p><strong>{{ contractor.name }}</strong></p>
+                            {% if contractor.legal_address %}
+                                <p>Юр. адрес: {{ contractor.legal_address }}</p>
+                            {% endif %}
+                            {% if contractor.inn %}
+                                <p>ИНН: {{ contractor.inn }}{% if contractor.kpp %} / КПП: {{ contractor.kpp }}{% endif %}</p>
+                            {% endif %}
+                            {% if contractor.bank_details %}
+                                {% if contractor.bank_details.account %}
+                                    <p>р/с: {{ contractor.bank_details.account }}</p>
+                                {% endif %}
+                                {% if contractor.bank_details.bank_name %}
+                                    <p>{{ contractor.bank_details.bank_name }}</p>
+                                {% endif %}
+                                {% if contractor.bank_details.bik %}
+                                    <p>БИК: {{ contractor.bank_details.bik }}</p>
+                                {% endif %}
+                                {% if contractor.bank_details.correspondent_account %}
+                                    <p>к/с: {{ contractor.bank_details.correspondent_account }}</p>
+                                {% endif %}
+                            {% endif %}
+                            {% if contractor.tax_system %}
+                                <p>Система налогообложения:
+                                    {% if contractor.tax_system == 'osno' %}ОСНО
+                                    {% elif contractor.tax_system == 'usn_6' %}УСН "Доходы"
+                                    {% elif contractor.tax_system == 'usn_15' %}УСН "Доходы-Расходы"
+                                    {% elif contractor.tax_system == 'patent' %}Патент
+                                    {% elif contractor.tax_system == 'npd' %}НПД
+                                    {% else %}{{ contractor.tax_system }}
+                                    {% endif %}
+                                </p>
+                            {% endif %}
+                        {% else %}
+                            <p>Не указан</p>
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
+        </div>
 
     {% if invoice.comment %}
     <p><strong>Комментарий:</strong> {{ invoice.comment }}</p>
