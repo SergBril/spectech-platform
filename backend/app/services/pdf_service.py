@@ -1,6 +1,39 @@
-"""Сервис генерации PDF документов."""
+"""Сервис генерации PDF документов на русском языке."""
 
 from datetime import datetime
+
+# === СЛОВАРЬ ПЕРЕВОДА ЕДИНИЦ ИЗМЕРЕНИЯ ===
+UNIT_TRANSLATIONS = {
+    "hourly": "час",
+    "hour": "час",
+    "hr": "час",
+    "shift": "смена",
+    "smena": "смена",
+    "km": "км",
+    "fixed": "услуга",
+    "service": "услуга",
+    "usluga": "услуга",
+    "piece": "шт",
+    "pcs": "шт",
+    "шт": "шт",
+    "m": "м",
+    "m2": "м²",
+    "m3": "м³",
+    "kg": "кг",
+    "ton": "т",
+    "liter": "л",
+    "l": "л",
+    "day": "день",
+    "month": "мес",
+}
+
+
+def translate_unit(unit: str) -> str:
+    """Перевод единицы измерения с английского на русский."""
+    if not unit:
+        return "шт"
+    unit_lower = str(unit).strip().lower()
+    return UNIT_TRANSLATIONS.get(unit_lower, str(unit).strip())
 
 
 def _to_str(value) -> str:
@@ -22,251 +55,357 @@ def _to_float(value) -> float:
         return 0.0
 
 
-def _transliterate(text: str) -> str:
-    """Простая транслитерация кириллицы в латиницу."""
-    if not text:
-        return ""
-    mapping = {
-        "а": "a",
-        "б": "b",
-        "в": "v",
-        "г": "g",
-        "д": "d",
-        "е": "e",
-        "ё": "yo",
-        "ж": "zh",
-        "з": "z",
-        "и": "i",
-        "й": "y",
-        "к": "k",
-        "л": "l",
-        "м": "m",
-        "н": "n",
-        "о": "o",
-        "п": "p",
-        "р": "r",
-        "с": "s",
-        "т": "t",
-        "у": "u",
-        "ф": "f",
-        "х": "kh",
-        "ц": "ts",
-        "ч": "ch",
-        "ш": "sh",
-        "щ": "sch",
-        "ъ": "",
-        "ы": "y",
-        "ь": "",
-        "э": "e",
-        "ю": "yu",
-        "я": "ya",
-        "А": "A",
-        "Б": "B",
-        "В": "V",
-        "Г": "G",
-        "Д": "D",
-        "Е": "E",
-        "Ё": "Yo",
-        "Ж": "Zh",
-        "З": "Z",
-        "И": "I",
-        "Й": "Y",
-        "К": "K",
-        "Л": "L",
-        "М": "M",
-        "Н": "N",
-        "О": "O",
-        "П": "P",
-        "Р": "R",
-        "С": "S",
-        "Т": "T",
-        "У": "U",
-        "Ф": "F",
-        "Х": "Kh",
-        "Ц": "Ts",
-        "Ч": "Ch",
-        "Ш": "Sh",
-        "Щ": "Sch",
-        "Ъ": "",
-        "Ы": "Y",
-        "Ь": "",
-        "Э": "E",
-        "Ю": "Yu",
-        "Я": "Ya",
+def _format_money(value) -> str:
+    """Форматирование суммы с пробелами (1 234 567.89)."""
+    f = _to_float(value)
+    return f"{f:,.2f}".replace(",", " ")
+
+
+def _get_tax_system_label(tax_system: str) -> str:
+    """Возвращает русское название системы налогообложения."""
+    labels = {
+        "osno": "ОСНО",
+        "usn_6": 'УСН "Доходы"',
+        "usn_15": 'УСН "Доходы-Расходы"',
+        "patent": "Патент",
+        "npd": "НПД",
     }
-    result = []
-    for char in text:
-        if char in mapping:
-            result.append(mapping[char])
-        elif ord(char) < 128:
-            result.append(char)
+    return labels.get(tax_system, tax_system or "ОСНО")
+
+
+def generate_invoice_pdf(invoice, contractor=None, local_path: str = None) -> bytes:
+    """
+    Генерирует профессиональный PDF для счёта с полными реквизитами.
+    Использует Jinja2 + HTML шаблон для качества.
+    """
+    try:
+        import os
+
+        from jinja2 import Environment, FileSystemLoader
+
+        # Пытаемся использовать WeasyPrint для HTML → PDF
+        try:
+            from weasyprint import HTML
+
+            use_weasy = True
+        except ImportError:
+            use_weasy = False
+
+        # Путь к HTML-шаблону
+        templates_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "email_templates"
+        )
+
+        env = Environment(loader=FileSystemLoader(templates_dir))
+        env.filters["translate_unit"] = translate_unit
+
+        template = env.get_template("invoice_pdf.html")
+
+        # Формируем контекст
+        context = {
+            "invoice": invoice,
+            "contractor": contractor,
+            "translate_unit": translate_unit,
+            "format_money": _format_money,
+            "now": datetime.now(),
+        }
+
+        html_content = template.render(**context)
+
+        if use_weasy:
+            # Профессиональный PDF через WeasyPrint
+            pdf_bytes = HTML(string=html_content).write_pdf()
+            return pdf_bytes
         else:
-            result.append("?")
-    return "".join(result)
+            # Fallback: сохраняем как HTML (временное решение)
+            return html_content.encode("utf-8")
+
+    except Exception as e:
+        print(f"❌ Ошибка генерации PDF через WeasyPrint: {e}")
+        # Fallback на старую FPDF-версию
+        return _generate_invoice_pdf_fpdf(invoice, contractor)
 
 
-def generate_invoice_pdf(
-    invoice, client_name: str = "", local_path: str = None
+def generate_act_pdf(
+    act, contractor=None, request=None, local_path: str = None
 ) -> bytes:
-    """Генерирует PDF для счёта."""
+    """
+    Генерирует профессиональный PDF для акта с полными реквизитами.
+    """
+    try:
+        import os
+
+        from jinja2 import Environment, FileSystemLoader
+
+        try:
+            from weasyprint import HTML
+
+            use_weasy = True
+        except ImportError:
+            use_weasy = False
+
+        templates_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "email_templates"
+        )
+
+        env = Environment(loader=FileSystemLoader(templates_dir))
+        env.filters["translate_unit"] = translate_unit
+
+        template = env.get_template("act_pdf.html")
+
+        context = {
+            "act": act,
+            "contractor": contractor,
+            "request": request,
+            "translate_unit": translate_unit,
+            "format_money": _format_money,
+            "now": datetime.now(),
+        }
+
+        html_content = template.render(**context)
+
+        if use_weasy:
+            pdf_bytes = HTML(string=html_content).write_pdf()
+            return pdf_bytes
+        else:
+            return html_content.encode("utf-8")
+
+    except Exception as e:
+        print(f"❌ Ошибка генерации PDF через WeasyPrint: {e}")
+        return _generate_act_pdf_fpdf(act, contractor)
+
+
+def _generate_invoice_pdf_fpdf(invoice, contractor=None) -> bytes:
+    """Fallback: старый FPDF-генератор с русскими единицами."""
     from fpdf import FPDF
 
     pdf = FPDF()
     pdf.add_page()
-    font_family = "Helvetica"
+    pdf.add_font(
+        "DejaVu", "", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", uni=True
+    )
+    pdf.add_font(
+        "DejaVu", "B", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", uni=True
+    )
 
-    # === Заголовок (с пробелом между INVOICE и #) ===
-    pdf.set_font(font_family, "B", 16)
-    pdf.cell(0, 10, f"INVOICE  #{invoice.document_number}", 0, 1, "C")
+    # Заголовок
+    pdf.set_font("DejaVu", "B", 16)
+    pdf.cell(0, 10, f"СЧЁТ № {invoice.document_number}", 0, 1, "C")
+    pdf.set_font("DejaVu", "", 10)
+    pdf.cell(0, 6, f"от {invoice.invoice_date}", 0, 1, "C")
     pdf.ln(5)
 
-    # === Информация (статус через .value) ===
-    pdf.set_font(font_family, "", 10)
-    pdf.cell(95, 7, f"Date: {invoice.invoice_date}", 0, 0)
-    pdf.cell(95, 7, f"Due: {invoice.due_date}", 0, 1)
-    pdf.cell(0, 7, f"Status: {_to_str(invoice.status).upper()}", 0, 1)
+    # Поставщик
+    pdf.set_font("DejaVu", "B", 11)
+    pdf.cell(0, 7, "Поставщик:", 0, 1)
+    pdf.set_font("DejaVu", "", 9)
+    pdf.multi_cell(
+        0,
+        5,
+        'ООО "СпецТехника Про"\n'
+        "Юр. адрес: г. Москва, ул. Примерная, д. 1\n"
+        "ИНН: 7700000000 / КПП: 770001001\n"
+        'р/с: 40702810000000012345 в ПАО "Сбербанк"\n'
+        "БИК: 044525225, к/с: 30101810400000000225",
+    )
     pdf.ln(3)
 
-    # === Клиент ===
-    pdf.set_font(font_family, "B", 11)
-    pdf.cell(0, 7, "Client:", 0, 1)
-    pdf.set_font(font_family, "", 10)
-    safe_client = _transliterate(client_name or "Not specified")
-    pdf.cell(0, 7, safe_client, 0, 1)
+    # Покупатель
+    pdf.set_font("DejaVu", "B", 11)
+    pdf.cell(0, 7, "Покупатель:", 0, 1)
+    pdf.set_font("DejaVu", "", 9)
+    if contractor:
+        info = contractor.name or ""
+        if contractor.legal_address:
+            info += f"\nЮр. адрес: {contractor.legal_address}"
+        if contractor.inn:
+            kpp = f" / КПП: {contractor.kpp}" if contractor.kpp else ""
+            info += f"\nИНН: {contractor.inn}{kpp}"
+        if contractor.bank_details:
+            bd = contractor.bank_details
+            if bd.get("account"):
+                info += f"\nр/с: {bd['account']}"
+            if bd.get("bank_name"):
+                info += f"\n{bd['bank_name']}"
+            if bd.get("bik"):
+                info += f"\nБИК: {bd['bik']}"
+        if contractor.tax_system:
+            info += f"\nСистема налогообложения: {_get_tax_system_label(contractor.tax_system)}"
+        pdf.multi_cell(0, 5, info)
+    else:
+        pdf.cell(0, 5, "Не указан", 0, 1)
     pdf.ln(5)
 
-    # === Таблица позиций ===
-    pdf.set_font(font_family, "B", 11)
-    pdf.cell(0, 7, "Items:", 0, 1)
-    pdf.ln(2)
+    # Таблица позиций
+    pdf.set_font("DejaVu", "B", 10)
+    pdf.cell(10, 7, "№", 1, 0, "C")
+    pdf.cell(100, 7, "Наименование", 1, 0, "C")
+    pdf.cell(20, 7, "Ед.", 1, 0, "C")
+    pdf.cell(15, 7, "Кол-во", 1, 0, "C")
+    pdf.cell(25, 7, "Цена", 1, 0, "C")
+    pdf.cell(20, 7, "Сумма", 1, 1, "C")
 
-    pdf.set_font(font_family, "B", 9)
-    pdf.set_fill_color(230, 230, 230)
-    pdf.cell(10, 8, "#", 1, 0, "C", True)
-    pdf.cell(90, 8, "Description", 1, 0, "C", True)
-    pdf.cell(25, 8, "Qty", 1, 0, "C", True)
-    pdf.cell(30, 8, "Price", 1, 0, "C", True)
-    pdf.cell(35, 8, "Amount", 1, 1, "C", True)
-
-    pdf.set_font(font_family, "", 9)
+    pdf.set_font("DejaVu", "", 9)
     for idx, item in enumerate(invoice.items, 1):
-        amount = _to_float(item.amount)
-        desc = _transliterate(str(item.description or ""))[:50]
-
-        pdf.cell(10, 7, str(idx), 1, 0, "C")
-        pdf.cell(90, 7, desc, 1, 0, "L")
-        pdf.cell(25, 7, str(item.quantity), 1, 0, "C")
-        pdf.cell(30, 7, f"{_to_float(item.unit_price):.2f}", 1, 0, "R")
-        pdf.cell(35, 7, f"{amount:.2f}", 1, 1, "R")
+        unit = translate_unit(getattr(item, "unit", "шт") or "шт")
+        pdf.cell(10, 6, str(idx), 1, 0, "C")
+        pdf.cell(100, 6, str(item.description or "")[:60], 1, 0, "L")
+        pdf.cell(20, 6, unit, 1, 0, "C")
+        pdf.cell(15, 6, str(item.quantity), 1, 0, "C")
+        pdf.cell(25, 6, _format_money(item.unit_price), 1, 0, "R")
+        pdf.cell(20, 6, _format_money(item.amount), 1, 1, "R")
 
     pdf.ln(5)
 
-    # === Итоги ===
+    # Итоги
     subtotal = _to_float(invoice.subtotal)
-    vat_amount = _to_float(invoice.vat_amount)
     total = _to_float(invoice.total)
-    vat_rate = _to_float(invoice.vat_rate)
+    vat_amount = _to_float(invoice.vat_amount)
+    tax_system = getattr(invoice, "tax_system", "osno")
 
-    pdf.set_font(font_family, "", 10)
-    pdf.cell(130, 7, "Subtotal:", 0, 0, "R")
-    pdf.cell(60, 7, f"{subtotal:.2f} RUB", 0, 1, "R")
+    pdf.set_font("DejaVu", "", 10)
+    pdf.cell(150, 7, "Итого:", 0, 0, "R")
+    pdf.cell(40, 7, f"{_format_money(subtotal)} ₽", 0, 1, "R")
 
-    pdf.cell(130, 7, f"VAT ({vat_rate:.2f}%):", 0, 0, "R")
-    pdf.cell(60, 7, f"{vat_amount:.2f} RUB", 0, 1, "R")
+    if tax_system == "osno" and vat_amount > 0:
+        vat_rate = _to_float(invoice.vat_rate)
+        pdf.cell(150, 7, f"НДС ({vat_rate}%):", 0, 0, "R")
+        pdf.cell(40, 7, f"{_format_money(vat_amount)} ₽", 0, 1, "R")
+    else:
+        label = _get_tax_system_label(tax_system)
+        pdf.cell(150, 7, f"НДС: Без НДС ({label})", 0, 0, "R")
+        pdf.cell(40, 7, "", 0, 1, "R")
 
-    pdf.set_font(font_family, "B", 12)
-    pdf.cell(130, 8, "TOTAL:", 0, 0, "R")
-    pdf.cell(60, 8, f"{total:.2f} RUB", 0, 1, "R")
+    pdf.set_font("DejaVu", "B", 12)
+    pdf.cell(150, 8, "Всего к оплате:", 0, 0, "R")
+    pdf.cell(40, 8, f"{_format_money(total)} ₽", 0, 1, "R")
 
-    # === Комментарий ===
-    if invoice.comment:
-        pdf.ln(5)
-        pdf.set_font(font_family, "B", 10)
-        pdf.cell(0, 7, "Comment:", 0, 1)
-        pdf.set_font(font_family, "", 9)
-        pdf.multi_cell(0, 6, _transliterate(str(invoice.comment)))
-
-    # === Футер ===
+    # Футер
     pdf.ln(10)
-    pdf.set_font(font_family, "I", 8)
-    pdf.cell(0, 5, f'Generated: {datetime.now().strftime("%d.%m.%Y %H:%M")}', 0, 1, "C")
-    pdf.cell(0, 5, "SpecTech Pro System", 0, 1, "C")
+    pdf.set_font("DejaVu", "I", 8)
+    pdf.cell(
+        0,
+        5,
+        f'Документ сгенерирован: {datetime.now().strftime("%d.%m.%Y %H:%M")}',
+        0,
+        1,
+        "C",
+    )
+    pdf.cell(0, 5, 'Система "СпецТехника Про"', 0, 1, "C")
 
     return bytes(pdf.output())
 
 
-def generate_act_pdf(act, client_name: str = "", local_path: str = None) -> bytes:
-    """Генерирует PDF для акта выполненных работ."""
+def _generate_act_pdf_fpdf(act, contractor=None) -> bytes:
+    """Fallback: старый FPDF-генератор с русскими единицами."""
     from fpdf import FPDF
 
     pdf = FPDF()
     pdf.add_page()
-    font_family = "Helvetica"
+    pdf.add_font(
+        "DejaVu", "", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", uni=True
+    )
+    pdf.add_font(
+        "DejaVu", "B", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", uni=True
+    )
 
-    # === Заголовок ===
-    pdf.set_font(font_family, "B", 16)
-    pdf.cell(0, 10, f"ACT #{act.document_number}", 0, 1, "C")
+    # Заголовок
+    pdf.set_font("DejaVu", "B", 16)
+    pdf.cell(0, 10, f"АКТ № {act.document_number}", 0, 1, "C")
+    pdf.set_font("DejaVu", "", 10)
+    pdf.cell(0, 6, f"от {act.act_date}", 0, 1, "C")
     pdf.ln(5)
 
-    # === Информация ===
-    pdf.set_font(font_family, "", 10)
-    pdf.cell(95, 7, f"Date: {act.act_date}", 0, 0)
-    pdf.cell(95, 7, f"Status: {_to_str(act.status).upper()}", 0, 1)
+    # Исполнитель
+    pdf.set_font("DejaVu", "B", 11)
+    pdf.cell(0, 7, "Исполнитель:", 0, 1)
+    pdf.set_font("DejaVu", "", 9)
+    pdf.multi_cell(
+        0,
+        5,
+        'ООО "СпецТехника Про"\n'
+        "Юр. адрес: г. Москва, ул. Примерная, д. 1\n"
+        "ИНН: 7700000000 / КПП: 770001001\n"
+        'р/с: 40702810000000012345 в ПАО "Сбербанк"\n'
+        "БИК: 044525225, к/с: 30101810400000000225",
+    )
     pdf.ln(3)
 
-    # === Клиент ===
-    pdf.set_font(font_family, "B", 11)
-    pdf.cell(0, 7, "Client:", 0, 1)
-    pdf.set_font(font_family, "", 10)
-    safe_client = _transliterate(client_name or "Not specified")
-    pdf.cell(0, 7, safe_client, 0, 1)
+    # Заказчик
+    pdf.set_font("DejaVu", "B", 11)
+    pdf.cell(0, 7, "Заказчик:", 0, 1)
+    pdf.set_font("DejaVu", "", 9)
+    if contractor:
+        info = contractor.name or ""
+        if contractor.legal_address:
+            info += f"\nЮр. адрес: {contractor.legal_address}"
+        if contractor.inn:
+            kpp = f" / КПП: {contractor.kpp}" if contractor.kpp else ""
+            info += f"\nИНН: {contractor.inn}{kpp}"
+        if contractor.bank_details:
+            bd = contractor.bank_details
+            if bd.get("account"):
+                info += f"\nр/с: {bd['account']}"
+            if bd.get("bank_name"):
+                info += f"\n{bd['bank_name']}"
+            if bd.get("bik"):
+                info += f"\nБИК: {bd['bik']}"
+        if contractor.tax_system:
+            info += f"\nСистема налогообложения: {_get_tax_system_label(contractor.tax_system)}"
+        pdf.multi_cell(0, 5, info)
+    else:
+        pdf.cell(0, 5, "Не указан", 0, 1)
     pdf.ln(5)
 
-    # === Сумма ===
-    pdf.set_font(font_family, "B", 12)
-    pdf.cell(0, 8, "Total amount of work performed:", 0, 1)
-    pdf.set_font(font_family, "B", 14)
+    # Сумма
     total = _to_float(act.total_amount)
-    pdf.cell(0, 10, f"{total:.2f} RUB", 0, 1, "R")
-    pdf.ln(5)
+    tax_system = getattr(act, "tax_system", "osno")
 
-    # === Подписи ===
-    pdf.set_font(font_family, "B", 11)
-    pdf.cell(0, 7, "Signatures:", 0, 1)
-    pdf.set_font(font_family, "", 10)
+    pdf.set_font("DejaVu", "B", 12)
+    pdf.cell(150, 8, "Итого:", 0, 0, "R")
+    pdf.cell(40, 8, f"{_format_money(total)} ₽", 0, 1, "R")
 
-    client_signed = "Yes" if act.signed_by_client_at else "No"
-    executor_signed = "Yes" if act.signed_by_executor_at else "No"
+    if tax_system == "osno":
+        vat_rate = _to_float(getattr(act, "vat_rate", 20))
+        vat_included = getattr(act, "is_vat_included", True)
+        if vat_included:
+            vat = total * vat_rate / (100 + vat_rate)
+            pdf.cell(150, 7, f"НДС ({vat_rate}%, включён):", 0, 0, "R")
+        else:
+            vat = total * vat_rate / 100
+            pdf.cell(150, 7, f"НДС ({vat_rate}%, сверху):", 0, 0, "R")
+        pdf.cell(40, 7, f"{_format_money(vat)} ₽", 0, 1, "R")
+    else:
+        label = _get_tax_system_label(tax_system)
+        pdf.cell(150, 7, f"НДС: Без НДС ({label})", 0, 0, "R")
+        pdf.cell(40, 7, "", 0, 1, "R")
 
-    client_date = (
-        act.signed_by_client_at.strftime("%d.%m.%Y %H:%M")
-        if act.signed_by_client_at
-        else "—"
-    )
-    executor_date = (
-        act.signed_by_executor_at.strftime("%d.%m.%Y %H:%M")
-        if act.signed_by_executor_at
-        else "—"
-    )
+    pdf.set_font("DejaVu", "B", 12)
+    pdf.cell(150, 8, "Всего к оплате:", 0, 0, "R")
+    pdf.cell(40, 8, f"{_format_money(total)} ₽", 0, 1, "R")
 
-    pdf.cell(95, 7, f"Client: {client_signed}", 0, 0)
-    pdf.cell(95, 7, f"Date: {client_date}", 0, 1)
-    pdf.cell(95, 7, f"Executor: {executor_signed}", 0, 0)
-    pdf.cell(95, 7, f"Date: {executor_date}", 0, 1)
+    # Подписи
+    pdf.ln(20)
+    pdf.set_font("DejaVu", "B", 11)
+    pdf.cell(95, 7, "Исполнитель", 0, 0, "C")
+    pdf.cell(95, 7, "Заказчик", 0, 1, "C")
+    pdf.ln(15)
+    pdf.set_font("DejaVu", "", 9)
+    pdf.cell(95, 5, "М.П. / ________________", 0, 0, "C")
+    pdf.cell(95, 5, "М.П. / ________________", 0, 1, "C")
 
-    # === Комментарий ===
-    if act.comment:
-        pdf.ln(5)
-        pdf.set_font(font_family, "B", 10)
-        pdf.cell(0, 7, "Comment:", 0, 1)
-        pdf.set_font(font_family, "", 9)
-        pdf.multi_cell(0, 6, _transliterate(str(act.comment)))
-
-    # === Футер ===
+    # Футер
     pdf.ln(10)
-    pdf.set_font(font_family, "I", 8)
-    pdf.cell(0, 5, f'Generated: {datetime.now().strftime("%d.%m.%Y %H:%M")}', 0, 1, "C")
-    pdf.cell(0, 5, "SpecTech Pro System", 0, 1, "C")
+    pdf.set_font("DejaVu", "I", 8)
+    pdf.cell(
+        0,
+        5,
+        f'Документ сгенерирован: {datetime.now().strftime("%d.%m.%Y %H:%M")}',
+        0,
+        1,
+        "C",
+    )
+    pdf.cell(0, 5, 'Система "СпецТехника Про"', 0, 1, "C")
 
     return bytes(pdf.output())
 

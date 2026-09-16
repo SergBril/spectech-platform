@@ -225,7 +225,7 @@
                 <tr>
                     <td>{{ loop.index }}</td>
                     <td>{{ item.description|default('Услуга', true) }}</td>
-                    <td style="text-align: center;">{{ item.unit|default('шт', true) }}</td>
+                    <td style="text-align: center;">{{ (item.unit|default('шт', true)) | translate_unit }}</td>
                     <td style="text-align: center;">{{ item.quantity|default(1, true) }}</td>
                     <td class="amount">{{ "{:,.2f}".format((item.unit_price or 0)|float).replace(',', ' ') }} ₽</td>
                     <td class="amount">{{ "{:,.2f}".format((item.amount or 0)|float).replace(',', ' ') }} ₽</td>

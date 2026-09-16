@@ -228,7 +228,7 @@
             <tr>
                 <td>1</td>
                 <td>{{ request.work_type }} по адресу: {{ request.object_address }}</td>
-                <td style="text-align: center;">{{ request.rate_type }}</td>
+                <td style="text-align: center;">{{ request.rate_type | translate_unit }}</td>
                 <td style="text-align: center;">{{ request.shift_duration_hours or 1 }}</td>
                 <td class="amount">{{ "{:,.2f}".format(act.total_amount).replace(',', ' ') }} ₽</td>
             </tr>
