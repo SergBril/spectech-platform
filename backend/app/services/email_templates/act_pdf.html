@@ -204,19 +204,36 @@
             <span>{{ "{:,.2f}".format((act.total_amount or 0) | float).replace(',', ' ') }} ₽</span>
         </div>
 
-        {% if act.tax_system == 'osno' %}
-            <div class="total-row">
-                <span>НДС ({{ act.vat_rate or '20' }}%):</span>
-                <span>{{ "{:,.2f}".format((act.total_amount or 0) | float * 0.2 / 1.2).replace(',', ' ') }} ₽</span>
-            </div>
+        {% set ts = act.tax_system or 'osno' %}
+        {% set vat_rate_val = (act.vat_rate or 20) | float %}
+        {% set total_val = (act.total_amount or 0) | float %}
+
+        {% if ts == 'osno' and vat_rate_val > 0 %}
+            {% if act.is_vat_included %}
+                <div class="total-row">
+                    <span>НДС ({{ vat_rate_val }}%, включён):</span>
+                    <span>{{ "{:,.2f}".format(total_val * vat_rate_val / (100 + vat_rate_val)).replace(',', ' ') }} ₽</span>
+                </div>
+            {% else %}
+                {% set subtotal = total_val %}
+                {% set vat = subtotal * vat_rate_val / 100 %}
+                <div class="total-row">
+                    <span>Сумма без НДС:</span>
+                    <span>{{ "{:,.2f}".format(subtotal).replace(',', ' ') }} ₽</span>
+                </div>
+                <div class="total-row">
+                    <span>НДС ({{ vat_rate_val }}%, сверху):</span>
+                    <span>{{ "{:,.2f}".format(vat).replace(',', ' ') }} ₽</span>
+                </div>
+            {% endif %}
         {% else %}
             <div class="total-row">
                 <span>НДС:</span>
                 <span>Без НДС
-                    {% if act.tax_system == 'usn_6' %}(УСН "Доходы"){% endif %}
-                    {% if act.tax_system == 'usn_15' %}(УСН "Доходы-Расходы"){% endif %}
-                    {% if act.tax_system == 'patent' %}(Патент){% endif %}
-                    {% if act.tax_system == 'npd' %}(НПД / Самозанятый){% endif %}
+                    {% if ts == 'usn_6' %} (УСН "Доходы"){% endif %}
+                    {% if ts == 'usn_15' %} (УСН "Доходы-Расходы"){% endif %}
+                    {% if ts == 'patent' %} (Патент){% endif %}
+                    {% if ts == 'npd' %} (НПД / Самозанятый){% endif %}
                 </span>
             </div>
         {% endif %}

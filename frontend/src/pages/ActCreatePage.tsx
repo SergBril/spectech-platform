@@ -5,6 +5,7 @@ import { financeApi } from '../api/finance';
 import { requestsApi } from '../api/requests';
 import { showToast } from '../utils/toast';
 import NotificationBell from '../components/NotificationBell';
+import { TaxSystemSelector } from '../components/TaxSystemSelector';
 
 export const ActCreatePage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,6 +22,10 @@ export const ActCreatePage: React.FC = () => {
     act_date: new Date().toISOString().split('T')[0],
     total_amount: '0.00',
     comment: '',
+    // 🆕 Поля для НДС
+    tax_system: 'osno',
+    vat_rate: '20',
+    is_vat_included: true,
   });
 
   const canCreate = hasPermission('finance', 'create');
@@ -51,6 +56,15 @@ export const ActCreatePage: React.FC = () => {
     }
   };
 
+  // 🆕 Обработчик смены системы налогообложения
+  const handleTaxSystemChange = (newSystem: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      tax_system: newSystem,
+      vat_rate: newSystem !== 'osno' ? '0' : prev.vat_rate === '0' ? '20' : prev.vat_rate,
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canCreate) {
@@ -66,6 +80,10 @@ export const ActCreatePage: React.FC = () => {
         act_date: formData.act_date,
         total_amount: parseFloat(formData.total_amount),
         comment: formData.comment || undefined,
+        // 🆕 Новые поля для НДС
+        tax_system: formData.tax_system,
+        vat_rate: parseFloat(formData.vat_rate || '0'),
+        is_vat_included: formData.is_vat_included,
       });
       showToast.success(`✅ Акт ${act.document_number} создан!`);
       navigate(`/requests/${requestId}`);
@@ -146,6 +164,30 @@ export const ActCreatePage: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
                 required
               />
+            </div>
+
+            {/* 🆕 БЛОК СИСТЕМЫ НАЛОГООБЛОЖЕНИЯ */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <TaxSystemSelector
+                value={formData.tax_system}
+                onChange={handleTaxSystemChange}
+                onVatRateChange={(rate) => setFormData({ ...formData, vat_rate: rate })}
+              />
+
+              {formData.tax_system === 'osno' && (
+                <div className="mt-3 flex items-center">
+                  <input
+                    id="actVatIncluded"
+                    type="checkbox"
+                    checked={formData.is_vat_included}
+                    onChange={(e) => setFormData({ ...formData, is_vat_included: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="actVatIncluded" className="ml-2 text-sm text-gray-700">
+                    НДС включён в сумму (иначе — начисляется сверху)
+                  </label>
+                </div>
+              )}
             </div>
 
             <div>
