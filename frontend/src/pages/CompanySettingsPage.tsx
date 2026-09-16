@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { companiesApi, type CompanyTaxSettings } from '../api/companies';
 import { TaxSystemSelector } from '../components/TaxSystemSelector';
 import { showToast } from '../utils/toast';
+import Navbar from '../components/Navbar';
 
 export const CompanySettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -67,18 +68,7 @@ export const CompanySettingsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center space-x-6">
-              <h1 className="text-xl font-bold text-gray-900">🚜 СпецТехника Про</h1>
-              <button onClick={() => navigate('/')} className="text-gray-600 hover:text-gray-900">
-                Dashboard
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       <main className="max-w-3xl mx-auto py-8 px-4">
         <div className="bg-white rounded-lg shadow p-6">

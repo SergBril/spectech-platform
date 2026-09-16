@@ -8,6 +8,7 @@ import { contractorsApi, type Contractor } from '../api/contractors';
 import { showToast } from '../utils/toast';
 import NotificationBell from '../components/NotificationBell';
 import { TaxSystemSelector } from '../components/TaxSystemSelector';
+import Navbar from '../components/Navbar';
 
 export const ActCreatePage: React.FC = () => {
   const navigate = useNavigate();
@@ -172,37 +173,7 @@ export const ActCreatePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center space-x-6">
-              <h1 className="text-xl font-bold text-gray-900">🚜 СпецТехника Про</h1>
-              <button onClick={() => navigate('/')} className="text-gray-600 hover:text-gray-900">
-                Dashboard
-              </button>
-              <button
-                onClick={() => navigate(`/requests/${requestId}`)}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                ← К заявке #{requestId}
-              </button>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-700">{user?.email}</span>
-              <NotificationBell />
-              <button
-                onClick={() => {
-                  logout();
-                  navigate('/login');
-                }}
-                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-              >
-                Выйти
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       <main className="max-w-3xl mx-auto py-8 px-4">
         <div className="bg-white rounded-lg shadow p-6">

@@ -5,6 +5,7 @@ import { financeApi, type Invoice, type InvoiceStatus } from '../api/finance';
 import InvoiceFormModal from '../components/InvoiceFormModal';
 import PaymentModal from '../components/PaymentModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
+import Navbar from '../components/Navbar';
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
@@ -150,24 +151,7 @@ export const InvoicesPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center space-x-6">
-              <h1 className="text-xl font-bold text-gray-900">🚜 СпецТехника Про</h1>
-              <button onClick={() => navigate('/')} className="text-gray-600 hover:text-gray-900">Dashboard</button>
-              <button onClick={() => navigate('/finance')} className="text-gray-600 hover:text-gray-900">Финансы</button>
-              <span className="text-blue-600 font-medium">Счета</span>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-700">{user?.email}</span>
-              <button onClick={() => { logout(); navigate('/login'); }} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
-                Выйти
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">

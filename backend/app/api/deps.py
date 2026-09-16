@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -63,12 +63,40 @@ def require_permission(entity: str, action: str):
 
 def get_current_company_id(
     user: User = Depends(get_current_user),
+    x_company_id: str | None = Header(default=None, alias="X-Company-Id"),
+    db: Session = Depends(get_db),
 ) -> int:
     """
-    Возвращает company_id текущего пользователя.
+    Возвращает company_id для текущего запроса.
 
-    Если у пользователя нет компании — возвращает 403.
+    Логика:
+    - Если передан header X-Company-Id и пользователь superuser —
+      возвращаем company_id из header (после проверки существования)
+    - Иначе — возвращаем company_id пользователя
     """
+    from app.models.company import Company
+
+    # Superuser может переключаться между компаниями через header
+    if x_company_id and user.is_superuser:
+        try:
+            requested_company_id = int(x_company_id)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid X-Company-Id header",
+            )
+
+        # Проверяем, что компания существует и активна
+        company = db.get(Company, requested_company_id)
+        if not company or not company.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Company {requested_company_id} not found or inactive",
+            )
+
+        return requested_company_id
+
+    # Обычный пользователь — только своя компания
     if not user.company_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

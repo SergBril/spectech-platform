@@ -2,12 +2,12 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { CompanyProvider } from './contexts/CompanyContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { Toaster } from 'react-hot-toast';
 import { CompanySettingsPage } from './pages/CompanySettingsPage';
 import { ContractorsPage } from './pages/ContractorsPage';
 
-// ✅ Все импорты БЕЗ фигурных скобок (default export)
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import RequestsPage from './pages/RequestsPage';
@@ -20,17 +20,11 @@ import ActCreatePage from './pages/ActCreatePage';
 
 import './index.css';
 
-/**
- * Защищённый роут - редиректит на /login если пользователь не авторизован
- */
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const { isAuthenticated } = useAuth();
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
 
-/**
- * Роут только для гостей - редиректит на / если пользователь уже авторизован
- */
 const GuestRoute = ({ children }: { children: JSX.Element }) => {
   const { isAuthenticated } = useAuth();
   return !isAuthenticated ? children : <Navigate to="/" replace />;
@@ -84,9 +78,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         }}
       />
       <AuthProvider>
-        <WebSocketProvider>
-          <AppRoutes />
-        </WebSocketProvider>
+        <CompanyProvider>
+          <WebSocketProvider>
+            <AppRoutes />
+          </WebSocketProvider>
+        </CompanyProvider>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>
