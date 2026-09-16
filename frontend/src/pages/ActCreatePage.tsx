@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { financeApi } from '../api/finance';
 import { requestsApi } from '../api/requests';
+import { companiesApi } from '../api/companies';
 import { showToast } from '../utils/toast';
 import NotificationBell from '../components/NotificationBell';
 import { TaxSystemSelector } from '../components/TaxSystemSelector';
@@ -22,7 +23,6 @@ export const ActCreatePage: React.FC = () => {
     act_date: new Date().toISOString().split('T')[0],
     total_amount: '0.00',
     comment: '',
-    // 🆕 Поля для НДС
     tax_system: 'osno',
     vat_rate: '20',
     is_vat_included: true,
@@ -37,6 +37,25 @@ export const ActCreatePage: React.FC = () => {
       setPageLoading(false);
     }
   }, [requestId]);
+
+  // 🆕 АВТОЗАГРУЗКА настроек компании
+  useEffect(() => {
+    if (user?.company_id) {
+      companiesApi
+        .getTaxSettings(user.company_id)
+        .then((settings) => {
+          setFormData((prev) => ({
+            ...prev,
+            tax_system: settings.default_tax_system,
+            vat_rate: settings.default_vat_rate.toString(),
+            is_vat_included: settings.default_is_vat_included,
+          }));
+        })
+        .catch((err) => {
+          console.warn('Не удалось загрузить настройки компании:', err);
+        });
+    }
+  }, [user]);
 
   const loadRequest = async (id: number) => {
     try {
@@ -56,7 +75,6 @@ export const ActCreatePage: React.FC = () => {
     }
   };
 
-  // 🆕 Обработчик смены системы налогообложения
   const handleTaxSystemChange = (newSystem: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -80,7 +98,6 @@ export const ActCreatePage: React.FC = () => {
         act_date: formData.act_date,
         total_amount: parseFloat(formData.total_amount),
         comment: formData.comment || undefined,
-        // 🆕 Новые поля для НДС
         tax_system: formData.tax_system,
         vat_rate: parseFloat(formData.vat_rate || '0'),
         is_vat_included: formData.is_vat_included,
@@ -166,7 +183,6 @@ export const ActCreatePage: React.FC = () => {
               />
             </div>
 
-            {/* 🆕 БЛОК СИСТЕМЫ НАЛОГООБЛОЖЕНИЯ */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <TaxSystemSelector
                 value={formData.tax_system}

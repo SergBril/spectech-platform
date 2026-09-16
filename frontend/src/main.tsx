@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { Toaster } from 'react-hot-toast';
+import { CompanySettingsPage } from './pages/CompanySettingsPage';
 
 // ✅ Все импорты БЕЗ фигурных скобок (default export)
 import LoginPage from './pages/LoginPage';
@@ -37,22 +38,16 @@ const GuestRoute = ({ children }: { children: JSX.Element }) => {
 const AppRoutes = () => {
   return (
     <Routes>
-      {/* Публичные страницы */}
       <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
       <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
-
-      {/* Защищённые страницы */}
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
       <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
       <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
       <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
       <Route path="/requests/:id" element={<ProtectedRoute><RequestDetailPage /></ProtectedRoute>} />
-
-      {/* ✅ НОВЫЙ РОУТ для создания акта */}
       <Route path="/acts/new" element={<ProtectedRoute><ActCreatePage /></ProtectedRoute>} />
-
-      {/* 404 */}
+      <Route path="/settings/company" element={<ProtectedRoute><CompanySettingsPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

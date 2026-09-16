@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import type { Invoice, InvoiceCreate, InvoiceItemCreate } from '../api/finance';
 import { requestsApi, type Request } from '../api/requests';
 import { TaxSystemSelector } from './TaxSystemSelector';
+import { companiesApi } from '../api/companies';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Props {
   invoice: Invoice | null;
@@ -19,12 +21,12 @@ const toDateString = (iso: string | null | undefined) => {
 };
 
 export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) => {
+  const { user } = useAuth();
   const [clientId, setClientId] = useState(invoice?.client_id?.toString() || '1');
   const [invoiceDate, setInvoiceDate] = useState(toDateString(invoice?.invoice_date));
   const [dueDate, setDueDate] = useState(toDateString(invoice?.due_date));
   const [comment, setComment] = useState(invoice?.comment || '');
 
-  // 🆕 Состояние для системы налогообложения и НДС
   const [taxSystem, setTaxSystem] = useState(invoice?.tax_system || 'osno');
   const [vatRate, setVatRate] = useState(invoice?.vat_rate?.toString() || '20');
   const [isVatIncluded, setIsVatIncluded] = useState(invoice?.is_vat_included ?? true);
@@ -44,6 +46,7 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
   const [requests, setRequests] = useState<Request[]>([]);
   const [requestId, setRequestId] = useState<string>(invoice?.request_id?.toString() || '7');
 
+  // Загрузка заявок
   useEffect(() => {
     requestsApi
       .getAll({ limit: 100 })
@@ -58,6 +61,22 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
       });
   }, []);
 
+  // 🆕 АВТОЗАГРУЗКА настроек компании для НОВОГО счёта
+  useEffect(() => {
+    if (!invoice && user?.company_id) {
+      companiesApi
+        .getTaxSettings(user.company_id)
+        .then((settings) => {
+          setTaxSystem(settings.default_tax_system);
+          setVatRate(settings.default_vat_rate.toString());
+          setIsVatIncluded(settings.default_is_vat_included);
+        })
+        .catch((err) => {
+          console.warn('Не удалось загрузить настройки компании:', err);
+        });
+    }
+  }, [invoice, user]);
+
   const updateItem = (key: string, field: keyof InvoiceItemCreate, value: any) => {
     setItems(items.map((it) => (it.key === key ? { ...it, [field]: value } : it)));
   };
@@ -71,13 +90,11 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
     setItems(items.filter((it) => it.key !== key));
   };
 
-  // 🧮 Расчёт итогов с учётом системы налогообложения
   const subtotal = items.reduce(
     (sum, it) => sum + (parseFloat(String(it.quantity)) || 0) * (parseFloat(String(it.unit_price)) || 0),
     0,
   );
 
-  // НДС считается только для ОСНО
   const isOsno = taxSystem === 'osno';
   const vatRateNum = isOsno ? parseFloat(vatRate || '0') : 0;
 
@@ -86,20 +103,16 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
 
   if (isOsno && vatRateNum > 0) {
     if (isVatIncluded) {
-      // НДС "внутри" суммы
       vat = subtotal * vatRateNum / (100 + vatRateNum);
-      total = subtotal; // total не меняется
+      total = subtotal;
     } else {
-      // НДС начисляется сверху
       vat = subtotal * vatRateNum / 100;
       total = subtotal + vat;
     }
   }
 
-  // Обработчик смены системы налогообложения
   const handleTaxSystemChange = (newSystem: string) => {
     setTaxSystem(newSystem);
-    // Автоматически ставим ставку НДС
     if (newSystem !== 'osno') {
       setVatRate('0');
     } else if (vatRate === '0') {
@@ -127,7 +140,6 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
         due_date: dueDate,
         vat_rate: parseFloat(vatRate || '0'),
         comment: comment.trim() || undefined,
-        // 🆕 Передаём новые поля
         tax_system: taxSystem,
         is_vat_included: isVatIncluded,
         items: items
@@ -213,7 +225,6 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
               </div>
             </div>
 
-            {/* 🆕 БЛОК СИСТЕМЫ НАЛОГООБЛОЖЕНИЯ */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <TaxSystemSelector
                 value={taxSystem}
@@ -221,7 +232,6 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
                 onVatRateChange={(rate) => setVatRate(rate)}
               />
 
-              {/* Чекбокс "НДС включён в сумму" — только для ОСНО */}
               {taxSystem === 'osno' && (
                 <div className="mt-3 flex items-center">
                   <input
@@ -238,7 +248,6 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
               )}
             </div>
 
-            {/* Items */}
             <div>
               <div className="flex justify-between items-center mb-2">
                 <label className="block text-sm font-medium text-gray-700">Позиции</label>
@@ -304,7 +313,6 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
               </div>
             </div>
 
-            {/* Totals */}
             <div className="bg-gray-50 p-4 rounded-lg space-y-1">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Сумма без НДС:</span>
