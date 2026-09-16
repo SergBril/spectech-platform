@@ -111,3 +111,11 @@ cloudflared/
 cf-token.txt
 project_overview.txt
 tree_output.txt
+
+# PDF файлы (сгенерированные документы)
+*.pdf
+ACT-*-FINAL.pdf
+ACT-*-final.pdf
+INV-*-FINAL.pdf
+INV-*-final.pdf
+update_client.sql
