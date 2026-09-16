@@ -62,20 +62,28 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
   }, []);
 
   // 🆕 АВТОЗАГРУЗКА настроек компании для НОВОГО счёта
-  useEffect(() => {
-    if (!invoice && user?.company_id) {
-      companiesApi
-        .getTaxSettings(user.company_id)
-        .then((settings) => {
-          setTaxSystem(settings.default_tax_system);
-          setVatRate(settings.default_vat_rate.toString());
-          setIsVatIncluded(settings.default_is_vat_included);
-        })
-        .catch((err) => {
-          console.warn('Не удалось загрузить настройки компании:', err);
-        });
-    }
-  }, [invoice, user]);
+useEffect(() => {
+  console.log('🔍 InvoiceFormModal useEffect:', {
+    invoice: !!invoice,
+    user: user?.email,
+    companyId: user?.company_id
+  });
+
+  if (!invoice && user?.company_id) {
+    console.log('📥 Loading tax settings for company:', user.company_id);
+    companiesApi
+      .getTaxSettings(user.company_id)
+      .then((settings) => {
+        console.log('✅ Tax settings loaded:', settings);
+        setTaxSystem(settings.default_tax_system);
+        setVatRate(settings.default_vat_rate.toString());
+        setIsVatIncluded(settings.default_is_vat_included);
+      })
+      .catch((err) => {
+        console.warn('❌ Failed to load tax settings:', err);
+      });
+  }
+}, [invoice, user]);
 
   const updateItem = (key: string, field: keyof InvoiceItemCreate, value: any) => {
     setItems(items.map((it) => (it.key === key ? { ...it, [field]: value } : it)));

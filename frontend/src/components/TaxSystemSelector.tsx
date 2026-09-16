@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface TaxSystemSelectorProps {
   value: string;
@@ -7,7 +7,6 @@ interface TaxSystemSelectorProps {
   disabled?: boolean;
 }
 
-// 📋 Захардкоженные значения (всегда доступны, не зависят от API)
 const TAX_SYSTEMS = [
   { value: 'osno', label: 'ОСНО (с НДС)', has_vat: true },
   { value: 'usn_6', label: 'УСН Доходы (6%)', has_vat: false },
@@ -33,6 +32,16 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
 }) => {
   const [selectedVatRate, setSelectedVatRate] = useState('20');
 
+  // 🆕 СИНХРОНИЗАЦИЯ: когда родитель меняет value (систему), обновляем ставку НДС
+  useEffect(() => {
+    const system = TAX_SYSTEMS.find((s) => s.value === value);
+    if (system && !system.has_vat) {
+      setSelectedVatRate('0');
+    } else if (system?.has_vat && selectedVatRate === '0') {
+      setSelectedVatRate('20');
+    }
+  }, [value]); // ← Зависимость от value!
+
   const handleSystemChange = (newSystem: string) => {
     onChange(newSystem);
     const system = TAX_SYSTEMS.find((s) => s.value === newSystem);
@@ -56,7 +65,6 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
 
   return (
     <div className="space-y-3">
-      {/* Система налогообложения */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           💼 Система налогообложения
@@ -75,7 +83,6 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
         </select>
       </div>
 
-      {/* Ставка НДС (только для ОСНО) */}
       {showVatRateSelector && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -96,7 +103,6 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
         </div>
       )}
 
-      {/* Информационная подсказка для не-ОСНО систем */}
       {!showVatRateSelector && (
         <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
           💡 При данной системе налогообложения НДС не начисляется.
