@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_permission
+from app.api.deps import get_current_company_id, get_current_user, require_permission
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
@@ -20,8 +20,10 @@ def list_requests(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    stmt = select(Request)
+    """Список заявок (только своей компании)."""
+    stmt = select(Request).where(Request.company_id == company_id)
     if status_filter:
         stmt = stmt.where(Request.status == status_filter)
     if client_id:
@@ -35,8 +37,10 @@ def create_request(
     payload: RequestCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
     _: None = Depends(require_permission("requests", "create")),
 ):
+    """Создать заявку (для своей компании)."""
     if payload.planned_end <= payload.planned_start:
         raise HTTPException(
             status_code=422, detail="planned_end must be after planned_start"
@@ -44,7 +48,7 @@ def create_request(
 
     request = Request(
         **payload.model_dump(),
-        company_id=current_user.company_id,
+        company_id=company_id,  # 🆕 Используем company_id из зависимости
         created_by=current_user.id,
     )
     db.add(request)
@@ -70,9 +74,11 @@ def get_request(
     request_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
+    """Получить заявку по ID (только своей компании)."""
     request = db.get(Request, request_id)
-    if not request:
+    if not request or request.company_id != company_id:
         raise HTTPException(status_code=404, detail="Request not found")
     return request
 
@@ -83,17 +89,19 @@ def assign_request(
     payload: RequestAssign,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
     _: None = Depends(require_permission("requests", "assign")),
 ):
+    """Назначить технику на заявку (только своей компании)."""
     request = db.get(Request, request_id)
-    if not request:
+    if not request or request.company_id != company_id:
         raise HTTPException(status_code=404, detail="Request not found")
 
     if request.status in ("closed", "cancelled"):
         raise HTTPException(status_code=409, detail="Request is closed or cancelled")
 
     vehicle = db.get(Vehicle, payload.vehicle_id)
-    if not vehicle:
+    if not vehicle or vehicle.company_id != company_id:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
     planned_start = payload.planned_start or request.planned_start
@@ -150,11 +158,12 @@ async def update_request(
     payload: RequestUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
     _: None = Depends(require_permission("requests", "update")),
 ):
-    """Обновить заявку (включая смену статуса с логированием)."""
+    """Обновить заявку (только своей компании)."""
     request = db.get(Request, request_id)
-    if not request:
+    if not request or request.company_id != company_id:
         raise HTTPException(status_code=404, detail="Request not found")
 
     update_data = payload.model_dump(exclude_unset=True)
@@ -207,10 +216,11 @@ def get_request_history(
     request_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Получить историю изменений статуса заявки."""
+    """Получить историю изменений статуса заявки (только своей компании)."""
     request = db.get(Request, request_id)
-    if not request:
+    if not request or request.company_id != company_id:
         raise HTTPException(status_code=404, detail="Request not found")
 
     stmt = (
