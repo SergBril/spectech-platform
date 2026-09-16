@@ -26,6 +26,11 @@ class Contractor(Base):
     contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # 🆕 Система налогообложения клиента
+    tax_system: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, comment="Система налогообложения клиента"
+    )
+
     company_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
