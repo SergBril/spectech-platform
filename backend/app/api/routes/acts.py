@@ -6,7 +6,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.contractor import Contractor
@@ -32,9 +32,10 @@ def list_acts(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Список актов."""
-    stmt = select(Act)
+    """Список актов (только своей компании)."""
+    stmt = select(Act).where(Act.company_id == company_id)
 
     if status_filter:
         stmt = stmt.where(Act.status == status_filter)
@@ -48,15 +49,16 @@ def create_act(
     payload: ActCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Создать акт выполненных работ."""
+    """Создать акт выполненных работ (для своей компании)."""
     import traceback
 
     act = Act(
         document_number=generate_document_number(db, "ACT"),
         request_id=payload.request_id,
         client_id=payload.client_id,
-        company_id=current_user.company_id,
+        company_id=company_id,
         act_date=payload.act_date,
         total_amount=payload.total_amount,
         status=DocumentStatus.draft,
@@ -68,16 +70,16 @@ def create_act(
     db.refresh(act)
 
     logger.info(f"✅ Act {act.document_number} created by user {current_user.email}")
-    # 🎨 АВТОГЕНЕРАЦИЯ PDF И СОХРАНЕНИЕ В MINIO
+
+    # 🎨 Автогенерация PDF
     try:
         generate_and_save_act_pdf(act.id, db)
     except Exception as pdf_err:
         logger.error(
             f"⚠️ PDF auto-generation failed for {act.document_number}: {pdf_err}"
         )
-        # Не прерываем создание акта — PDF не критичен
 
-    # 📧 Уведомляем исполнителя (создателя заявки) о создании акта
+    # 📧 Уведомляем исполнителя (создателя заявки)
     try:
         if act.request_id:
             request = db.get(Request, act.request_id)
@@ -100,7 +102,6 @@ def create_act(
     except Exception as email_err:
         logger.error(f"❌ Failed to send act_created email: {email_err}")
         logger.error(traceback.format_exc())
-        # Не прерываем — email не критичен
 
     return act
 
@@ -110,10 +111,11 @@ def get_act(
     act_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Получить акт по ID."""
+    """Получить акт по ID (только своей компании)."""
     act = db.get(Act, act_id)
-    if not act:
+    if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
     return act
 
@@ -124,10 +126,11 @@ def update_act(
     payload: ActCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Обновить акт (только если статус draft)."""
+    """Обновить акт (только своей компании, только draft)."""
     act = db.get(Act, act_id)
-    if not act:
+    if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
     if act.status != DocumentStatus.draft:
@@ -153,8 +156,9 @@ async def sign_act(
     payload: ActSign,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Подписать акт (со стороны клиента или исполнителя)."""
+    """Подписать акт (только своей компании)."""
     import traceback
 
     logger.info(
@@ -162,7 +166,7 @@ async def sign_act(
     )
 
     act = db.get(Act, act_id)
-    if not act:
+    if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
     now = datetime.now(UTC)
@@ -176,14 +180,10 @@ async def sign_act(
             act.signed_by_client_at = now
             logger.info(f"✅ Act signed by client at {now}")
 
-            # Уведомляем создателя заявки (исполнителя) через in-app notification
+            # Уведомляем создателя заявки
             if act.request_id:
                 try:
                     request = db.get(Request, act.request_id)
-                    logger.info(
-                        f"📋 Request found: id={request.id if request else None}"
-                    )
-
                     if (
                         request
                         and hasattr(request, "created_by")
@@ -201,22 +201,12 @@ async def sign_act(
                             body=f"Клиент подписал акт {act.document_number} на сумму {float(act.total_amount):.2f} ₽",
                             channel="in_app",
                         )
-                        logger.info(
-                            f"🔔 Notification sent to user {request.created_by}"
-                        )
                 except Exception as notif_err:
                     logger.error(f"❌ Notification failed: {notif_err}")
-                    logger.error(traceback.format_exc())
-                    # Не прерываем — уведомление не критично
 
-            # 📧 Email клиенту
+            # Email клиенту
             try:
                 client = db.get(Contractor, act.client_id) if act.client_id else None
-                logger.info(
-                    f"👥 Client for email: {client.name if client else None}, contact_email={client.contact_email if client else None}"
-                )
-
-                # ✅ ИСПРАВЛЕНО: поле называется contact_email, а не email
                 if client and hasattr(client, "contact_email") and client.contact_email:
                     success = email_service.send_act_signed(
                         act=act,
@@ -226,7 +216,6 @@ async def sign_act(
                     logger.info(f"📧 Client email sent: {success}")
             except Exception as email_err:
                 logger.error(f"❌ Client email failed: {email_err}")
-                logger.error(traceback.format_exc())
 
         elif payload.signed_by == "executor":
             if act.signed_by_executor_at:
@@ -236,7 +225,6 @@ async def sign_act(
             act.signed_by_executor_at = now
             logger.info(f"✅ Act signed by executor at {now}")
 
-            # 📧 Email исполнителю (текущему пользователю)
             try:
                 if current_user.email:
                     success = email_service.send_act_signed(
@@ -247,9 +235,7 @@ async def sign_act(
                     logger.info(f"📧 Executor email sent: {success}")
             except Exception as email_err:
                 logger.error(f"❌ Executor email failed: {email_err}")
-                logger.error(traceback.format_exc())
 
-        # Если обе стороны подписали — акт завершён
         if act.signed_by_client_at and act.signed_by_executor_at:
             act.status = DocumentStatus.paid
             logger.info(f"✅ Act {act.document_number} fully signed, status=paid")
@@ -276,10 +262,11 @@ def delete_act(
     act_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Удалить акт (только если статус draft)."""
+    """Удалить акт (только своей компании, только draft)."""
     act = db.get(Act, act_id)
-    if not act:
+    if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
     if act.status != DocumentStatus.draft:
@@ -297,17 +284,16 @@ def download_act_pdf(
     act_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Скачать акт в формате PDF (через WeasyPrint с Unicode шрифтами)."""
+    """Скачать акт в формате PDF (только своей компании)."""
     act = db.get(Act, act_id)
-    if not act:
+    if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
-    # Получаем связанные данные для шаблона
     request = db.get(Request, act.request_id) if act.request_id else None
     contractor = db.get(Contractor, act.client_id) if act.client_id else None
 
-    # Если contractor нет в акте, ищем через заявку
     if (
         not contractor
         and request
@@ -317,7 +303,6 @@ def download_act_pdf(
         contractor = db.get(Contractor, request.client_id)
 
     try:
-        # Используем новый сервис с WeasyPrint
         pdf_bytes = generate_act_pdf(
             act=act,
             request=request,
@@ -344,8 +329,13 @@ def regenerate_act_pdf_endpoint(
     act_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Ручная перегенерация PDF для существующего акта."""
+    """Ручная перегенерация PDF (только своей компании)."""
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
     from app.services.finance_service import generate_and_save_act_pdf
 
     result = generate_and_save_act_pdf(act_id, db)
