@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user, require_permission
+from app.api.deps import get_current_company_id, get_current_user, require_permission
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.contractor import Contractor
@@ -30,9 +30,14 @@ def list_invoices(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Список счетов."""
-    stmt = select(Invoice).options(joinedload(Invoice.items))
+    """Список счетов (только своей компании)."""
+    stmt = (
+        select(Invoice)
+        .where(Invoice.company_id == company_id)  # 🆕
+        .options(joinedload(Invoice.items))
+    )
 
     if status_filter:
         stmt = stmt.where(Invoice.status == status_filter)
@@ -46,16 +51,16 @@ def create_invoice_endpoint(
     payload: InvoiceCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
     _: None = Depends(require_permission("invoices", "create")),
 ):
-    """Создать новый счёт."""
-    # ✅ ПРАВИЛЬНО: передаем current_user
+    """Создать новый счёт (для своей компании)."""
     invoice = create_invoice(
         db=db,
         payload=payload,
         current_user=current_user,
     )
-    # 🎨 АВТОГЕНЕРАЦИЯ PDF И СОХРАНЕНИЕ В MINIO
+    # 🎨 Автогенерация PDF
     try:
         generate_and_save_invoice_pdf(invoice.id, db)
     except Exception as pdf_err:
@@ -70,12 +75,13 @@ def get_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Получить счёт по ID."""
+    """Получить счёт по ID (только своей компании)."""
     stmt = (
         select(Invoice)
         .options(joinedload(Invoice.items))
-        .where(Invoice.id == invoice_id)
+        .where(Invoice.id == invoice_id, Invoice.company_id == company_id)
     )
     invoice = db.scalar(stmt)
 
@@ -91,11 +97,12 @@ def update_invoice(
     payload: InvoiceUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
     _: None = Depends(require_permission("invoices", "update")),
 ):
-    """Обновить счёт."""
+    """Обновить счёт (только своей компании)."""
     invoice = db.get(Invoice, invoice_id)
-    if not invoice:
+    if not invoice or invoice.company_id != company_id:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -111,11 +118,12 @@ def send_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
     _: None = Depends(require_permission("invoices", "update")),
 ):
-    """Отправить счёт клиенту (меняет статус на 'sent')."""
+    """Отправить счёт клиенту (только своей компании)."""
     invoice = db.get(Invoice, invoice_id)
-    if not invoice:
+    if not invoice or invoice.company_id != company_id:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     if invoice.status != DocumentStatus.draft:
@@ -135,11 +143,12 @@ def cancel_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
     _: None = Depends(require_permission("invoices", "delete")),
 ):
-    """Отменить счёт."""
+    """Отменить счёт (только своей компании)."""
     invoice = db.get(Invoice, invoice_id)
-    if not invoice:
+    if not invoice or invoice.company_id != company_id:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     if invoice.status == DocumentStatus.paid:
@@ -157,26 +166,24 @@ def download_invoice_pdf(
     invoice_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Скачать счёт в формате PDF (через WeasyPrint с Unicode шрифтами)."""
+    """Скачать счёт в формате PDF (только своей компании)."""
     from sqlalchemy.orm import selectinload
 
-    # Загружаем счёт с items (важно для шаблона!)
     stmt = (
         select(Invoice)
         .options(selectinload(Invoice.items))
-        .where(Invoice.id == invoice_id)
+        .where(Invoice.id == invoice_id, Invoice.company_id == company_id)
     )
     invoice = db.scalar(stmt)
 
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
-    # Получаем контрагента
     contractor = db.get(Contractor, invoice.client_id) if invoice.client_id else None
 
     try:
-        # Используем новый сервис с WeasyPrint
         pdf_bytes = generate_invoice_pdf(
             invoice=invoice,
             contractor=contractor,
@@ -202,8 +209,14 @@ def regenerate_invoice_pdf_endpoint(
     invoice_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Ручная перегенерация PDF для существующего счета."""
+    """Ручная перегенерация PDF (только своей компании)."""
+    # Проверка принадлежности
+    invoice = db.get(Invoice, invoice_id)
+    if not invoice or invoice.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
     from app.services.finance_service import generate_and_save_invoice_pdf
 
     result = generate_and_save_invoice_pdf(invoice_id, db)
@@ -213,6 +226,6 @@ def regenerate_invoice_pdf_endpoint(
     logger.info(f"📄 PDF regenerated for invoice #{invoice_id}: {result['path']}")
     return {
         "status": "success",
-        "message": "PDF счета успешно перегенерирован",
+        "message": "PDF счёта успешно перегенерирован",
         "data": result,
     }
