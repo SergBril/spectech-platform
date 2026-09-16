@@ -39,23 +39,30 @@ export const ActCreatePage: React.FC = () => {
   }, [requestId]);
 
   // 🆕 АВТОЗАГРУЗКА настроек компании
-  useEffect(() => {
-    if (user?.company_id) {
-      companiesApi
-        .getTaxSettings(user.company_id)
-        .then((settings) => {
-          setFormData((prev) => ({
-            ...prev,
-            tax_system: settings.default_tax_system,
-            vat_rate: settings.default_vat_rate.toString(),
-            is_vat_included: settings.default_is_vat_included,
-          }));
-        })
-        .catch((err) => {
-          console.warn('Не удалось загрузить настройки компании:', err);
-        });
-    }
-  }, [user]);
+useEffect(() => {
+  console.log('🔍 ActCreatePage useEffect:', {
+    user: user?.email,
+    companyId: user?.company_id
+  });
+
+  if (user?.company_id) {
+    console.log('📥 Loading tax settings for company:', user.company_id);
+    companiesApi
+      .getTaxSettings(user.company_id)
+      .then((settings) => {
+        console.log('✅ Tax settings loaded:', settings);
+        setFormData((prev) => ({
+          ...prev,
+          tax_system: settings.default_tax_system,
+          vat_rate: settings.default_vat_rate.toString(),
+          is_vat_included: settings.default_is_vat_included,
+        }));
+      })
+      .catch((err) => {
+        console.warn('❌ Failed to load tax settings:', err);
+      });
+  }
+}, [user]);
 
   const loadRequest = async (id: number) => {
     try {
