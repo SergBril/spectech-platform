@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.shift import ShiftReport, ShiftTask
@@ -25,8 +25,10 @@ def list_shift_tasks(
     limit: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    stmt = select(ShiftTask)
+    """Список сменных заданий (только своей компании)."""
+    stmt = select(ShiftTask).where(ShiftTask.company_id == company_id)
     if request_id:
         stmt = stmt.where(ShiftTask.request_id == request_id)
     stmt = stmt.order_by(ShiftTask.created_at.desc()).limit(limit)
@@ -38,8 +40,10 @@ def create_shift_task(
     payload: ShiftTaskCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    task = ShiftTask(**payload.model_dump(), company_id=current_user.company_id)
+    """Создать сменное задание (для своей компании)."""
+    task = ShiftTask(**payload.model_dump(), company_id=company_id)
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -51,9 +55,11 @@ def get_shift_task(
     task_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
+    """Получить сменное задание по ID (только своей компании)."""
     task = db.get(ShiftTask, task_id)
-    if not task:
+    if not task or task.company_id != company_id:
         raise HTTPException(status_code=404, detail="Shift task not found")
     return task
 
@@ -64,8 +70,10 @@ def list_shift_reports(
     limit: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    stmt = select(ShiftReport)
+    """Список сменных отчётов (только своей компании)."""
+    stmt = select(ShiftReport).where(ShiftReport.company_id == company_id)
     if shift_task_id:
         stmt = stmt.where(ShiftReport.shift_task_id == shift_task_id)
     stmt = stmt.order_by(ShiftReport.created_at.desc()).limit(limit)
@@ -77,11 +85,13 @@ def create_shift_report(
     payload: ShiftReportCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
+    """Создать сменный отчёт (для своей компании)."""
     from datetime import datetime
 
     task = db.get(ShiftTask, payload.shift_task_id)
-    if not task:
+    if not task or task.company_id != company_id:
         raise HTTPException(status_code=404, detail="Shift task not found")
 
     report_data = payload.model_dump()
@@ -90,7 +100,7 @@ def create_shift_report(
     report = ShiftReport(
         shift_task_id=shift_task_id,
         operator_id=task.operator_id,
-        company_id=current_user.company_id,
+        company_id=company_id,
         **report_data,
     )
 
@@ -110,11 +120,13 @@ def update_shift_report(
     payload: ShiftReportUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
+    """Обновить сменный отчёт (только своей компании)."""
     from datetime import datetime
 
     report = db.get(ShiftReport, report_id)
-    if not report:
+    if not report or report.company_id != company_id:
         raise HTTPException(status_code=404, detail="Shift report not found")
 
     update_data = payload.model_dump(exclude_unset=True)
