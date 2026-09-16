@@ -9,12 +9,19 @@ export const apiClient = axios.create({
   },
 });
 
-// Request interceptor - добавляем токен
+// Request interceptor - добавляем токен и company_id
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  // 🆕 Добавляем X-Company-Id header для мульти-компании
+  const companyId = localStorage.getItem('spectech_current_company_id');
+  if (companyId) {
+    config.headers['X-Company-Id'] = companyId;
+  }
+
   return config;
 });
 

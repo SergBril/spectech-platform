@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { VehicleFormModal } from '../components/VehicleFormModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import NotificationBell from '../components/NotificationBell';
+import Navbar from '../components/Navbar';
 
 export const VehiclesPage: React.FC = () => {
   const { user, logout, hasPermission } = useAuth();
@@ -101,32 +102,7 @@ export const VehiclesPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center space-x-8">
-              <h1 className="text-xl font-bold text-gray-900">СпецТехника Про</h1>
-              <button
-                onClick={() => navigate('/')}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                Dashboard
-              </button>
-              <span className="text-blue-600 font-medium">Техника</span>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-700">{user?.email}</span>
-              <NotificationBell />
-              <button
-                onClick={handleLogout}
-                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-              >
-                Выйти
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
