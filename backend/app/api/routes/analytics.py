@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import extract, func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.dispatch import Request
@@ -18,13 +18,12 @@ def get_revenue_chart(
     months: int = Query(default=12, ge=1, le=24),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
     """Данные для линейного графика доходов по месяцам."""
-    # Последние N месяцев
     now = datetime.now()
     start_date = now - timedelta(days=months * 30)
 
-    # Группируем счета по месяцам
     stmt = (
         select(
             extract("year", Invoice.invoice_date).label("year"),
@@ -33,14 +32,13 @@ def get_revenue_chart(
             func.sum(Invoice.paid_amount).label("paid"),
         )
         .where(Invoice.invoice_date >= start_date)
-        .where(Invoice.company_id == current_user.company_id)
+        .where(Invoice.company_id == company_id)  # ✅ Исправлено
         .group_by("year", "month")
         .order_by("year", "month")
     )
 
     results = db.execute(stmt).all()
 
-    # Форматируем для Recharts
     data = []
     for row in results:
         month_name = datetime(int(row.year), int(row.month), 1).strftime("%b %Y")
@@ -60,6 +58,7 @@ def get_revenue_chart(
 def get_status_chart(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
     """Данные для круговой диаграммы статусов счетов."""
     stmt = (
@@ -67,13 +66,12 @@ def get_status_chart(
             Invoice.status,
             func.count(Invoice.id).label("count"),
         )
-        .where(Invoice.company_id == current_user.company_id)
+        .where(Invoice.company_id == company_id)  # ✅ Исправлено
         .group_by(Invoice.status)
     )
 
     results = db.execute(stmt).all()
 
-    # Маппинг статусов на русские названия и цвета
     status_map = {
         DocumentStatus.draft: {"name": "Черновик", "color": "#9CA3AF"},
         DocumentStatus.sent: {"name": "Отправлен", "color": "#3B82F6"},
@@ -104,6 +102,7 @@ def get_top_requests(
     limit: int = Query(default=5, ge=1, le=20),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
     """Топ-5 заявок по сумме связанных счетов."""
     stmt = (
@@ -114,7 +113,7 @@ def get_top_requests(
             func.sum(Invoice.total).label("total_amount"),
         )
         .outerjoin(Invoice, Invoice.request_id == Request.id)
-        .where(Request.company_id == current_user.company_id)
+        .where(Request.company_id == company_id)  # ✅ Исправлено
         .group_by(Request.id, Request.work_type, Request.object_address)
         .order_by(func.sum(Invoice.total).desc())
         .limit(limit)
@@ -141,6 +140,7 @@ def get_sparkline(
     days: int = Query(default=7, ge=1, le=30),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
     """Тренд доходов за последние N дней (sparkline)."""
     now = datetime.now()
@@ -152,14 +152,13 @@ def get_sparkline(
             func.sum(Invoice.total).label("total"),
         )
         .where(Invoice.invoice_date >= start_date)
-        .where(Invoice.company_id == current_user.company_id)
+        .where(Invoice.company_id == company_id)  # ✅ Исправлено
         .group_by(func.date(Invoice.invoice_date))
         .order_by(func.date(Invoice.invoice_date))
     )
 
     results = db.execute(stmt).all()
 
-    # Заполняем пропущенные дни нулями
     data = []
     current = start_date
     result_map = {str(row.date): float(row.total or 0) for row in results}
