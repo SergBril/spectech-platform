@@ -184,9 +184,47 @@ class EmailService:
         return result
 
     def send_act_signed(self, act, user_email: str, user_name: str) -> bool:
-        """Уведомление о подписании акта."""
+        """Уведомление о подписании акта с PDF вложением."""
+        from app.models.telematics import UploadedFile
+
         subject = f"Акт {act.document_number} подписан"
-        return self.send_email(
+
+        # Загружаем PDF из MinIO
+        pdf_path = None
+        try:
+            from app.core.db import SessionLocal
+
+            db = SessionLocal()
+            uploaded_file = (
+                db.query(UploadedFile)
+                .filter(
+                    UploadedFile.act_id == act.id,
+                    UploadedFile.file_category == "act_pdf",
+                )
+                .order_by(UploadedFile.created_at.desc())
+                .first()
+            )
+            db.close()
+
+            if uploaded_file:
+                from app.services import storage_service
+
+                pdf_bytes = storage_service.get_file(uploaded_file.storage_path)
+                if pdf_bytes:
+                    import tempfile
+
+                    temp_file = tempfile.NamedTemporaryFile(
+                        delete=False, suffix=".pdf", prefix=f"{act.document_number}_"
+                    )
+                    temp_file.write(pdf_bytes)
+                    temp_file.close()
+                    pdf_path = Path(temp_file.name)
+        except Exception as e:
+            logger.warning(f"⚠️ Could not attach PDF to act email: {e}")
+
+        attachments = [pdf_path] if pdf_path else None
+
+        result = self.send_email(
             to_email=user_email,
             subject=subject,
             template_name="email/act_signed.html",
@@ -195,7 +233,16 @@ class EmailService:
                 "user_name": user_name,
                 "subject": subject,
             },
+            attachments=attachments,
         )
+
+        if pdf_path and pdf_path.exists():
+            try:
+                pdf_path.unlink()
+            except Exception:
+                pass
+
+        return result
 
     def send_act_created(
         self, act, executor_email: str, executor_name: str, client_name: str
