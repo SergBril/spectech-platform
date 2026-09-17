@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
-from app.models.finance import Payment
+from app.models.finance import Invoice, Payment, Payout
 from app.schemas.finance import (
     FinanceDashboard,
     PaymentCreate,
@@ -23,9 +23,18 @@ router = APIRouter()
 def list_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Список всех платежей."""
-    stmt = select(Payment).order_by(Payment.created_at.desc()).limit(100)
+    """Список платежей (только своей компании)."""
+    # Платежи связаны с Invoice или Payout, которые имеют company_id
+    stmt = (
+        select(Payment)
+        .outerjoin(Invoice, Payment.invoice_id == Invoice.id)
+        .outerjoin(Payout, Payment.payout_id == Payout.id)
+        .where((Invoice.company_id == company_id) | (Payout.company_id == company_id))
+        .order_by(Payment.created_at.desc())
+        .limit(100)
+    )
     return db.scalars(stmt).all()
 
 
@@ -34,9 +43,10 @@ def create_payment(
     payload: PaymentCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
     """
-    Зарегистрировать платёж.
+    Зарегистрировать платёж (только для своей компании).
     Автоматически обновляет paid_amount у связанного счёта.
     """
     # Валидация: должен быть указан либо invoice_id, либо payout_id
@@ -45,6 +55,21 @@ def create_payment(
             status_code=422,
             detail="Either invoice_id or payout_id must be specified",
         )
+
+    # Проверка принадлежности к компании
+    if payload.invoice_id:
+        invoice = db.get(Invoice, payload.invoice_id)
+        if not invoice or invoice.company_id != company_id:
+            raise HTTPException(
+                status_code=404, detail="Invoice not found or access denied"
+            )
+
+    if payload.payout_id:
+        payout = db.get(Payout, payload.payout_id)
+        if not payout or payout.company_id != company_id:
+            raise HTTPException(
+                status_code=404, detail="Payout not found or access denied"
+            )
 
     payment = Payment(
         invoice_id=payload.invoice_id,
@@ -69,16 +94,11 @@ def create_payment(
 def get_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
     """
     Финансовый дашборд: доходы, выплаты, комиссии.
-    Для суперпользователей показывает все данные (без фильтрации по компании).
+    Использует company_id из X-Company-Id header для superuser.
     """
-    # Для суперпользователей и админов без компании - показываем все данные
-    if current_user.is_superuser or not current_user.company_id:
-        company_id = None
-    else:
-        company_id = current_user.company_id
-
     stats = get_finance_dashboard(db, company_id)
     return FinanceDashboard(**stats)
