@@ -28,6 +28,7 @@ from app.api.routes import (
     me,
     payments,
     payouts,
+    public,  # 🆕 Маркетплейс
     rbac,
     requests,
     secure_test,
@@ -189,6 +190,7 @@ app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytic
 app.include_router(export.router, prefix="/api/v1/export", tags=["export"])
 app.include_router(tax.router, prefix="/api/v1", tags=["📊 Tax & VAT (НДС)"])
 app.include_router(companies.router, prefix="/api/v1", tags=["companies"])
+app.include_router(public.router, prefix="/api/v1", tags=["🌐 Public (Маркетплейс)"])
 
 
 # 6. Кастомизация OpenAPI

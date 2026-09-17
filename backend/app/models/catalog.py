@@ -1,8 +1,22 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String
+if TYPE_CHECKING:
+    from app.models.company import Company
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -75,4 +89,58 @@ class Vehicle(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # === МАРКЕТПЛЕЙС: поля для публичного каталога ===
+    is_available_for_rent: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
+        comment="Доступна для аренды через маркетплейс",
+    )
+    hourly_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2),
+        nullable=True,
+        comment="Ставка за час (руб)",
+    )
+    shift_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2),
+        nullable=True,
+        comment="Ставка за смену (руб)",
+    )
+    photos: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Список URL фотографий техники",
+    )
+    marketplace_description: Mapped[str | None] = mapped_column(
+        "description",
+        Text,
+        nullable=True,
+        comment="Описание техники для маркетплейса",
+    )
+    base_location_lat: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        comment="Широта базирования",
+    )
+    base_location_lon: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        comment="Долгота базирования",
+    )
+
+    # Связь с категорией (для JOIN в публичных запросах)
+    category: Mapped[Optional["Category"]] = relationship(
+        "Category",
+        foreign_keys="[Vehicle.category_id]",
+        lazy="selectin",
+    )
+
+    # 🆕 Связь с компанией-владельцем (для маркетплейса)
+    company: Mapped[Optional["Company"]] = relationship(
+        "Company",
+        primaryjoin="Vehicle.company_id == Company.id",
+        foreign_keys="[Vehicle.company_id]",
+        lazy="selectin",
     )

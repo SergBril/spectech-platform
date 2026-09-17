@@ -28,7 +28,8 @@ class Company(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-    # 🆕 Настройки налогообложения по умолчанию
+
+    # Настройки налогообложения по умолчанию
     default_tax_system = Column(
         String(20),
         default=TaxSystem.OSNO.value,
@@ -49,4 +50,20 @@ class Company(Base):
         server_default="true",
         nullable=False,
         comment="НДС включён в сумму по умолчанию",
+    )
+
+    # === МАРКЕТПЛЕЙС: публичный профиль ===
+    company_type = Column(
+        String(50), nullable=True, comment="Тип: owner/client/dispatcher/mixed"
+    )
+    description = Column(Text, nullable=True, comment="Описание компании")
+    logo_url = Column(String(500), nullable=True, comment="URL логотипа")
+    city = Column(String(100), nullable=True, comment="Город")
+    phone = Column(String(50), nullable=True, comment="Телефон для публичного профиля")
+    website = Column(String(255), nullable=True, comment="Сайт компании")
+    is_verified = Column(
+        Boolean,
+        default=False,
+        server_default="false",
+        comment="Верифицирована ли компания",
     )
