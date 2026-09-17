@@ -110,83 +110,92 @@ export const FinancePage: React.FC = () => {
   // === ИНВОЙСЫ ===
   const handleEditInvoice = (inv: Invoice) => setEditingInvoice(inv);
 
-const handleDeleteInvoice = async () => {
-  if (!deleteTarget) return;
-  try {
-    await financeApi.deleteInvoice(deleteTarget.id);
-    setInvoices(invoices.filter((i) => i.id !== deleteTarget.id));
-    setDeleteTarget(null);
-    showToast.success('Счёт удалён');
-    loadData();
-  } catch (err: any) {
-    showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
-  }
-};
-
-const handleSendInvoice = async (inv: Invoice) => {
-  if (!confirm(`Отправить счёт ${inv.document_number} клиенту?`)) return;
-  try {
-    const updated = await financeApi.sendInvoice(inv.id);
-    setInvoices(invoices.map((i) => (i.id === inv.id ? updated : i)));
-    showToast.success(`Счёт ${inv.document_number} отправлен`);
-  } catch (err: any) {
-    showToast.error('Ошибка отправки: ' + (err?.response?.data?.detail || err.message));
-  }
-};
-
-const handleCancelInvoice = async (inv: Invoice) => {
-  if (!confirm(`Отменить счёт ${inv.document_number}?`)) return;
-  try {
-    const updated = await financeApi.updateInvoice(inv.id, { status: 'cancelled' } as any);
-    setInvoices(invoices.map((i) => (i.id === inv.id ? updated : i)));
-    showToast.success(`Счёт ${inv.document_number} отменён`);
-  } catch (err: any) {
-    showToast.error('Ошибка отмены: ' + (err?.response?.data?.detail || err.message));
-  }
-};
-
-const handleDownloadPdf = async (type: 'invoice' | 'act' | 'payout', id: number, docNumber: string) => {
-  try {
-    let blob: Blob;
-    if (type === 'invoice') blob = await financeApi.downloadInvoicePdf(id);
-    else if (type === 'act') blob = await financeApi.downloadActPdf(id);
-    else {
-      showToast.warning('PDF для выплат пока не поддерживается');
-      return;
+  const handleDeleteInvoice = async () => {
+    if (!deleteTarget) return;
+    try {
+      await financeApi.deleteInvoice(deleteTarget.id);
+      setInvoices(invoices.filter((i) => i.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      showToast.success('Счёт удалён');
+      loadData();
+    } catch (err: any) {
+      showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
     }
-    downloadBlob(blob, `${docNumber}.pdf`);
-    showToast.success('PDF скачан');
-  } catch (err: any) {
-    showToast.error('Ошибка скачивания: ' + (err?.response?.data?.detail || err.message));
-  }
-};
+  };
 
-const handleSaveInvoice = async (data: any) => {
-  try {
-    if (editingInvoice) {
-      // Обновление существующего счёта
-      const updated = await financeApi.updateInvoice(editingInvoice.id, data);
-      setInvoices(invoices.map((i) => (i.id === editingInvoice.id ? updated : i)));
-      showToast.success('Счёт обновлён');
-    } else {
-      // ✅ Создание нового счёта
-      const created = await financeApi.createInvoice(data);
-      setInvoices([created, ...invoices]);
-      showToast.success('Счёт создан');
+  const handleSendInvoice = async (inv: Invoice) => {
+    if (!confirm(`Отправить счёт ${inv.document_number} клиенту?`)) return;
+    try {
+      const updated = await financeApi.sendInvoice(inv.id);
+      setInvoices(invoices.map((i) => (i.id === inv.id ? updated : i)));
+      showToast.success(`Счёт ${inv.document_number} отправлен`);
+    } catch (err: any) {
+      showToast.error('Ошибка отправки: ' + (err?.response?.data?.detail || err.message));
     }
-    setEditingInvoice(null);
-    setIsInvoiceFormOpen(false);
-    loadData(); // Обновляем метрики dashboard
-  } catch (err: any) {
-    const detail = err?.response?.data?.detail;
-    if (Array.isArray(detail)) {
-      showToast.error('Ошибка валидации: ' + detail.map((d: any) => `${d.loc?.join('.')}: ${d.msg}`).join(', '));
-    } else {
-      showToast.error('Ошибка: ' + (detail || err.message));
+  };
+
+  // 🆕 Отправить счёт повторно (с PDF вложением)
+  const handleResendInvoiceEmail = async (inv: Invoice) => {
+    if (!confirm(`Отправить счёт ${inv.document_number} клиенту повторно с PDF вложением?`)) return;
+    try {
+      await financeApi.resendInvoiceEmail(inv.id);
+      showToast.success(`✅ Письмо с PDF отправлено клиенту`);
+    } catch (err: any) {
+      showToast.error('Ошибка отправки: ' + (err?.response?.data?.detail || err.message));
     }
-    throw err;
-  }
-};
+  };
+
+  const handleCancelInvoice = async (inv: Invoice) => {
+    if (!confirm(`Отменить счёт ${inv.document_number}?`)) return;
+    try {
+      const updated = await financeApi.updateInvoice(inv.id, { status: 'cancelled' } as any);
+      setInvoices(invoices.map((i) => (i.id === inv.id ? updated : i)));
+      showToast.success(`Счёт ${inv.document_number} отменён`);
+    } catch (err: any) {
+      showToast.error('Ошибка отмены: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleDownloadPdf = async (type: 'invoice' | 'act' | 'payout', id: number, docNumber: string) => {
+    try {
+      let blob: Blob;
+      if (type === 'invoice') blob = await financeApi.downloadInvoicePdf(id);
+      else if (type === 'act') blob = await financeApi.downloadActPdf(id);
+      else {
+        showToast.warning('PDF для выплат пока не поддерживается');
+        return;
+      }
+      downloadBlob(blob, `${docNumber}.pdf`);
+      showToast.success('PDF скачан');
+    } catch (err: any) {
+      showToast.error('Ошибка скачивания: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleSaveInvoice = async (data: any) => {
+    try {
+      if (editingInvoice) {
+        const updated = await financeApi.updateInvoice(editingInvoice.id, data);
+        setInvoices(invoices.map((i) => (i.id === editingInvoice.id ? updated : i)));
+        showToast.success('Счёт обновлён');
+      } else {
+        const created = await financeApi.createInvoice(data);
+        setInvoices([created, ...invoices]);
+        showToast.success('Счёт создан');
+      }
+      setEditingInvoice(null);
+      setIsInvoiceFormOpen(false);
+      loadData();
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        showToast.error('Ошибка валидации: ' + detail.map((d: any) => `${d.loc?.join('.')}: ${d.msg}`).join(', '));
+      } else {
+        showToast.error('Ошибка: ' + (detail || err.message));
+      }
+      throw err;
+    }
+  };
 
   const handlePaymentSuccess = () => {
     setPaymentTarget(null);
@@ -210,37 +219,48 @@ const handleSaveInvoice = async (data: any) => {
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
       if (Array.isArray(detail)) {
-        showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
+        showToast.error('Ошибка: ' + detail.map((d: any) => `${d.loc?.join('.')}: ${d.msg}`).join(', '));
       } else {
-        alert('Ошибка: ' + (detail || err.message));
+        showToast.error('Ошибка: ' + (detail || err.message));
       }
       throw err;
     }
   };
 
-const handleDeleteAct = async () => {
-  if (!deleteActTarget) return;
-  try {
-    await financeApi.deleteAct(deleteActTarget.id);
-    setActs(acts.filter((a) => a.id !== deleteActTarget.id));
-    setDeleteActTarget(null);
-    showToast.success('Акт удалён');
-    loadData();
-  } catch (err: any) {
-    showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
-  }
-};
+  const handleDeleteAct = async () => {
+    if (!deleteActTarget) return;
+    try {
+      await financeApi.deleteAct(deleteActTarget.id);
+      setActs(acts.filter((a) => a.id !== deleteActTarget.id));
+      setDeleteActTarget(null);
+      showToast.success('Акт удалён');
+      loadData();
+    } catch (err: any) {
+      showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
 
-const handleSignAct = async (act: Act, role: 'client' | 'executor') => {
-  if (!confirm(`Подписать акт ${act.document_number} как ${role}?`)) return;
-  try {
-    const updated = await financeApi.signAct(act.id, role);
-    setActs(acts.map((a) => (a.id === act.id ? updated : a)));
-    showToast.success(`Акт подписан как ${role === 'client' ? 'клиент' : 'исполнитель'}`);
-  } catch (err: any) {
-    showToast.error('Ошибка подписания: ' + (err?.response?.data?.detail || err.message));
-  }
-};
+  const handleSignAct = async (act: Act, role: 'client' | 'executor') => {
+    if (!confirm(`Подписать акт ${act.document_number} как ${role}?`)) return;
+    try {
+      const updated = await financeApi.signAct(act.id, role);
+      setActs(acts.map((a) => (a.id === act.id ? updated : a)));
+      showToast.success(`Акт подписан как ${role === 'client' ? 'клиент' : 'исполнитель'}`);
+    } catch (err: any) {
+      showToast.error('Ошибка подписания: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  // 🆕 Отправить акт повторно (с PDF вложением)
+  const handleResendActEmail = async (act: Act) => {
+    if (!confirm(`Отправить акт ${act.document_number} клиенту повторно с PDF вложением?`)) return;
+    try {
+      await financeApi.resendActEmail(act.id);
+      showToast.success(`✅ Письмо с PDF отправлено клиенту`);
+    } catch (err: any) {
+      showToast.error('Ошибка отправки: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
 
   // === ЭКСПОРТ ===
   const handleExportInvoicesCsv = async () => {
@@ -248,7 +268,7 @@ const handleSignAct = async (act: Act, role: 'client' | 'executor') => {
       const blob = await exportApi.invoicesCsv({});
       downloadBlob(blob, `invoices_${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (err: any) {
-      showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
+      showToast.error('Ошибка экспорта: ' + (err?.response?.data?.detail || err.message));
     }
   };
 
@@ -257,7 +277,7 @@ const handleSignAct = async (act: Act, role: 'client' | 'executor') => {
       const blob = await exportApi.actsCsv({});
       downloadBlob(blob, `acts_${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (err: any) {
-      showToast.error('Ошибка удаления: ' + (err?.response?.data?.detail || err.message));
+      showToast.error('Ошибка экспорта: ' + (err?.response?.data?.detail || err.message));
     }
   };
 
@@ -275,45 +295,39 @@ const handleSignAct = async (act: Act, role: 'client' | 'executor') => {
     );
   }
 
-if (loading) {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {/* Skeleton заголовка */}
-          <div className="flex justify-between items-center mb-6">
-            <div className="w-40 h-8 bg-gray-200 rounded animate-pulse" />
-            <div className="w-48 h-10 bg-gray-200 rounded animate-pulse" />
-          </div>
-
-          {/* Skeleton метрик */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <MetricCardSkeleton />
-            <MetricCardSkeleton />
-            <MetricCardSkeleton />
-            <MetricCardSkeleton />
-          </div>
-
-          {/* Skeleton таблицы */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="border-b border-gray-200">
-              <div className="flex space-x-2 p-2">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="w-32 h-10 bg-gray-100 rounded animate-pulse" />
-                ))}
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          <div className="px-4 py-6 sm:px-0">
+            <div className="flex justify-between items-center mb-6">
+              <div className="w-40 h-8 bg-gray-200 rounded animate-pulse" />
+              <div className="w-48 h-10 bg-gray-200 rounded animate-pulse" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <MetricCardSkeleton />
+              <MetricCardSkeleton />
+              <MetricCardSkeleton />
+              <MetricCardSkeleton />
+            </div>
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="border-b border-gray-200">
+                <div className="flex space-x-2 p-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="w-32 h-10 bg-gray-100 rounded animate-pulse" />
+                  ))}
+                </div>
+              </div>
+              <div className="p-6">
+                <TableSkeleton rows={5} columns={7} />
               </div>
             </div>
-            <div className="p-6">
-              <TableSkeleton rows={5} columns={7} />
-            </div>
           </div>
-        </div>
-      </main>
-    </div>
-  );
-}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -429,6 +443,8 @@ if (loading) {
                             const paid = parseFloat(inv.paid_amount || '0');
                             const total = parseFloat(inv.total || '0');
                             const canAcceptPayment = inv.status !== 'paid' && inv.status !== 'cancelled' && paid < total;
+                            // 🆕 Статусы, для которых показываем кнопку 📧
+                            const canResendEmail = ['sent', 'paid', 'partially_paid', 'overdue'].includes(inv.status);
                             return (
                               <tr key={inv.id} className="hover:bg-gray-50">
                                 <td className="px-4 py-3 whitespace-nowrap">
@@ -456,6 +472,10 @@ if (loading) {
                                   )}
                                   {canAcceptPayment && canEdit && (
                                     <button onClick={() => setPaymentTarget(inv)} className="text-green-600 hover:text-green-900 font-medium" title="Принять оплату">💳</button>
+                                  )}
+                                  {/* 🆕 Кнопка "📧 Email" для sent/paid/partially_paid/overdue */}
+                                  {canResendEmail && canEdit && (
+                                    <button onClick={() => handleResendInvoiceEmail(inv)} className="text-indigo-600 hover:text-indigo-900" title="Отправить PDF клиенту повторно">📧</button>
                                   )}
                                   {['sent', 'overdue', 'partially_paid'].includes(inv.status) && canEdit && (
                                     <button onClick={() => handleCancelInvoice(inv)} className="text-orange-600 hover:text-orange-900" title="Отменить">❌</button>
@@ -509,47 +529,55 @@ if (loading) {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {acts.map((act) => (
-                            <tr key={act.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <button onClick={() => handleGoToRequest(act.request_id)} className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline">
-                                  {act.document_number || `#${act.id}`}
-                                </button>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(act.act_date)}</td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(act.total_amount)}</td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${ACT_STATUS_LABELS[act.status]?.color || 'bg-gray-100'}`}>
-                                  {ACT_STATUS_LABELS[act.status]?.label || act.status}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-                                <button onClick={() => handleDownloadPdf('act', act.id, act.document_number)} className="text-purple-600 hover:text-purple-900" title="PDF">📄</button>
-                                {act.status === 'draft' && canEdit && (
-                                  <>
-                                    <button onClick={() => setEditingAct(act)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
-                                    <button
-                                      onClick={() => handleSignAct(act, 'client')}
-                                      className={act.signed_by_client_at ? 'text-gray-400' : 'text-green-600 hover:text-green-900'}
-                                      title={act.signed_by_client_at ? 'Уже подписан клиентом' : 'Подписать (клиент)'}
-                                      disabled={!!act.signed_by_client_at}
-                                    >
-                                      {act.signed_by_client_at ? '✅' : '✍️👤'}
-                                    </button>
-                                    <button
-                                      onClick={() => handleSignAct(act, 'executor')}
-                                      className={act.signed_by_executor_at ? 'text-gray-400' : 'text-blue-600 hover:text-blue-900'}
-                                      title={act.signed_by_executor_at ? 'Уже подписан исполнителем' : 'Подписать (исполнитель)'}
-                                      disabled={!!act.signed_by_executor_at}
-                                    >
-                                      {act.signed_by_executor_at ? '✅' : '✍️🏢'}
-                                    </button>
-                                    {canDelete && <button onClick={() => setDeleteActTarget(act)} className="text-red-600 hover:text-red-900" title="Удалить">🗑️</button>}
-                                  </>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
+                          {acts.map((act) => {
+                            // 🆕 Статусы, для которых показываем кнопку 📧
+                            const canResendEmail = ['sent', 'paid', 'overdue'].includes(act.status);
+                            return (
+                              <tr key={act.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <button onClick={() => handleGoToRequest(act.request_id)} className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline">
+                                    {act.document_number || `#${act.id}`}
+                                  </button>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(act.act_date)}</td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(act.total_amount)}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${ACT_STATUS_LABELS[act.status]?.color || 'bg-gray-100'}`}>
+                                    {ACT_STATUS_LABELS[act.status]?.label || act.status}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
+                                  <button onClick={() => handleDownloadPdf('act', act.id, act.document_number)} className="text-purple-600 hover:text-purple-900" title="PDF">📄</button>
+                                  {act.status === 'draft' && canEdit && (
+                                    <>
+                                      <button onClick={() => setEditingAct(act)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
+                                      <button
+                                        onClick={() => handleSignAct(act, 'client')}
+                                        className={act.signed_by_client_at ? 'text-gray-400' : 'text-green-600 hover:text-green-900'}
+                                        title={act.signed_by_client_at ? 'Уже подписан клиентом' : 'Подписать (клиент)'}
+                                        disabled={!!act.signed_by_client_at}
+                                      >
+                                        {act.signed_by_client_at ? '✅' : '✍️👤'}
+                                      </button>
+                                      <button
+                                        onClick={() => handleSignAct(act, 'executor')}
+                                        className={act.signed_by_executor_at ? 'text-gray-400' : 'text-blue-600 hover:text-blue-900'}
+                                        title={act.signed_by_executor_at ? 'Уже подписан исполнителем' : 'Подписать (исполнитель)'}
+                                        disabled={!!act.signed_by_executor_at}
+                                      >
+                                        {act.signed_by_executor_at ? '✅' : '✍️🏢'}
+                                      </button>
+                                      {canDelete && <button onClick={() => setDeleteActTarget(act)} className="text-red-600 hover:text-red-900" title="Удалить">🗑️</button>}
+                                    </>
+                                  )}
+                                  {/* 🆕 Кнопка "📧 Email" для sent/paid/overdue */}
+                                  {canResendEmail && canEdit && (
+                                    <button onClick={() => handleResendActEmail(act)} className="text-indigo-600 hover:text-indigo-900" title="Отправить PDF клиенту повторно">📧</button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

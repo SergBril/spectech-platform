@@ -59,7 +59,11 @@ class EmailService:
                 if not file_path.exists():
                     continue
                 with open(file_path, "rb") as f:
-                    part = MIMEBase("application", "octet-stream")
+                    # 🆕 Определяем правильный MIME-тип
+                    if file_path.suffix.lower() == ".pdf":
+                        part = MIMEBase("application", "pdf")
+                    else:
+                        part = MIMEBase("application", "octet-stream")
                     part.set_payload(f.read())
                 encoders.encode_base64(part)
                 part.add_header(
@@ -112,9 +116,53 @@ class EmailService:
     def send_invoice_created(
         self, invoice, client_email: str, client_name: str
     ) -> bool:
-        """Уведомление о создании счёта."""
+        """Уведомление о создании счёта с PDF вложением."""
+        from app.models.telematics import UploadedFile
+
         subject = f"Новый счёт {invoice.document_number} от СпецТехника Про"
-        return self.send_email(
+
+        # Загружаем PDF из MinIO
+        pdf_path = None
+        try:
+            # Ищем последний загруженный PDF для этого счёта
+            from app.core.db import SessionLocal
+
+            db = SessionLocal()
+            uploaded_file = (
+                db.query(UploadedFile)
+                .filter(
+                    UploadedFile.invoice_id == invoice.id,
+                    UploadedFile.file_category == "invoice_pdf",
+                )
+                .order_by(UploadedFile.created_at.desc())
+                .first()
+            )
+            db.close()
+
+            if uploaded_file:
+                # Скачиваем из MinIO во временный файл
+                from app.services import storage_service
+
+                pdf_bytes = storage_service.get_file(
+                    uploaded_file.storage_path
+                )  # ← get_file!
+                if pdf_bytes:
+                    import tempfile
+
+                    temp_file = tempfile.NamedTemporaryFile(
+                        delete=False,
+                        suffix=".pdf",
+                        prefix=f"{invoice.document_number}_",
+                    )
+                    temp_file.write(pdf_bytes)
+                    temp_file.close()
+                    pdf_path = Path(temp_file.name)
+        except Exception as e:
+            logger.warning(f"⚠️ Could not attach PDF to email: {e}")
+
+        attachments = [pdf_path] if pdf_path else None
+
+        result = self.send_email(
             to_email=client_email,
             subject=subject,
             template_name="email/invoice_created.html",
@@ -123,7 +171,17 @@ class EmailService:
                 "client_name": client_name,
                 "subject": subject,
             },
+            attachments=attachments,
         )
+
+        # Удаляем временный файл
+        if pdf_path and pdf_path.exists():
+            try:
+                pdf_path.unlink()
+            except Exception:
+                pass
+
+        return result
 
     def send_act_signed(self, act, user_email: str, user_name: str) -> bool:
         """Уведомление о подписании акта."""

@@ -247,4 +247,16 @@ export const financeApi = {
     const response = await apiClient.get<PaymentsDashboard>('/payments/dashboard');
     return response.data;
   },
+
+  // 🆕 НОВАЯ ФУНКЦИЯ: Отправить счёт повторно (с PDF вложением)
+  async resendInvoiceEmail(id: number): Promise<Invoice> {
+    const response = await apiClient.post<Invoice>(`/invoices/${id}/resend-email`);
+    return response.data;
+  },
+
+  // 🆕 НОВАЯ ФУНКЦИЯ: Отправить акт повторно (с PDF вложением)
+  async resendActEmail(id: number): Promise<Act> {
+    const response = await apiClient.post<Act>(`/acts/${id}/resend-email`);
+    return response.data;
+  },
 };

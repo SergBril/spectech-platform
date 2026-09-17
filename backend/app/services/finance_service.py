@@ -61,7 +61,6 @@ def calculate_invoice_totals(invoice: Invoice) -> None:
     - ОСНО: с НДС (внутри или сверху)
     - УСН, Патент, НПД: без НДС
     """
-    # 1. Считаем сумму позиций
     subtotal = Decimal("0")
     for item in invoice.items:
         item.amount = (item.quantity * item.unit_price).quantize(
@@ -71,33 +70,27 @@ def calculate_invoice_totals(invoice: Invoice) -> None:
 
     invoice.subtotal = subtotal
 
-    # 2. Определяем систему налогообложения
     tax_system_value = invoice.tax_system or TaxSystem.OSNO.value
     try:
         tax_system = TaxSystem(tax_system_value)
     except ValueError:
         tax_system = TaxSystem.OSNO
 
-    # 3. Для систем без НДС — обнуляем НДС
     if not tax_system.has_vat:
         invoice.vat_rate = Decimal("0")
         invoice.vat_amount = Decimal("0")
         invoice.total = subtotal
         return
 
-    # 4. Для ОСНО — считаем НДС
     vat_rate = invoice.vat_rate or Decimal("20.00")
 
     if invoice.is_vat_included:
-        # НДС "внутри" суммы (например, 120₽ = 100₽ + 20₽ НДС)
-        # Формула: vat = subtotal * rate / (100 + rate)
         vat_amount = (subtotal * vat_rate / (Decimal("100") + vat_rate)).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
         invoice.vat_amount = vat_amount
         invoice.total = subtotal
     else:
-        # НДС начисляется сверху (например, 100₽ + 20% = 120₽)
         vat_amount = (subtotal * vat_rate / Decimal("100")).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
@@ -123,7 +116,6 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
     try:
         company_id = getattr(current_user, "company_id", None)
 
-        # 1. Создаём счёт с новыми полями tax_system и is_vat_included
         invoice = Invoice(
             document_number=generate_document_number(db, "INV"),
             request_id=_get_field(payload, "request_id"),
@@ -135,7 +127,6 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
             comment=_get_field(payload, "comment", ""),
             status=DocumentStatus.draft,
             created_by=current_user.id,
-            # 🆕 Новые поля для НДС
             tax_system=_get_field(payload, "tax_system", "osno"),
             is_vat_included=_get_field(payload, "is_vat_included", True),
         )
@@ -145,7 +136,6 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
             f"✅ Invoice #{invoice.id} created with tax_system={invoice.tax_system}"
         )
 
-        # 2. Добавляем позиции
         items = _get_field(payload, "items", []) or []
         logger.info(f"📦 Adding {len(items)} items")
 
@@ -161,10 +151,7 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
             db.add(item)
 
         db.flush()
-
-        # 3. Пересчитываем итоги (ВАЖНО: после установки tax_system и is_vat_included!)
         calculate_invoice_totals(invoice)
-
         db.commit()
         db.refresh(invoice)
         logger.info(
@@ -173,7 +160,6 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
             f"tax_system={invoice.tax_system}"
         )
 
-        # 4. Отправляем email клиенту
         try:
             client = (
                 db.get(Contractor, invoice.client_id) if invoice.client_id else None
@@ -287,7 +273,6 @@ def generate_and_save_act_pdf(act_id: int, db: Session) -> dict | None:
     Возвращает метаданные загруженного файла или None при ошибке.
     """
     try:
-        # 1. Получаем акт и связанные данные
         act = db.get(Act, act_id)
         if not act:
             logger.error(f"❌ Act #{act_id} not found")
@@ -300,11 +285,9 @@ def generate_and_save_act_pdf(act_id: int, db: Session) -> dict | None:
             else None
         )
 
-        # Если contractor_id нет в акте, ищем через заявку
         if not contractor and request and request.client_id:
             contractor = db.get(Contractor, request.client_id)
 
-        # 2. Генерируем PDF
         logger.info(f"🎨 Generating PDF for act {act.document_number}")
         pdf_bytes = generate_act_pdf(
             act=act,
@@ -312,7 +295,6 @@ def generate_and_save_act_pdf(act_id: int, db: Session) -> dict | None:
             contractor=contractor,
         )
 
-        # 3. Загружаем в MinIO
         filename = f"{act.document_number}.pdf"
         upload_result = storage_service.upload_bytes(
             content=pdf_bytes,
@@ -321,7 +303,6 @@ def generate_and_save_act_pdf(act_id: int, db: Session) -> dict | None:
             content_type="application/pdf",
         )
 
-        # 4. Сохраняем запись в uploaded_files
         uploaded_file = UploadedFile(
             original_filename=filename,
             storage_path=upload_result["path"],
@@ -358,7 +339,6 @@ def generate_and_save_invoice_pdf(invoice_id: int, db: Session) -> dict | None:
     from app.services.pdf_generator import generate_invoice_pdf
 
     try:
-        # 1. Получаем счет С items (важно для шаблона!)
         stmt = (
             select(Invoice)
             .options(selectinload(Invoice.items))
@@ -374,14 +354,12 @@ def generate_and_save_invoice_pdf(invoice_id: int, db: Session) -> dict | None:
             db.get(Contractor, invoice.client_id) if invoice.client_id else None
         )
 
-        # 2. Генерируем PDF
         logger.info(f"🎨 Generating PDF for invoice {invoice.document_number}")
         pdf_bytes = generate_invoice_pdf(
             invoice=invoice,
             contractor=contractor,
         )
 
-        # 3. Загружаем в MinIO
         filename = f"{invoice.document_number}.pdf"
         upload_result = storage_service.upload_bytes(
             content=pdf_bytes,
@@ -390,7 +368,6 @@ def generate_and_save_invoice_pdf(invoice_id: int, db: Session) -> dict | None:
             content_type="application/pdf",
         )
 
-        # 4. Сохраняем запись в uploaded_files
         uploaded_file = UploadedFile(
             original_filename=filename,
             storage_path=upload_result["path"],

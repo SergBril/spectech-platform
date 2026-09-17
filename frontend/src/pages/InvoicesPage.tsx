@@ -102,6 +102,17 @@ export const InvoicesPage: React.FC = () => {
     }
   };
 
+  // 🆕 НОВАЯ ФУНКЦИЯ: Отправить email повторно
+  const handleResendEmail = async (inv: Invoice) => {
+    if (!confirm(`Отправить счёт ${inv.document_number} клиенту повторно с PDF вложением?`)) return;
+    try {
+      await financeApi.resendInvoiceEmail(inv.id);
+      alert(`✅ Письмо с PDF отправлено клиенту`);
+    } catch (err: any) {
+      alert('Ошибка отправки: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
   const handleDownloadPdf = async (inv: Invoice) => {
     try {
       const blob = await financeApi.downloadInvoicePdf(inv.id);
@@ -217,6 +228,7 @@ export const InvoicesPage: React.FC = () => {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right text-sm space-x-1">
+                          {/* Кнопка "Отправить" только для draft */}
                           {inv.status === 'draft' && canEdit && (
                             <>
                               <button onClick={() => handleSend(inv)} className="text-blue-600 hover:text-blue-900">Отправить</button>
@@ -224,16 +236,35 @@ export const InvoicesPage: React.FC = () => {
                               <button onClick={() => handleEdit(inv)} className="text-gray-600 hover:text-gray-900">Изменить</button>
                             </>
                           )}
+
+                          {/* 🆕 Кнопка "📧 Email" для всех статусов кроме cancelled и draft */}
+                          {inv.status !== 'cancelled' && inv.status !== 'draft' && canEdit && (
+                            <>
+                              <button
+                                onClick={() => handleResendEmail(inv)}
+                                className="text-indigo-600 hover:text-indigo-900 font-medium"
+                                title="Отправить PDF клиенту повторно"
+                              >
+                                📧 Email
+                              </button>
+                              <span className="text-gray-300">|</span>
+                            </>
+                          )}
+
+                          {/* Принять оплату */}
                           {canAcceptPayment && canEdit && (
                             <>
-                              {inv.status !== 'draft' && <span className="text-gray-300">|</span>}
                               <button onClick={() => setPaymentTarget(inv)} className="text-green-600 hover:text-green-900 font-medium">
                                 💳 Принять оплату
                               </button>
+                              <span className="text-gray-300">|</span>
                             </>
                           )}
-                          <span className="text-gray-300">|</span>
+
+                          {/* Скачать PDF */}
                           <button onClick={() => handleDownloadPdf(inv)} className="text-purple-600 hover:text-purple-900">PDF</button>
+
+                          {/* Удалить */}
                           {canDelete && inv.status === 'draft' && (
                             <>
                               <span className="text-gray-300">|</span>
