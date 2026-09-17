@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import apiClient from "../api/client";
+import { useAuth } from "./AuthContext";
 
 export interface Company {
   id: number;
@@ -30,6 +31,7 @@ const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 const STORAGE_KEY = "spectech_current_company_id";
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
+  const { user, isAuthenticated } = useAuth();  // 🆕 Получаем статус авторизации
   const [companies, setCompanies] = useState<Company[]>([]);
   const [currentCompanyId, setCurrentCompanyIdState] = useState<number | null>(
     () => {
@@ -40,16 +42,20 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchCompanies = useCallback(async () => {
+    // 🆕 Не делаем запрос, пока пользователь не залогинен
+    if (!isAuthenticated) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
-      const token = localStorage.getItem("access_token");
-      if (!token) {
-        setCompanies([]);
-        return;
-      }
+      console.log("🔄 Fetching companies...");
 
       const response = await apiClient.get("/me/companies");
       const data: Company[] = response.data;
+
+      console.log("✅ Companies loaded:", data);
       setCompanies(data);
 
       if (data.length > 0) {
@@ -63,21 +69,21 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (error) {
-      console.error("Failed to fetch companies:", error);
+      console.error("❌ Failed to fetch companies:", error);
       setCompanies([]);
     } finally {
       setIsLoading(false);
     }
-  }, [currentCompanyId]);
+  }, [isAuthenticated, currentCompanyId]);
 
+  // 🆕 Перезагружаем при изменении статуса авторизации
   useEffect(() => {
     fetchCompanies();
-  }, [fetchCompanies]);
+  }, [fetchCompanies, isAuthenticated]);
 
   const setCurrentCompanyId = useCallback((id: number) => {
     setCurrentCompanyIdState(id);
     localStorage.setItem(STORAGE_KEY, String(id));
-    // Перезагружаем страницу для обновления всех данных
     window.location.reload();
   }, []);
 

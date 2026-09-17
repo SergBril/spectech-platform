@@ -1,9 +1,10 @@
 import { Building2, ChevronDown, Check } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { useCompany } from '../contexts/CompanyContext';
+import { useCompany } from "../contexts/CompanyContext";
 
 export function CompanySwitcher() {
-  const { companies, currentCompany, setCurrentCompanyId, isLoading } =
+  // ✅ ВАЖНО: добавлен currentCompanyId в деструктуризацию!
+  const { companies, currentCompanyId, currentCompany, setCurrentCompanyId, isLoading } =
     useCompany();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -67,6 +68,7 @@ export function CompanySwitcher() {
           </div>
           <div className="max-h-80 overflow-y-auto">
             {companies.map((company) => {
+              // ✅ Теперь currentCompanyId доступен!
               const isSelected = company.id === currentCompanyId;
               return (
                 <button
@@ -94,11 +96,11 @@ export function CompanySwitcher() {
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
                       {company.inn && <span>ИНН: {company.inn}</span>}
-                      {company.tax_system && (
+                      {company.default_tax_system && (
                         <>
                           <span>•</span>
                           <span className="font-medium">
-                            {getTaxSystemLabel(company.tax_system)}
+                            {getTaxSystemLabel(company.default_tax_system)}
                           </span>
                         </>
                       )}
