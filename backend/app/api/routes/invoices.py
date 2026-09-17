@@ -204,6 +204,48 @@ def download_invoice_pdf(
     )
 
 
+@router.post("/{invoice_id}/resend-email", response_model=InvoiceRead)
+def resend_invoice_email(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Отправить счёт клиенту повторно (только своей компании)."""
+    from app.services.email_service import email_service
+
+    invoice = db.get(Invoice, invoice_id)
+    if not invoice or invoice.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    contractor = db.get(Contractor, invoice.client_id) if invoice.client_id else None
+    if not contractor:
+        raise HTTPException(status_code=400, detail="Invoice has no client attached")
+
+    if not hasattr(contractor, "contact_email") or not contractor.contact_email:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Client '{contractor.name}' has no contact email",
+        )
+
+    client_name = contractor.name or "Клиент"
+    success = email_service.send_invoice_created(
+        invoice=invoice,
+        client_email=contractor.contact_email,
+        client_name=client_name,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=500, detail="Failed to send email. Check SMTP settings."
+        )
+
+    logger.info(
+        f"📧 Invoice {invoice.document_number} resent to {contractor.contact_email}"
+    )
+    return invoice
+
+
 @router.post("/{invoice_id}/regenerate-pdf", status_code=201)
 def regenerate_invoice_pdf_endpoint(
     invoice_id: int,

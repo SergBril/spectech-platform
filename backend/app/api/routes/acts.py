@@ -348,3 +348,43 @@ def regenerate_act_pdf_endpoint(
         "message": "PDF успешно перегенерирован",
         "data": result,
     }
+
+
+@router.post("/{act_id}/resend-email", response_model=ActRead)
+def resend_act_email(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Отправить акт клиенту повторно (только своей компании)."""
+    from app.services.email_service import email_service
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    contractor = db.get(Contractor, act.client_id) if act.client_id else None
+    if not contractor:
+        raise HTTPException(status_code=400, detail="Act has no client attached")
+
+    if not hasattr(contractor, "contact_email") or not contractor.contact_email:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Client '{contractor.name}' has no contact email",
+        )
+
+    client_name = contractor.name or "Клиент"
+    success = email_service.send_act_signed(
+        act=act,
+        user_email=contractor.contact_email,
+        user_name=client_name,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=500, detail="Failed to send email. Check SMTP settings."
+        )
+
+    logger.info(f"📧 Act {act.document_number} resent to {contractor.contact_email}")
+    return act
