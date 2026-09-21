@@ -33,7 +33,7 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
 
     isConnectingRef.current = true;
-    const wsUrl = `ws://localhost:8080/api/v1/ws?token=${token}`;
+    const wsUrl = `ws://localhost:8000/api/v1/ws?token=${token}`;
     console.log('🔌 WebSocket: connecting to', wsUrl);
 
     const ws = new WebSocket(wsUrl);
