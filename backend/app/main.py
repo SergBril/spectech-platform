@@ -26,6 +26,7 @@ from app.api.routes import (
     export,
     files,
     invoices,
+    maintenance,
     marketplace,
     me,
     payments,
@@ -192,6 +193,9 @@ app.include_router(
 )
 app.include_router(chat.router, prefix="/api/v1", tags=["💬 Chat (Чат по заявке)"])
 app.include_router(public.router, prefix="/api/v1", tags=["🌐 Public (Маркетплейс)"])
+app.include_router(
+    maintenance.router, prefix="/api/v1", tags=["🔧 Maintenance (ТО и Ремонты)"]
+)
 
 
 # 6. Кастомизация OpenAPI
