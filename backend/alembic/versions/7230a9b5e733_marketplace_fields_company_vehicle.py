@@ -1,17 +1,16 @@
-"""marketplace_fields_company_vehicle
+"""marketplace fields company vehicle
 
 Revision ID: 7230a9b5e733
 Revises: 9a1b2c3d4e5f
-Create Date: 2026-09-17
+Create Date: 2026-09-XX
 """
 
-from collections.abc import Sequence
+from collections.abc import Sequence  # ← ДОБАВЬТЕ ЭТУ СТРОКУ
 
 from alembic import op
 
-# revision identifiers, used by Alembic.
 revision: str = "7230a9b5e733"  # pragma: allowlist secret
-down_revision: Union[str, None] = "9a1b2c3d4e5f"  # pragma: allowlist secret
+down_revision: str | None = "9a1b2c3d4e5f"  # pragma: allowlist secret
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

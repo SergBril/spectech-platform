@@ -3,6 +3,7 @@ from app.models.auth import User, UserSession
 
 # Catalog
 from app.models.catalog import Category, Vehicle
+from app.models.chat import ChatMessage, ChatParticipant, RequestChat  # noqa: F401
 
 # Company
 from app.models.company import Company
@@ -23,8 +24,6 @@ from app.models.finance import (
     Payout,
 )
 from app.models.marketplace import MarketplaceOffer  # noqa: F401
-
-from app.models.chat import ChatMessage, ChatParticipant, RequestChat  # noqa: F401
 
 # RBAC
 from app.models.rbac import Permission, Role, RolePermission, UserRole
@@ -93,4 +92,21 @@ __all__ = [
     "GeofenceType",
     "AlertSeverity",
     "AlertStatus",
+    # Maintenance
+    "MaintenanceOrder",
+    "MaintenanceOrderType",
+    "MaintenanceOrderStatus",
+    "MaintenancePriority",
+    "MaintenancePart",
+    "MaintenanceWork",
 ]
+
+# Maintenance (ТО и Ремонты)
+from app.models.maintenance import (
+    MaintenanceOrder,
+    MaintenanceOrderStatus,
+    MaintenanceOrderType,
+    MaintenancePart,
+    MaintenancePriority,
+    MaintenanceWork,
+)  # noqa: F401
