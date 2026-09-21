@@ -22,6 +22,9 @@ from app.models.finance import (
     Payment,
     Payout,
 )
+from app.models.marketplace import MarketplaceOffer  # noqa: F401
+
+from app.models.chat import ChatMessage, ChatParticipant, RequestChat  # noqa: F401
 
 # RBAC
 from app.models.rbac import Permission, Role, RolePermission, UserRole
