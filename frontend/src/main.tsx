@@ -13,6 +13,7 @@ import RegisterPage from './pages/RegisterPage';
 import RequestsPage from './pages/RequestsPage';
 import DashboardPage from './pages/DashboardPage';
 import VehiclesPage from './pages/VehiclesPage';
+import MarketplacePage from './pages/MarketplacePage';  // ← ДОБАВИТЬ
 import FinancePage from './pages/FinancePage';
 import InvoicesPage from './pages/InvoicesPage';
 import RequestDetailPage from './pages/RequestDetailPage';
@@ -37,6 +38,7 @@ const AppRoutes = () => {
       <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
+      <Route path="/marketplace" element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />  // ← ДОБАВИТЬ
       <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
       <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
       <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />

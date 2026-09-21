@@ -13,6 +13,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/', label: 'Дашборд' },
   { path: '/requests', label: 'Заявки' },
   { path: '/vehicles', label: 'Техника' },
+  { path: '/marketplace', label: '🎯 Маркетплейс' },  // ← ДОБАВИТЬ
   { path: '/contractors', label: 'Контрагенты' },
   { path: '/finance', label: 'Финансы' },
   { path: '/invoices', label: 'Счета' },

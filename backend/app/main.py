@@ -55,8 +55,6 @@ from app.core.sentry_config import init_sentry
 from app.models import *  # noqa: F401, F403
 from app.services.minio_service import minio_service
 
-app = FastAPI
-
 # Настройка логирования
 setup_logging("INFO")
 logger = logging.getLogger("spectech.app")
@@ -77,9 +75,6 @@ async def lifespan(app: FastAPI):
 
     # --- Shutdown ---
     print("👋 SpectechPlatform shutting down...")
-
-
-app = FastAPI(title="SpectechPlatform API", lifespan=lifespan)
 
 
 # 1. Создание приложения
@@ -196,10 +191,7 @@ app.include_router(
     marketplace.router, prefix="/api/v1", tags=["🎯 Marketplace (Отклики на заявки)"]
 )
 app.include_router(chat.router, prefix="/api/v1", tags=["💬 Chat (Чат по заявке)"])
-app.include_router(public.router, prefix="/api/v1")
-app.include_router(companies.public_router, prefix="/api/v1")
-app.include_router(vehicles.public_router, prefix="/api/v1")
-app.include_router(categories.public_router, prefix="/api/v1")
+app.include_router(public.router, prefix="/api/v1", tags=["🌐 Public (Маркетплейс)"])
 
 
 # 6. Кастомизация OpenAPI
