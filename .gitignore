@@ -119,3 +119,6 @@ ACT-*-final.pdf
 INV-*-FINAL.pdf
 INV-*-final.pdf
 update_client.sql
+
+# Marketing demo videos (generated artifacts)
+marketing/demo-videos/output/
