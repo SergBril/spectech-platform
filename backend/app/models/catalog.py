@@ -137,10 +137,42 @@ class Vehicle(Base):
         lazy="selectin",
     )
 
+    # === ТО и Ремонты ===
+    last_maintenance_hours: Mapped[float | None] = mapped_column(
+        Numeric(10, 2),
+        nullable=True,
+        comment="Моточасы при последнем ТО",
+    )
+    next_maintenance_hours: Mapped[float | None] = mapped_column(
+        Numeric(10, 2),
+        nullable=True,
+        comment="Моточасы для следующего ТО (рассчитывается автоматически)",
+    )
+    maintenance_interval: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=250,
+        comment="Интервал ТО в моточасах (по умолчанию 250)",
+    )
+    total_maintenance_cost: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2),
+        nullable=False,
+        default=0,
+        comment="Общая стоимость обслуживания за всё время",
+    )
+
     # 🆕 Связь с компанией-владельцем (для маркетплейса)
     company: Mapped[Optional["Company"]] = relationship(
         "Company",
         primaryjoin="Vehicle.company_id == Company.id",
         foreign_keys="[Vehicle.company_id]",
+        lazy="selectin",
+    )
+
+    # === ТО и Ремонты ===
+    maintenance_orders = relationship(
+        "MaintenanceOrder",
+        back_populates="vehicle",
+        cascade="all, delete-orphan",
         lazy="selectin",
     )
