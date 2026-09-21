@@ -13,7 +13,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     Enum as SqlEnum,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.core.db import Base
@@ -97,6 +97,13 @@ class Request(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    # === МАРКЕТПЛЕЙС: отклики на заявку ===
+    marketplace_offers = relationship(
+        "MarketplaceOffer",
+        back_populates="request",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
 

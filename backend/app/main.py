@@ -38,6 +38,8 @@ from app.api.routes import (
     tax,
     telematics,
     vehicles,
+    marketplace,
+    chat,
 )
 from app.api.routes import websocket as ws_routes
 from app.core.config import settings
@@ -190,7 +192,8 @@ app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytic
 app.include_router(export.router, prefix="/api/v1/export", tags=["export"])
 app.include_router(tax.router, prefix="/api/v1", tags=["📊 Tax & VAT (НДС)"])
 app.include_router(companies.router, prefix="/api/v1", tags=["companies"])
-app.include_router(public.router, prefix="/api/v1", tags=["🌐 Public (Маркетплейс)"])
+app.include_router(marketplace.router, prefix="/api/v1", tags=["🎯 Marketplace (Отклики на заявки)"])
+app.include_router(chat.router, prefix="/api/v1", tags=["💬 Chat (Чат по заявке)"])
 
 
 # 6. Кастомизация OpenAPI
