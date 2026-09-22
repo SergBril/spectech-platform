@@ -27,6 +27,7 @@ from app.schemas.maintenance import (
     MaintenanceOrderRead,
     MaintenanceOrderUpdate,
 )
+from app.services.maintenance_service import maintenance_service
 
 router = APIRouter(prefix="/maintenance", tags=["🔧 Maintenance (ТО и Ремонты)"])
 
@@ -399,3 +400,56 @@ def complete_maintenance_order(
     )
 
     return _enrich_response(order)
+
+
+@router.post(
+    "/check-scheduled",
+    summary="Проверить и создать плановые ТО",
+)
+def check_scheduled_maintenance(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Проверяет технику компании и создаёт наряд-заказы на плановое ТО
+    при достижении моточасов next_maintenance_hours.
+
+    Возвращает список созданных заказов.
+    """
+    created = maintenance_service.check_scheduled_maintenance(
+        db=db, company_id=company_id, user_id=current_user.id
+    )
+    return {
+        "created_count": len(created),
+        "orders": created,
+    }
+
+
+@router.get(
+    "/upcoming",
+    summary="Предстоящие ТО",
+)
+def get_upcoming_maintenance(
+    hours_threshold: float = Query(
+        default=50.0,
+        ge=1,
+        le=500,
+        description="За сколько часов до ТО показывать предупреждение",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Возвращает список техники, которой скоро потребуется плановое ТО
+    (в пределах hours_threshold моточасов).
+    """
+    upcoming = maintenance_service.get_upcoming_maintenance(
+        db=db, company_id=company_id, hours_threshold=hours_threshold
+    )
+    return {
+        "threshold_hours": hours_threshold,
+        "vehicles_count": len(upcoming),
+        "vehicles": upcoming,
+    }

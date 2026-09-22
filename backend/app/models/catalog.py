@@ -138,6 +138,12 @@ class Vehicle(Base):
     )
 
     # === ТО и Ремонты ===
+    engine_hours: Mapped[float] = mapped_column(
+        Numeric(10, 2),
+        nullable=False,
+        default=0,
+        comment="Текущие моточасы техники",
+    )
     last_maintenance_hours: Mapped[float | None] = mapped_column(
         Numeric(10, 2),
         nullable=True,
@@ -146,19 +152,19 @@ class Vehicle(Base):
     next_maintenance_hours: Mapped[float | None] = mapped_column(
         Numeric(10, 2),
         nullable=True,
-        comment="Моточасы для следующего ТО (рассчитывается автоматически)",
+        comment="Моточасы для следующего ТО",
     )
     maintenance_interval: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         default=250,
-        comment="Интервал ТО в моточасах (по умолчанию 250)",
+        comment="Интервал ТО в моточасах",
     )
     total_maintenance_cost: Mapped[Decimal] = mapped_column(
         Numeric(14, 2),
         nullable=False,
         default=0,
-        comment="Общая стоимость обслуживания за всё время",
+        comment="Общая стоимость обслуживания",
     )
 
     # 🆕 Связь с компанией-владельцем (для маркетплейса)
