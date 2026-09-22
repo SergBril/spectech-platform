@@ -159,6 +159,12 @@ export const MaintenancePage: React.FC = () => {
             >
               ➕ Создать наряд-заказ
             </button>
+            <button
+              onClick={() => navigate('/maintenance/analytics')}
+              className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 text-sm font-medium"
+            >
+              📊 Аналитика TCO
+            </button>
           </div>
         </div>
 

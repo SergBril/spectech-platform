@@ -178,3 +178,18 @@ export async function getUpcomingMaintenance(
   );
   return response.data;
 }
+
+export interface VehicleTCO {
+  vehicle_id: number;
+  vehicle_name: string;
+  engine_hours: number;
+  maintenance_cost: number;
+  fuel_cost: number;
+  total_tco: number;
+  cost_per_hour: number;
+}
+
+export async function getVehicleTCO(vehicleId: number): Promise<VehicleTCO> {
+  const response = await apiClient.get(`/maintenance/tco/${vehicleId}`);
+  return response.data;
+}
