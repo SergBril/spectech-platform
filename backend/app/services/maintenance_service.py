@@ -40,23 +40,10 @@ class MaintenanceService:
         Проверяет технику компании и создаёт наряд-заказы
         на плановое ТО при достижении моточасов.
 
-        Логика:
-        1. Найти технику где engine_hours >= next_maintenance_hours
-        2. Проверить, что нет активного scheduled заказа
-        3. Создать заказ автоматически
-        4. Вернуть список созданных заказов
-
-        Args:
-            db: Сессия БД
-            company_id: ID компании
-            user_id: ID пользователя-инициатора
-
-        Returns:
-            Список созданных заказов с деталями
+        ВАЖНО: НЕ делает commit — это ответственность вызывающего кода.
         """
         created_orders = []
 
-        # Найти технику, требующую ТО
         stmt = select(Vehicle).where(
             and_(
                 Vehicle.company_id == company_id,
@@ -71,7 +58,6 @@ class MaintenanceService:
         vehicles = db.scalars(stmt).all()
 
         for vehicle in vehicles:
-            # Проверяем, нет ли уже активного scheduled заказа
             active_scheduled = (
                 db.query(MaintenanceOrder)
                 .filter(
@@ -95,7 +81,6 @@ class MaintenanceService:
                 )
                 continue
 
-            # Определяем приоритет по превышению
             hours_overdue = float(vehicle.engine_hours - vehicle.next_maintenance_hours)
 
             if hours_overdue > 50:
@@ -105,7 +90,6 @@ class MaintenanceService:
             else:
                 priority = MaintenancePriority.medium
 
-            # Создаём наряд-заказ
             order = MaintenanceOrder(
                 order_number=MaintenanceService.generate_order_number(db),
                 vehicle_id=vehicle.id,
@@ -124,7 +108,7 @@ class MaintenanceService:
                 created_by_id=user_id,
             )
             db.add(order)
-            db.flush()  # Получить ID
+            db.flush()  # Получить ID (БЕЗ commit!)
 
             created_orders.append(
                 {
@@ -147,9 +131,9 @@ class MaintenanceService:
             )
 
         if created_orders:
-            db.commit()
+            # ❌ НЕ делаем commit — делает вызывающий код
             logger.info(
-                "Created %d scheduled maintenance orders for company %s",
+                "Created %d scheduled maintenance orders for company %s (waiting for caller commit)",
                 len(created_orders),
                 company_id,
             )
@@ -165,18 +149,7 @@ class MaintenanceService:
     def get_upcoming_maintenance(
         db: Session, company_id: int, hours_threshold: float = 50.0
     ) -> list[dict]:
-        """
-        Возвращает список техники, которая скоро потребует ТО
-        (в пределах threshold моточасов).
-
-        Args:
-            db: Сессия БД
-            company_id: ID компании
-            hours_threshold: За сколько часов до ТО предупреждать
-
-        Returns:
-            Список техники с данными о приближающемся ТО
-        """
+        """Возвращает список техники, которая скоро потребует ТО."""
         stmt = (
             select(Vehicle)
             .where(
@@ -206,6 +179,104 @@ class MaintenanceService:
             }
             for v in vehicles
         ]
+
+    @staticmethod
+    def update_vehicle_engine_hours(
+        db: Session,
+        vehicle_id: int,
+        new_engine_hours: float,
+        auto_check: bool = True,
+    ) -> dict:
+        """
+        Обновляет моточасы техники и опционально проверяет необходимость ТО.
+
+        ВАЖНО: НЕ делает commit — это ответственность вызывающего кода.
+        Все изменения (vehicle + maintenance_orders) должны быть закоммичены вместе.
+        """
+        logger.info(
+            "🔧 update_vehicle_engine_hours CALLED: vehicle_id=%s, new_hours=%.1f",
+            vehicle_id,
+            new_engine_hours,
+        )
+
+        vehicle = db.get(Vehicle, vehicle_id)
+        if not vehicle or vehicle.is_deleted:
+            logger.warning("❌ Vehicle %s not found or deleted", vehicle_id)
+            return {"updated": False, "reason": "vehicle_not_found"}
+
+        old_hours = float(vehicle.engine_hours or 0)
+
+        # Защита от отката моточасов
+        if new_engine_hours < old_hours:
+            logger.debug(
+                "Vehicle %s: skipping engine_hours update (%.1f < %.1f)",
+                vehicle_id,
+                new_engine_hours,
+                old_hours,
+            )
+            return {
+                "updated": False,
+                "reason": "engine_hours_rollback",
+                "old_hours": old_hours,
+                "new_hours": new_engine_hours,
+            }
+
+        # Обновляем моточасы (БЕЗ commit!)
+        vehicle.engine_hours = new_engine_hours
+
+        logger.info(
+            "🚀 Vehicle %s engine_hours updated in session: %.1f → %.1f (waiting for commit)",
+            vehicle_id,
+            old_hours,
+            new_engine_hours,
+        )
+
+        result = {
+            "updated": True,
+            "old_hours": old_hours,
+            "new_hours": new_engine_hours,
+            "maintenance_created": False,
+            "orders": [],
+        }
+
+        # Автопроверка ТО
+        if auto_check and vehicle.company_id:
+            needs_to = (
+                vehicle.next_maintenance_hours is not None
+                and new_engine_hours >= float(vehicle.next_maintenance_hours)
+            )
+
+            if needs_to:
+                logger.info(
+                    "⚠️ Vehicle %s reached TO threshold (%.1f >= %.1f), checking...",
+                    vehicle_id,
+                    new_engine_hours,
+                    vehicle.next_maintenance_hours,
+                )
+
+                from app.models.auth import User
+
+                user = (
+                    db.query(User).filter(User.company_id == vehicle.company_id).first()
+                )
+                user_id = user.id if user else 0
+
+                created = MaintenanceService.check_scheduled_maintenance(
+                    db=db,
+                    company_id=vehicle.company_id,
+                    user_id=user_id,
+                )
+
+                if created:
+                    result["maintenance_created"] = True
+                    result["orders"] = created
+                    logger.info(
+                        "✅ Auto-created %d maintenance order(s) for vehicle %s",
+                        len(created),
+                        vehicle_id,
+                    )
+
+        return result
 
 
 maintenance_service = MaintenanceService()

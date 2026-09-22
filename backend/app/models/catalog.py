@@ -142,7 +142,7 @@ class Vehicle(Base):
         Numeric(10, 2),
         nullable=False,
         default=0,
-        comment="Текущие моточасы техники",
+        comment="Текущие моточасы техники (обновляется GPS-трекером)",
     )
     last_maintenance_hours: Mapped[float | None] = mapped_column(
         Numeric(10, 2),
