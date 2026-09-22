@@ -134,6 +134,35 @@ async def receive_single_gps_point(
 
     _check_vehicle_access(db, point.vehicle_id, company_id)
 
+    # 🆕 ШАГ 1: Обновляем моточасы техники ПЕРЕД сохранением GPS
+    maintenance_result = {"updated": False}
+    if point.engine_hours is not None:
+        try:
+            from app.services.maintenance_service import maintenance_service
+
+            maintenance_result = maintenance_service.update_vehicle_engine_hours(
+                db=db,
+                vehicle_id=point.vehicle_id,
+                new_engine_hours=float(point.engine_hours),
+                auto_check=True,
+            )
+
+            if maintenance_result.get("maintenance_created"):
+                logger.info(
+                    "🔧 Auto-maintenance triggered by GPS for vehicle %s: %s",
+                    point.vehicle_id,
+                    maintenance_result.get("orders"),
+                )
+        except Exception as e:
+            logger.error(
+                "❌ Failed to update engine_hours for vehicle %s: %s: %s",
+                point.vehicle_id,
+                type(e).__name__,
+                str(e),
+                exc_info=True,
+            )
+
+    # 🆕 ШАГ 2: Сохраняем GPS-точку
     gps_point = GpsPoint(
         vehicle_id=point.vehicle_id,
         latitude=point.latitude,
@@ -150,8 +179,9 @@ async def receive_single_gps_point(
     db.commit()
     db.refresh(gps_point)
 
-    logger.info("🚀 GPS point saved. Broadcasting to company_id=%s", company_id)
+    logger.info("🚀 GPS point saved for vehicle %s", point.vehicle_id)
 
+    # 🆕 ШАГ 3: Broadcast GPS точки
     try:
         await manager.broadcast_gps_to_company(
             company_id=company_id,
@@ -181,7 +211,33 @@ async def receive_single_gps_point(
     except Exception as e:
         logger.warning("GPS broadcast failed: %s", e)
 
-    # Проверка правил алертов
+    # 🆕 ШАГ 4: Broadcast уведомления о созданном ТО
+    if maintenance_result.get("maintenance_created"):
+        try:
+            for order_info in maintenance_result["orders"]:
+                await manager.broadcast_alert_to_company(
+                    company_id,
+                    {
+                        "id": 0,
+                        "alert_type": "maintenance_required",
+                        "severity": "warning",
+                        "status": "active",
+                        "vehicle_id": order_info["vehicle_id"],
+                        "title": f"🔧 Требуется ТО: {order_info['vehicle_name']}",
+                        "description": (
+                            f"Создан наряд-заказ {order_info['order_number']}. "
+                            f"Моточасы: {order_info['engine_hours']:.0f}, "
+                            f"превышение: {order_info['hours_overdue']:.0f}ч, "
+                            f"приоритет: {order_info['priority']}"
+                        ),
+                        "occurred_at": datetime.now(UTC).isoformat(),
+                        "maintenance_order_id": order_info["order_id"],
+                    },
+                )
+        except Exception as e:
+            logger.warning("Failed to broadcast maintenance alert: %s", e)
+
+    # Проверка правил алертов (скорость)
     try:
         from datetime import timedelta
 
@@ -259,12 +315,24 @@ async def receive_single_gps_point(
     except Exception as e:
         logger.warning("Alert processing failed: %s", e)
 
-    return {
+    # Формируем ответ
+    response = {
         "status": "ok",
         "id": gps_point.id,
         "vehicle_id": gps_point.vehicle_id,
         "coordinates": [gps_point.latitude, gps_point.longitude],
     }
+
+    # Добавляем информацию об обновлении моточасов и ТО
+    if maintenance_result.get("updated"):
+        response["engine_hours_update"] = {
+            "old": maintenance_result.get("old_hours"),
+            "new": maintenance_result.get("new_hours"),
+        }
+    if maintenance_result.get("maintenance_created"):
+        response["maintenance_created"] = maintenance_result.get("orders", [])
+
+    return response
 
 
 @router.get("/gps/{vehicle_id}", response_model=list[GpsPointRead])
