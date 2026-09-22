@@ -453,3 +453,49 @@ def get_upcoming_maintenance(
         "vehicles_count": len(upcoming),
         "vehicles": upcoming,
     }
+
+
+@router.get("/tco/{vehicle_id}")
+def get_vehicle_tco(
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Расчёт полной стоимости владения (TCO) для конкретной техники."""
+    from sqlalchemy import func
+
+    from app.models.telematics import FuelTransaction
+
+    vehicle = db.get(Vehicle, vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Техника не найдена")
+
+    maint_cost = (
+        db.query(func.coalesce(func.sum(MaintenanceOrder.total_cost), 0))
+        .filter(
+            MaintenanceOrder.vehicle_id == vehicle_id,
+            MaintenanceOrder.status == MaintenanceOrderStatus.completed,
+        )
+        .scalar()
+    )
+
+    fuel_cost = (
+        db.query(func.coalesce(func.sum(FuelTransaction.total_cost), 0))
+        .filter(FuelTransaction.vehicle_id == vehicle_id)
+        .scalar()
+    )
+
+    engine_hours = float(vehicle.engine_hours or 0)
+    total_tco = float(maint_cost) + float(fuel_cost)
+    cost_per_hour = (total_tco / engine_hours) if engine_hours > 0 else 0.0
+
+    return {
+        "vehicle_id": vehicle_id,
+        "vehicle_name": vehicle.name,
+        "engine_hours": engine_hours,
+        "maintenance_cost": float(maint_cost),
+        "fuel_cost": float(fuel_cost),
+        "total_tco": round(total_tco, 2),
+        "cost_per_hour": round(cost_per_hour, 2),
+    }
