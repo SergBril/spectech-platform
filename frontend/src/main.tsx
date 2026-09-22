@@ -18,6 +18,7 @@ import FinancePage from './pages/FinancePage';
 import InvoicesPage from './pages/InvoicesPage';
 import RequestDetailPage from './pages/RequestDetailPage';
 import ActCreatePage from './pages/ActCreatePage';
+import MaintenancePage from './pages/MaintenancePage';
 
 import './index.css';
 
@@ -38,6 +39,7 @@ const AppRoutes = () => {
       <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
+      <Route path="/maintenance" element={<ProtectedRoute><MaintenancePage /></ProtectedRoute>} />
       <Route path="/marketplace" element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />  // ← ДОБАВИТЬ
       <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
       <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
