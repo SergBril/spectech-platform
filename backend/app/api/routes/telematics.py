@@ -672,6 +672,26 @@ def get_fuel_by_vehicle(
     )
 
 
+@router.get("/fuel/analytics/anomalies")
+def detect_fuel_anomalies(
+    vehicle_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Детекция аномалий: сливы, перерасход, дорогие заправки."""
+    from app.services.fuel_service import fuel_service
+
+    if vehicle_id:
+        _check_vehicle_access(db, vehicle_id, company_id)
+
+    return fuel_service.detect_anomalies(
+        db=db,
+        company_id=company_id,
+        vehicle_id=vehicle_id,
+    )
+
+
 # =========================================
 # === Alerts ===
 # =========================================

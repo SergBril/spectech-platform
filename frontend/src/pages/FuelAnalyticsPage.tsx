@@ -18,11 +18,14 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { getFuelAnomalies, FuelAnomaly } from '../api/fuel';
+import { FuelAnomalyAlerts } from '../components/FuelAnomalyAlerts';
 
 export const FuelAnalyticsPage: React.FC = () => {
   const [analytics, setAnalytics] = useState<FuelAnalytics | null>(null);
   const [consumption, setConsumption] = useState<ConsumptionRate[]>([]);
   const [byVehicle, setByVehicle] = useState<FuelByVehicle[]>([]);
+  const [anomalies, setAnomalies] = useState<FuelAnomaly[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,13 +35,15 @@ export const FuelAnalyticsPage: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [analyticsData, consumptionData, byVehicleData] = await Promise.all([
+      const [analyticsData, consumptionData, byVehicleData, anomaliesData] = await Promise.all([
         getFuelAnalytics(),
         getFuelConsumption(),
         getFuelByVehicle(),
+        getFuelAnomalies(),
       ]);
       setAnalytics(analyticsData);
       setConsumption(consumptionData);
+      setAnomalies(anomaliesData.anomalies);
       setByVehicle(byVehicleData);
     } catch (error) {
       console.error('Error loading fuel analytics:', error);
@@ -86,6 +91,16 @@ export const FuelAnalyticsPage: React.FC = () => {
             Аналитика заправок, расхода и стоимости топлива
           </p>
         </div>
+
+        {/* Алерты аномалий */}
+        {anomalies.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-3">
+              🚨 Обнаружено аномалий: {anomalies.length}
+            </h2>
+            <FuelAnomalyAlerts anomalies={anomalies} />
+          </div>
+        )}
 
         {/* Карточки с метриками */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
