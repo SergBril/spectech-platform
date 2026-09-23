@@ -67,3 +67,47 @@ export async function getFuelByVehicle(
   const response = await apiClient.get(`/telematics/fuel/analytics/by-vehicle?${params}`);
   return response.data;
 }
+
+export interface FuelAnomalyDetail {
+  transaction_id?: number;
+  volume?: number;
+  fuel_level_before?: number;
+  fuel_level_after?: number;
+  odometer?: number;
+  comment?: string;
+  actual_liters_per_hour?: number;
+  expected_liters_per_hour?: number;
+  deviation_percent?: number;
+  total_fuel?: number;
+  engine_hours?: number;
+  price_per_liter?: number;
+  avg_price?: number;
+}
+
+export interface FuelAnomaly {
+  type: 'drain' | 'high_consumption' | 'expensive_refuel';
+  severity: 'critical' | 'warning' | 'info';
+  vehicle_id: number;
+  vehicle_name: string;
+  description: string;
+  occurred_at: string | null;
+  details: FuelAnomalyDetail;
+}
+
+export interface FuelAnomaliesResponse {
+  anomalies: FuelAnomaly[];
+  summary: {
+    total_anomalies: number;
+    critical: number;
+    warning: number;
+    info: number;
+  };
+}
+
+export async function getFuelAnomalies(vehicleId?: number): Promise<FuelAnomaliesResponse> {
+  const params = new URLSearchParams();
+  if (vehicleId) params.set('vehicle_id', vehicleId.toString());
+
+  const response = await apiClient.get(`/telematics/fuel/analytics/anomalies?${params}`);
+  return response.data;
+}
