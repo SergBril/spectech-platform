@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
-from app.models.auth import User
+from app.models.auth import User, UserStatus
 from app.models.catalog import Vehicle
 from app.models.maintenance import (
     MaintenanceOrder,
@@ -32,6 +32,7 @@ from app.schemas.maintenance import (
     MaintenanceOrderRead,
     MaintenanceOrderUpdate,
 )
+from app.services.auth_service import decode_access_token
 from app.services.maintenance_service import maintenance_service
 
 router = APIRouter(prefix="/maintenance", tags=["🔧 Maintenance (ТО и Ремонты)"])
@@ -40,7 +41,6 @@ router = APIRouter(prefix="/maintenance", tags=["🔧 Maintenance (ТО и Ре�
 def _generate_order_number(db: Session) -> str:
     """Генерирует уникальный номер наряд-заказа."""
     year = datetime.now(UTC).year
-    # Подсчёт существующих заказов в этом году
     count = (
         db.query(MaintenanceOrder)
         .filter(MaintenanceOrder.order_number.like(f"ТО-{year}-%"))
@@ -62,7 +62,6 @@ def _enrich_response(order: MaintenanceOrder) -> dict:
     """Добавляет вычисляемые поля в ответ."""
     data = MaintenanceOrderRead.model_validate(order).model_dump()
 
-    # Добавляем имена
     if order.vehicle:
         data["vehicle_name"] = order.vehicle.name
     if order.assigned_to:
@@ -107,7 +106,6 @@ def list_maintenance_orders(
     if priority:
         query = query.where(MaintenanceOrder.priority == priority)
 
-    # Подсчёт общего количества
     count_query = select(MaintenanceOrder).where(
         MaintenanceOrder.company_id == company_id
     )
@@ -148,7 +146,6 @@ def create_maintenance_order(
     company_id: int = Depends(get_current_company_id),
 ):
     """Создать новый наряд-заказ."""
-    # Проверить, что техника принадлежит компании
     vehicle = db.get(Vehicle, payload.vehicle_id)
     if not vehicle or vehicle.company_id != company_id:
         raise HTTPException(
@@ -156,7 +153,6 @@ def create_maintenance_order(
             detail="Техника не найдена или не принадлежит компании",
         )
 
-    # Создать наряд-заказ
     order = MaintenanceOrder(
         order_number=_generate_order_number(db),
         vehicle_id=payload.vehicle_id,
@@ -177,9 +173,8 @@ def create_maintenance_order(
         ),
     )
     db.add(order)
-    db.flush()  # Получить ID
+    db.flush()
 
-    # Добавить запчасти
     for part_data in payload.parts:
         part = MaintenancePart(
             maintenance_order_id=order.id,
@@ -193,7 +188,6 @@ def create_maintenance_order(
         )
         db.add(part)
 
-    # Добавить работы
     for work_data in payload.works:
         work = MaintenanceWork(
             maintenance_order_id=order.id,
@@ -207,7 +201,6 @@ def create_maintenance_order(
 
     db.commit()
 
-    # Перезагрузить с связями
     db.refresh(order)
     order = (
         db.query(MaintenanceOrder)
@@ -301,7 +294,6 @@ def update_maintenance_order(
     db.commit()
     db.refresh(order)
 
-    # Перезагрузить с связями
     order = (
         db.query(MaintenanceOrder)
         .options(
@@ -330,14 +322,7 @@ def complete_maintenance_order(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """
-    Завершить наряд-заказ.
-
-    Обновляет:
-    - Статус на 'completed'
-    - Моточасы техники (last_maintenance_hours, next_maintenance_hours)
-    - Общую стоимость обслуживания техники (total_maintenance_cost)
-    """
+    """Завершить наряд-заказ."""
     order = (
         db.query(MaintenanceOrder)
         .options(joinedload(MaintenanceOrder.vehicle))
@@ -360,7 +345,6 @@ def complete_maintenance_order(
             detail="Наряд-заказ уже завершён",
         )
 
-    # Обновить статус
     order.status = MaintenanceOrderStatus.completed
     order.completed_at = datetime.now(UTC)
     order.started_at = order.started_at or datetime.now(UTC)
@@ -374,7 +358,6 @@ def complete_maintenance_order(
     if payload.photos_after is not None:
         order.photos_after = payload.photos_after
 
-    # Обновить данные техники
     vehicle = order.vehicle
     if vehicle and payload.engine_hours_at_completion:
         vehicle.last_maintenance_hours = payload.engine_hours_at_completion
@@ -382,7 +365,6 @@ def complete_maintenance_order(
             payload.engine_hours_at_completion + vehicle.maintenance_interval
         )
 
-    # Обновить общую стоимость обслуживания техники
     if vehicle:
         vehicle.total_maintenance_cost = (
             vehicle.total_maintenance_cost + order.total_cost
@@ -390,7 +372,6 @@ def complete_maintenance_order(
 
     db.commit()
 
-    # Перезагрузить
     order = (
         db.query(MaintenanceOrder)
         .options(
@@ -416,12 +397,7 @@ def check_scheduled_maintenance(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """
-    Проверяет технику компании и создаёт наряд-заказы на плановое ТО
-    при достижении моточасов next_maintenance_hours.
-
-    Возвращает список созданных заказов.
-    """
+    """Проверяет технику и создаёт плановые ТО."""
     created = maintenance_service.check_scheduled_maintenance(
         db=db, company_id=company_id, user_id=current_user.id
     )
@@ -440,16 +416,12 @@ def get_upcoming_maintenance(
         default=50.0,
         ge=1,
         le=500,
-        description="За сколько часов до ТО показывать предупреждение",
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """
-    Возвращает список техники, которой скоро потребуется плановое ТО
-    (в пределах hours_threshold моточасов).
-    """
+    """Список техники, которой скоро потребуется ТО."""
     upcoming = maintenance_service.get_upcoming_maintenance(
         db=db, company_id=company_id, hours_threshold=hours_threshold
     )
@@ -467,7 +439,7 @@ def get_vehicle_tco(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """Расчёт полной стоимости владения (TCO) для конкретной техники."""
+    """Расчёт TCO для техники."""
     from sqlalchemy import func
 
     from app.models.telematics import FuelTransaction
@@ -511,17 +483,36 @@ def download_order_pdf(
     order_id: int,
     token: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
 ):
-    """Скачать PDF наряд-заказа."""
+    """Скачать PDF наряд-заказа (поддержка ?token= для новой вкладки)."""
+    from urllib.parse import quote
+
     from app.services.pdf_service import generate_maintenance_order_pdf
+
+    # === INLINE АУТЕНТИФИКАЦИЯ ===
+    if not token:
+        raise HTTPException(status_code=401, detail="Токен не указан")
+
+    try:
+        payload = decode_access_token(token)
+        user_id = int(payload.get("sub"))
+        user = db.get(User, user_id)
+        if not user or user.status != UserStatus.active:
+            raise HTTPException(status_code=401, detail="Пользователь не найден")
+        company_id = user.company_id
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Токен недействителен. Обновите страницу. ({e})",
+        )
+    # === КОНЕЦ АУТЕНТИФИКАЦИИ ===
 
     order = db.get(MaintenanceOrder, order_id)
     if not order or order.company_id != company_id:
         raise HTTPException(status_code=404, detail="Наряд-заказ не найден")
 
-    # Сериализуем заказ в словарь (для Jinja2)
     order_data = {
         "id": order.id,
         "order_number": order.order_number,
@@ -581,11 +572,7 @@ def download_order_pdf(
         logger.error("PDF generation failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Ошибка генерации PDF: {e}")
 
-    from urllib.parse import quote
-
-    # Чисто ASCII имя (используем ID вместо order_number)
     ascii_filename = f"Maintenance_Order_{order.id}.pdf"
-    # UTF-8 имя по RFC 5987 (с кириллицей)
     utf8_filename = quote(f"Наряд-заказ_{order.order_number}.pdf")
 
     return Response(
@@ -595,3 +582,212 @@ def download_order_pdf(
             "Content-Disposition": f"inline; filename=\"{ascii_filename}\"; filename*=UTF-8''{utf8_filename}",
         },
     )
+
+
+@router.get("/orders/{order_id}/act/pdf")
+def download_act_pdf(
+    order_id: int,
+    token: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Скачать PDF акта выполненных работ."""
+    from urllib.parse import quote
+
+    from app.services.pdf_service import generate_act_maintenance_pdf
+
+    # === INLINE АУТЕНТИФИКАЦИЯ ===
+    if not token:
+        raise HTTPException(status_code=401, detail="Токен не указан")
+
+    try:
+        payload = decode_access_token(token)
+        user_id = int(payload.get("sub"))
+        user = db.get(User, user_id)
+        if not user or user.status != UserStatus.active:
+            raise HTTPException(status_code=401, detail="Пользователь не найден")
+        company_id = user.company_id
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Токен недействителен. Обновите страницу. ({e})",
+        )
+    # === КОНЕЦ АУТЕНТИФИКАЦИИ ===
+
+    order = db.get(MaintenanceOrder, order_id)
+    if not order or order.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Наряд-заказ не найден")
+
+    if order.status != MaintenanceOrderStatus.completed:
+        raise HTTPException(
+            status_code=400, detail="Акт можно создать только для завершённого заказа"
+        )
+
+    vehicle_owner = None
+    if order.vehicle:
+        # Безопасный доступ: пробуем разные варианты имени поля
+        vehicle_owner = (
+            getattr(order.vehicle, "owner_name", None)
+            or getattr(order.vehicle, "contractor_name", None)
+            or "Не указан"
+        )
+
+    order_data = {
+        "id": order.id,
+        "order_number": order.order_number,
+        "vehicle_id": order.vehicle_id,
+        "vehicle_name": order.vehicle.name if order.vehicle else None,
+        "vehicle_owner": vehicle_owner,
+        "company_id": order.company_id,
+        "title": order.title,
+        "description": order.description,
+        "actual_hours": float(order.actual_hours) if order.actual_hours else None,
+        "parts_cost": float(order.parts_cost) if order.parts_cost else 0,
+        "labor_cost": float(order.labor_cost) if order.labor_cost else 0,
+        "total_cost": float(order.total_cost) if order.total_cost else 0,
+        "completed_at": order.completed_at.isoformat() if order.completed_at else "",
+        "parts": [
+            {
+                "name": p.name,
+                "part_number": p.part_number,
+                "quantity": p.quantity,
+                "unit_price": float(p.unit_price) if p.unit_price else 0,
+                "total_price": float(p.total_price) if p.total_price else 0,
+            }
+            for p in (order.parts or [])
+        ],
+        "works": [
+            {
+                "work_type": w.work_type,
+                "description": w.description,
+                "labor_hours": float(w.labor_hours) if w.labor_hours else 0,
+                "hourly_rate": float(w.hourly_rate) if w.hourly_rate else 0,
+                "total_cost": float(w.total_cost) if w.total_cost else 0,
+            }
+            for w in (order.works or [])
+        ],
+    }
+
+    try:
+        pdf_bytes = generate_act_maintenance_pdf(order_data)
+    except Exception as e:
+        logger.error("Act PDF generation failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ошибка генерации PDF акта: {e}")
+
+    ascii_filename = f"Act_{order.id}.pdf"
+    utf8_filename = quote(f"Акт_{order.order_number}.pdf")
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=\"{ascii_filename}\"; filename*=UTF-8''{utf8_filename}",
+        },
+    )
+
+
+@router.post("/orders/{order_id}/send-act")
+async def send_act_by_email(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Отправить акт выполненных работ по email контрагенту."""
+    from app.models.contractor import Contractor
+    from app.services.email_service import email_service
+    from app.services.pdf_service import generate_act_maintenance_pdf
+
+    order = db.get(MaintenanceOrder, order_id)
+    if not order or order.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Наряд-заказ не найден")
+
+    if order.status != MaintenanceOrderStatus.completed:
+        raise HTTPException(
+            status_code=400, detail="Акт можно отправить только для завершённого заказа"
+        )
+
+    contractor = None
+    # Безопасный доступ к owner_id
+    owner_id = getattr(order.vehicle, "owner_id", None) if order.vehicle else None
+    if owner_id:
+        contractor = db.get(Contractor, owner_id)
+
+    if not contractor or not contractor.email:
+        raise HTTPException(
+            status_code=400,
+            detail="У владельца техники не указан email для отправки акта",
+        )
+
+    vehicle_owner = contractor.name if contractor else None
+    order_data = {
+        "order_number": order.order_number,
+        "vehicle_name": order.vehicle.name if order.vehicle else None,
+        "vehicle_owner": vehicle_owner,
+        "title": order.title,
+        "description": order.description,
+        "actual_hours": float(order.actual_hours) if order.actual_hours else None,
+        "parts_cost": float(order.parts_cost) if order.parts_cost else 0,
+        "labor_cost": float(order.labor_cost) if order.labor_cost else 0,
+        "total_cost": float(order.total_cost) if order.total_cost else 0,
+        "completed_at": order.completed_at.isoformat() if order.completed_at else "",
+        "parts": [
+            {
+                "name": p.name,
+                "part_number": p.part_number,
+                "quantity": p.quantity,
+                "unit_price": float(p.unit_price) if p.unit_price else 0,
+                "total_price": float(p.total_price) if p.total_price else 0,
+            }
+            for p in (order.parts or [])
+        ],
+        "works": [
+            {
+                "work_type": w.work_type,
+                "description": w.description,
+                "labor_hours": float(w.labor_hours) if w.labor_hours else 0,
+                "hourly_rate": float(w.hourly_rate) if w.hourly_rate else 0,
+                "total_cost": float(w.total_cost) if w.total_cost else 0,
+            }
+            for w in (order.works or [])
+        ],
+    }
+
+    try:
+        pdf_bytes = generate_act_maintenance_pdf(order_data)
+    except Exception as e:
+        logger.error("Act PDF generation failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ошибка генерации PDF: {e}")
+
+    try:
+        await email_service.send_email(
+            to_email=contractor.email,
+            subject=f"Акт выполненных работ № {order.order_number}",
+            body=f"""Добрый день!
+
+Направляем акт выполненных работ по наряд-заказу № {order.order_number}.
+
+Техника: {order.vehicle.name if order.vehicle else 'N/A'}
+Сумма: {order.total_cost} ₽
+
+С уважением,
+ООО "СпецТехника Про"
+""",
+            attachments=[
+                {
+                    "filename": f"Акт_{order.order_number}.pdf",
+                    "content": pdf_bytes,
+                    "content_type": "application/pdf",
+                }
+            ],
+        )
+    except Exception as e:
+        logger.error("Email sending failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ошибка отправки email: {e}")
+
+    return {
+        "status": "success",
+        "message": f"Акт отправлен на {contractor.email}",
+        "recipient": contractor.email,
+    }

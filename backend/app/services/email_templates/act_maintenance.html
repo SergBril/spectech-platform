@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Акт выполненных работ {{ order.order_number }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+        }
+        body {
+            font-family: "DejaVu Sans", Arial, sans-serif;
+            font-size: 11pt;
+            color: #333;
+            line-height: 1.5;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #059669;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        .company-name {
+            font-size: 18pt;
+            font-weight: bold;
+            color: #047857;
+        }
+        .document-title {
+            font-size: 16pt;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .act-number {
+            font-size: 14pt;
+            color: #666;
+        }
+        .info-grid {
+            display: table;
+            width: 100%;
+            margin-bottom: 25px;
+        }
+        .info-row {
+            display: table-row;
+        }
+        .info-cell {
+            display: table-cell;
+            padding: 8px;
+            background: #f0fdf4;
+            border: 1px solid #d1fae5;
+            width: 50%;
+        }
+        .info-label {
+            font-size: 9pt;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+        .info-value {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #1e293b;
+        }
+        .section-title {
+            font-size: 13pt;
+            font-weight: bold;
+            color: #047857;
+            margin-top: 25px;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #d1fae5;
+            padding-bottom: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            font-size: 10pt;
+        }
+        thead {
+            background: #059669;
+            color: white;
+        }
+        th {
+            padding: 8px;
+            text-align: left;
+            font-weight: bold;
+        }
+        td {
+            padding: 8px;
+            border-bottom: 1px solid #d1fae5;
+        }
+        tr:nth-child(even) {
+            background: #f0fdf4;
+        }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .totals {
+            background: #f0fdf4;
+            border: 2px solid #059669;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .total-row {
+            padding: 5px 0;
+            overflow: hidden;
+        }
+        .total-label {
+            float: left;
+        }
+        .total-value {
+            float: right;
+            font-weight: bold;
+        }
+        .total-grand {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #047857;
+            border-top: 2px solid #059669;
+            padding-top: 10px;
+            margin-top: 10px;
+        }
+        .signature-block {
+            margin-top: 40px;
+            overflow: hidden;
+        }
+        .signature-left {
+            float: left;
+            width: 45%;
+        }
+        .signature-right {
+            float: right;
+            width: 45%;
+        }
+        .signature-line {
+            border-top: 1px solid #333;
+            padding-top: 5px;
+            margin-top: 30px;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #d1fae5;
+            font-size: 9pt;
+            color: #64748b;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="company-name">ООО "СпецТехника Про"</div>
+        <div class="document-title">АКТ ВЫПОЛНЕННЫХ РАБОТ</div>
+        <div class="act-number">№ {{ order.order_number }}</div>
+    </div>
+
+    <div class="info-grid">
+        <div class="info-row">
+            <div class="info-cell">
+                <div class="info-label">Заказчик</div>
+                <div class="info-value">{{ order.vehicle_owner or 'Не указан' }}</div>
+            </div>
+            <div class="info-cell">
+                <div class="info-label">Исполнитель</div>
+                <div class="info-value">ООО "СпецТехника Про"</div>
+            </div>
+        </div>
+        <div class="info-row">
+            <div class="info-cell">
+                <div class="info-label">Техника</div>
+                <div class="info-value">{{ order.vehicle_name or 'ID: ' ~ order.vehicle_id }}</div>
+            </div>
+            <div class="info-cell">
+                <div class="info-label">Дата выполнения</div>
+                <div class="info-value">{{ order.completed_at[:10] if order.completed_at else 'N/A' }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-title">📝 Выполненные работы</div>
+    <p><strong>{{ order.title }}</strong></p>
+    {% if order.description %}<p>{{ order.description }}</p>{% endif %}
+
+    {% if order.parts and order.parts|length > 0 %}
+    <div class="section-title">🔩 Использованные запчасти</div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 5%">№</th>
+                <th style="width: 35%">Название</th>
+                <th style="width: 15%">Артикул</th>
+                <th class="text-center" style="width: 10%">Кол-во</th>
+                <th class="text-right" style="width: 15%">Цена</th>
+                <th class="text-right" style="width: 20%">Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for part in order.parts %}
+            <tr>
+                <td class="text-center">{{ loop.index }}</td>
+                <td>{{ part.name }}</td>
+                <td>{{ part.part_number or '—' }}</td>
+                <td class="text-center">{{ part.quantity }}</td>
+                <td class="text-right">{{ "{:,.0f}".format(part.unit_price|float) }} ₽</td>
+                <td class="text-right"><strong>{{ "{:,.0f}".format(part.total_price|float) }} ₽</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {% if order.works and order.works|length > 0 %}
+    <div class="section-title">🔨 Выполненные работы</div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 5%">№</th>
+                <th style="width: 35%">Вид работы</th>
+                <th class="text-center" style="width: 15%">Часы</th>
+                <th class="text-right" style="width: 20%">Ставка/ч</th>
+                <th class="text-right" style="width: 25%">Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for work in order.works %}
+            <tr>
+                <td class="text-center">{{ loop.index }}</td>
+                <td>
+                    {{ work.work_type }}
+                    {% if work.description %}<br><small style="color: #64748b;">{{ work.description }}</small>{% endif %}
+                </td>
+                <td class="text-center">{{ work.labor_hours }} ч</td>
+                <td class="text-right">{{ "{:,.0f}".format(work.hourly_rate|float) }} ₽</td>
+                <td class="text-right"><strong>{{ "{:,.0f}".format(work.total_cost|float) }} ₽</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <div class="totals">
+        <div class="total-row">
+            <span class="total-label">Запчасти:</span>
+            <span class="total-value">{{ "{:,.0f}".format(order.parts_cost|float) }} ₽</span>
+        </div>
+        <div class="total-row">
+            <span class="total-label">Работы:</span>
+            <span class="total-value">{{ "{:,.0f}".format(order.labor_cost|float) }} ₽</span>
+        </div>
+        {% if order.actual_hours %}
+        <div class="total-row">
+            <span class="total-label">Фактические часы:</span>
+            <span class="total-value">{{ order.actual_hours }} ч</span>
+        </div>
+        {% endif %}
+        <div class="total-row total-grand">
+            <span class="total-label">ИТОГО К ОПЛАТЕ:</span>
+            <span class="total-value">{{ "{:,.0f}".format(order.total_cost|float) }} ₽</span>
+        </div>
+    </div>
+
+    <div class="signature-block">
+        <div class="signature-left">
+            <div class="signature-line">
+                <strong>Исполнитель:</strong> ______________________ / ______________________
+            </div>
+        </div>
+        <div class="signature-right">
+            <div class="signature-line">
+                <strong>Заказчик:</strong> ______________________ / ______________________
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Документ сгенерирован автоматически в системе "СпецТехника Про" {{ now.strftime('%d.%m.%Y %H:%M') }}</p>
+    </div>
+</body>
+</html>
