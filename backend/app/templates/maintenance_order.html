@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Наряд-заказ {{ order.order_number }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+            @bottom-center {
+                content: "Страница " counter(page) " из " counter(pages);
+                font-size: 9pt;
+                color: #666;
+            }
+        }
+
+        body {
+            font-family: "DejaVu Sans", Arial, sans-serif;
+            font-size: 11pt;
+            color: #333;
+            line-height: 1.5;
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .company-name {
+            font-size: 18pt;
+            font-weight: bold;
+            color: #1e40af;
+            margin-bottom: 5px;
+        }
+
+        .document-title {
+            font-size: 16pt;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .order-number {
+            font-size: 14pt;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .info-block {
+            background: #f8fafc;
+            padding: 12px;
+            border-left: 4px solid #2563eb;
+        }
+
+        .info-label {
+            font-size: 9pt;
+            color: #64748b;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+
+        .info-value {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #1e293b;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 10pt;
+        }
+
+        .status-planned { background: #dbeafe; color: #1e40af; }
+        .status-in_progress { background: #fef3c7; color: #92400e; }
+        .status-completed { background: #d1fae5; color: #065f46; }
+        .status-cancelled { background: #f3f4f6; color: #374151; }
+
+        .section-title {
+            font-size: 13pt;
+            font-weight: bold;
+            color: #1e40af;
+            margin-top: 25px;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            font-size: 10pt;
+        }
+
+        thead {
+            background: #1e40af;
+            color: white;
+        }
+
+        th {
+            padding: 8px;
+            text-align: left;
+            font-weight: bold;
+        }
+
+        td {
+            padding: 8px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        tr:nth-child(even) {
+            background: #f9fafb;
+        }
+
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+
+        .totals {
+            background: linear-gradient(to right, #eff6ff, #dbeafe);
+            border: 2px solid #2563eb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+
+        .total-grand {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #1e40af;
+            border-top: 2px solid #2563eb;
+            padding-top: 10px;
+            margin-top: 10px;
+        }
+
+        .description-box {
+            background: #f8fafc;
+            padding: 12px;
+            border-left: 3px solid #94a3b8;
+            margin: 15px 0;
+        }
+
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #e5e7eb;
+            font-size: 9pt;
+            color: #64748b;
+        }
+
+        .signature-block {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 40px;
+        }
+
+        .signature-line {
+            border-top: 1px solid #333;
+            padding-top: 5px;
+            font-size: 10pt;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="company-name">ООО "СпецТехника Про"</div>
+        <div class="document-title">НАРЯД-ЗАКАЗ</div>
+        <div class="order-number">№ {{ order.order_number }}</div>
+    </div>
+
+    <div class="info-grid">
+        <div class="info-block">
+            <div class="info-label">Статус</div>
+            <div class="info-value">
+                <span class="status-badge status-{{ order.status }}">
+                    {% if order.status == 'planned' %}📋 Запланирован
+                    {% elif order.status == 'in_progress' %}🔧 В работе
+                    {% elif order.status == 'completed' %}✅ Завершён
+                    {% else %}❌ Отменён{% endif %}
+                </span>
+            </div>
+        </div>
+        <div class="info-block">
+            <div class="info-label">Приоритет</div>
+            <div class="info-value">
+                {% if order.priority == 'critical' %}🔴 Критичный
+                {% elif order.priority == 'high' %}🟠 Высокий
+                {% elif order.priority == 'medium' %}🟡 Средний
+                {% else %}🟢 Низкий{% endif %}
+            </div>
+        </div>
+        <div class="info-block">
+            <div class="info-label">Техника</div>
+            <div class="info-value">{{ order.vehicle_name or 'ID: ' ~ order.vehicle_id }}</div>
+        </div>
+        <div class="info-block">
+            <div class="info-label">Тип работ</div>
+            <div class="info-value">
+                {% if order.order_type == 'scheduled' %}🔧 Плановое ТО
+                {% elif order.order_type == 'repair' %}🛠️ Ремонт
+                {% elif order.order_type == 'diagnostic' %}🔍 Диагностика
+                {% else %}👁️ Осмотр{% endif %}
+            </div>
+        </div>
+        <div class="info-block">
+            <div class="info-label">Дата создания</div>
+            <div class="info-value">{{ order.created_at[:10] }}</div>
+        </div>
+        <div class="info-block">
+            <div class="info-label">Создал</div>
+            <div class="info-value">{{ order.created_by_name or 'Система' }}</div>
+        </div>
+    </div>
+
+    <div class="section-title">📝 Название работ</div>
+    <p><strong>{{ order.title }}</strong></p>
+
+    {% if order.description %}
+    <div class="description-box">
+        <div class="info-label">Описание</div>
+        <p>{{ order.description }}</p>
+    </div>
+    {% endif %}
+
+    {% if order.parts and order.parts|length > 0 %}
+    <div class="section-title">🔩 Запчасти ({{ order.parts|length }} поз.)</div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 5%">№</th>
+                <th style="width: 35%">Название</th>
+                <th style="width: 15%">Артикул</th>
+                <th class="text-center" style="width: 10%">Кол-во</th>
+                <th class="text-right" style="width: 15%">Цена</th>
+                <th class="text-right" style="width: 20%">Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for part in order.parts %}
+            <tr>
+                <td class="text-center">{{ loop.index }}</td>
+                <td>{{ part.name }}</td>
+                <td>{{ part.part_number or '—' }}</td>
+                <td class="text-center">{{ part.quantity }}</td>
+                <td class="text-right">{{ "{:,.0f}".format(part.unit_price|float) }} ₽</td>
+                <td class="text-right"><strong>{{ "{:,.0f}".format(part.total_price|float) }} ₽</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {% if order.works and order.works|length > 0 %}
+    <div class="section-title">🔨 Работы ({{ order.works|length }} поз.)</div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 5%">№</th>
+                <th style="width: 35%">Вид работы</th>
+                <th class="text-center" style="width: 15%">Часы</th>
+                <th class="text-right" style="width: 20%">Ставка/ч</th>
+                <th class="text-right" style="width: 25%">Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for work in order.works %}
+            <tr>
+                <td class="text-center">{{ loop.index }}</td>
+                <td>
+                    {{ work.work_type }}
+                    {% if work.description %}<br><small style="color: #64748b;">{{ work.description }}</small>{% endif %}
+                </td>
+                <td class="text-center">{{ work.labor_hours }} ч</td>
+                <td class="text-right">{{ "{:,.0f}".format(work.hourly_rate|float) }} ₽</td>
+                <td class="text-right"><strong>{{ "{:,.0f}".format(work.total_cost|float) }} ₽</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <div class="totals">
+        <div class="total-row">
+            <span>Запчасти:</span>
+            <span><strong>{{ "{:,.0f}".format(order.parts_cost|float) }} ₽</strong></span>
+        </div>
+        <div class="total-row">
+            <span>Работы:</span>
+            <span><strong>{{ "{:,.0f}".format(order.labor_cost|float) }} ₽</strong></span>
+        </div>
+        {% if order.planned_hours %}
+        <div class="total-row">
+            <span>Плановые часы:</span>
+            <span><strong>{{ order.planned_hours }} ч</strong></span>
+        </div>
+        {% endif %}
+        {% if order.actual_hours %}
+        <div class="total-row">
+            <span>Фактические часы:</span>
+            <span><strong>{{ order.actual_hours }} ч</strong></span>
+        </div>
+        {% endif %}
+        <div class="total-row total-grand">
+            <span>ИТОГО:</span>
+            <span>{{ "{:,.0f}".format(order.total_cost|float) }} ₽</span>
+        </div>
+    </div>
+
+    {% if order.notes %}
+    <div class="description-box" style="margin-top: 25px;">
+        <div class="info-label">📝 Заметки</div>
+        <p>{{ order.notes }}</p>
+    </div>
+    {% endif %}
+
+    <div class="signature-block">
+        <div>
+            <div class="signature-line">
+                <strong>Исполнитель:</strong> ______________________ / ______________________
+            </div>
+        </div>
+        <div>
+            <div class="signature-line">
+                <strong>Заказчик:</strong> ______________________ / ______________________
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Документ сгенерирован автоматически в системе "СпецТехника Про" {{ order.created_at[:10] }}</p>
+    </div>
+</body>
+</html>
