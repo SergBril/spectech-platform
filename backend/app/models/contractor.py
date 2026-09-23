@@ -14,6 +14,7 @@ class Contractor(Base):
 
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     inn: Mapped[str | None] = mapped_column(String(20), nullable=True)
     kpp: Mapped[str | None] = mapped_column(String(20), nullable=True)
     ogrn: Mapped[str | None] = mapped_column(String(20), nullable=True)

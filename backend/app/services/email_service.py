@@ -74,44 +74,121 @@ class EmailService:
 
         return msg
 
-    def send_email(
+    async def send_email(
         self,
         to_email: str,
         subject: str,
-        template_name: str,
-        context: dict,
-        attachments: list[Path] | None = None,
+        body: str | None = None,
+        html_body: str | None = None,
+        template_name: str | None = None,
+        context: dict | None = None,
+        attachments: list | None = None,
     ) -> bool:
-        """Отправляет email используя шаблон."""
-        if not self.enabled:
-            logger.info(f"📧 Email skipped (disabled): {subject} -> {to_email}")
-            return False
+        """
+        Универсальный метод отправки email через SMTP.
 
+        Поддерживает два режима:
+        1. Прямой: body + html_body
+        2. Шаблонный: template_name + context (для обратной совместимости)
+
+        Args:
+            to_email: Email получателя
+            subject: Тема письма
+            body: Текстовое тело письма (режим 1)
+            html_body: HTML-версия (режим 1)
+            template_name: Имя Jinja2 шаблона (режим 2)
+            context: Контекст для шаблона (режим 2)
+            attachments: Список вложений
+                - Режим 1: [{"filename": "...", "content": bytes}]
+                - Режим 2: [Path, Path, ...]
+
+        Returns:
+            True если отправлено успешно
+        """
         try:
-            context_with_defaults = {
-                "frontend_url": settings.FRONTEND_URL,
-                **context,
-            }
-            html_body = self._render_template(template_name, context_with_defaults)
-            msg = self._create_message(to_email, subject, html_body, attachments)
+            # === Режим 2: Шаблонный (старая архитектура) ===
+            if template_name and context:
+                html_body = self._render_template(template_name, context)
+                # Преобразуем Path-вложения в dict-формат
+                if attachments:
+                    converted_attachments = []
+                    for file_path in attachments:
+                        if isinstance(file_path, Path) and file_path.exists():
+                            with open(file_path, "rb") as f:
+                                converted_attachments.append(
+                                    {
+                                        "filename": file_path.name,
+                                        "content": f.read(),
+                                    }
+                                )
+                    attachments = converted_attachments
 
-            if settings.SMTP_USE_TLS:
-                context_ssl = ssl.create_default_context()
-                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-                    server.starttls(context=context_ssl)
-                    if settings.SMTP_USER and settings.SMTP_PASSWORD:
-                        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                    server.send_message(msg)
+            # === Режим 1: Прямой (новая архитектура) ===
+            elif not body and not html_body:
+                raise ValueError(
+                    "Either (body/html_body) or (template_name/context) must be provided"
+                )
+
+            # Создаём MIME-сообщение
+            msg = MIMEMultipart("mixed")
+            msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
+            msg["To"] = to_email
+            msg["Subject"] = subject
+
+            # Текстовое тело
+            if body:
+                msg.attach(MIMEText(body, "plain", "utf-8"))
+
+            # HTML-версия
+            if html_body:
+                msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+            # Вложения (всегда в dict-формате)
+            if attachments:
+                for attachment in attachments:
+                    if isinstance(attachment, dict):
+                        part = MIMEBase("application", "octet-stream")
+                        part.set_payload(attachment["content"])
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            "Content-Disposition",
+                            f'attachment; filename="{attachment["filename"]}"',
+                        )
+                        msg.attach(part)
+
+            # === КЛЮЧЕВОЕ: правильный выбор SMTP-соединения ===
+            port = settings.SMTP_PORT
+
+            if port == 465:
+                # Mail.ru, Яндекс: SSL с самого начала (НЕ starttls!)
+                server = smtplib.SMTP_SSL(
+                    settings.SMTP_HOST,
+                    port,
+                    timeout=30,
+                    context=ssl.create_default_context(),
+                )
             else:
-                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-                    server.send_message(msg)
+                # Gmail (587): обычный SMTP + STARTTLS
+                server = smtplib.SMTP(settings.SMTP_HOST, port, timeout=30)
+                server.ehlo()
+                if port == 587:
+                    server.starttls(context=ssl.create_default_context())
+                    server.ehlo()
 
-            logger.info(f"✅ Email sent: {subject} -> {to_email}")
+            # Аутентификация
+            if settings.SMTP_USER and settings.SMTP_PASSWORD:
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+
+            # Отправка
+            server.send_message(msg)
+            server.quit()
+
+            logger.info(f"✅ Email sent to {to_email}: {subject}")
             return True
 
         except Exception as e:
-            logger.error(f"❌ Failed to send email to {to_email}: {e}")
-            return False
+            logger.error(f"❌ Failed to send email to {to_email}: {e}", exc_info=True)
+            raise
 
     def send_invoice_created(
         self, invoice, client_email: str, client_name: str

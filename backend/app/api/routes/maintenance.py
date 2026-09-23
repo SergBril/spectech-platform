@@ -709,12 +709,15 @@ async def send_act_by_email(
         )
 
     contractor = None
-    # Безопасный доступ к owner_id
-    owner_id = getattr(order.vehicle, "owner_id", None) if order.vehicle else None
-    if owner_id:
-        contractor = db.get(Contractor, owner_id)
+    if order.vehicle:
+        owner_id = getattr(order.vehicle, "owner_id", None)
+        if owner_id:
+            contractor = db.get(Contractor, owner_id)
 
-    if not contractor or not contractor.email:
+    # Безопасный доступ к email (поле может отсутствовать в модели)
+    contractor_email = getattr(contractor, "email", None) if contractor else None
+
+    if not contractor or not contractor_email:
         raise HTTPException(
             status_code=400,
             detail="У владельца техники не указан email для отправки акта",
@@ -762,7 +765,7 @@ async def send_act_by_email(
 
     try:
         await email_service.send_email(
-            to_email=contractor.email,
+            to_email=contractor_email,
             subject=f"Акт выполненных работ № {order.order_number}",
             body=f"""Добрый день!
 
@@ -773,6 +776,35 @@ async def send_act_by_email(
 
 С уважением,
 ООО "СпецТехника Про"
+""",
+            html_body=f"""
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    <h2 style="color: #059669;">Акт выполненных работ</h2>
+    <p>Добрый день!</p>
+    <p>Направляем акт выполненных работ по наряд-заказу <strong>№ {order.order_number}</strong>.</p>
+
+    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <tr style="background: #f0fdf4;">
+            <td style="padding: 10px; border: 1px solid #d1fae5;"><strong>Техника:</strong></td>
+            <td style="padding: 10px; border: 1px solid #d1fae5;">{order.vehicle.name if order.vehicle else 'N/A'}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px; border: 1px solid #d1fae5;"><strong>Сумма:</strong></td>
+            <td style="padding: 10px; border: 1px solid #d1fae5;">{order.total_cost} ₽</td>
+        </tr>
+        <tr style="background: #f0fdf4;">
+            <td style="padding: 10px; border: 1px solid #d1fae5;"><strong>Дата:</strong></td>
+            <td style="padding: 10px; border: 1px solid #d1fae5;">{order.completed_at.strftime('%d.%m.%Y') if order.completed_at else 'N/A'}</td>
+        </tr>
+    </table>
+
+    <p>Акт во вложении (PDF).</p>
+
+    <p style="margin-top: 30px; color: #64748b; font-size: 12px;">
+        С уважением,<br>
+        <strong>ООО "СпецТехника Про"</strong>
+    </p>
+</div>
 """,
             attachments=[
                 {
@@ -788,6 +820,6 @@ async def send_act_by_email(
 
     return {
         "status": "success",
-        "message": f"Акт отправлен на {contractor.email}",
-        "recipient": contractor.email,
+        "message": f"Акт отправлен на {contractor_email}",
+        "recipient": contractor_email,
     }
