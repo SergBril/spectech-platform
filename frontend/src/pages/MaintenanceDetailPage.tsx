@@ -131,6 +131,28 @@ export const MaintenanceDetailPage: React.FC = () => {
               </button>
             )}
           </div>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => {
+                const token = localStorage.getItem('access_token');
+                window.open(
+                  `http://localhost:8000/api/v1/maintenance/orders/${order.id}/pdf?token=${token}`,
+                  '_blank'
+                );
+              }}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
+            >
+              📄 Скачать PDF
+            </button>
+            {isActive && (
+              <button
+                onClick={() => setShowCompleteModal(true)}
+                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm font-medium"
+              >
+                ✅ Завершить ТО
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Основная информация */}

@@ -1,9 +1,14 @@
 """🔧 CRUD endpoints для ТО и Ремонтов."""
 
+import logging
+
+logger = logging.getLogger("spectech.maintenance")
+
 from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -499,3 +504,94 @@ def get_vehicle_tco(
         "total_tco": round(total_tco, 2),
         "cost_per_hour": round(cost_per_hour, 2),
     }
+
+
+@router.get("/orders/{order_id}/pdf")
+def download_order_pdf(
+    order_id: int,
+    token: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Скачать PDF наряд-заказа."""
+    from app.services.pdf_service import generate_maintenance_order_pdf
+
+    order = db.get(MaintenanceOrder, order_id)
+    if not order or order.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Наряд-заказ не найден")
+
+    # Сериализуем заказ в словарь (для Jinja2)
+    order_data = {
+        "id": order.id,
+        "order_number": order.order_number,
+        "vehicle_id": order.vehicle_id,
+        "vehicle_name": order.vehicle.name if order.vehicle else None,
+        "company_id": order.company_id,
+        "order_type": (
+            order.order_type.value
+            if hasattr(order.order_type, "value")
+            else order.order_type
+        ),
+        "status": (
+            order.status.value if hasattr(order.status, "value") else order.status
+        ),
+        "priority": (
+            order.priority.value if hasattr(order.priority, "value") else order.priority
+        ),
+        "title": order.title,
+        "description": order.description,
+        "planned_hours": float(order.planned_hours) if order.planned_hours else None,
+        "actual_hours": float(order.actual_hours) if order.actual_hours else None,
+        "parts_cost": float(order.parts_cost) if order.parts_cost else 0,
+        "labor_cost": float(order.labor_cost) if order.labor_cost else 0,
+        "total_cost": float(order.total_cost) if order.total_cost else 0,
+        "notes": order.notes,
+        "created_at": order.created_at.isoformat() if order.created_at else "",
+        "created_by_name": (
+            order.created_by.full_name
+            if order.created_by and hasattr(order.created_by, "full_name")
+            else "Система"
+        ),
+        "parts": [
+            {
+                "name": p.name,
+                "part_number": p.part_number,
+                "quantity": p.quantity,
+                "unit_price": float(p.unit_price) if p.unit_price else 0,
+                "total_price": float(p.total_price) if p.total_price else 0,
+            }
+            for p in (order.parts or [])
+        ],
+        "works": [
+            {
+                "work_type": w.work_type,
+                "description": w.description,
+                "labor_hours": float(w.labor_hours) if w.labor_hours else 0,
+                "hourly_rate": float(w.hourly_rate) if w.hourly_rate else 0,
+                "total_cost": float(w.total_cost) if w.total_cost else 0,
+            }
+            for w in (order.works or [])
+        ],
+    }
+
+    try:
+        pdf_bytes = generate_maintenance_order_pdf(order_data)
+    except Exception as e:
+        logger.error("PDF generation failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ошибка генерации PDF: {e}")
+
+    from urllib.parse import quote
+
+    # Чисто ASCII имя (используем ID вместо order_number)
+    ascii_filename = f"Maintenance_Order_{order.id}.pdf"
+    # UTF-8 имя по RFC 5987 (с кириллицей)
+    utf8_filename = quote(f"Наряд-заказ_{order.order_number}.pdf")
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=\"{ascii_filename}\"; filename*=UTF-8''{utf8_filename}",
+        },
+    )
