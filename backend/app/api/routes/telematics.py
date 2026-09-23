@@ -609,6 +609,69 @@ def get_fuel_stats(
     }
 
 
+@router.get("/fuel/analytics")
+def get_fuel_analytics(
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    vehicle_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Расширенная аналитика топлива за период."""
+    from app.services.fuel_service import fuel_service
+
+    if vehicle_id:
+        _check_vehicle_access(db, vehicle_id, company_id)
+
+    return fuel_service.get_fuel_analytics(
+        db=db,
+        company_id=company_id,
+        date_from=date_from,
+        date_to=date_to,
+        vehicle_id=vehicle_id,
+    )
+
+
+@router.get("/fuel/analytics/consumption")
+def get_fuel_consumption(
+    vehicle_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Расход топлива на моточас и на 100км по технике."""
+    from app.services.fuel_service import fuel_service
+
+    if vehicle_id:
+        _check_vehicle_access(db, vehicle_id, company_id)
+
+    return fuel_service.get_consumption_rates(
+        db=db,
+        company_id=company_id,
+        vehicle_id=vehicle_id,
+    )
+
+
+@router.get("/fuel/analytics/by-vehicle")
+def get_fuel_by_vehicle(
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Статистика топлива по каждой технике (для графиков)."""
+    from app.services.fuel_service import fuel_service
+
+    return fuel_service.get_fuel_by_vehicle(
+        db=db,
+        company_id=company_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
 # =========================================
 # === Alerts ===
 # =========================================
