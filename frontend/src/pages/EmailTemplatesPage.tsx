@@ -397,7 +397,7 @@ export const EmailTemplatesPage: React.FC = () => {
                   placeholder="client1@example.com&#10;client2@example.com&#10;client3@example.com"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Получателей: {bulkEmails.split(/[\n,;]+/).filter((e) => e.trim() && e.includes('@')).length}
+                  Получателей: {bulkEmails.split(/[\n,;\s]+/).filter((e) => e && e.includes('@')).length}
                 </p>
               </div>
 
