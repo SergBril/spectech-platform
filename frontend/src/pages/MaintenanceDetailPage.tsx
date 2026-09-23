@@ -108,7 +108,7 @@ export const MaintenanceDetailPage: React.FC = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="mb-6 flex justify-between items-start">
+        <div className="mb-6 flex justify-between items-start flex-wrap gap-4">
           <div>
             <button
               onClick={() => navigate('/maintenance')}
@@ -121,17 +121,8 @@ export const MaintenanceDetailPage: React.FC = () => {
             </h1>
             <p className="text-gray-600 mt-1">{order.title}</p>
           </div>
-          <div className="flex space-x-2">
-            {isActive && (
-              <button
-                onClick={() => setShowCompleteModal(true)}
-                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm font-medium"
-              >
-                ✅ Завершить ТО
-              </button>
-            )}
-          </div>
-          <div className="flex space-x-2">
+
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => {
                 const token = localStorage.getItem('access_token');
@@ -142,8 +133,55 @@ export const MaintenanceDetailPage: React.FC = () => {
               }}
               className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
             >
-              📄 Скачать PDF
+              📄 Наряд-заказ
             </button>
+
+            {order.status === 'completed' && (
+              <>
+                <button
+                  onClick={() => {
+                    const token = localStorage.getItem('access_token');
+                    window.open(
+                      `http://localhost:8000/api/v1/maintenance/orders/${order.id}/act/pdf?token=${token}`,
+                      '_blank'
+                    );
+                  }}
+                  className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm font-medium"
+                >
+                  📄 Акт работ
+                </button>
+
+                <button
+                  onClick={async () => {
+                    if (!window.confirm('Отправить акт выполненных работ клиенту по email?')) return;
+                    try {
+                      const response = await fetch(
+                        `http://localhost:8000/api/v1/maintenance/orders/${order.id}/send-act`,
+                        {
+                          method: 'POST',
+                          headers: {
+                            Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+                            'Content-Type': 'application/json',
+                          },
+                        }
+                      );
+                      const data = await response.json();
+                      if (response.ok) {
+                        toast.success(`✅ Акт отправлен на ${data.recipient}`);
+                      } else {
+                        toast.error(`❌ ${data.detail || 'Ошибка отправки'}`);
+                      }
+                    } catch (error) {
+                      toast.error('Ошибка сети при отправке email');
+                    }
+                  }}
+                  className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 text-sm font-medium"
+                >
+                  📧 Отправить клиенту
+                </button>
+              </>
+            )}
+
             {isActive && (
               <button
                 onClick={() => setShowCompleteModal(true)}

@@ -459,3 +459,47 @@ def generate_maintenance_order_pdf(order_data: dict, local_path: str = None) -> 
         </html>
         """
         return fallback_html.encode("utf-8")
+
+
+def generate_act_maintenance_pdf(order_data: dict, local_path: str = None) -> bytes:
+    """
+    Генерирует PDF акта выполненных работ для наряд-заказа.
+    """
+    try:
+        import os
+
+        from jinja2 import Environment, FileSystemLoader
+        from weasyprint import HTML
+
+        templates_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "email_templates"
+        )
+
+        env = Environment(loader=FileSystemLoader(templates_dir))
+        template = env.get_template("act_maintenance.html")
+
+        context = {
+            "order": order_data,
+            "format_money": _format_money,
+            "now": datetime.now(),
+        }
+
+        html_content = template.render(**context)
+        pdf_bytes = HTML(string=html_content).write_pdf()
+        return pdf_bytes
+
+    except Exception as e:
+        print(f"❌ Ошибка генерации PDF акта: {e}")
+        fallback_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="UTF-8"><title>Акт {order_data.get('order_number', '')}</title></head>
+        <body>
+            <h1>АКТ ВЫПОЛНЕННЫХ РАБОТ № {order_data.get('order_number', '')}</h1>
+            <p><strong>Техника:</strong> {order_data.get('vehicle_name', 'N/A')}</p>
+            <p><strong>Итого:</strong> {order_data.get('total_cost', 0)} ₽</p>
+            <p style="color: red;">⚠️ PDF-генерация недоступна: {e}</p>
+        </body>
+        </html>
+        """
+        return fallback_html.encode("utf-8")
