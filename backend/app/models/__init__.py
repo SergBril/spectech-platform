@@ -13,6 +13,7 @@ from app.models.contractor import Contractor, Employee, EmployeeCertificate
 
 # Dispatch
 from app.models.dispatch import Request, RequestAssignment, RequestStatusLog
+from app.models.email import EmailLog, EmailStatus, EmailTemplate, EmailTemplateType
 
 # Finance
 from app.models.finance import (

@@ -2,7 +2,10 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CompanySwitcher } from './CompanySwitcher';
-import { Fuel } from 'lucide-react';
+import {
+  Home, FileText, Truck, Fuel, Wrench, ShoppingBag,
+  Users, DollarSign, Receipt, Bell, LogOut, Mail
+} from 'lucide-react';
 import NotificationBell from './NotificationBell';
 
 interface NavItem {
@@ -20,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/contractors', label: 'Контрагенты' },
   { path: '/finance', label: 'Финансы' },
   { path: '/invoices', label: 'Счета' },
+  { path: '/email-templates', label: '📧 Email', icon: Mail },
 ];
 
 export const Navbar: React.FC = () => {
