@@ -79,6 +79,17 @@ class Settings(BaseSettings):
     MINIO_ROOT_PASSWORD: str = "minioadmin"  # Должно совпадать с docker-compose
     MINIO_BUCKET: str = "spectech-docs"
 
+    # SMTP настройки
+    SMTP_HOST: str = Field(default="smtp.yandex.ru", description="SMTP server host")
+    SMTP_PORT: int = Field(default=465, description="SMTP server port")
+    SMTP_USER: str = Field(default="", description="SMTP username")
+    SMTP_PASSWORD: str = Field(default="", description="SMTP password")
+    SMTP_FROM_EMAIL: str = Field(
+        default="noreply@spectech.dev", description="From email"
+    )
+    SMTP_FROM_NAME: str = Field(default="СпецТехника Про", description="From name")
+    SMTP_USE_TLS: bool = Field(default=True, description="Use TLS/SSL")
+
     # Sentry
     sentry_dsn: str | None = None
     environment: str = "development"
