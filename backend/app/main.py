@@ -23,6 +23,8 @@ from app.api.routes import (
     companies,
     contractors,
     debug,
+    email_bulk,
+    email_templates,
     export,
     files,
     invoices,
@@ -196,6 +198,8 @@ app.include_router(public.router, prefix="/api/v1", tags=["🌐 Public (Марк
 app.include_router(
     maintenance.router, prefix="/api/v1", tags=["🔧 Maintenance (ТО и Ремонты)"]
 )
+app.include_router(email_templates.router)
+app.include_router(email_bulk.router)
 
 
 # 6. Кастомизация OpenAPI
