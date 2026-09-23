@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CompanySwitcher } from './CompanySwitcher';
+import { Fuel } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 
 interface NavItem {
@@ -13,6 +14,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/', label: 'Дашборд' },
   { path: '/requests', label: 'Заявки' },
   { path: '/vehicles', label: 'Техника' },
+  { path: '/fuel/analytics', label: '⛽ Топливо', icon: Fuel },
   { path: '/maintenance', label: '🔧 ТО и Ремонты' },
   { path: '/marketplace', label: '🎯 Маркетплейс' },  // ← ДОБАВИТЬ
   { path: '/contractors', label: 'Контрагенты' },

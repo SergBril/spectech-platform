@@ -22,6 +22,7 @@ import MaintenancePage from './pages/MaintenancePage';
 import MaintenanceDetailPage from './pages/MaintenanceDetailPage';
 import MaintenanceCreatePage from './pages/MaintenanceCreatePage';
 import MaintenanceAnalyticsPage from './pages/MaintenanceAnalyticsPage';
+import FuelAnalyticsPage from './pages/FuelAnalyticsPage';
 
 import './index.css';
 
@@ -46,6 +47,7 @@ const AppRoutes = () => {
       <Route path="/maintenance/new" element={<ProtectedRoute><MaintenanceCreatePage /></ProtectedRoute>} />
       <Route path="/maintenance/:id" element={<ProtectedRoute><MaintenanceDetailPage /></ProtectedRoute>} />
       <Route path="/maintenance/analytics" element={<ProtectedRoute><MaintenanceAnalyticsPage /></ProtectedRoute>} />
+      <Route path="/fuel/analytics" element={<ProtectedRoute><FuelAnalyticsPage /></ProtectedRoute>} />
       <Route path="/marketplace" element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />  // ← ДОБАВИТЬ
       <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
       <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
