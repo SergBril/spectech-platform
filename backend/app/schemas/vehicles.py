@@ -2,6 +2,7 @@
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -67,8 +68,38 @@ class VehicleBase(BaseModel):
     )
     category_id: int | None = Field(
         None,
-        description="ID категории техники",
-        examples=[1],
+        description="ID категории техники (level=1)",
+        examples=[12],
+    )
+    # 🆕 Новые поля для каталога
+    subcategory_id: int | None = Field(
+        None,
+        description="ID подкатегории техники (level=2)",
+        examples=[23],
+    )
+    make: str | None = Field(
+        None,
+        max_length=100,
+        description="Марка (CAT, Komatsu, Liebherr)",
+        examples=["CAT"],
+    )
+    model: str | None = Field(
+        None,
+        max_length=100,
+        description="Модель (320D, PC200)",
+        examples=["320D"],
+    )
+    vin: str | None = Field(
+        None,
+        max_length=50,
+        description="VIN / серийный номер",
+        examples=["XTA21099042512345"],
+    )
+    # 🆕 Динамические атрибуты из каталога
+    attributes: dict[str, Any] | None = Field(
+        default_factory=dict,
+        description="Значения динамических атрибутов: {slug: value}",
+        examples=[{"weight": 20.5, "boom_type": "Телескопическая"}],
     )
     owner_id: int | None = Field(
         None,
@@ -91,77 +122,57 @@ class VehicleCreate(VehicleBase):
 class VehicleUpdate(BaseModel):
     """Схема для обновления техники (все поля опциональны)."""
 
-    id_type: str | None = Field(
-        None,
-        min_length=1,
-        max_length=50,
-        description="Тип идентификатора",
-    )
-    id_value: str | None = Field(
-        None,
-        min_length=1,
-        max_length=255,
-        description="Значение идентификатора",
-    )
-    name: str | None = Field(
-        None,
-        min_length=1,
-        max_length=255,
-        description="Название техники",
-    )
-    year: int | None = Field(
-        None,
-        ge=1900,
-        le=2100,
-        description="Год выпуска",
-    )
-    status: str | None = Field(
-        None,
-        description="Статус техники",
-    )
-    fuel_norm_per_hour: Decimal | None = Field(
-        None,
-        ge=0,
-        description="Норма расхода топлива в час",
-    )
-    fuel_norm_per_100km: Decimal | None = Field(
-        None,
-        ge=0,
-        description="Норма расхода топлива на 100 км",
-    )
-    psm_number: str | None = Field(
-        None,
-        max_length=100,
-        description="Номер ПСМ",
-    )
-    osago_expiry_date: date | None = Field(
-        None,
-        description="Дата окончания ОСАГО",
-    )
-    category_id: int | None = Field(
-        None,
-        description="ID категории техники",
-    )
-    owner_id: int | None = Field(
-        None,
-        description="ID владельца",
-    )
-    company_id: int | None = Field(
-        None,
-        description="ID компании",
-    )
+    id_type: str | None = Field(None, min_length=1, max_length=50)
+    id_value: str | None = Field(None, min_length=1, max_length=255)
+    name: str | None = Field(None, min_length=1, max_length=255)
+    year: int | None = Field(None, ge=1900, le=2100)
+    status: str | None = None
+    fuel_norm_per_hour: Decimal | None = Field(None, ge=0)
+    fuel_norm_per_100km: Decimal | None = Field(None, ge=0)
+    psm_number: str | None = Field(None, max_length=100)
+    osago_expiry_date: date | None = None
+    category_id: int | None = None
+    subcategory_id: int | None = None
+    make: str | None = Field(None, max_length=100)
+    model: str | None = Field(None, max_length=100)
+    vin: str | None = Field(None, max_length=50)
+    attributes: dict[str, Any] | None = None
+    owner_id: int | None = None
+    company_id: int | None = None
+
+
+class AttributeValueRead(BaseModel):
+    """Значение атрибута для чтения (заполняется вручную в _enrich_vehicle)."""
+
+    slug: str | None = None
+    name: str | None = None
+    data_type: str | None = None
+    unit: str | None = None
+    value_text: str | None = None
+    value_number: float | None = None
+    value_boolean: bool | None = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VehicleRead(VehicleBase):
     """Схема для чтения техники."""
 
     id: int = Field(..., description="ID техники", examples=[1])
-    is_custom_number: bool = Field(
-        False,
-        description="Пользовательский номер",
-    )
+    is_custom_number: bool = Field(False, description="Пользовательский номер")
     created_at: datetime = Field(..., description="Дата создания")
     updated_at: datetime = Field(..., description="Дата обновления")
+
+    # 🆕 Подкатегория и атрибуты
+    subcategory_id: int | None = None
+    make: str | None = None
+    model: str | None = None
+    vin: str | None = None
+    attribute_values: list[Any] = Field(default_factory=list)
+
+    # Связанные названия (заполняются в endpoint через enrichment)
+    category_name: str | None = None
+    subcategory_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

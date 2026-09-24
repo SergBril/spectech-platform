@@ -2,7 +2,13 @@
 from app.models.auth import User, UserSession
 
 # Catalog
-from app.models.catalog import Category, Vehicle
+from app.models.catalog import (
+    Category,
+    EquipmentAttributeDefinition,
+    EquipmentAttributeOption,
+    EquipmentAttributeValue,
+    Vehicle,
+)
 from app.models.chat import ChatMessage, ChatParticipant, RequestChat  # noqa: F401
 
 # Company
@@ -57,6 +63,9 @@ __all__ = [
     # Catalog
     "Category",
     "Vehicle",
+    "EquipmentAttributeDefinition",
+    "EquipmentAttributeOption",
+    "EquipmentAttributeValue",
     # Contractor
     "Contractor",
     "Employee",

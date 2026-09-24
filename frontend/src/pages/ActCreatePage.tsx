@@ -30,7 +30,7 @@ export const ActCreatePage: React.FC = () => {
     total_amount: '0.00',
     comment: '',
     tax_system: 'osno',
-    vat_rate: '20',
+    vat_rate: '22',
     is_vat_included: true,
   });
 
@@ -97,7 +97,7 @@ export const ActCreatePage: React.FC = () => {
     setFormData((prev) => ({
       ...prev,
       tax_system: newSystem,
-      vat_rate: newSystem !== 'osno' ? '0' : prev.vat_rate === '0' ? '20' : prev.vat_rate,
+      vat_rate: newSystem !== 'osno' ? '0' : prev.vat_rate === '0' ? '22' : prev.vat_rate,
     }));
   };
 
@@ -114,7 +114,7 @@ export const ActCreatePage: React.FC = () => {
         const contractor = contractors.find((c) => c.id === id);
         if (contractor?.tax_system) {
           newData.tax_system = contractor.tax_system;
-          newData.vat_rate = contractor.tax_system !== 'osno' ? '0' : '20';
+          newData.vat_rate = contractor.tax_system !== 'osno' ? '0' : '22';
         }
       }
 

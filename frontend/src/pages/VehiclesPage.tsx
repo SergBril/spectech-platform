@@ -30,8 +30,8 @@ export const VehiclesPage: React.FC = () => {
     try {
       setIsLoading(true);
       const response = await vehiclesApi.list();
-      setVehicles(response.data.items);
-      setTotal(response.data.total);
+      setVehicles(response.items);
+      setTotal(response.total);
       setError('');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Ошибка загрузки техники');
@@ -139,8 +139,10 @@ export const VehiclesPage: React.FC = () => {
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Название</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Тип ID</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Номер</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Категория</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Подкатегория</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Марка/Модель</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Год</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
@@ -151,8 +153,19 @@ export const VehiclesPage: React.FC = () => {
                     <tr key={vehicle.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vehicle.id}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{vehicle.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vehicle.id_type}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vehicle.id_value}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {(vehicle as any).category_name || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {(vehicle as any).subcategory_name || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {[
+                          (vehicle as any).make,
+                          (vehicle as any).model,
+                        ].filter(Boolean).join(' ') || '-'}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vehicle.year || '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(vehicle.status)}`}>

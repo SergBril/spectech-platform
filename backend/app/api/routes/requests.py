@@ -23,13 +23,50 @@ def list_requests(
     company_id: int = Depends(get_current_company_id),
 ):
     """Список заявок (только своей компании)."""
-    stmt = select(Request).where(Request.company_id == company_id)
+    from app.models.catalog import Category, Vehicle
+    from app.models.contractor import Contractor
+
+    stmt = (
+        select(Request)
+        .outerjoin(Contractor, Request.client_id == Contractor.id)
+        .outerjoin(Category, Request.vehicle_category_id == Category.id)
+        .outerjoin(Vehicle, Request.assigned_vehicle_id == Vehicle.id)
+        .where(Request.company_id == company_id)
+    )
     if status_filter:
         stmt = stmt.where(Request.status == status_filter)
     if client_id:
         stmt = stmt.where(Request.client_id == client_id)
     stmt = stmt.order_by(Request.created_at.desc()).offset(offset).limit(limit)
-    return db.scalars(stmt).all()
+
+    requests_list = db.scalars(stmt).all()
+
+    # 🆕 Enrichment: добавляем client_name, vehicle_category_name
+    enriched = []
+    for req in requests_list:
+        data = RequestRead.model_validate(req).model_dump()
+
+        # Имя клиента
+        if req.client_id:
+            contractor = db.get(Contractor, req.client_id)
+            if contractor:
+                data["client_name"] = contractor.name
+
+        # Название категории техники
+        if req.vehicle_category_id:
+            category = db.get(Category, req.vehicle_category_id)
+            if category:
+                data["vehicle_category_name"] = category.name
+
+        # Назначенная техника
+        if req.assigned_vehicle_id:
+            vehicle = db.get(Vehicle, req.assigned_vehicle_id)
+            if vehicle:
+                data["assigned_vehicle_name"] = vehicle.name
+
+        enriched.append(data)
+
+    return enriched
 
 
 @router.post("", response_model=RequestRead, status_code=201)
@@ -77,10 +114,32 @@ def get_request(
     company_id: int = Depends(get_current_company_id),
 ):
     """Получить заявку по ID (только своей компании)."""
+    from app.models.catalog import Category, Vehicle
+    from app.models.contractor import Contractor
+
     request = db.get(Request, request_id)
     if not request or request.company_id != company_id:
         raise HTTPException(status_code=404, detail="Request not found")
-    return request
+
+    data = RequestRead.model_validate(request).model_dump()
+
+    # Enrichment
+    if request.client_id:
+        contractor = db.get(Contractor, request.client_id)
+        if contractor:
+            data["client_name"] = contractor.name
+
+    if request.vehicle_category_id:
+        category = db.get(Category, request.vehicle_category_id)
+        if category:
+            data["vehicle_category_name"] = category.name
+
+    if request.assigned_vehicle_id:
+        vehicle = db.get(Vehicle, request.assigned_vehicle_id)
+        if vehicle:
+            data["assigned_vehicle_name"] = vehicle.name
+
+    return data
 
 
 @router.post("/{request_id}/assign", response_model=RequestRead)

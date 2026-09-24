@@ -38,7 +38,7 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
 
   // Налоги
   const [taxSystem, setTaxSystem] = useState(act?.tax_system || 'osno');
-  const [vatRate, setVatRate] = useState(act?.vat_rate?.toString() || '20');
+  const [vatRate, setVatRate] = useState(act?.vat_rate?.toString() || '22');
   const [isVatIncluded, setIsVatIncluded] = useState(act?.is_vat_included ?? true);
 
   useEffect(() => {
@@ -94,7 +94,7 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
     if (newSystem !== 'osno') {
       setVatRate('0');
     } else if (vatRate === '0') {
-      setVatRate('20');
+      setVatRate('22');
     }
   };
 
@@ -108,7 +108,7 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
     const contractor = contractors.find((c) => c.id === parseInt(contractorId));
     if (contractor?.tax_system) {
       setTaxSystem(contractor.tax_system);
-      setVatRate(contractor.tax_system !== 'osno' ? '0' : '20');
+      setVatRate(contractor.tax_system !== 'osno' ? '0' : '22');
     }
   };
 

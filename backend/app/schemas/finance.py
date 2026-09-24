@@ -43,11 +43,11 @@ class InvoiceCreate(BaseModel):
         description="Система налогообложения (osno, usn_6, usn_15, patent, npd)",
     )
     vat_rate: Decimal | None = Field(
-        default=Decimal("20.00"),
+        default=Decimal("22.00"),
         ge=0,
         le=100,
         decimal_places=2,
-        description="Ставка НДС (%)",
+        description="Ставка НДС (%, 22% с января 2026)",
     )
     is_vat_included: bool = Field(
         default=True,
@@ -102,7 +102,7 @@ class ActCreate(BaseModel):
         default=TaxSystem.OSNO.value, description="Система налогообложения"
     )
     vat_rate: Decimal | None = Field(
-        default=Decimal("20.00"), description="Ставка НДС (%)"
+        default=Decimal("22.00"), description="Ставка НДС (%, 22% с января 2026)"
     )
     is_vat_included: bool = Field(default=True, description="НДС включён в сумму")
 
@@ -113,6 +113,8 @@ class ActRead(BaseModel):
     request_id: int
     client_id: int
     total_amount: Decimal
+    vat_amount: Decimal | None = None  # 🆕 Добавить
+    vat_rate: Decimal | None = None  # 🆕 Добавить
     act_date: date
     status: str
     signed_by_client_at: datetime | None = None

@@ -172,6 +172,22 @@ export const FinancePage: React.FC = () => {
     }
   };
 
+  // 🆕 Скачать счёт-фактуру (только для ОСНО с НДС)
+  const handleDownloadInvoiceFacture = async (act: Act) => {
+    try {
+      const blob = await financeApi.downloadInvoiceFacturePdf(act.id);
+      downloadBlob(blob, `SF-${act.document_number}.pdf`);
+      showToast.success('✅ Счёт-фактура скачана');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      if (typeof detail === 'string' && detail.includes('ОСНО')) {
+        showToast.error('❌ Счёт-фактура доступна только для ОСНО');
+      } else {
+        showToast.error('Ошибка: ' + (detail || err.message));
+      }
+    }
+  };
+
   const handleSaveInvoice = async (data: any) => {
     try {
       if (editingInvoice) {
@@ -547,7 +563,17 @@ export const FinancePage: React.FC = () => {
                                   </span>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-                                  <button onClick={() => handleDownloadPdf('act', act.id, act.document_number)} className="text-purple-600 hover:text-purple-900" title="PDF">📄</button>
+                                  <button onClick={() => handleDownloadPdf('act', act.id, act.document_number)} className="text-purple-600 hover:text-purple-900" title="Акт PDF">📄</button>
+                                  {/* 🆕 Кнопка "Счёт-фактура" — только для ОСНО с НДС */}
+                                  {act.tax_system === 'osno' && parseFloat(act.vat_rate || '0') > 0 && (
+                                    <button
+                                      onClick={() => handleDownloadInvoiceFacture(act)}
+                                      className="text-orange-600 hover:text-orange-900"
+                                      title="Счёт-фактура (для ОСНО)"
+                                    >
+                                      🧾
+                                    </button>
+                                  )}
                                   {act.status === 'draft' && canEdit && (
                                     <>
                                       <button onClick={() => setEditingAct(act)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>

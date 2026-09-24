@@ -155,6 +155,22 @@ export const RequestDetailPage: React.FC = () => {
     }
   };
 
+  // 🆕 Скачать счёт-фактуру
+  const handleDownloadInvoiceFacture = async (act: Act) => {
+    try {
+      const blob = await financeApi.downloadInvoiceFacturePdf(act.id);
+      downloadBlob(blob, `SF-${act.document_number || `act-${act.id}`}.pdf`);
+      showToast.success('Счёт-фактура скачана');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      if (typeof detail === 'string' && detail.includes('ОСНО')) {
+        showToast.error('Счёт-фактура доступна только для ОСНО');
+      } else {
+        showToast.error('Ошибка: ' + (detail || err.message));
+      }
+    }
+  };
+
   const handleCreateInvoice = () => navigate(`/invoices?new=1&request_id=${request?.id}`);
 
   const handleExportReport = async () => {
@@ -241,6 +257,39 @@ export const RequestDetailPage: React.FC = () => {
               {request.comment && (<div className="bg-gray-50 p-3 rounded md:col-span-2 lg:col-span-3"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💬 Комментарий</dt><dd className="text-gray-900">{request.comment}</dd></div>)}
             </dl>
           </div>
+
+          {/* 🆕 === ПРИВЯЗАННАЯ ТЕХНИКА === */}
+          {(request as any).assigned_vehicle_name || request.vehicle_category_id ? (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">🚜 Техника</h3>
+              <dl className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                <div className="bg-gray-50 p-3 rounded">
+                  <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">📂 Категория</dt>
+                  <dd className="text-gray-900 font-medium">
+                    {(request as any).vehicle_category_name || '—'}
+                  </dd>
+                </div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">🚜 Назначена</dt>
+                  <dd className="text-gray-900 font-medium">
+                    {(request as any).assigned_vehicle_name || '—'}
+                  </dd>
+                </div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">👷 Оператор</dt>
+                  <dd className="text-gray-900 font-medium">
+                    {(request as any).assigned_operator_name || '—'}
+                  </dd>
+                </div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">👤 Клиент</dt>
+                  <dd className="text-gray-900 font-medium">
+                    {(request as any).client_name || '—'}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          ) : null}
 
           {/* === СЧЕТА === */}
           <div className="bg-white rounded-lg shadow p-6">
@@ -362,10 +411,20 @@ export const RequestDetailPage: React.FC = () => {
                           <button
                             onClick={() => handleDownloadActPdf(act)}
                             className="text-purple-600 hover:text-purple-900"
-                            title="Скачать PDF"
+                            title="Акт PDF"
                           >
-                            📥 PDF
+                            📄 Акт
                           </button>
+                          {/* 🆕 Кнопка счёт-фактуры (только ОСНО с НДС) */}
+                          {act.tax_system === 'osno' && parseFloat(act.vat_rate || '0') > 0 && (
+                            <button
+                              onClick={() => handleDownloadInvoiceFacture(act)}
+                              className="text-orange-600 hover:text-orange-900"
+                              title="Счёт-фактура (ОСНО)"
+                            >
+                              🧾 СФ
+                            </button>
+                          )}
                           <FileUploadButton
                             fileCategory="act_pdf"
                             options={{ act_id: act.id }}

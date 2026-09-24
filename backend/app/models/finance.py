@@ -153,6 +153,15 @@ class Act(Base):
         Numeric(14, 2), default=0, nullable=False
     )
 
+    # 🆕 Сумма НДС (вычисляемая)
+    vat_amount: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2),
+        default=0,
+        server_default="0",
+        nullable=False,
+        comment="Сумма НДС",
+    )
+
     # 🆕 Новые поля для систем налогообложения
     tax_system: Mapped[str] = mapped_column(
         String(20),

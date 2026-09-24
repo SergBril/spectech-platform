@@ -193,6 +193,13 @@ export const financeApi = {
     return response.data;
   },
 
+  async downloadInvoiceFacturePdf(actId: number): Promise<Blob> {
+    const response = await apiClient.get(`/acts/${actId}/invoice-facture`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
   // === Acts ===
   async getActs(params?: { status?: ActStatus; limit?: number; offset?: number }): Promise<Act[]> {
     const response = await apiClient.get<Act[]>('/acts', { params });

@@ -2,25 +2,46 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <title>Счёт {{ invoice.document_number }}</title>
     <style>
-        body { font-family: Arial, sans-serif; }
-        h1 { color: #333; }
-        table { width: 100%; border-collapse: collapse; }
+        body { font-family: Arial, sans-serif; font-size: 12px; }
+        h1 { color: #333; font-size: 18px; margin-bottom: 10px; }
+        h2 { color: #555; font-size: 14px; margin-top: 20px; }
+        .header { margin-bottom: 20px; }
+        .info-row { margin: 5px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        .total-section { margin-top: 20px; text-align: right; }
+        .total-row { margin: 5px 0; font-size: 14px; }
+        .total-final { font-size: 16px; font-weight: bold; color: #333; }
+        .vat-info { color: #666; font-size: 11px; margin-top: 5px; }
     </style>
 </head>
 <body>
-    <h1>Счёт {{ invoice.document_number }}</h1>
-    <p><strong>Дата:</strong> {{ invoice.invoice_date }}</p>
-    <p><strong>Срок оплаты:</strong> {{ invoice.due_date }}</p>
+    <div class="header">
+        <h1>Счёт на оплату № {{ invoice.document_number }}</h1>
+        <div class="info-row"><strong>Дата:</strong> {{ invoice.invoice_date }}</div>
+        {% if invoice.due_date %}
+        <div class="info-row"><strong>Срок оплаты:</strong> {{ invoice.due_date }}</div>
+        {% endif %}
+        <div class="info-row"><strong>Система налогообложения:</strong> {{ invoice.tax_system | upper }}</div>
+    </div>
+
+    {% if contractor %}
+    <h2>Клиент</h2>
+    <div class="info-row"><strong>{{ contractor.name }}</strong></div>
+    {% if contractor.inn %}<div class="info-row">ИНН: {{ contractor.inn }}</div>{% endif %}
+    {% endif %}
 
     <h2>Позиции</h2>
     <table>
         <thead>
             <tr>
+                <th>№</th>
                 <th>Описание</th>
                 <th>Кол-во</th>
+                <th>Ед.</th>
                 <th>Цена</th>
                 <th>Сумма</th>
             </tr>
@@ -28,16 +49,33 @@
         <tbody>
             {% for item in invoice.items %}
             <tr>
+                <td>{{ loop.index }}</td>
                 <td>{{ item.description }}</td>
                 <td>{{ item.quantity }}</td>
-                <td>{{ item.unit_price }} ₽</td>
-                <td>{{ item.amount }} ₽</td>
+                <td>{{ item.unit }}</td>
+                <td>{{ "%.2f" | format(item.unit_price|float) }} ₽</td>
+                <td>{{ "%.2f" | format(item.amount|float) }} ₽</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 
-    <h3>Итого: {{ invoice.total }} ₽</h3>
-    <p>НДС ({{ invoice.vat_rate }}%): {{ invoice.vat_amount }} ₽</p>
+    <div class="total-section">
+        <div class="total-row">Сумма без НДС: <strong>{{ "%.2f" | format((invoice.subtotal|float) - (invoice.vat_amount|float)) }} ₽</strong></div>
+        {% if invoice.vat_rate and invoice.vat_rate|float > 0 %}
+        <div class="total-row">НДС ({{ invoice.vat_rate }}%): <strong>{{ "%.2f" | format(invoice.vat_amount|float) }} ₽</strong></div>
+        {% else %}
+        <div class="total-row vat-info">Без НДС ({{ invoice.tax_system | upper }})</div>
+        {% endif %}
+        <div class="total-row total-final">ИТОГО: {{ "%.2f" | format(invoice.total|float) }} ₽</div>
+        {% if invoice.is_vat_included %}
+        <div class="vat-info">(НДС включён в сумму)</div>
+        {% endif %}
+    </div>
+
+    {% if invoice.comment %}
+    <h2>Комментарий</h2>
+    <p>{{ invoice.comment }}</p>
+    {% endif %}
 </body>
 </html>

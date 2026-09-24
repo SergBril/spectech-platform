@@ -79,6 +79,9 @@ services:
       SMTP_FROM_NAME: СпецТехника Про
       SMTP_USE_TLS: "false"
       FRONTEND_URL: http://localhost:8080
+      # 🆕 DaData API
+      DADATA_API_KEY: ${DADATA_API_KEY}
+      DADATA_TOKEN: ${DADATA_TOKEN}
     volumes:
       - uploads_data:/app/uploads
       - logs_data:/app/logs

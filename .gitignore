@@ -122,3 +122,4 @@ update_client.sql
 
 # Marketing demo videos (generated artifacts)
 marketing/demo-videos/output/
+logs.txt

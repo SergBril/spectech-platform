@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { Contractor, ContractorCreate, ContractorUpdate, BankDetails } from '../api/contractors';
+import { InnSearchInput } from './InnSearchInput';
 
 interface Props {
   contractor: Contractor | null;
@@ -48,6 +49,34 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
       correspondent_account: '',
     }
   );
+  // 🆕 Обработчик автозаполнения из DaData
+  const handleInnFound = (data: any) => {
+    setFormData({
+      ...formData,
+      name: data.name || formData.name,
+      inn: data.inn || formData.inn,
+      kpp: data.kpp || formData.kpp,
+      ogrn: data.ogrn || formData.ogrn,
+      legal_address: data.address || formData.legal_address,
+    });
+
+    // Заполняем банковские реквизиты, если они пришли
+    if (data.bank_name || data.bank_bik || data.bank_account) {
+      setBankDetails({
+        account: data.bank_account || bankDetails.account,
+        bank_name: data.bank_name || bankDetails.bank_name,
+        bik: data.bank_bik || bankDetails.bik,
+        correspondent_account: data.bank_correspondent_account || bankDetails.correspondent_account,
+      });
+    }
+  };
+
+  // 🆕 Обработчик найденного дубликата
+  const handleDuplicateFound = (existingId: number, existingName: string) => {
+    if (confirm(`Контрагент "${existingName}" уже существует. Закрыть форму?`)) {
+      onClose();
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,18 +180,17 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">ИНН</label>
-                    <input
-                      type="text"
-                      value={formData.inn}
-                      onChange={(e) => setFormData({ ...formData, inn: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                      placeholder="7712345678"
-                      maxLength={12}
-                    />
-                  </div>
+                {/* 🆕 ИНН с поиском на отдельной строке */}
+                <InnSearchInput
+                  inn={formData.inn}
+                  onInnChange={(inn) => setFormData({ ...formData, inn })}
+                  onFound={handleInnFound}
+                  onDuplicateFound={handleDuplicateFound}
+                  disabled={!!contractor}
+                />
+
+                {/* КПП и ОГРН в гриде */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">КПП</label>
                     <input
@@ -185,8 +213,7 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
                       maxLength={15}
                     />
                   </div>
-                </div>
-              </div>
+                </div>              </div>
             )}
 
             {/* Tab: Адреса */}
