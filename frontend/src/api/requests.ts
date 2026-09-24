@@ -50,6 +50,11 @@ export interface Request {
   priority: Priority | string;
   comment: string | null;
   created_at: string;
+  // 🆕 Enrichment поля
+  client_name?: string | null;
+  vehicle_category_name?: string | null;
+  assigned_vehicle_name?: string | null;
+  assigned_operator_name?: string | null;
 }
 
 export interface RequestCreate {

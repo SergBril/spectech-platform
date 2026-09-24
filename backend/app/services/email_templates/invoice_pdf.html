@@ -252,23 +252,33 @@
             <span>{{ "{:,.2f}".format((invoice.subtotal or 0) | float).replace(',', ' ') }} ₽</span>
         </div>
 
-        {# === НДС в зависимости от системы налогообложения === #}
-        {% if invoice.tax_system == 'osno' and invoice.vat_rate and invoice.vat_rate | float > 0 %}
-            <div class="total-row">
-                <span>НДС ({{ invoice.vat_rate }}%):</span>
-                <span>{{ "{:,.2f}".format((invoice.vat_amount or 0) | float).replace(',', ' ') }} ₽</span>
-            </div>
+    {# === НДС в зависимости от системы налогообложения === #}
+    {% if invoice.tax_system == 'osno' and invoice.vat_rate and invoice.vat_rate | float > 0 %}
+        {% if invoice.is_vat_included %}
+        <div class="total-row" style="font-size: 9pt; color: #666; font-style: italic;">
+            <span>НДС включён в стоимость</span>
+        </div>
         {% else %}
-            <div class="total-row">
-                <span>НДС:</span>
-                <span>Без НДС
-                    {% if invoice.tax_system == 'usn_6' %}(УСН "Доходы"){% endif %}
-                    {% if invoice.tax_system == 'usn_15' %}(УСН "Доходы-Расходы"){% endif %}
-                    {% if invoice.tax_system == 'patent' %}(Патент){% endif %}
-                    {% if invoice.tax_system == 'npd' %}(НПД / Самозанятый){% endif %}
-                </span>
-            </div>
+        <div class="total-row" style="font-size: 9pt; color: #666; font-style: italic;">
+            <span>НДС начисляется сверху</span>
+        </div>
         {% endif %}
+
+        <div class="total-row">
+            <span>НДС ({{ invoice.vat_rate }}%):</span>
+            <span>{{ "{:,.2f}".format((invoice.vat_amount or 0) | float).replace(',', ' ') }} ₽</span>
+        </div>
+    {% else %}
+        <div class="total-row">
+            <span>НДС:</span>
+            <span>Без НДС
+                {% if invoice.tax_system == 'usn_6' %}(УСН "Доходы"){% endif %}
+                {% if invoice.tax_system == 'usn_15' %}(УСН "Доходы-Расходы"){% endif %}
+                {% if invoice.tax_system == 'patent' %}(Патент){% endif %}
+                {% if invoice.tax_system == 'npd' %}(НПД / Самозанятый){% endif %}
+            </span>
+        </div>
+    {% endif %}
 
         <div class="total-row grand">
             <span>Всего к оплате:</span>

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user
+from app.core.constants import TaxSystem
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.contractor import Contractor
@@ -53,6 +54,32 @@ def create_act(
 ):
     """Создать акт выполненных работ (для своей компании)."""
     import traceback
+    from decimal import ROUND_HALF_UP, Decimal
+
+    # 💰 Расчёт НДС
+    vat_rate = payload.vat_rate or Decimal("0")
+    is_vat_included = payload.is_vat_included
+    tax_system = payload.tax_system
+
+    # Для УСН/Патент/НПД НДС = 0
+    if tax_system != TaxSystem.OSNO.value:
+        vat_rate = Decimal("0")
+
+    total_amount = payload.total_amount
+    vat_amount = Decimal("0")
+
+    if vat_rate > 0:
+        if is_vat_included:
+            # НДС уже включён в сумму: vat = total * rate / (100 + rate)
+            vat_amount = (
+                total_amount * vat_rate / (Decimal("100") + vat_rate)
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        else:
+            # НДС начисляется сверху: vat = total * rate / 100
+            vat_amount = (total_amount * vat_rate / Decimal("100")).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            total_amount = total_amount + vat_amount
 
     act = Act(
         document_number=generate_document_number(db, "ACT"),
@@ -60,7 +87,11 @@ def create_act(
         client_id=payload.client_id,
         company_id=company_id,
         act_date=payload.act_date,
-        total_amount=payload.total_amount,
+        total_amount=total_amount,
+        vat_amount=vat_amount,
+        vat_rate=vat_rate,
+        is_vat_included=is_vat_included,
+        tax_system=tax_system,
         status=DocumentStatus.draft,
         comment=payload.comment,
         created_by=current_user.id,
@@ -69,7 +100,10 @@ def create_act(
     db.commit()
     db.refresh(act)
 
-    logger.info(f"✅ Act {act.document_number} created by user {current_user.email}")
+    logger.info(
+        f"✅ Act {act.document_number} created by user {current_user.email} "
+        f"(total={total_amount}, vat={vat_amount}, rate={vat_rate}%)"
+    )
 
     # 🎨 Автогенерация PDF
     try:
@@ -129,6 +163,8 @@ def update_act(
     company_id: int = Depends(get_current_company_id),
 ):
     """Обновить акт (только своей компании, только draft)."""
+    from decimal import ROUND_HALF_UP, Decimal
+
     act = db.get(Act, act_id)
     if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
@@ -139,10 +175,34 @@ def update_act(
             detail=f"Only draft acts can be edited. Current status: {act.status}",
         )
 
+    # 💰 Пересчёт НДС
+    vat_rate = payload.vat_rate or Decimal("0")
+    tax_system = payload.tax_system
+    if tax_system != TaxSystem.OSNO.value:
+        vat_rate = Decimal("0")
+
+    total_amount = payload.total_amount
+    vat_amount = Decimal("0")
+
+    if vat_rate > 0:
+        if payload.is_vat_included:
+            vat_amount = (
+                total_amount * vat_rate / (Decimal("100") + vat_rate)
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        else:
+            vat_amount = (total_amount * vat_rate / Decimal("100")).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            total_amount = total_amount + vat_amount
+
     act.request_id = payload.request_id
     act.client_id = payload.client_id
     act.act_date = payload.act_date
-    act.total_amount = payload.total_amount
+    act.total_amount = total_amount
+    act.vat_amount = vat_amount
+    act.vat_rate = vat_rate
+    act.is_vat_included = payload.is_vat_included
+    act.tax_system = tax_system
     act.comment = payload.comment
 
     db.commit()
@@ -388,3 +448,60 @@ def resend_act_email(
 
     logger.info(f"📧 Act {act.document_number} resent to {contractor.contact_email}")
     return act
+
+
+@router.get("/{act_id}/invoice-facture")
+def download_invoice_facture_pdf(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Скачать счёт-фактуру (только для ОСНО с НДС)."""
+    from app.core.constants import TaxSystem
+    from app.services.pdf_generator import generate_invoice_facture_pdf
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    # Счёт-фактура только для ОСНО с НДС > 0
+    if act.tax_system != TaxSystem.OSNO.value:
+        raise HTTPException(
+            status_code=400,
+            detail="Счёт-фактура доступна только для ОСНО",
+        )
+
+    vat_rate = float(act.vat_rate or 0)
+    if vat_rate <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Счёт-фактура не генерируется для документов без НДС",
+        )
+
+    request = db.get(Request, act.request_id) if act.request_id else None
+    contractor = db.get(Contractor, act.client_id) if act.client_id else None
+
+    if not contractor and request and request.client_id:
+        contractor = db.get(Contractor, request.client_id)
+
+    try:
+        pdf_bytes = generate_invoice_facture_pdf(
+            act=act,
+            request=request,
+            contractor=contractor,
+        )
+    except Exception as e:
+        logger.error(f"PDF generation error for invoice facture {act_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"PDF generation error: {str(e)}")
+
+    filename = f"SF-{act.document_number}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )

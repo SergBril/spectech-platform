@@ -29,7 +29,7 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
   const [comment, setComment] = useState(invoice?.comment || '');
 
   const [taxSystem, setTaxSystem] = useState(invoice?.tax_system || 'osno');
-  const [vatRate, setVatRate] = useState(invoice?.vat_rate?.toString() || '20');
+  const [vatRate, setVatRate] = useState(invoice?.vat_rate?.toString() || '22');
   const [isVatIncluded, setIsVatIncluded] = useState(invoice?.is_vat_included ?? true);
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [searchContractor, setSearchContractor] = useState('');
@@ -131,7 +131,7 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
     if (newSystem !== 'osno') {
       setVatRate('0');
     } else if (vatRate === '0') {
-      setVatRate('20');
+      setVatRate('22');
     }
   };
 
@@ -150,7 +150,7 @@ export const InvoiceFormModal: React.FC<Props> = ({ invoice, onClose, onSave }) 
         if (contractor.tax_system !== 'osno') {
           setVatRate('0');
         } else {
-          setVatRate('20');
+          setVatRate('22');
         }
       }
     }

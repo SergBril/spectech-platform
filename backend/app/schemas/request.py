@@ -60,6 +60,12 @@ class RequestRead(BaseModel):
     comment: str | None = None
     created_at: datetime
 
+    # 🆕 Enrichment поля (заполняются в роутере)
+    client_name: str | None = None
+    vehicle_category_name: str | None = None
+    assigned_vehicle_name: str | None = None
+    assigned_operator_name: str | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -1,7 +1,17 @@
 import apiClient from './client';
 
-export type VehicleStatus = 'free' | 'working' | 'maintenance' | 'out_of_service';
-export type IdType = 'VIN' | 'chassis' | 'body' | 'custom';
+export type VehicleStatus = 'free' | 'busy' | 'maintenance';
+export type IdType = 'license_plate' | 'VIN' | 'inventory' | 'chassis' | 'body' | 'custom';
+
+export interface AttributeValue {
+  slug: string;
+  name: string;
+  data_type: 'select' | 'number' | 'text' | 'boolean';
+  unit: string | null;
+  value_text: string | null;
+  value_number: number | null;
+  value_boolean: boolean | null;
+}
 
 export interface Vehicle {
   id: number;
@@ -20,6 +30,14 @@ export interface Vehicle {
   is_custom_number: boolean;
   created_at: string;
   updated_at: string;
+  // 🆕 Новые поля каталога
+  subcategory_id?: number | null;
+  make?: string | null;
+  model?: string | null;
+  vin?: string | null;
+  attribute_values?: AttributeValue[];
+  category_name?: string | null;
+  subcategory_name?: string | null;
 }
 
 export interface VehicleCreate {
@@ -33,24 +51,39 @@ export interface VehicleCreate {
   psm_number?: string;
   osago_expiry_date?: string;
   category_id?: number;
+  subcategory_id?: number;
+  make?: string;
+  model?: string;
+  vin?: string;
   owner_id?: number;
   is_custom_number?: boolean;
+  attributes?: Record<string, any>;
 }
 
 export interface VehicleUpdate extends Partial<VehicleCreate> {}
 
+export interface VehicleListResponse {
+  items: Vehicle[];
+  total: number;
+}
+
 export const vehiclesApi = {
+  async list(params?: {
+    status?: VehicleStatus;
+    limit?: number;
+    skip?: number;
+  }): Promise<{ items: Vehicle[]; total: number }> {
+    const response = await apiClient.get<VehicleListResponse>('/vehicles', { params });
+    return response.data;
+  },
+
   async getAll(params?: {
     status?: VehicleStatus;
     limit?: number;
     skip?: number;
   }): Promise<Vehicle[]> {
-    const response = await apiClient.get<Vehicle[] | { items: Vehicle[]; total: number }>('/vehicles', {
-      params,
-    });
-    // API может возвращать либо массив, либо объект с пагинацией
-    const data = response.data;
-    return Array.isArray(data) ? data : (data as any).items || [];
+    const result = await this.list(params);
+    return result.items;
   },
 
   async getById(id: number): Promise<Vehicle> {
@@ -64,7 +97,7 @@ export const vehiclesApi = {
   },
 
   async update(id: number, data: VehicleUpdate): Promise<Vehicle> {
-    const response = await apiClient.patch<Vehicle>(`/vehicles/${id}`, data);
+    const response = await apiClient.put<Vehicle>(`/vehicles/${id}`, data);
     return response.data;
   },
 

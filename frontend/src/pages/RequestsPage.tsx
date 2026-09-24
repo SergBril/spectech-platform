@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { requestsApi, type Request, type RequestStatus } from '../api/requests';
 import { TableSkeleton } from '../components/Skeleton';
 import RequestFormModal from '../components/RequestFormModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
-import NotificationBell from '../components/NotificationBell';
 import Navbar from '../components/Navbar';
 
 const STATUS_LABELS: Record<RequestStatus, { label: string; color: string }> = {
@@ -37,6 +36,13 @@ const formatDateTime = (dt: string | null) => {
   });
 };
 
+const formatDate = (dt: string | null) => {
+  if (!dt) return '—';
+  return new Date(dt).toLocaleDateString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+  });
+};
+
 const formatMoney = (v: number | string | null | undefined) => {
   if (v === null || v === undefined || v === '') return '—';
   const num = typeof v === 'string' ? parseFloat(v) : v;
@@ -44,16 +50,20 @@ const formatMoney = (v: number | string | null | undefined) => {
 };
 
 export const RequestsPage: React.FC = () => {
-  const { user, logout, hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
 
   const [requests, setRequests] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // 🆕 Фильтры
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<Request | null>(null);
-
   const [deleteTarget, setDeleteTarget] = useState<Request | null>(null);
 
   const canCreate = hasPermission('requests', 'create');
@@ -63,7 +73,7 @@ export const RequestsPage: React.FC = () => {
   const loadRequests = async () => {
     try {
       setLoading(true);
-      const data = await requestsApi.getAll({ limit: 100 });
+      const data = await requestsApi.getAll({ limit: 200 });
       setRequests(data);
       setError('');
     } catch (err: any) {
@@ -78,18 +88,42 @@ export const RequestsPage: React.FC = () => {
     loadRequests();
   }, []);
 
+  // 🆕 Фильтрация заявок
+  const filteredRequests = useMemo(() => {
+    return requests.filter((req) => {
+      if (filterStatus !== 'all' && req.status !== filterStatus) return false;
+      if (filterPriority !== 'all' && req.priority !== filterPriority) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const matchesSearch =
+          req.work_type?.toLowerCase().includes(q) ||
+          req.object_address?.toLowerCase().includes(q) ||
+          String(req.id).includes(q) ||
+          (req as any).client_name?.toLowerCase().includes(q);
+        if (!matchesSearch) return false;
+      }
+      return true;
+    });
+  }, [requests, filterStatus, filterPriority, searchQuery]);
+
   const handleCreate = () => {
     setEditingRequest(null);
     setIsModalOpen(true);
   };
 
-  const handleEdit = (request: Request) => {
+  const handleEdit = (e: React.MouseEvent, request: Request) => {
+    e.stopPropagation();
     setEditingRequest(request);
     setIsModalOpen(true);
   };
 
-  const handleDelete = (request: Request) => {
+  const handleDelete = (e: React.MouseEvent, request: Request) => {
+    e.stopPropagation();
     setDeleteTarget(request);
+  };
+
+  const handleRowClick = (request: Request) => {
+    navigate(`/requests/${request.id}`);
   };
 
   const confirmDelete = async () => {
@@ -116,44 +150,45 @@ export const RequestsPage: React.FC = () => {
       setIsModalOpen(false);
       setEditingRequest(null);
     } catch (err: any) {
-      console.error('Failed to save request:', err);
-      alert('Ошибка при сохранении: ' + (err?.response?.data?.detail || err.message));
+      alert('Ошибка: ' + (err?.response?.data?.detail || err.message));
       throw err;
     }
   };
 
-if (loading) {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navbar */}
-      <Navbar />
+  // Подсчёт статистики для фильтров
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: requests.length };
+    requests.forEach(r => {
+      counts[r.status] = (counts[r.status] || 0) + 1;
+    });
+    return counts;
+  }, [requests]);
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {/* Skeleton заголовка + кнопки */}
-          <div className="flex justify-between items-center mb-6">
-            <div className="w-40 h-8 bg-gray-200 rounded animate-pulse" />
-            <div className="w-40 h-10 bg-gray-200 rounded animate-pulse" />
-          </div>
-
-          {/* Skeleton фильтров */}
-          <div className="bg-white rounded-lg shadow p-4 mb-6 animate-pulse">
-            <div className="flex flex-wrap gap-3">
-              <div className="w-48 h-10 bg-gray-100 rounded" />
-              <div className="w-40 h-10 bg-gray-100 rounded" />
-              <div className="w-40 h-10 bg-gray-100 rounded" />
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          <div className="px-4 py-6 sm:px-0">
+            <div className="flex justify-between items-center mb-6">
+              <div className="w-40 h-8 bg-gray-200 rounded animate-pulse" />
+              <div className="w-40 h-10 bg-gray-200 rounded animate-pulse" />
+            </div>
+            <div className="bg-white rounded-lg shadow p-4 mb-6 animate-pulse">
+              <div className="flex flex-wrap gap-3">
+                <div className="w-48 h-10 bg-gray-100 rounded" />
+                <div className="w-40 h-10 bg-gray-100 rounded" />
+                <div className="w-40 h-10 bg-gray-100 rounded" />
+              </div>
+            </div>
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <TableSkeleton rows={8} columns={8} />
             </div>
           </div>
-
-          {/* Skeleton таблицы заявок */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <TableSkeleton rows={8} columns={8} />
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -162,13 +197,19 @@ if (loading) {
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">
-              Список заявок ({requests.length})
-            </h2>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                Список заявок ({filteredRequests.length}
+                {filteredRequests.length !== requests.length && (
+                  <span className="text-gray-500 text-base font-normal"> из {requests.length}</span>
+                )}
+                )
+              </h2>
+            </div>
             {canCreate && (
               <button
                 onClick={handleCreate}
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center"
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center shadow-sm"
               >
                 <span className="mr-2">+</span> Новая заявка
               </button>
@@ -181,12 +222,63 @@ if (loading) {
             </div>
           )}
 
+          {/* 🆕 Панель фильтров */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
+            <div className="flex flex-wrap gap-3 items-center">
+              <div className="flex-1 min-w-[200px]">
+                <input
+                  type="text"
+                  placeholder="🔍 Поиск по адресу, типу работ, номеру, клиенту..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="all">Все статусы ({statusCounts.all})</option>
+                  {Object.entries(STATUS_LABELS).map(([key, { label }]) => (
+                    <option key={key} value={key}>
+                      {label} ({statusCounts[key] || 0})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <select
+                  value={filterPriority}
+                  onChange={(e) => setFilterPriority(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="all">Все приоритеты</option>
+                  {Object.entries(PRIORITY_LABELS).map(([key, { label }]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              {(filterStatus !== 'all' || filterPriority !== 'all' || searchQuery) && (
+                <button
+                  onClick={() => { setFilterStatus('all'); setFilterPriority('all'); setSearchQuery(''); }}
+                  className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
+                >
+                  ✕ Сбросить
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="bg-white shadow rounded-lg overflow-hidden">
-            {requests.length === 0 ? (
+            {filteredRequests.length === 0 ? (
               <div className="p-12 text-center text-gray-500">
                 <div className="text-5xl mb-4">📋</div>
-                <p className="text-lg">Заявок пока нет</p>
-                {canCreate && (
+                <p className="text-lg">
+                  {requests.length === 0 ? 'Заявок пока нет' : 'Нет заявок по выбранным фильтрам'}
+                </p>
+                {canCreate && requests.length === 0 && (
                   <p className="mt-2">Создайте первую заявку, нажав кнопку выше</p>
                 )}
               </div>
@@ -194,10 +286,12 @@ if (loading) {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Тип работы</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Адрес объекта</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Адрес</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Период</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Категория</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Клиент</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Приоритет</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
@@ -207,16 +301,14 @@ if (loading) {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {requests.map((req) => (
-                    <tr key={req.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
-                        <button
-                          onClick={() => navigate(`/requests/${req.id}`)}
-                          className="text-blue-600 hover:text-blue-900 hover:underline font-medium"
-                          title="Открыть детали заявки"
-                        >
-                          #{req.id}
-                        </button>
+                  {filteredRequests.map((req) => (
+                    <tr
+                      key={req.id}
+                      onClick={() => handleRowClick(req)}
+                      className="hover:bg-blue-50 cursor-pointer transition-colors"
+                    >
+                      <td className="px-4 py-4 whitespace-nowrap text-sm font-mono text-blue-600 font-medium">
+                        #{req.id}
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-900">
                         <div className="font-medium">{req.work_type || '—'}</div>
@@ -226,8 +318,14 @@ if (loading) {
                         {req.object_address || '—'}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-600">
-                        <div>{formatDateTime(req.planned_start)}</div>
-                        <div>— {formatDateTime(req.planned_end)}</div>
+                        <div>{formatDate(req.planned_start)}</div>
+                        <div className="text-gray-400">— {formatDate(req.planned_end)}</div>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {req.vehicle_category_name || <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {req.client_name || <span className="text-gray-400">—</span>}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${STATUS_LABELS[req.status]?.color || 'bg-gray-100'}`}>
@@ -239,25 +337,25 @@ if (loading) {
                           {PRIORITY_LABELS[req.priority]?.label || req.priority}
                         </span>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
                         {formatMoney(req.estimated_amount)}
                       </td>
                       {(canEdit || canDelete) && (
-                        <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                        <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2" onClick={(e) => e.stopPropagation()}>
                           {canEdit && (
                             <button
-                              onClick={() => handleEdit(req)}
+                              onClick={(e) => handleEdit(e, req)}
                               className="text-blue-600 hover:text-blue-900"
                             >
-                              Редактировать
+                              ✏️
                             </button>
                           )}
                           {canDelete && (
                             <button
-                              onClick={() => handleDelete(req)}
+                              onClick={(e) => handleDelete(e, req)}
                               className="text-red-600 hover:text-red-900"
                             >
-                              Удалить
+                              🗑️
                             </button>
                           )}
                         </td>

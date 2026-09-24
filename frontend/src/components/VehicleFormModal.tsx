@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { vehiclesApi } from '../api/vehicles';
 import type { Vehicle, VehicleCreate } from '../api/vehicles';
+import { EquipmentSelector } from './EquipmentSelector';
 
 interface VehicleFormModalProps {
   vehicle: Vehicle | null;
@@ -10,14 +11,27 @@ interface VehicleFormModalProps {
 export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({ vehicle, onClose }) => {
   const isEdit = !!vehicle;
 
-  const [formData, setFormData] = useState<VehicleCreate>({
+  const [formData, setFormData] = useState<VehicleCreate & {
+    make?: string;
+    model?: string;
+    vin?: string;
+    category_id?: number;
+    subcategory_id?: number;
+    attributes?: Record<string, any>;
+  }>({
     id_type: vehicle?.id_type || 'license_plate',
     id_value: vehicle?.id_value || '',
     name: vehicle?.name || '',
     year: vehicle?.year || undefined,
     status: vehicle?.status || 'free',
-    fuel_norm_per_hour: vehicle?.fuel_norm_per_hour ? parseFloat(vehicle.fuel_norm_per_hour) : undefined,
-    fuel_norm_per_100km: vehicle?.fuel_norm_per_100km ? parseFloat(vehicle.fuel_norm_per_100km) : undefined,
+    fuel_norm_per_hour: vehicle?.fuel_norm_per_hour ? parseFloat(vehicle.fuel_norm_per_hour as any) : undefined,
+    fuel_norm_per_100km: vehicle?.fuel_norm_per_100km ? parseFloat(vehicle.fuel_norm_per_100km as any) : undefined,
+    make: (vehicle as any)?.make || '',
+    model: (vehicle as any)?.model || '',
+    vin: (vehicle as any)?.vin || '',
+    category_id: (vehicle as any)?.category_id || undefined,
+    subcategory_id: (vehicle as any)?.subcategory_id || undefined,
+    attributes: (vehicle as any)?.attributes || {},
   });
 
   const [error, setError] = useState('');
@@ -29,10 +43,19 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({ vehicle, onC
     setIsLoading(true);
 
     try {
+      // Подготавливаем данные для отправки
+      const payload: any = {
+        ...formData,
+        // Очищаем пустые строки
+        make: formData.make || null,
+        model: formData.model || null,
+        vin: formData.vin || null,
+      };
+
       if (isEdit && vehicle) {
-        await vehiclesApi.update(vehicle.id, formData);
+        await vehiclesApi.update(vehicle.id, payload);
       } else {
-        await vehiclesApi.create(formData);
+        await vehiclesApi.create(payload);
       }
       onClose();
     } catch (err: any) {
@@ -43,116 +66,187 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({ vehicle, onC
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b sticky top-0 bg-white z-10">
           <h2 className="text-xl font-bold">
             {isEdit ? 'Редактировать технику' : 'Создать технику'}
           </h2>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
               {error}
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Тип ID *</label>
-              <select
-                value={formData.id_type}
-                onChange={(e) => setFormData({ ...formData, id_type: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded"
-                required
-              >
-                <option value="license_plate">Гос. номер</option>
-                <option value="VIN">VIN</option>
-                <option value="inventory">Инвентарный номер</option>
-              </select>
+          {/* === ОСНОВНЫЕ ДАННЫЕ === */}
+          <div className="border-b pb-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">🚗 Основные данные</h3>
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Тип ID *</label>
+                <select
+                  value={formData.id_type}
+                  onChange={(e) => setFormData({ ...formData, id_type: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                >
+                  <option value="license_plate">Гос. номер</option>
+                  <option value="VIN">VIN</option>
+                  <option value="inventory">Инвентарный номер</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Номер *</label>
+                <input
+                  type="text"
+                  value={formData.id_value}
+                  onChange={(e) => setFormData({ ...formData, id_value: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="А123БВ777 / XTA..."
+                  required
+                />
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Номер *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Название *</label>
               <input
                 type="text"
-                value={formData.id_value}
-                onChange={(e) => setFormData({ ...formData, id_value: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Например: Экскаватор CAT 320D"
                 required
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Название *</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-              required
+          {/* === КАТАЛОГ ТЕХНИКИ === */}
+          <div className="border-b pb-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">📋 Каталог техники</h3>
+            <EquipmentSelector
+              value={{
+                category_id: formData.category_id,
+                subcategory_id: formData.subcategory_id,
+                attributes: formData.attributes,
+              }}
+              onChange={(data) =>
+                setFormData({
+                  ...formData,
+                  category_id: data.category_id,
+                  subcategory_id: data.subcategory_id,
+                  attributes: data.attributes,
+                })
+              }
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Год</label>
-              <input
-                type="number"
-                value={formData.year || ''}
-                onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) || undefined })}
-                className="w-full px-3 py-2 border border-gray-300 rounded"
-                min="1900"
-                max="2100"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Статус *</label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded"
-                required
-              >
-                <option value="free">Свободна</option>
-                <option value="busy">Занята</option>
-                <option value="maintenance">ТО</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Расход (л/час)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.fuel_norm_per_hour || ''}
-                onChange={(e) => setFormData({ ...formData, fuel_norm_per_hour: parseFloat(e.target.value) || undefined })}
-                className="w-full px-3 py-2 border border-gray-300 rounded"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Расход (л/100км)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.fuel_norm_per_100km || ''}
-                onChange={(e) => setFormData({ ...formData, fuel_norm_per_100km: parseFloat(e.target.value) || undefined })}
-                className="w-full px-3 py-2 border border-gray-300 rounded"
-              />
+          {/* === МАРКА, МОДЕЛЬ, VIN === */}
+          <div className="border-b pb-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">🔍 Идентификация (для поиска запчастей)</h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Марка</label>
+                <input
+                  type="text"
+                  value={formData.make || ''}
+                  onChange={(e) => setFormData({ ...formData, make: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="CAT, Komatsu"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Модель</label>
+                <input
+                  type="text"
+                  value={formData.model || ''}
+                  onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="320D, PC200"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">VIN</label>
+                <input
+                  type="text"
+                  value={formData.vin || ''}
+                  onChange={(e) => setFormData({ ...formData, vin: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="17 символов"
+                  maxLength={17}
+                />
+              </div>
             </div>
           </div>
 
-          <div className="flex justify-end space-x-3 pt-4 border-t">
+          {/* === СТАТУС И ГОД === */}
+          <div className="border-b pb-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">⚙️ Статус и параметры</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Год выпуска</label>
+                <input
+                  type="number"
+                  value={formData.year || ''}
+                  onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) || undefined })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  min="1900"
+                  max="2100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Статус *</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                >
+                  <option value="free">Свободна</option>
+                  <option value="busy">Занята</option>
+                  <option value="maintenance">ТО</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Расход (л/час)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.fuel_norm_per_hour || ''}
+                  onChange={(e) => setFormData({ ...formData, fuel_norm_per_hour: parseFloat(e.target.value) || undefined })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Расход (л/100км)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.fuel_norm_per_100km || ''}
+                  onChange={(e) => setFormData({ ...formData, fuel_norm_per_100km: parseFloat(e.target.value) || undefined })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* === КНОПКИ === */}
+          <div className="flex justify-end space-x-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+              disabled={isLoading}
+              className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
             >
               Отмена
             </button>

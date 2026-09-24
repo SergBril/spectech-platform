@@ -13,6 +13,7 @@ from app.schemas.contractor import (
     EmployeeCreate,
     EmployeeRead,
 )
+from app.services.dadata_service import dadata_service
 
 router = APIRouter()
 
@@ -133,6 +134,61 @@ def list_employees(
 
     stmt = select(Employee).where(Employee.contractor_id == contractor_id)
     return db.scalars(stmt).all()
+
+
+@router.post("/suggest-inn")
+async def suggest_contractor_by_inn(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Поиск контрагента по ИНН через DaData API.
+
+    Request body: {"inn": "7707083893"}
+    Response: данные компании или 404
+    """
+    from app.models.contractor import Contractor
+
+    inn = payload.get("inn", "").strip()
+
+    if not inn:
+        raise HTTPException(status_code=400, detail="ИНН обязателен")
+
+    # Проверка на дубликат в своей компании
+    existing = db.scalar(
+        select(Contractor).where(
+            Contractor.inn == inn,
+            Contractor.company_id == company_id,
+        )
+    )
+
+    if existing:
+        return {
+            "found": True,
+            "duplicate": True,
+            "existing_id": existing.id,
+            "existing_name": existing.name,
+            "message": f"Контрагент '{existing.name}' с ИНН {inn} уже существует в системе",
+        }
+
+    # Запрос к DaData
+    result = await dadata_service.suggest_party_by_inn(inn)
+
+    if not result:
+        return {
+            "found": False,
+            "duplicate": False,
+            "message": f"Контрагент с ИНН {inn} не найден в ЕГРЮЛ",
+        }
+
+    return {
+        "found": True,
+        "duplicate": False,
+        "data": result,
+        "message": f"Найден контрагент: {result['name']}",
+    }
 
 
 @router.post(

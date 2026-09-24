@@ -30,7 +30,7 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
   onVatRateChange,
   disabled = false,
 }) => {
-  const [selectedVatRate, setSelectedVatRate] = useState('20');
+  const [selectedVatRate, setSelectedVatRate] = useState('22');
 
   // 🆕 СИНХРОНИЗАЦИЯ: когда родитель меняет value (систему), обновляем ставку НДС
   useEffect(() => {
@@ -38,7 +38,7 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
     if (system && !system.has_vat) {
       setSelectedVatRate('0');
     } else if (system?.has_vat && selectedVatRate === '0') {
-      setSelectedVatRate('20');
+      setSelectedVatRate('22');
     }
   }, [value]); // ← Зависимость от value!
 
@@ -50,8 +50,8 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
       setSelectedVatRate('0');
       onVatRateChange?.('0');
     } else if (system?.has_vat && selectedVatRate === '0') {
-      setSelectedVatRate('20');
-      onVatRateChange?.('20');
+      setSelectedVatRate('22');
+      onVatRateChange?.('22');
     }
   };
 

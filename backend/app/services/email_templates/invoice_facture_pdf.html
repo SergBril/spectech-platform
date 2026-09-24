@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page { size: A4; margin: 1.5cm; }
+        body {
+            font-family: 'DejaVu Sans', Arial, sans-serif;
+            font-size: 10pt;
+            color: #333;
+            line-height: 1.4;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #2c3e50;
+        }
+        .header h1 {
+            color: #2c3e50;
+            margin: 0 0 5px 0;
+            font-size: 16pt;
+        }
+        .header .subtitle {
+            font-size: 10pt;
+            color: #666;
+            margin: 3px 0;
+        }
+        .info-table {
+            width: 100%;
+            margin: 15px 0;
+            border-collapse: collapse;
+        }
+        .info-table td {
+            padding: 5px 10px;
+            vertical-align: top;
+            border-bottom: 1px solid #ddd;
+            font-size: 9pt;
+        }
+        .info-table .label {
+            font-weight: bold;
+            width: 35%;
+            background: #f5f5f5;
+        }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 9pt;
+        }
+        .items-table th {
+            background: #2c3e50;
+            color: white;
+            padding: 6px;
+            text-align: left;
+            font-size: 9pt;
+        }
+        .items-table td {
+            padding: 5px 6px;
+            border: 1px solid #ddd;
+            vertical-align: top;
+        }
+        .items-table .amount {
+            text-align: right;
+            font-family: 'Courier New', monospace;
+        }
+        .total-box {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f9f9f9;
+            border: 1px solid #ccc;
+        }
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 0;
+        }
+        .total-row.grand {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #2c3e50;
+            border-top: 2px solid #2c3e50;
+            margin-top: 8px;
+            padding-top: 8px;
+        }
+        .signatures {
+            margin-top: 40px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .signature-block {
+            width: 48%;
+        }
+        .signature-line {
+            border-top: 1px solid #333;
+            margin-top: 30px;
+            padding-top: 5px;
+            font-size: 8pt;
+        }
+        .footer {
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+            font-size: 8pt;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>СЧЁТ-ФАКТУРА</h1>
+        <div class="subtitle">№ {{ facture_number }} от {{ facture_date.strftime('%d.%m.%Y') }}</div>
+        <div class="subtitle">к акту № {{ act.document_number }} от {{ act.act_date.strftime('%d.%m.%Y') }}</div>
+    </div>
+
+    <table class="info-table">
+        <tr>
+            <td class="label">Продавец:</td>
+            <td><strong>ООО "СпецТехника Про"</strong>, ИНН 7700000000 / КПП 770001001</td>
+        </tr>
+        <tr>
+            <td class="label">Адрес:</td>
+            <td>г. Москва, ул. Примерная, д. 1</td>
+        </tr>
+        <tr>
+            <td class="label">Покупатель:</td>
+            <td>
+                {% if contractor %}
+                    <strong>{{ contractor.name }}</strong>
+                    {% if contractor.inn %}, ИНН {{ contractor.inn }}{% if contractor.kpp %} / КПП {{ contractor.kpp }}{% endif %}{% endif %}
+                {% else %}
+                    Не указан
+                {% endif %}
+            </td>
+        </tr>
+        {% if contractor and contractor.legal_address %}
+        <tr>
+            <td class="label">Адрес покупателя:</td>
+            <td>{{ contractor.legal_address }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+            <td class="label">Валюта:</td>
+            <td>Российский рубль (RUB)</td>
+        </tr>
+        <tr>
+            <td class="label">Основание:</td>
+            <td>Акт выполненных работ № {{ act.document_number }} от {{ act.act_date.strftime('%d.%m.%Y') }}</td>
+        </tr>
+    </table>
+
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th style="width: 5%;">№</th>
+                <th style="width: 35%;">Наименование</th>
+                <th style="width: 10%; text-align: center;">Ед.</th>
+                <th style="width: 7%; text-align: center;">Кол-во</th>
+                <th style="width: 10%; text-align: right;">Цена</th>
+                <th style="width: 11%; text-align: right;">Сумма без НДС</th>
+                <th style="width: 7%; text-align: center;">НДС</th>
+                <th style="width: 12%; text-align: right;">Сумма с НДС</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>1</td>
+                <td>{{ request.work_type if request else 'Услуги по договору' }}</td>
+                <td style="text-align: center;">{{ (request.rate_type if request else 'усл') | translate_unit }}</td>
+                <td style="text-align: center;">{{ request.shift_duration_hours if request else 1 }}</td>
+                <td class="amount">{{ "{:,.2f}".format((total_without_vat)|float).replace(',', ' ') }}</td>
+                <td class="amount">{{ "{:,.2f}".format((total_without_vat)|float).replace(',', ' ') }}</td>
+                <td style="text-align: center;">{{ vat_rate }}%</td>
+                <td class="amount">{{ "{:,.2f}".format((act.total_amount)|float).replace(',', ' ') }}</td>
+            </tr>
+            <tr style="background: #f5f5f5; font-weight: bold;">
+                <td colspan="5" style="text-align: right;">Итого:</td>
+                <td class="amount">{{ "{:,.2f}".format((total_without_vat)|float).replace(',', ' ') }}</td>
+                <td style="text-align: center;">X</td>
+                <td class="amount">{{ "{:,.2f}".format((act.total_amount)|float).replace(',', ' ') }}</td>
+            </tr>
+            <tr style="background: #f5f5f5;">
+                <td colspan="5" style="text-align: right;">НДС ({{ vat_rate }}%):</td>
+                <td class="amount" colspan="3">{{ "{:,.2f}".format((act.vat_amount)|float).replace(',', ' ') }}</td>
+            </tr>
+            <tr style="background: #e8e8e8; font-weight: bold;">
+                <td colspan="5" style="text-align: right;">Всего к оплате:</td>
+                <td class="amount" colspan="3">{{ "{:,.2f}".format((act.total_amount)|float).replace(',', ' ') }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="total-box">
+        <div class="total-row">
+            <span>Всего наименований: 1</span>
+        </div>
+        <div class="total-row grand">
+            <span>Всего к оплате:</span>
+            <span>{{ "{:,.2f}".format((act.total_amount)|float).replace(',', ' ') }} ₽</span>
+        </div>
+    </div>
+
+    <div class="signatures">
+        <div class="signature-block">
+            <p><strong>Руководитель организации</strong></p>
+            <div class="signature-line">
+                (подпись) / _______________ /
+            </div>
+        </div>
+        <div class="signature-block">
+            <p><strong>Главный бухгалтер</strong></p>
+            <div class="signature-line">
+                (подпись) / _______________ /
+            </div>
+        </div>
+    </div>
+
+    <p style="margin-top: 20px; font-size: 8pt; color: #666;">
+        <strong>Выдал (ответственный за правильность оформления):</strong> _______________ / _______________
+    </p>
+
+    <div class="footer">
+        Счёт-фактура сгенерирована автоматически в системе "СпецТехника Про" • spectech.pro
+    </div>
+</body>
+</html>

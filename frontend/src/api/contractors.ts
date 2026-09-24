@@ -87,4 +87,28 @@ export const contractorsApi = {
   delete: async (id: number): Promise<void> => {
     await apiClient.delete(`/contractors/${id}`);
   },
+
+  async suggestByInn(inn: string): Promise<{
+    found: boolean;
+    duplicate: boolean;
+    existing_id?: number;
+    existing_name?: string;
+    data?: {
+      name: string;
+      name_full: string;
+      inn: string;
+      kpp: string;
+      ogrn: string;
+      address: string;
+      bank_name: string;
+      bank_bik: string;
+      bank_account: string;
+      bank_correspondent_account: string;
+      management_name: string;
+    };
+    message: string;
+  }> {
+    const response = await apiClient.post('/contractors/suggest-inn', { inn });
+    return response.data;
+  },
 };

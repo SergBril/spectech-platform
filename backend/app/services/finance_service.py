@@ -82,7 +82,7 @@ def calculate_invoice_totals(invoice: Invoice) -> None:
         invoice.total = subtotal
         return
 
-    vat_rate = invoice.vat_rate or Decimal("20.00")
+    vat_rate = invoice.vat_rate or Decimal("22.00")
 
     if invoice.is_vat_included:
         vat_amount = (subtotal * vat_rate / (Decimal("100") + vat_rate)).quantize(

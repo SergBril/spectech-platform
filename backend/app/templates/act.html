@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Акт {{ act.document_number }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; font-size: 12px; }
+        h1 { color: #333; font-size: 18px; margin-bottom: 10px; }
+        h2 { color: #555; font-size: 14px; margin-top: 20px; }
+        .header { margin-bottom: 20px; }
+        .info-row { margin: 5px 0; }
+        .signature-block { margin-top: 40px; display: flex; justify-content: space-between; }
+        .signature-box { width: 45%; }
+        .signature-line { border-top: 1px solid #333; margin-top: 30px; padding-top: 5px; }
+        .total-section { margin-top: 20px; padding: 15px; background-color: #f9f9f9; border: 1px solid #ddd; }
+        .total-row { margin: 8px 0; font-size: 13px; }
+        .total-final { font-size: 16px; font-weight: bold; color: #333; margin-top: 10px; }
+        .vat-info { color: #666; font-size: 11px; font-style: italic; }
+        .status-badge { display: inline-block; padding: 3px 8px; background-color: #e0e0e0; border-radius: 3px; font-size: 10px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Акт выполненных работ № {{ act.document_number }}</h1>
+        <div class="info-row"><strong>Дата:</strong> {{ act.act_date }}</div>
+        <div class="info-row"><strong>Статус:</strong> <span class="status-badge">{{ act.status }}</span></div>
+        <div class="info-row"><strong>Система налогообложения:</strong> {{ act.tax_system | upper }}</div>
+    </div>
+
+    {% if contractor %}
+    <h2>Заказчик</h2>
+    <div class="info-row"><strong>{{ contractor.name }}</strong></div>
+    {% if contractor.inn %}<div class="info-row">ИНН: {{ contractor.inn }}</div>{% endif %}
+    {% if contractor.address %}<div class="info-row">Адрес: {{ contractor.address }}</div>{% endif %}
+    {% endif %}
+
+    {% if request %}
+    <h2>Заявка</h2>
+    <div class="info-row"><strong>Номер заявки:</strong> {{ request.id }}</div>
+    {% if request.description %}<div class="info-row">{{ request.description }}</div>{% endif %}
+    {% endif %}
+
+    <div class="total-section">
+        <h2 style="margin-top: 0;">Стоимость работ</h2>
+        <div class="total-row">Сумма без НДС: <strong>{{ "%.2f" | format((act.total_amount|float) - (act.vat_amount|float)) }} ₽</strong></div>
+
+        {% if act.vat_rate and act.vat_rate|float > 0 %}
+        <div class="total-row">НДС ({{ act.vat_rate }}%): <strong>{{ "%.2f" | format(act.vat_amount|float) }} ₽</strong></div>
+        {% else %}
+        <div class="total-row vat-info">Без НДС ({{ act.tax_system | upper }})</div>
+        {% endif %}
+
+        <div class="total-row total-final">ИТОГО К ОПЛАТЕ: {{ "%.2f" | format(act.total_amount|float) }} ₽</div>
+
+        {% if act.is_vat_included %}
+        <div class="vat-info" style="margin-top: 10px;">(НДС включён в сумму)</div>
+        {% else %}
+        <div class="vat-info" style="margin-top: 10px;">(НДС начисляется сверху)</div>
+        {% endif %}
+    </div>
+
+    {% if act.comment %}
+    <h2>Комментарий</h2>
+    <p>{{ act.comment }}</p>
+    {% endif %}
+
+    <div class="signature-block">
+        <div class="signature-box">
+            <p><strong>Заказчик:</strong></p>
+            <div class="signature-line">
+                {% if act.signed_by_client_at %}
+                Подписано: {{ act.signed_by_client_at.strftime('%d.%m.%Y %H:%M') }}
+                {% else %}
+                Подпись: _______________ / _______________
+                {% endif %}
+            </div>
+        </div>
+        <div class="signature-box">
+            <p><strong>Исполнитель:</strong></p>
+            <div class="signature-line">
+                {% if act.signed_by_executor_at %}
+                Подписано: {{ act.signed_by_executor_at.strftime('%d.%m.%Y %H:%M') }}
+                {% else %}
+                Подпись: _______________ / _______________
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>
