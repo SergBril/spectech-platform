@@ -1,22 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { contractorsApi, type Contractor } from '../api/contractors';
 import { ContractorFormModal } from '../components/ContractorFormModal';
 import { showToast } from '../utils/toast';
-import NotificationBell from '../components/NotificationBell';
 import Navbar from '../components/Navbar';
 
 export const ContractorsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { hasPermission } = useAuth();
 
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string>('');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [taxFilter, setTaxFilter] = useState<string>('all');
   const [showForm, setShowForm] = useState(false);
   const [editingContract, setEditingContract] = useState<Contractor | null>(null);
+
+  const canCreate = hasPermission('contractors', 'create');
+  const canEdit = hasPermission('contractors', 'update');
 
   useEffect(() => {
     loadContractors();
@@ -39,9 +42,14 @@ export const ContractorsPage: React.FC = () => {
     setShowForm(true);
   };
 
-  const handleEdit = (contractor: Contractor) => {
+  const handleEdit = (e: React.MouseEvent, contractor: Contractor) => {
+    e.stopPropagation();
     setEditingContract(contractor);
     setShowForm(true);
+  };
+
+  const handleRowClick = (contractor: Contractor) => {
+    navigate(`/contractors/${contractor.id}`);
   };
 
   const handleSave = async (data: any) => {
@@ -60,7 +68,8 @@ export const ContractorsPage: React.FC = () => {
     }
   };
 
-  const handleToggleActive = async (contractor: Contractor) => {
+  const handleToggleActive = async (e: React.MouseEvent, contractor: Contractor) => {
+    e.stopPropagation();
     try {
       await contractorsApi.update(contractor.id, { is_active: !contractor.is_active });
       showToast.success(
@@ -72,19 +81,35 @@ export const ContractorsPage: React.FC = () => {
     }
   };
 
-  const filteredContractors = contractors.filter((c) => {
-    const matchesSearch =
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.inn?.toLowerCase().includes(search.toLowerCase());
-    const matchesType = !typeFilter || c.type === typeFilter;
-    return matchesSearch && matchesType;
-  });
+  // 🆕 Фильтрация с useMemo
+  const filteredContractors = useMemo(() => {
+    return contractors.filter((c) => {
+      const q = search.toLowerCase();
+      const matchesSearch =
+        !search ||
+        c.name.toLowerCase().includes(q) ||
+        c.inn?.toLowerCase().includes(q) ||
+        c.contact_email?.toLowerCase().includes(q);
+      const matchesType = typeFilter === 'all' || c.type === typeFilter;
+      const matchesTax = taxFilter === 'all' || c.tax_system === taxFilter;
+      return matchesSearch && matchesType && matchesTax;
+    });
+  }, [contractors, search, typeFilter, taxFilter]);
+
+  // Подсчёт статистики для фильтров
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: contractors.length };
+    contractors.forEach(c => {
+      counts[c.type] = (counts[c.type] || 0) + 1;
+    });
+    return counts;
+  }, [contractors]);
 
   const getTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
-      client: 'Клиент',
-      owner: 'Собственник',
-      subcontractor: 'Субподрядчик',
+      client: '👤 Клиент',
+      owner: '🚜 Собственник',
+      subcontractor: '🤝 Субподрядчик',
     };
     return labels[type] || type;
   };
@@ -96,6 +121,28 @@ export const ContractorsPage: React.FC = () => {
       subcontractor: 'bg-purple-100 text-purple-800',
     };
     return colors[type] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getTaxLabel = (taxSystem: string | undefined) => {
+    const labels: Record<string, string> = {
+      osno: 'ОСНО',
+      usn_6: 'УСН 6%',
+      usn_15: 'УСН 15%',
+      patent: 'Патент',
+      npd: 'НПД',
+    };
+    return labels[taxSystem || ''] || '—';
+  };
+
+  const getTaxColor = (taxSystem: string | undefined) => {
+    const colors: Record<string, string> = {
+      osno: 'bg-indigo-100 text-indigo-800',
+      usn_6: 'bg-teal-100 text-teal-800',
+      usn_15: 'bg-cyan-100 text-cyan-800',
+      patent: 'bg-amber-100 text-amber-800',
+      npd: 'bg-emerald-100 text-emerald-800',
+    };
+    return colors[taxSystem || ''] || 'bg-gray-100 text-gray-800';
   };
 
   if (loading) {
@@ -116,34 +163,66 @@ export const ContractorsPage: React.FC = () => {
       <main className="max-w-7xl mx-auto py-8 px-4">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">👥 Контрагенты</h1>
-            <button
-              onClick={handleCreate}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-            >
-              + Добавить контрагента
-            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">👥 Контрагенты</h1>
+              <p className="text-sm text-gray-600 mt-1">
+                Всего: <strong>{filteredContractors.length}</strong>
+                {filteredContractors.length !== contractors.length && (
+                  <span className="text-gray-500"> из {contractors.length}</span>
+                )}
+              </p>
+            </div>
+            {canCreate && (
+              <button
+                onClick={handleCreate}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                + Добавить контрагента
+              </button>
+            )}
           </div>
 
-          {/* Filters */}
-          <div className="flex gap-4 mb-6">
-            <input
-              type="text"
-              placeholder="Поиск по названию или ИНН..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-            />
+          {/* 🆕 Фильтры */}
+          <div className="flex flex-wrap gap-3 mb-6 p-4 bg-gray-50 rounded-lg">
+            <div className="flex-1 min-w-[250px]">
+              <input
+                type="text"
+                placeholder="🔍 Поиск по названию, ИНН, email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
             >
-              <option value="">Все типы</option>
-              <option value="client">Клиенты</option>
-              <option value="owner">Собственники</option>
-              <option value="subcontractor">Субподрядчики</option>
+              <option value="all">Все типы ({typeCounts.all})</option>
+              <option value="client">👤 Клиенты ({typeCounts.client || 0})</option>
+              <option value="owner">🚜 Собственники ({typeCounts.owner || 0})</option>
+              <option value="subcontractor">🤝 Субподрядчики ({typeCounts.subcontractor || 0})</option>
             </select>
+            <select
+              value={taxFilter}
+              onChange={(e) => setTaxFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+            >
+              <option value="all">Все налоги</option>
+              <option value="osno">ОСНО (с НДС)</option>
+              <option value="usn_6">УСН 6%</option>
+              <option value="usn_15">УСН 15%</option>
+              <option value="patent">Патент</option>
+              <option value="npd">НПД</option>
+            </select>
+            {(search || typeFilter !== 'all' || taxFilter !== 'all') && (
+              <button
+                onClick={() => { setSearch(''); setTypeFilter('all'); setTaxFilter('all'); }}
+                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
+              >
+                ✕ Сбросить
+              </button>
+            )}
           </div>
 
           {/* Table */}
@@ -158,7 +237,7 @@ export const ContractorsPage: React.FC = () => {
                     Тип
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    ИНН
+                    ИНН / КПП
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Контакты
@@ -169,19 +248,25 @@ export const ContractorsPage: React.FC = () => {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Статус
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Действия
-                  </th>
+                  {canEdit && (
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Действия
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredContractors.map((contractor) => (
-                  <tr key={contractor.id} className="hover:bg-gray-50">
+                  <tr
+                    key={contractor.id}
+                    onClick={() => handleRowClick(contractor)}
+                    className="hover:bg-blue-50 cursor-pointer transition-colors"
+                  >
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{contractor.name}</div>
+                      <div className="font-medium text-blue-600">{contractor.name}</div>
                       {contractor.legal_address && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          {contractor.legal_address.substring(0, 50)}...
+                        <div className="text-xs text-gray-500 mt-1 max-w-xs truncate">
+                          📍 {contractor.legal_address}
                         </div>
                       )}
                     </td>
@@ -194,20 +279,31 @@ export const ContractorsPage: React.FC = () => {
                         {getTypeLabel(contractor.type)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{contractor.inn || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">
-                      {contractor.contact_name && <div>{contractor.contact_name}</div>}
-                      {contractor.contact_phone && (
-                        <div className="text-xs text-gray-500">{contractor.contact_phone}</div>
+                      <div className="font-mono">{contractor.inn || '—'}</div>
+                      {contractor.kpp && (
+                        <div className="text-xs text-gray-500 font-mono">{contractor.kpp}</div>
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
+                      {contractor.contact_name && (
+                        <div className="text-xs">👤 {contractor.contact_name}</div>
+                      )}
+                      {contractor.contact_phone && (
+                        <div className="text-xs">📞 {contractor.contact_phone}</div>
+                      )}
+                      {contractor.contact_email && (
+                        <div className="text-xs text-blue-600">✉️ {contractor.contact_email}</div>
+                      )}
+                      {!contractor.contact_name && !contractor.contact_phone && !contractor.contact_email && '—'}
+                    </td>
+                    <td className="px-4 py-3">
                       {contractor.tax_system ? (
-                        <span className="text-xs bg-gray-100 px-2 py-1 rounded">
-                          {contractor.tax_system.toUpperCase()}
+                        <span className={`px-2 py-1 text-xs font-semibold rounded ${getTaxColor(contractor.tax_system)}`}>
+                          {getTaxLabel(contractor.tax_system)}
                         </span>
                       ) : (
-                        '—'
+                        <span className="text-gray-400 text-xs">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -218,29 +314,33 @@ export const ContractorsPage: React.FC = () => {
                             : 'bg-red-100 text-red-800'
                         }`}
                       >
-                        {contractor.is_active ? 'Активен' : 'Неактивен'}
+                        {contractor.is_active ? '✅ Активен' : '❌ Неактивен'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => handleEdit(contractor)}
-                          className="text-blue-600 hover:text-blue-900 text-sm"
-                        >
-                          Редактировать
-                        </button>
-                        <button
-                          onClick={() => handleToggleActive(contractor)}
-                          className={`text-sm ${
-                            contractor.is_active
-                              ? 'text-orange-600 hover:text-orange-900'
-                              : 'text-green-600 hover:text-green-900'
-                          }`}
-                        >
-                          {contractor.is_active ? 'Деактивировать' : 'Активировать'}
-                        </button>
-                      </div>
-                    </td>
+                    {canEdit && (
+                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={(e) => handleEdit(e, contractor)}
+                            className="text-blue-600 hover:text-blue-900 text-sm"
+                            title="Редактировать"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={(e) => handleToggleActive(e, contractor)}
+                            className={`text-sm ${
+                              contractor.is_active
+                                ? 'text-orange-600 hover:text-orange-900'
+                                : 'text-green-600 hover:text-green-900'
+                            }`}
+                            title={contractor.is_active ? 'Деактивировать' : 'Активировать'}
+                          >
+                            {contractor.is_active ? '🚫' : '✅'}
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -250,7 +350,17 @@ export const ContractorsPage: React.FC = () => {
           {filteredContractors.length === 0 && (
             <div className="text-center py-12">
               <div className="text-5xl mb-4">👥</div>
-              <p className="text-gray-600">Контрагенты не найдены</p>
+              <p className="text-gray-600">
+                {contractors.length === 0 ? 'Контрагентов пока нет' : 'Контрагенты не найдены по фильтрам'}
+              </p>
+              {canCreate && contractors.length === 0 && (
+                <button
+                  onClick={handleCreate}
+                  className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                >
+                  + Добавить первого контрагента
+                </button>
+              )}
             </div>
           )}
         </div>

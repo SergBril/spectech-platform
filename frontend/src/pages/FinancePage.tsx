@@ -188,6 +188,28 @@ export const FinancePage: React.FC = () => {
     }
   };
 
+  // 🆕 Скачать УПД (Универсальный передаточный документ)
+  const handleDownloadUpd = async (act: Act) => {
+    try {
+      const blob = await financeApi.downloadUpdPdf(act.id);
+      downloadBlob(blob, `UPD-${act.document_number}.pdf`);
+      showToast.success('✅ УПД скачан');
+    } catch (err: any) {
+      showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  // 🆕 Скачать ТОРГ-12 (Расходная накладная)
+  const handleDownloadTorg12 = async (act: Act) => {
+    try {
+      const blob = await financeApi.downloadTorg12Pdf(act.id);
+      downloadBlob(blob, `TORG-${act.document_number}.pdf`);
+      showToast.success('✅ ТОРГ-12 скачан');
+    } catch (err: any) {
+      showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
   const handleSaveInvoice = async (data: any) => {
     try {
       if (editingInvoice) {
@@ -564,17 +586,32 @@ export const FinancePage: React.FC = () => {
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
                                   <button onClick={() => handleDownloadPdf('act', act.id, act.document_number)} className="text-purple-600 hover:text-purple-900" title="Акт PDF">📄</button>
-                                  {/* 🆕 Кнопка "Счёт-фактура" — только для ОСНО с НДС */}
+                                  {/* 🆕 Кнопка УПД (для всех актов) */}
+                                  <button
+                                    onClick={() => handleDownloadUpd(act)}
+                                    className="text-green-600 hover:text-green-900 font-semibold"
+                                    title="УПД (Универсальный передаточный документ)"
+                                  >
+                                    📋УПД
+                                  </button>
+                                  {/* 🆕 Кнопка ТОРГ-12 (расходная накладная для товаров) */}
+                                  <button
+                                    onClick={() => handleDownloadTorg12(act)}
+                                    className="text-purple-600 hover:text-purple-900"
+                                    title="ТОРГ-12 (Расходная накладная для товаров)"
+                                  >
+                                    📦Т-12
+                                  </button>
+                                  {/* 🆕 Кнопка "Счёт-фактура" — только для ОСНО с НДС (legacy) */}
                                   {act.tax_system === 'osno' && parseFloat(act.vat_rate || '0') > 0 && (
                                     <button
                                       onClick={() => handleDownloadInvoiceFacture(act)}
                                       className="text-orange-600 hover:text-orange-900"
-                                      title="Счёт-фактура (для ОСНО)"
+                                      title="Счёт-фактура (для ОСНО, legacy)"
                                     >
                                       🧾
                                     </button>
-                                  )}
-                                  {act.status === 'draft' && canEdit && (
+                                  )}                                  {act.status === 'draft' && canEdit && (
                                     <>
                                       <button onClick={() => setEditingAct(act)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
                                       <button

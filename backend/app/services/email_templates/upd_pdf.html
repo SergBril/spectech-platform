@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>УПД № {{ document_number }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; font-size: 11px; line-height: 1.4; color: #000; }
+        .page { width: 210mm; min-height: 297mm; padding: 15mm; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h1 { font-size: 16px; font-weight: bold; margin-bottom: 5px; }
+        .header .subtitle { font-size: 12px; color: #666; }
+        .status-badge { display: inline-block; padding: 4px 12px; background: #3b82f6; color: white; border-radius: 4px; font-size: 11px; font-weight: bold; margin: 10px 0; }
+        .info-block { margin: 15px 0; border: 1px solid #ddd; padding: 12px; background: #f9f9f9; }
+        .info-row { display: flex; margin: 6px 0; }
+        .info-label { font-weight: bold; width: 200px; flex-shrink: 0; }
+        .info-value { flex: 1; }
+        .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+        .party-box { border: 1px solid #ccc; padding: 12px; }
+        .party-title { font-weight: bold; font-size: 12px; margin-bottom: 8px; background: #e5e7eb; padding: 4px 8px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th { background: #374151; color: white; padding: 10px 4px; text-align: left; font-size: 9px; font-weight: bold; border: 1px solid #1f2937; word-wrap: break-word; }
+        td { padding: 8px 4px; border: 1px solid #d1d5db; font-size: 10px; word-wrap: break-word; }
+        tr:nth-child(even) { background: #f9fafb; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .total-section { background: #f3f4f6; padding: 15px; margin: 20px 0; border: 2px solid #3b82f6; }
+        .total-row { display: flex; justify-content: space-between; margin: 6px 0; font-size: 12px; }
+        .total-row.grand { font-size: 14px; font-weight: bold; border-top: 2px solid #3b82f6; padding-top: 8px; margin-top: 8px; }
+        .signatures { margin-top: 40px; page-break-inside: avoid; }
+        .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin: 20px 0; }
+        .signature-box { border-top: 1px solid #000; padding-top: 8px; margin-top: 40px; }
+        .signature-label { font-size: 10px; color: #666; margin-bottom: 5px; }
+        .signature-name { font-size: 11px; font-weight: bold; }
+        .footer { margin-top: 30px; text-align: center; font-size: 9px; color: #999; border-top: 1px solid #ddd; padding-top: 10px; }
+        .vat-note { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 10px; margin: 15px 0; font-size: 10px; }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <!-- ШАПКА -->
+        <div class="header">
+            <h1>УНИВЕРСАЛЬНЫЙ ПЕРЕДАТОЧНЫЙ ДОКУМЕНТ</h1>
+            <div class="subtitle">№ {{ document_number }} от {{ document_date }}</div>
+            {% if tax_system == 'osno' and vat_rate > 0 %}
+            <div class="status-badge">Статус: 1 (СЧФДОП — счёт-фактура и передаточный документ)</div>
+            {% else %}
+            <div class="status-badge">Статус: 2 (Передаточный документ)</div>
+            {% endif %}
+        </div>
+
+        <!-- ПРОДАВЕЦ -->
+        <div class="party-box">
+            <div class="party-title">Продавец (Исполнитель)</div>
+            <div class="info-row">
+                <span class="info-label">Наименование:</span>
+                <span class="info-value"><strong>{{ executor_name }}</strong></span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">ИНН / КПП:</span>
+                <span class="info-value">{{ executor_inn }}{% if executor_kpp %} / {{ executor_kpp }}{% endif %}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Адрес:</span>
+                <span class="info-value">{{ executor_address }}</span>
+            </div>
+            {% if executor_bank %}
+            <div class="info-row">
+                <span class="info-label">Банк:</span>
+                <span class="info-value">{{ executor_bank }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">р/с:</span>
+                <span class="info-value">{{ executor_account }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">БИК / к/с:</span>
+                <span class="info-value">{{ executor_bik }} / {{ executor_correspondent_account }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- ПОКУПАТЕЛЬ -->
+        <div class="party-box" style="margin-top: 15px;">
+            <div class="party-title">Покупатель (Заказчик)</div>
+            <div class="info-row">
+                <span class="info-label">Наименование:</span>
+                <span class="info-value"><strong>{{ client_name }}</strong></span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">ИНН / КПП:</span>
+                <span class="info-value">{{ client_inn }}{% if client_kpp %} / {{ client_kpp }}{% endif %}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Адрес:</span>
+                <span class="info-value">{{ client_address }}</span>
+            </div>
+            {% if client_bank %}
+            <div class="info-row">
+                <span class="info-label">Банк:</span>
+                <span class="info-value">{{ client_bank }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">р/с:</span>
+                <span class="info-value">{{ client_account }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">БИК / к/с:</span>
+                <span class="info-value">{{ client_bik }} / {{ client_correspondent_account }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- ВАЛЮТА И ОСНОВАНИЕ -->
+        <div class="info-block">
+            <div class="info-row">
+                <span class="info-label">Валюта:</span>
+                <span class="info-value">Российский рубль (RUB)</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Основание:</span>
+                <span class="info-value">{{ basis_document }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Система налогообложения:</span>
+                <span class="info-value">
+                    {% if tax_system == 'osno' %}ОСНО (общая система)
+                    {% elif tax_system == 'usn_6' %}УСН "Доходы" (6%)
+                    {% elif tax_system == 'usn_15' %}УСН "Доходы минус расходы" (15%)
+                    {% elif tax_system == 'patent' %}Патент
+                    {% elif tax_system == 'npd' %}НПД (самозанятый)
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+
+        <!-- ТАБЛИЦА ТОВАРОВ/УСЛУГ -->
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 30px;">№</th>
+                    <th>Наименование товара (работы, услуги)</th>
+                    <th style="width: 50px;">Ед. изм.</th>
+                    <th style="width: 60px;" class="text-right">Кол-во</th>
+                    <th style="width: 90px;" class="text-right">Цена (тариф) без НДС</th>
+                    <th style="width: 90px;" class="text-right">Сумма без НДС</th>
+                    {% if tax_system == 'osno' and vat_rate > 0 %}
+                    <th style="width: 60px;" class="text-center">НДС %</th>
+                    <th style="width: 90px;" class="text-right">Сумма НДС</th>
+                    {% endif %}
+                    <th style="width: 100px;" class="text-right">Сумма с НДС</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="text-center">{{ loop.index }}</td>
+                    <td>{{ item.description }}</td>
+                    <td class="text-center">{{ item.unit }}</td>
+                    <td class="text-right">{{ "%.2f"|format(item.quantity) }}</td>
+                    <td class="text-right">{{ "%.2f"|format(item.unit_price) }} ₽</td>
+                    <td class="text-right">{{ "%.2f"|format(item.subtotal) }} ₽</td>
+                    {% if tax_system == 'osno' and vat_rate > 0 %}
+                    <td class="text-center">{{ vat_rate }}%</td>
+                    <td class="text-right">{{ "%.2f"|format(item.vat_amount) }} ₽</td>
+                    {% endif %}
+                    <td class="text-right"><strong>{{ "%.2f"|format(item.total) }} ₽</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="background: #e5e7eb; font-weight: bold;">
+                    <td colspan="5" class="text-right">Итого:</td>
+                    <td class="text-right">{{ "%.2f"|format(subtotal) }} ₽</td>
+                    {% if tax_system == 'osno' and vat_rate > 0 %}
+                    <td class="text-center">X</td>
+                    <td class="text-right">{{ "%.2f"|format(vat_amount) }} ₽</td>
+                    {% endif %}
+                    <td class="text-right">{{ "%.2f"|format(total_amount) }} ₽</td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <!-- ИТОГОВАЯ СЕКЦИЯ -->
+        <div class="total-section">
+            <div class="total-row">
+                <span>Всего наименований:</span>
+                <span><strong>{{ items|length }}</strong></span>
+            </div>
+            <div class="total-row">
+                <span>Сумма без НДС:</span>
+                <span><strong>{{ "%.2f"|format(subtotal) }} ₽</strong></span>
+            </div>
+            {% if tax_system == 'osno' and vat_rate > 0 %}
+            <div class="total-row">
+                <span>НДС ({{ vat_rate }}%):</span>
+                <span><strong>{{ "%.2f"|format(vat_amount) }} ₽</strong></span>
+            </div>
+            {% else %}
+            <div class="total-row">
+                <span>НДС:</span>
+                <span><strong>Без НДС</strong></span>
+            </div>
+            {% endif %}
+            <div class="total-row grand">
+                <span>ВСЕГО К ОПЛАТЕ (с НДС):</span>
+                <span>{{ "%.2f"|format(total_amount) }} ₽</span>
+            </div>
+        </div>
+
+        {% if tax_system == 'osno' and vat_rate > 0 %}
+        <div class="vat-note">
+            <strong>ℹ️ Примечание:</strong> Данный документ является счёт-фактурой и передаточным документом одновременно (статус "1" — СЧФДОП).
+            Принимается к учёту как первичный документ и как счёт-фактура для вычета НДС.
+        </div>
+        {% endif %}
+
+        <!-- ПОДПИСИ -->
+        <div class="signatures">
+            <h3 style="margin-bottom: 15px;">Подписи сторон</h3>
+
+            <div class="signature-grid">
+                <div>
+                    <h4 style="margin-bottom: 10px;">Продавец (Исполнитель)</h4>
+                    <div class="signature-box">
+                        <div class="signature-label">Руководитель организации (или уполномоченное лицо)</div>
+                        <div class="signature-name">{{ executor_name }}</div>
+                        <div style="margin-top: 10px;">
+                            <span style="display: inline-block; width: 150px; border-bottom: 1px solid #000;"></span>
+                            <span style="margin-left: 10px;">/ _________________ /</span>
+                        </div>
+                    </div>
+                    <div class="signature-box" style="margin-top: 20px;">
+                        <div class="signature-label">Главный бухгалтер (при наличии)</div>
+                        <div style="margin-top: 10px;">
+                            <span style="display: inline-block; width: 150px; border-bottom: 1px solid #000;"></span>
+                            <span style="margin-left: 10px;">/ _________________ /</span>
+                        </div>
+                    </div>
+                    <div style="margin-top: 20px; font-size: 10px; color: #666;">
+                        М.П. (при наличии)
+                    </div>
+                </div>
+
+                <div>
+                    <h4 style="margin-bottom: 10px;">Покупатель (Заказчик)</h4>
+                    <div class="signature-box">
+                        <div class="signature-label">Руководитель организации (или уполномоченное лицо)</div>
+                        <div class="signature-name">{{ client_name }}</div>
+                        <div style="margin-top: 10px;">
+                            <span style="display: inline-block; width: 150px; border-bottom: 1px solid #000;"></span>
+                            <span style="margin-left: 10px;">/ _________________ /</span>
+                        </div>
+                    </div>
+                    <div class="signature-box" style="margin-top: 20px;">
+                        <div class="signature-label">Лицо, принявшее товар (работу, услугу)</div>
+                        <div style="margin-top: 10px;">
+                            <span style="display: inline-block; width: 150px; border-bottom: 1px solid #000;"></span>
+                            <span style="margin-left: 10px;">/ _________________ /</span>
+                        </div>
+                    </div>
+                    <div style="margin-top: 20px; font-size: 10px; color: #666;">
+                        М.П. (при наличии)
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 30px; padding: 10px; background: #f9fafb; border-left: 4px solid #3b82f6;">
+                <strong>Дата отгрузки (передачи):</strong> {{ document_date }}<br>
+                <strong>Документ составил:</strong> {{ executor_name }}
+            </div>
+        </div>
+
+        <!-- ФУТЕР -->
+        <div class="footer">
+            УПД сгенерирован автоматически в системе "СпецТехника Про" • spectech.pro<br>
+            Документ соответствует требованиям ФНС России (Приказ ФНС от 20.01.2025 № ЕД-7-26/970@)
+        </div>
+    </div>
+</body>
+</html>
