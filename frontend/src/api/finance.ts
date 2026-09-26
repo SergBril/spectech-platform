@@ -200,6 +200,20 @@ export const financeApi = {
     return response.data;
   },
 
+  async downloadUpdPdf(actId: number): Promise<Blob> {
+    const response = await apiClient.get(`/acts/${actId}/upd`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  async downloadTorg12Pdf(actId: number): Promise<Blob> {
+    const response = await apiClient.get(`/acts/${actId}/torg12`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
   // === Acts ===
   async getActs(params?: { status?: ActStatus; limit?: number; offset?: number }): Promise<Act[]> {
     const response = await apiClient.get<Act[]>('/acts', { params });

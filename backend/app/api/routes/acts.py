@@ -505,3 +505,110 @@ def download_invoice_facture_pdf(
             "Access-Control-Expose-Headers": "Content-Disposition",
         },
     )
+
+
+@router.get("/{act_id}/upd")
+def download_upd_pdf(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Скачать УПД (Универсальный передаточный документ) для акта.
+
+    УПД = Акт + Счёт-фактура в одном документе (для ОСНО с НДС).
+    Статус "1" = СЧФДОП (счёт-фактура + передаточный документ).
+    Статус "2" = только передаточный документ (для УСН).
+    """
+    from fastapi.responses import Response
+
+    from app.models.company import Company
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
+    from app.services.pdf_generator import generate_upd_pdf
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    client = db.get(Contractor, act.client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    company = db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    # Получаем связанную заявку (для описания работ)
+    request = db.get(Request, act.request_id) if act.request_id else None
+
+    try:
+        pdf_bytes = generate_upd_pdf(act, company, client, request)
+
+        filename = f"UPD-{act.document_number}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(pdf_bytes)),
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate UPD PDF: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate UPD: {str(e)}")
+
+
+@router.get("/{act_id}/torg12")
+def download_torg12_pdf(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Скачать ТОРГ-12 (Расходная накладная) на основании акта.
+
+    Используется для отгрузки товаров (песок, бетон, щебень, стройматериалы).
+    Форма утверждена Постановлением Госкомстата РФ от 25.12.1998 № 132.
+    """
+    from fastapi.responses import Response
+
+    from app.models.company import Company
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
+    from app.services.pdf_generator import generate_torg12_pdf
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    client = db.get(Contractor, act.client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    company = db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    # Получаем связанную заявку
+    request = db.get(Request, act.request_id) if act.request_id else None
+
+    try:
+        pdf_bytes = generate_torg12_pdf(act, company, client, request)
+
+        filename = f"TORG-{act.document_number}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(pdf_bytes)),
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate TORG-12 PDF: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to generate TORG-12: {str(e)}"
+        )

@@ -75,12 +75,16 @@ export const filesApi = {
     file_category?: string;
     vehicle_id?: number;
     invoice_id?: number;
+    act_id?: number;        // 🆕 ДОБАВЛЕНО
+    contractor_id?: number; // 🆕 ДОБАВЛЕНО
     limit?: number;
   }): Promise<UploadedFile[]> => {
     const params = new URLSearchParams();
     if (filters?.file_category) params.append('file_category', filters.file_category);
     if (filters?.vehicle_id) params.append('vehicle_id', String(filters.vehicle_id));
     if (filters?.invoice_id) params.append('invoice_id', String(filters.invoice_id));
+    if (filters?.act_id) params.append('act_id', String(filters.act_id));               // 🆕
+    if (filters?.contractor_id) params.append('contractor_id', String(filters.contractor_id)); // 🆕
     if (filters?.limit) params.append('limit', String(filters.limit));
 
     const query = params.toString() ? `?${params.toString()}` : '';

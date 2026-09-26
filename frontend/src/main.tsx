@@ -7,6 +7,7 @@ import { WebSocketProvider } from './contexts/WebSocketContext';
 import { Toaster } from 'react-hot-toast';
 import { CompanySettingsPage } from './pages/CompanySettingsPage';
 import { ContractorsPage } from './pages/ContractorsPage';
+import { ContractorDetailPage } from './pages/ContractorDetailPage';
 
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -60,6 +61,7 @@ const AppRoutes = () => {
       <Route path="/acts/new" element={<ProtectedRoute><ActCreatePage /></ProtectedRoute>} />
       <Route path="/settings/company" element={<ProtectedRoute><CompanySettingsPage /></ProtectedRoute>} />
       <Route path="/contractors" element={<ProtectedRoute><ContractorsPage /></ProtectedRoute>} />
+      <Route path="/contractors/:id" element={<ProtectedRoute><ContractorDetailPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

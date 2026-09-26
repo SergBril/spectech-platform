@@ -171,6 +171,28 @@ export const RequestDetailPage: React.FC = () => {
     }
   };
 
+  // 🆕 Скачать УПД
+  const handleDownloadUpd = async (act: Act) => {
+    try {
+      const blob = await financeApi.downloadUpdPdf(act.id);
+      downloadBlob(blob, `UPD-${act.document_number}.pdf`);
+      showToast.success('✅ УПД скачан');
+    } catch (err: any) {
+      showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  // 🆕 Скачать ТОРГ-12
+  const handleDownloadTorg12 = async (act: Act) => {
+    try {
+      const blob = await financeApi.downloadTorg12Pdf(act.id);
+      downloadBlob(blob, `TORG-${act.document_number}.pdf`);
+      showToast.success('✅ ТОРГ-12 скачан');
+    } catch (err: any) {
+      showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
+    }
+  };
+
   const handleCreateInvoice = () => navigate(`/invoices?new=1&request_id=${request?.id}`);
 
   const handleExportReport = async () => {
@@ -335,29 +357,38 @@ export const RequestDetailPage: React.FC = () => {
                       const total = parseFloat(inv.total || '0');
                       const progress = total > 0 ? (paid / total) * 100 : 0;
                       return (
-                        <tr key={inv.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm font-mono text-gray-900">{inv.document_number}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString('ru-RU') : '—'}</td>
-                          <td className="px-4 py-3 text-sm font-semibold">{formatMoney(inv.total)}</td>
-                          <td className="px-4 py-3 text-sm">
-                            <div className="flex items-center space-x-2">
-                              <div className="w-20 bg-gray-200 rounded-full h-2"><div className={`h-2 rounded-full ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div></div>
-                              <span className="text-xs text-gray-600">{formatMoney(inv.paid_amount)}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>{INVOICE_STATUS_LABELS[inv.status]?.label || inv.status}</span></td>
-                          <td className="px-4 py-3 text-right text-sm space-x-2">
-                            <button onClick={() => handleDownloadInvoicePdf(inv)} className="text-purple-600 hover:text-purple-900" title="Скачать PDF">📥 PDF</button>
-                            <FileUploadButton fileCategory="invoice_pdf" options={{ invoice_id: inv.id }} accept=".pdf,.jpg,.png" onUploadSuccess={handleFileUploaded} label="📎" className="text-xs px-2 py-1 inline-block" />
-                          </td>
-                        </tr>
+                        <>
+                          <tr key={inv.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm font-mono text-gray-900">{inv.document_number}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString('ru-RU') : '—'}</td>
+                            <td className="px-4 py-3 text-sm font-semibold">{formatMoney(inv.total)}</td>
+                            <td className="px-4 py-3 text-sm">
+                              <div className="flex items-center space-x-2">
+                                <div className="w-20 bg-gray-200 rounded-full h-2"><div className={`h-2 rounded-full ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div></div>
+                                <span className="text-xs text-gray-600">{formatMoney(inv.paid_amount)}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>{INVOICE_STATUS_LABELS[inv.status]?.label || inv.status}</span></td>
+                            <td className="px-4 py-3 text-right text-sm space-x-2">
+                              <button onClick={() => handleDownloadInvoicePdf(inv)} className="text-purple-600 hover:text-purple-900" title="Скачать PDF">📥 PDF</button>
+                              <FileUploadButton fileCategory="invoice_pdf" options={{ invoice_id: inv.id }} accept=".pdf,.jpg,.png" onUploadSuccess={handleFileUploaded} label="📎" className="text-xs px-2 py-1 inline-block" />
+                            </td>
+                          </tr>
+                          {/* 🆕 FileList для конкретного счёта */}
+                          <tr className="border-b border-gray-100">
+                            <td colSpan={6} className="px-4 py-2 bg-gray-50">
+                              <FileList
+                                fileCategory="invoice_pdf"
+                                invoiceId={inv.id}
+                                refreshTrigger={filesRefreshTrigger}
+                              />
+                            </td>
+                          </tr>
+                        </>
                       );
                     })}
                   </tbody>
                 </table>
-                <div className="mt-4">
-                  <FileList fileCategory="invoice_pdf" refreshTrigger={filesRefreshTrigger} />
-                </div>
               </div>
             )}
           </div>
@@ -396,51 +427,74 @@ export const RequestDetailPage: React.FC = () => {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {acts.map((act) => (
-                      <tr key={act.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-mono text-gray-900">{act.document_number}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {act.act_date ? new Date(act.act_date).toLocaleDateString('ru-RU') : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-semibold">{formatMoney(act.total_amount)}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[act.status]?.color || 'bg-gray-100'}`}>
-                            {INVOICE_STATUS_LABELS[act.status]?.label || act.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm space-x-2">
-                          <button
-                            onClick={() => handleDownloadActPdf(act)}
-                            className="text-purple-600 hover:text-purple-900"
-                            title="Акт PDF"
-                          >
-                            📄 Акт
-                          </button>
-                          {/* 🆕 Кнопка счёт-фактуры (только ОСНО с НДС) */}
-                          {act.tax_system === 'osno' && parseFloat(act.vat_rate || '0') > 0 && (
+                      <>
+                        <tr key={act.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-mono text-gray-900">{act.document_number}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {act.act_date ? new Date(act.act_date).toLocaleDateString('ru-RU') : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold">{formatMoney(act.total_amount)}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[act.status]?.color || 'bg-gray-100'}`}>
+                              {INVOICE_STATUS_LABELS[act.status]?.label || act.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm space-x-2">
                             <button
-                              onClick={() => handleDownloadInvoiceFacture(act)}
-                              className="text-orange-600 hover:text-orange-900"
-                              title="Счёт-фактура (ОСНО)"
+                              onClick={() => handleDownloadActPdf(act)}
+                              className="text-purple-600 hover:text-purple-900"
+                              title="Акт PDF"
                             >
-                              🧾 СФ
+                              📄 Акт
                             </button>
-                          )}
-                          <FileUploadButton
-                            fileCategory="act_pdf"
-                            options={{ act_id: act.id }}
-                            accept=".pdf,.jpg,.png"
-                            onUploadSuccess={handleFileUploaded}
-                            label="📎"
-                            className="text-xs px-2 py-1 inline-block"
-                          />
-                        </td>
-                      </tr>
+                            <button
+                              onClick={() => handleDownloadUpd(act)}
+                              className="text-green-600 hover:text-green-900 font-semibold"
+                              title="УПД (Универсальный передаточный документ)"
+                            >
+                              📋 УПД
+                            </button>
+                            {/* 🆕 Кнопка ТОРГ-12 */}
+                            <button
+                              onClick={() => handleDownloadTorg12(act)}
+                              className="text-purple-600 hover:text-purple-900"
+                              title="ТОРГ-12 (Расходная накладная)"
+                            >
+                              📦 Т-12
+                            </button>
+                            {act.tax_system === 'osno' && parseFloat(act.vat_rate || '0') > 0 && (
+                              <button
+                                onClick={() => handleDownloadInvoiceFacture(act)}
+                                className="text-orange-600 hover:text-orange-900"
+                                title="Счёт-фактура (ОСНО, legacy)"
+                              >
+                                🧾 СФ
+                              </button>
+                            )}
+                            <FileUploadButton
+                              fileCategory="act_pdf"
+                              options={{ act_id: act.id }}
+                              accept=".pdf,.jpg,.png"
+                              onUploadSuccess={handleFileUploaded}
+                              label="📎"
+                              className="text-xs px-2 py-1 inline-block"
+                            />
+                          </td>
+                        </tr>
+                        {/* 🆕 FileList для конкретного акта */}
+                        <tr className="border-b border-gray-100">
+                          <td colSpan={5} className="px-4 py-2 bg-gray-50">
+                            <FileList
+                              fileCategory="act_pdf"
+                              actId={act.id}
+                              refreshTrigger={filesRefreshTrigger}
+                            />
+                          </td>
+                        </tr>
+                      </>
                     ))}
                   </tbody>
                 </table>
-                <div className="mt-4">
-                  <FileList fileCategory="act_pdf" refreshTrigger={filesRefreshTrigger} />
-                </div>
               </div>
             )}
           </div>

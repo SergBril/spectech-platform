@@ -95,6 +95,38 @@ async def upload_file(
         uploaded_by=current_user.id,
         company_id=current_user.company_id,
     )
+
+    # 🆕 Дедупликация: удаляем старые версии того же документа
+    if act_id:
+        old_files = db.scalars(
+            select(UploadedFile).where(
+                UploadedFile.file_category == file_category,
+                UploadedFile.act_id == act_id,
+                UploadedFile.company_id == current_user.company_id,
+            )
+        ).all()
+        for old_file in old_files:
+            try:
+                storage_service.delete_file(old_file.storage_path)
+            except Exception:
+                pass
+            db.delete(old_file)
+
+    if invoice_id and not act_id:
+        old_files = db.scalars(
+            select(UploadedFile).where(
+                UploadedFile.file_category == file_category,
+                UploadedFile.invoice_id == invoice_id,
+                UploadedFile.company_id == current_user.company_id,
+            )
+        ).all()
+        for old_file in old_files:
+            try:
+                storage_service.delete_file(old_file.storage_path)
+            except Exception:
+                pass
+            db.delete(old_file)
+
     db.add(uploaded_file)
     db.commit()
     db.refresh(uploaded_file)
@@ -166,12 +198,16 @@ def list_files(
     file_category: str | None = None,
     vehicle_id: int | None = None,
     invoice_id: int | None = None,
+    act_id: int | None = None,  # 🆕 ДОБАВЛЕНО
+    contractor_id: int | None = None,  # 🆕 ДОБАВЛЕНО
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Список загруженных файлов."""
-    stmt = select(UploadedFile).order_by(UploadedFile.created_at.desc())
+    """Список загруженных файлов с фильтрацией по сущностям."""
+    stmt = select(UploadedFile).where(
+        UploadedFile.company_id == current_user.company_id
+    )
 
     if file_category:
         stmt = stmt.where(UploadedFile.file_category == file_category)
@@ -179,8 +215,13 @@ def list_files(
         stmt = stmt.where(UploadedFile.vehicle_id == vehicle_id)
     if invoice_id:
         stmt = stmt.where(UploadedFile.invoice_id == invoice_id)
+    if act_id:  # 🆕
+        stmt = stmt.where(UploadedFile.act_id == act_id)  # 🆕
+    if contractor_id:  # 🆕
+        stmt = stmt.where(UploadedFile.contractor_id == contractor_id)  # 🆕
 
-    return db.scalars(stmt.limit(limit)).all()
+    stmt = stmt.order_by(UploadedFile.created_at.desc()).limit(limit)
+    return db.scalars(stmt).all()
 
 
 @router.delete("/{file_id}", status_code=204)
