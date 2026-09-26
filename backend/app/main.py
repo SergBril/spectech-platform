@@ -24,6 +24,7 @@ from app.api.routes import (
     companies,
     contractors,
     debug,
+    email,
     email_bulk,
     email_templates,
     export,
@@ -174,6 +175,7 @@ app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["dispatch"])
 app.include_router(
     contractors.router, prefix="/api/v1/contractors", tags=["contractors"]
 )
+app.include_router(email.router, prefix="/api/v1/email", tags=["email"])
 app.include_router(rbac.router, prefix="/api/v1/rbac", tags=["rbac"])
 app.include_router(me.router, prefix="/api/v1", tags=["me"])
 app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["finance"])

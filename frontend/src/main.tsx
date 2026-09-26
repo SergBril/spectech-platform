@@ -24,6 +24,7 @@ import MaintenanceCreatePage from './pages/MaintenanceCreatePage';
 import MaintenanceAnalyticsPage from './pages/MaintenanceAnalyticsPage';
 import FuelAnalyticsPage from './pages/FuelAnalyticsPage';
 import EmailTemplatesPage from './pages/EmailTemplatesPage';
+import { EmailLogsPage } from './pages/EmailLogsPage';
 
 import './index.css';
 
@@ -54,6 +55,7 @@ const AppRoutes = () => {
       <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
       <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
       <Route path="/email-templates" element={<ProtectedRoute><EmailTemplatesPage /></ProtectedRoute>} />
+      <Route path="/email-logs" element={<ProtectedRoute><EmailLogsPage /></ProtectedRoute>} />
       <Route path="/requests/:id" element={<ProtectedRoute><RequestDetailPage /></ProtectedRoute>} />
       <Route path="/acts/new" element={<ProtectedRoute><ActCreatePage /></ProtectedRoute>} />
       <Route path="/settings/company" element={<ProtectedRoute><CompanySettingsPage /></ProtectedRoute>} />
