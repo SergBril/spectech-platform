@@ -23,7 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/contractors', label: 'Контрагенты' },
   { path: '/finance', label: 'Финансы' },
   { path: '/invoices', label: 'Счета' },
-  { path: '/email-templates', label: '📧 Email', icon: Mail },
+  { path: '/email-logs', label: '📧 Email', icon: Mail },
 ];
 
 export const Navbar: React.FC = () => {

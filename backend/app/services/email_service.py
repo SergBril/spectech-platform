@@ -3,6 +3,7 @@
 import logging
 import smtplib
 import ssl
+from datetime import datetime
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -36,6 +37,12 @@ class EmailService:
 
     def _render_template(self, template_name: str, context: dict) -> str:
         """Рендерит HTML шаблон и инлайнит CSS."""
+        from app.core.config import settings
+
+        # Добавляем frontend_url если его нет
+        if "frontend_url" not in context:
+            context["frontend_url"] = settings.FRONTEND_URL
+
         template = self.jinja_env.get_template(template_name)
         html = template.render(**context)
         return premailer_transform(html)
@@ -74,7 +81,7 @@ class EmailService:
 
         return msg
 
-    async def send_email(
+    def send_email(
         self,
         to_email: str,
         subject: str,
@@ -90,25 +97,52 @@ class EmailService:
         Поддерживает два режима:
         1. Прямой: body + html_body
         2. Шаблонный: template_name + context (для обратной совместимости)
-
-        Args:
-            to_email: Email получателя
-            subject: Тема письма
-            body: Текстовое тело письма (режим 1)
-            html_body: HTML-версия (режим 1)
-            template_name: Имя Jinja2 шаблона (режим 2)
-            context: Контекст для шаблона (режим 2)
-            attachments: Список вложений
-                - Режим 1: [{"filename": "...", "content": bytes}]
-                - Режим 2: [Path, Path, ...]
-
-        Returns:
-            True если отправлено успешно
         """
+        # 🆕 Логирование в EmailLog (создаём запись со статусом pending)
+        log_id = None
         try:
-            # === Режим 2: Шаблонный (старая архитектура) ===
+            from app.core.db import SessionLocal
+            from app.models.email import EmailLog, EmailStatus
+
+            db_log = SessionLocal()
+            # Рендерим HTML заранее для логирования
+            rendered_html = None
             if template_name and context:
-                html_body = self._render_template(template_name, context)
+                rendered_html = self._render_template(template_name, context)
+            elif html_body:
+                rendered_html = html_body
+
+            email_log = EmailLog(
+                company_id=1,  # TODO: получать из контекста
+                to_email=to_email,
+                subject=subject,
+                html_body=rendered_html,
+                status=EmailStatus.pending,
+                invoice_id=(
+                    context.get("invoice").id
+                    if context
+                    and context.get("invoice")
+                    and hasattr(context.get("invoice"), "id")
+                    else None
+                ),
+                act_id=(
+                    context.get("act").id
+                    if context
+                    and context.get("act")
+                    and hasattr(context.get("act"), "id")
+                    else None
+                ),
+            )
+            db_log.add(email_log)
+            db_log.commit()
+            log_id = email_log.id
+            db_log.close()
+        except Exception as log_err:
+            logger.warning(f"⚠️ Failed to create email log entry: {log_err}")
+
+        try:  # === Режим 2: Шаблонный ===
+            if template_name and context:
+                html_body = rendered_html  # Используем уже отрендеренный
                 # Преобразуем Path-вложения в dict-формат
                 if attachments:
                     converted_attachments = []
@@ -184,10 +218,38 @@ class EmailService:
             server.quit()
 
             logger.info(f"✅ Email sent to {to_email}: {subject}")
+
+            # 🆕 Обновляем статус в EmailLog на sent
+            if log_id:
+                try:
+                    db_log = SessionLocal()
+                    email_log = db_log.get(EmailLog, log_id)
+                    if email_log:
+                        email_log.status = EmailStatus.sent
+                        email_log.sent_at = datetime.now()
+                        db_log.commit()
+                    db_log.close()
+                except Exception as log_err:
+                    logger.warning(f"⚠️ Failed to update email log to sent: {log_err}")
+
             return True
 
         except Exception as e:
             logger.error(f"❌ Failed to send email to {to_email}: {e}", exc_info=True)
+
+            # 🆕 Обновляем статус в EmailLog на failed
+            if log_id:
+                try:
+                    db_log = SessionLocal()
+                    email_log = db_log.get(EmailLog, log_id)
+                    if email_log:
+                        email_log.status = EmailStatus.failed
+                        email_log.error_message = str(e)
+                        db_log.commit()
+                    db_log.close()
+                except Exception as log_err:
+                    logger.warning(f"⚠️ Failed to update email log to failed: {log_err}")
+
             raise
 
     def send_invoice_created(
