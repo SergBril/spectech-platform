@@ -1,341 +1,187 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>ТОРГ-12 № {{ document_number }}</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Times New Roman', serif; font-size: 11px; line-height: 1.3; color: #000; }
-        .page { width: 210mm; min-height: 297mm; padding: 12mm; margin: 0 auto; }
-        .header { text-align: center; margin-bottom: 15px; }
-        .header h1 { font-size: 14px; font-weight: bold; margin-bottom: 3px; }
-        .header .doc-number { font-size: 12px; margin-bottom: 8px; }
-        .okud { font-size: 9px; text-align: right; margin-bottom: 5px; }
-        .info-block { margin: 10px 0; }
-        .info-row { display: flex; margin: 4px 0; align-items: baseline; }
-        .info-label { font-weight: normal; width: 220px; flex-shrink: 0; }
-        .info-value { flex: 1; border-bottom: 1px solid #000; min-height: 16px; padding-left: 5px; word-wrap: break-word; overflow-wrap: break-word; }
-        .info-value.no-line { border: none; padding-left: 0; }
-        .info-value.bold { font-weight: bold; }
-        .section-title { font-weight: bold; font-size: 11px; margin: 12px 0 6px 0; padding: 3px 0; }
-        table.items { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10px; }
-        table.items th {
-            border: 1px solid #000;
-            padding: 4px;
-            text-align: center;
-            background: #f5f5f5;
-            font-weight: bold;
-        }
-        table.items td {
-            border: 1px solid #000;
-            padding: 4px;
-            vertical-align: middle;
-        }
-        .text-right { text-align: right; }
-        .text-center { text-align: center; }
-        .totals-section {
-            margin-top: 10px;
-            padding: 8px;
-            background: #f9f9f9;
-            border: 1px solid #999;
-        }
-        .totals-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 3px 0;
-            font-size: 11px;
-        }
-        .totals-row.grand {
-            font-size: 12px;
-            font-weight: bold;
-            border-top: 2px solid #000;
-            padding-top: 5px;
-            margin-top: 5px;
-        }
-        .signatures {
-            margin-top: 25px;
-            page-break-inside: avoid;
-            font-size: 10px;
-        }
-        .signature-block {
-            margin: 12px 0;
-            padding: 8px;
-            background: #fafafa;
-            border: 1px dashed #999;
-        }
-        .signature-row {
-            display: flex;
-            margin: 6px 0;
-            align-items: baseline;
-        }
-        .signature-label {
-            width: 250px;
-            flex-shrink: 0;
-            font-weight: bold;
-        }
-        .signature-line {
-            flex: 1;
-            border-bottom: 1px solid #000;
-            min-height: 16px;
-            margin-left: 10px;
-        }
-        .footer { margin-top: 25px; text-align: center; font-size: 9px; color: #666; border-top: 1px solid #ccc; padding-top: 10px; page-break-inside: avoid; line-height: 1.4; }
-        .stamp-placeholder {
-            display: inline-block;
-            width: 80px;
-            height: 80px;
-            border: 2px dashed #999;
-            border-radius: 50%;
-            text-align: center;
-            line-height: 80px;
-            font-size: 9px;
-            color: #999;
-            margin: 10px;
-        }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 10px 0; }
-        .grid-2 > div { overflow: hidden; }
-    </style>
+<meta charset="UTF-8">
+<title>ТОРГ-12 № {{ document_number }}</title>
+<style>
+@page { size: A4 landscape; margin: 7mm 10mm; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: Arial, sans-serif; font-size: 7.5pt; line-height: 1.25; color: #000; }
+.page { width: 277mm; margin: 0 auto; }
+.hdr-left { display: inline-block; width: 190mm; vertical-align: top; }
+.hdr-right { display: inline-block; width: 84mm; vertical-align: top; text-align: right; }
+.req { margin: 1px 0; }
+.req .lbl { display: inline-block; width: 55mm; vertical-align: top; }
+.req .val { display: inline-block; width: 130mm; border-bottom: 1px solid #000; vertical-align: top; padding: 0 1mm; min-height: 9px; word-wrap: break-word; overflow-wrap: break-word; }
+table { border-collapse: collapse; width: 100%; margin-top: 2mm; table-layout: fixed; }
+th, td { border: 1px solid #000; padding: 2px 3px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; font-size: 7pt; }
+th { background: #f2f2f2; font-weight: bold; text-align: center; }
+.c { text-align: center; } .r { text-align: right; } .b { font-weight: bold; }
+.sig { margin-top: 3mm; }
+.sig .col { display: inline-block; width: 49%; vertical-align: top; }
+.ul { display: inline-block; border-bottom: 1px solid #000; min-width: 30mm; height: 8px; }
+.small { font-size: 6pt; color: #444; }
+.colnum { font-size: 6pt; background: #e6e6e6; font-weight: bold; text-align: center; }
+</style>
 </head>
 <body>
-    <div class="page">
-        <!-- ОКУД и шапка -->
-        <div class="okud">
-            <div>Унифицированная форма № ТОРГ-12</div>
-            <div>Утверждена Постановлением Госкомстата России</div>
-            <div>от 25.12.1998 № 132</div>
-        </div>
+<div class="page">
 
-        <div class="header">
-            <h1>РАСХОДНАЯ НАКЛАДНАЯ № {{ document_number }}</h1>
-            <div class="doc-number">от {{ document_date }}</div>
-        </div>
+<div class="hdr-left">
+    <div class="req"><span class="lbl">Организация</span><span class="val b">{{ executor_name }}</span></div>
+    <div class="req"><span class="lbl">Структурное подразделение</span><span class="val">—</span></div>
+    <div class="req"><span class="lbl">Основание</span><span class="val">{{ basis_document }}</span></div>
+    <div class="req"><span class="lbl">Товар (груз) передал по доверенности №</span><span class="val">—</span></div>
+</div><div class="hdr-right">
+    Форма по ОКУД <b>0330212</b><br>
+    Товарная накладная № <b>{{ document_number }}</b><br>
+    Дата составления <b>{{ document_date }}</b><br>
+    Утв. Постановлением Госкомстата РФ от 25.12.1998 № 132
+</div>
 
-        <!-- Организация и основание -->
-        <div class="info-block">
-            <div class="info-row">
-                <span class="info-label">Организация:</span>
-                <span class="info-value bold">{{ executor_name }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Основание:</span>
-                <span class="info-value">{{ basis_document }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Номер документа:</span>
-                <span class="info-value">{{ document_number }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Дата составления:</span>
-                <span class="info-value">{{ document_date }}</span>
-            </div>
-        </div>
+<table>
+<thead>
+<tr>
+<th style="width:22mm;">Сторона</th>
+<th>Организация, адрес, телефон</th>
+<th style="width:40mm;">Банк</th>
+<th style="width:38mm;">Расчётный счёт</th>
+<th style="width:38mm;">Корр. счёт</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="b">Грузоотправитель</td>
+<td>{{ executor_name }}, {{ executor_address }}</td>
+<td>{{ executor_bank | default('—') }}</td>
+<td>{{ executor_account | default('—') }}</td>
+<td>{{ executor_correspondent_account | default('—') }}</td>
+</tr>
+<tr>
+<td class="b">Поставщик</td>
+<td>{{ executor_name }}, {{ executor_address }}, ИНН/КПП: {{ executor_inn }} / {{ executor_kpp }}</td>
+<td>{{ executor_bank | default('—') }}</td>
+<td>{{ executor_account | default('—') }}</td>
+<td>{{ executor_correspondent_account | default('—') }}</td>
+</tr>
+<tr>
+<td class="b">Грузополучатель</td>
+<td>{{ client_name }}, {{ client_address }}</td>
+<td>{{ client_bank | default('—') }}</td>
+<td>{{ client_account | default('—') }}</td>
+<td>{{ client_correspondent_account | default('—') }}</td>
+</tr>
+<tr>
+<td class="b">Плательщик</td>
+<td>{{ client_name }}, {{ client_address }}, ИНН/КПП: {{ client_inn }} / {{ client_kpp }}</td>
+<td>{{ client_bank | default('—') }}</td>
+<td>{{ client_account | default('—') }}</td>
+<td>{{ client_correspondent_account | default('—') }}</td>
+</tr>
+</tbody>
+</table>
 
-        <!-- Грузоотправитель / Грузополучатель -->
-        <div class="section-title">Стороны</div>
-        <div class="grid-2">
-            <div>
-                <div class="info-row">
-                    <span class="info-label">Грузоотправитель:</span>
-                    <span class="info-value bold">{{ executor_name }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">ИНН/КПП:</span>
-                    <span class="info-value">{{ executor_inn }}{% if executor_kpp %} / {{ executor_kpp }}{% endif %}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Адрес:</span>
-                    <span class="info-value">{{ executor_address }}</span>
-                </div>
-            </div>
-            <div>
-                <div class="info-row">
-                    <span class="info-label">Грузополучатель:</span>
-                    <span class="info-value bold">{{ client_name }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">ИНН/КПП:</span>
-                    <span class="info-value">{{ client_inn }}{% if client_kpp %} / {{ client_kpp }}{% endif %}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Адрес:</span>
-                    <span class="info-value">{{ client_address }}</span>
-                </div>
-            </div>
-        </div>
+<table>
+<thead>
+<tr class="colnum">
+<td style="width:6mm;">1</td>
+<td style="width:9mm;">2</td>
+<td>3</td>
+<td style="width:8mm;">4</td>
+<td style="width:7mm;">5</td>
+<td style="width:9mm;">6</td>
+<td style="width:11mm;">7</td>
+<td style="width:14mm;">8</td>
+<td style="width:15mm;">9</td>
+<td style="width:9mm;">10</td>
+<td style="width:13mm;">11</td>
+<td style="width:15mm;">12</td>
+<td style="width:9mm;">13</td>
+<td style="width:10mm;">14</td>
+<td style="width:13mm;">15</td>
+</tr>
+<tr>
+<th style="width:6mm;">№ п/п</th>
+<th style="width:9mm;">Код товара</th>
+<th>Наименование и краткое описание товара</th>
+<th style="width:8mm;">Сорт</th>
+<th style="width:7mm;">Ед. изм. код</th>
+<th style="width:9mm;">Ед. изм. наим.</th>
+<th style="width:11mm;">Количество</th>
+<th style="width:14mm;">Цена</th>
+<th style="width:15mm;">Сумма</th>
+<th style="width:9mm;">НДС, ставка</th>
+<th style="width:13mm;">НДС, сумма</th>
+<th style="width:15mm;">Сумма с НДС</th>
+<th style="width:9mm;">Кол-во мест</th>
+<th style="width:10mm;">Вид упаковки</th>
+<th style="width:13mm;">Масса нетто/брутто</th>
+</tr>
+</thead>
+<tbody>
+{% for item in items %}
+<tr>
+<td class="c">{{ loop.index }}</td>
+<td class="c">-</td>
+<td>{{ item.description }}</td>
+<td class="c">-</td>
+<td class="c">-</td>
+<td class="c">{{ item.unit }}</td>
+<td class="r">{{ "%.2f"|format(item.quantity) }}</td>
+<td class="r">{{ "%.2f"|format(item.unit_price) }}</td>
+<td class="r">{{ "%.2f"|format(item.subtotal) }}</td>
+<td class="c">{% if show_vat %}{{ vat_rate }}%{% else %}Без НДС{% endif %}</td>
+<td class="r">{% if show_vat %}{{ "%.2f"|format(item.vat_amount) }}{% else %}X{% endif %}</td>
+<td class="r b">{{ "%.2f"|format(item.total) }}</td>
+<td class="c">-</td>
+<td class="c">-</td>
+<td class="c">-</td>
+</tr>
+{% endfor %}
+<tr class="b" style="background:#f2f2f2;">
+<td></td><td></td>
+<td>Итого:</td>
+<td></td><td></td><td></td>
+<td class="r">{{ total_quantity | default(1) }}</td>
+<td></td>
+<td class="r">{{ "%.2f"|format(subtotal) }}</td>
+<td class="c">X</td>
+<td class="r">{% if show_vat %}{{ "%.2f"|format(vat_amount) }}{% else %}X{% endif %}</td>
+<td class="r">{{ "%.2f"|format(total_amount) }}</td>
+<td></td><td></td><td></td>
+</tr>
+</tbody>
+</table>
 
-        <div class="grid-2">
-            <div>
-                <div class="info-row">
-                    <span class="info-label">Поставщик:</span>
-                    <span class="info-value bold">{{ executor_name }}</span>
-                </div>
-                {% if executor_bank %}
-                <div class="info-row">
-                    <span class="info-label">Банк:</span>
-                    <span class="info-value">{{ executor_bank }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">р/с:</span>
-                    <span class="info-value">{{ executor_account }}</span>
-                </div>
-                {% endif %}
-            </div>
-            <div>
-                <div class="info-row">
-                    <span class="info-label">Плательщик:</span>
-                    <span class="info-value bold">{{ client_name }}</span>
-                </div>
-                {% if client_bank %}
-                <div class="info-row">
-                    <span class="info-label">Банк:</span>
-                    <span class="info-value">{{ client_bank }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">р/с:</span>
-                    <span class="info-value">{{ client_account }}</span>
-                </div>
-                {% endif %}
-            </div>
-        </div>
+<div style="margin-top:2mm;">
+Всего наименований <span class="ul" style="min-width:10mm;">{{ items|length }}</span>,
+мест <span class="ul" style="min-width:10mm;">—</span>,
+масса нетто <span class="ul" style="min-width:10mm;">—</span>,
+брутто <span class="ul" style="min-width:10mm;">—</span><br>
+<b>Всего сумма прописью:</b> {{ total_in_words }}
+</div>
 
-        <!-- Таблица товаров -->
-        <div class="section-title">Товарно-материальные ценности</div>
-        <table class="items">
-            <thead>
-                <tr>
-                    <th style="width: 30px;">№</th>
-                    <th>Наименование товара</th>
-                    <th style="width: 50px;">Ед. изм.</th>
-                    <th style="width: 60px;">Кол-во</th>
-                    <th style="width: 80px;">Цена без НДС</th>
-                    <th style="width: 90px;">Сумма без НДС</th>
-                    {% if tax_system == 'osno' and vat_rate > 0 %}
-                    <th style="width: 50px;">НДС %</th>
-                    <th style="width: 90px;">Сумма с НДС</th>
-                    {% else %}
-                    <th style="width: 120px;">Сумма с учётом налога</th>
-                    {% endif %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in items %}
-                <tr>
-                    <td class="text-center">{{ loop.index }}</td>
-                    <td>{{ item.description }}</td>
-                    <td class="text-center">{{ item.unit }}</td>
-                    <td class="text-right">{{ "%.2f"|format(item.quantity) }}</td>
-                    <td class="text-right">{{ "%.2f"|format(item.unit_price) }} ₽</td>
-                    <td class="text-right">{{ "%.2f"|format(item.subtotal) }} ₽</td>
-                    {% if tax_system == 'osno' and vat_rate > 0 %}
-                    <td class="text-center">{{ vat_rate }}%</td>
-                    <td class="text-right"><strong>{{ "%.2f"|format(item.total) }} ₽</strong></td>
-                    {% else %}
-                    <td class="text-right"><strong>{{ "%.2f"|format(item.total) }} ₽</strong></td>
-                    {% endif %}
-                </tr>
-                {% endfor %}
-            </tbody>
-            <tfoot>
-                <tr style="background: #e5e7eb; font-weight: bold;">
-                    <td colspan="5" class="text-right">Итого:</td>
-                    <td class="text-right">{{ "%.2f"|format(subtotal) }} ₽</td>
-                    {% if tax_system == 'osno' and vat_rate > 0 %}
-                    <td class="text-center">X</td>
-                    <td class="text-right">{{ "%.2f"|format(total_amount) }} ₽</td>
-                    {% else %}
-                    <td class="text-right">{{ "%.2f"|format(total_amount) }} ₽</td>
-                    {% endif %}
-                </tr>
-            </tfoot>
-        </table>
+<div class="sig">
+<div class="col">
+Отпуск груза разрешил: <span class="small">{{ executor_position | default('Генеральный директор') }}</span>
+<span class="ul"></span> <span class="small">(подпись)</span> <span class="ul"></span> <span class="small">(ф.и.о.)</span><br>
+Главный (старший) бухгалтер:
+<span class="ul" style="min-width:40mm;"></span> <span class="small">(подпись)</span> <span class="ul" style="min-width:40mm;"></span> <span class="small">(ф.и.о.)</span><br>
+М.П.
+</div><div class="col" style="padding-left:3mm; border-left:1px solid #000;">
+Груз принял: <span class="small">{{ client_position | default('Генеральный директор') }}</span>
+<span class="ul"></span> <span class="small">(подпись)</span> <span class="ul"></span> <span class="small">(ф.и.о.)</span><br>
+Груз получил (водитель/экспедитор):
+<span class="ul" style="min-width:40mm;"></span> <span class="small">(подпись)</span> <span class="ul" style="min-width:40mm;"></span> <span class="small">(ф.и.о.)</span><br>
+{% if driver_name %}<span class="small">Водитель: {{ driver_name }}{% if vehicle_plate %}, авто: {{ vehicle_plate }}{% endif %}</span><br>{% endif %}
+М.П.
+</div>
+</div>
 
-        <!-- Итоговая секция -->
-        <div class="totals-section">
-            <div class="totals-row">
-                <span>Всего наименований:</span>
-                <span><strong>{{ items|length }}</strong></span>
-            </div>
-            <div class="totals-row">
-                <span>Сумма без НДС:</span>
-                <span><strong>{{ "%.2f"|format(subtotal) }} ₽</strong></span>
-            </div>
-            {% if tax_system == 'osno' and vat_rate > 0 %}
-            <div class="totals-row">
-                <span>НДС ({{ vat_rate }}%):</span>
-                <span><strong>{{ "%.2f"|format(vat_amount) }} ₽</strong></span>
-            </div>
-            {% else %}
-            <div class="totals-row">
-                <span>НДС:</span>
-                <span><strong>Без НДС ({{ tax_system_label }})</strong></span>
-            </div>
-            {% endif %}
-            <div class="totals-row grand">
-                <span>ВСЕГО К ОПЛАТЕ:</span>
-                <span>{{ "%.2f"|format(total_amount) }} ₽</span>
-            </div>
-        </div>
+<div class="small" style="margin-top:2mm; text-align:center;">
+Товарная накладная (ТОРГ-12) сформирована в системе «СпецТехника Про» • Форма по ОКУД 0330212, утв. Постановлением Госкомстата РФ от 25.12.1998 № 132 (бумажная форма для внутренней логистики; электронный документооборот с 01.01.2026 осуществляется посредством УПД)
+</div>
 
-        <!-- Приложение -->
-        <div style="margin-top: 15px; font-size: 10px;">
-            <div><strong>Приложение</strong> (паспорта, сертификаты и т.п.) на ____ листах</div>
-            <div style="margin-top: 5px;">Всего отпущено <strong>{{ items|length }}</strong> наименований</div>
-        </div>
-
-        <!-- Подписи -->
-        <div class="signatures">
-            <div class="section-title">Подписи ответственных лиц</div>
-
-            <div class="signature-block">
-                <div class="signature-row">
-                    <span class="signature-label">Отпуск груза разрешил:</span>
-                    <span class="signature-line"></span>
-                </div>
-                <div style="text-align: right; font-size: 9px; margin-top: 2px;">(подпись, расшифровка)</div>
-            </div>
-
-            <div class="signature-block">
-                <div class="signature-row">
-                    <span class="signature-label">Главный (старший) бухгалтер:</span>
-                    <span class="signature-line"></span>
-                </div>
-                <div style="text-align: right; font-size: 9px; margin-top: 2px;">(подпись, расшифровка)</div>
-            </div>
-
-            <div class="signature-block">
-                <div class="signature-row">
-                    <span class="signature-label">Груз принял:</span>
-                    <span class="signature-line"></span>
-                </div>
-                <div style="text-align: right; font-size: 9px; margin-top: 2px;">(подпись, расшифровка)</div>
-            </div>
-
-            <div class="signature-block">
-                <div class="signature-row">
-                    <span class="signature-label">Груз получил (водитель / экспедитор):</span>
-                    <span class="signature-line"></span>
-                </div>
-                <div style="text-align: right; font-size: 9px; margin-top: 2px;">(подпись, расшифровка)</div>
-                {% if driver_name or vehicle_plate %}
-                <div style="margin-top: 5px;">
-                    <strong>Водитель:</strong> {{ driver_name or '________________' }}
-                    {% if vehicle_plate %}<strong>, авто:</strong> {{ vehicle_plate }}{% endif %}
-                </div>
-                {% endif %}
-            </div>
-
-            <!-- Место для печати -->
-            <div style="text-align: center; margin: 20px 0;">
-                <div class="stamp-placeholder">М.П.</div>
-            </div>
-        </div>
-
-        <!-- Футер -->
-        <div class="footer">
-            ТОРГ-12 сгенерирован автоматически в системе "СпецТехника Про" • spectech.pro<br>
-            Форма утверждена Постановлением Госкомстата РФ от 25.12.1998 № 132<br>
-            Документ используется для внутренней логистики и бумажного документооборота
-        </div>
-    </div>
+</div>
 </body>
 </html>
