@@ -4,57 +4,63 @@
 <meta charset="UTF-8">
 <title>УПД № {{ document_number }}</title>
 <style>
-@page { size: A4 landscape; margin: 7mm 10mm; }
+@page { size: A4 landscape; margin: 8mm 10mm; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: Arial, sans-serif; font-size: 7.5pt; line-height: 1.25; color: #000; }
 .page { width: 277mm; margin: 0 auto; }
-.hdr-left { display: inline-block; width: 42mm; vertical-align: top; padding-right: 3mm; }
-.hdr-right { display: inline-block; width: 232mm; vertical-align: top; }
-.status-box { display: inline-block; border: 1.5px solid #000; padding: 0 6px; font-weight: bold; font-size: 9pt; }
-.req { margin: 1px 0; }
-.req .lbl { display: inline-block; width: 62mm; vertical-align: top; }
-.req .val { display: inline-block; width: 156mm; border-bottom: 1px solid #000; vertical-align: top; padding: 0 1mm; min-height: 9px; word-wrap: break-word; overflow-wrap: break-word; }
-.req .num { display: inline-block; width: 10mm; font-size: 6pt; color: #444; vertical-align: top; }
-table { border-collapse: collapse; width: 100%; margin-top: 2mm; table-layout: fixed; }
-th, td { border: 1px solid #000; padding: 2px 3px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; font-size: 7pt; }
-th { background: #f2f2f2; font-weight: bold; text-align: center; }
-.c { text-align: center; } .r { text-align: right; } .b { font-weight: bold; }
-.sig { margin-top: 3mm; }
-.sig .col { display: inline-block; width: 49%; vertical-align: top; }
-.ul { display: inline-block; border-bottom: 1px solid #000; min-width: 30mm; height: 8px; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 3mm; }
+th, td { border: 1px solid #000; padding: 2px 3px; vertical-align: top; font-size: 6.5pt; }
+th { background: #e8e8e8; font-weight: bold; text-align: center; }
+.c { text-align: center; }
+.r { text-align: right; }
+.b { font-weight: bold; }
+.status-box { display: inline-block; border: 1.5px solid #000; padding: 1px 6px; font-weight: bold; font-size: 8pt; }
+.sig-line { display: inline-block; border-bottom: 1px solid #000; min-width: 30mm; height: 8px; }
 .small { font-size: 6pt; color: #444; }
-.colnum { font-size: 6pt; background: #e6e6e6; font-weight: bold; text-align: center; }
+.footer { margin-top: 3mm; text-align: center; font-size: 6pt; color: #666; border-top: 1px solid #ccc; padding-top: 2mm; }
 </style>
 </head>
 <body>
 <div class="page">
 
-<div class="hdr-left">
-    <b style="font-size: 9pt;">Универсальный<br>передаточный<br>документ</b><br><br>
-    Статус: <span class="status-box">{{ status }}</span><br><br>
-    <span class="small">1 - счёт-фактура и передаточный документ (акт)<br>2 - передаточный документ (акт)</span>
-</div><div class="hdr-right">
-    <div class="req"><span class="lbl">Счёт-фактура №</span><span class="val b">{{ document_number }}</span><span class="lbl" style="width:8mm;">от</span><span class="val b" style="width:30mm;">{{ document_date }}</span><span class="num">(1)</span></div>
-    <div class="req"><span class="lbl">Исправление №</span><span class="val">—</span><span class="lbl" style="width:8mm;">от</span><span class="val" style="width:30mm;">—</span><span class="num">(1а)</span></div>
-    <div class="req"><span class="lbl b">Продавец</span><span class="val">{{ executor_name }}</span><span class="num">(2)</span></div>
-    <div class="req"><span class="lbl">Адрес</span><span class="val">{{ executor_address }}</span><span class="num">(2а)</span></div>
-    <div class="req"><span class="lbl">ИНН/КПП продавца</span><span class="val">{{ executor_inn }} / {{ executor_kpp }}</span><span class="num">(2б)</span></div>
-    <div class="req"><span class="lbl">Грузоотправитель и его адрес</span><span class="val">{{ executor_name }}, {{ executor_address }}</span><span class="num">(3)</span></div>
-    <div class="req"><span class="lbl">Грузополучатель и его адрес</span><span class="val">{{ client_name }}, {{ client_address }}</span><span class="num">(4)</span></div>
-    <div class="req"><span class="lbl">К платёжно-расчётному документу №</span><span class="val">—</span><span class="lbl" style="width:8mm;">от</span><span class="val" style="width:30mm;">—</span><span class="num">(5, 5а)</span></div>
-    <div class="req"><span class="lbl b">Покупатель</span><span class="val">{{ client_name }}</span><span class="num">(6)</span></div>
-    <div class="req"><span class="lbl">Адрес</span><span class="val">{{ client_address }}</span><span class="num">(6а)</span></div>
-    <div class="req"><span class="lbl">ИНН/КПП покупателя</span><span class="val">{{ client_inn }} / {{ client_kpp }}</span><span class="num">(6б)</span></div>
-    <div class="req"><span class="lbl">Валюта: наименование, код</span><span class="val">Российский рубль, 643</span><span class="num">(7)</span></div>
-    <div class="req"><span class="lbl">Идентификатор гос. контракта, договора</span><span class="val">{{ basis_document }}</span><span class="num">(8)</span></div>
+<!-- ШАПКА: таблица с 3 ячейками -->
+<table style="margin-bottom: 3mm;">
+<tr>
+<td style="width: 50mm; background: #f9f9f9; vertical-align: top;">
+<b style="font-size: 9pt;">Универсальный<br>передаточный<br>документ</b><br><br>
+Статус: <span class="status-box">{{ status }}</span><br>
+<div class="small" style="margin-top: 2mm;">
+1 — счёт-фактура и<br>передаточный документ (акт)<br>
+2 — передаточный документ (акт)
 </div>
+</td>
+<td style="width: 114mm; vertical-align: top;">
+Счёт-фактура № <b>{{ document_number }}</b> от <b>{{ document_date }}</b> (1)<br>
+Исправление № — от — (1а)<br>
+<b>Продавец:</b> {{ executor_name }} (2)<br>
+Адрес: {{ executor_address }} (2а)<br>
+ИНН/КПП продавца: {{ executor_inn }} / {{ executor_kpp }} (2б)<br>
+Грузоотправитель и его адрес: {{ executor_name }}, {{ executor_address }} (3)<br>
+К платёжно-расчётному документу № — от — (5, 5а)<br>
+Валюта: наименование, код: Российский рубль, 643 (7)
+</td>
+<td style="width: 113mm; vertical-align: top;">
+<b>Покупатель:</b> {{ client_name }} (6)<br>
+Адрес: {{ client_address }} (6а)<br>
+ИНН/КПП покупателя: {{ client_inn }} / {{ client_kpp }} (6б)<br>
+Грузополучатель и его адрес: {{ client_name }}, {{ client_address }} (4)<br>
+Документ об отгрузке: наименование, № — от — (6, 6а)<br>
+Идентификатор гос. контракта, договора: {{ basis_document }} (8)
+</td>
+</tr>
+</table>
 
+<!-- ТАБЛИЦА: простая, без colspan -->
 <table>
-<thead>
-<tr class="colnum">
+<tr class="small" style="background:#d0d0d0;">
 <td style="width:6mm;">1</td>
 <td style="width:8mm;">А</td>
-<td>1а</td>
+<td style="width:60mm;">1а</td>
 <td style="width:8mm;">1б</td>
 <td style="width:7mm;">2</td>
 <td style="width:9mm;">2а</td>
@@ -70,25 +76,23 @@ th { background: #f2f2f2; font-weight: bold; text-align: center; }
 <td style="width:11mm;">11</td>
 </tr>
 <tr>
-<th style="width:6mm;">№ п/п</th>
-<th style="width:8mm;">Код товара</th>
+<th>№ п/п</th>
+<th>Код товара</th>
 <th>Наименование товара (описание работ, услуг), имущественного права</th>
-<th style="width:8mm;">Код вида товара</th>
-<th style="width:7mm;">Ед. изм. код</th>
-<th style="width:9mm;">Ед. изм. усл. обозн.</th>
-<th style="width:11mm;">Количество (объём)</th>
-<th style="width:14mm;">Цена (тариф) за единицу</th>
-<th style="width:16mm;">Стоимость без налога - всего</th>
-<th style="width:11mm;">В т.ч. сумма акциза</th>
-<th style="width:9mm;">Налоговая ставка</th>
-<th style="width:14mm;">Сумма налога, предъявл. покупателю</th>
-<th style="width:16mm;">Стоимость с налогом - всего</th>
-<th style="width:7mm;">Страна: код</th>
-<th style="width:9mm;">Страна: наим.</th>
-<th style="width:11mm;">№ декларации</th>
+<th>Код вида товара</th>
+<th>Ед. изм. код</th>
+<th>Ед. изм. усл. обозн.</th>
+<th>Количество (объём)</th>
+<th>Цена (тариф) за единицу</th>
+<th>Стоимость без налога - всего</th>
+<th>В т.ч. сумма акциза</th>
+<th>Налоговая ставка</th>
+<th>Сумма налога, предъявл. покупателю</th>
+<th>Стоимость с налогом - всего</th>
+<th>Страна: код</th>
+<th>Страна: наим.</th>
+<th>№ декларации</th>
 </tr>
-</thead>
-<tbody>
 {% for item in items %}
 <tr>
 <td class="c">{{ loop.index }}</td>
@@ -119,49 +123,47 @@ th { background: #f2f2f2; font-weight: bold; text-align: center; }
 <td class="r">{{ "%.2f"|format(total_amount) }}</td>
 <td></td><td></td><td></td>
 </tr>
-</tbody>
 </table>
 
-<div class="sig">
-<div class="col">
-Документ составлен на <span class="ul" style="min-width:6mm;">{{ sheets_count | default(1) }}</span> листах<br>
+<!-- ПОДПИСИ -->
+<div style="margin-top: 3mm;">
+Документ составлен на <span class="sig-line" style="min-width:6mm;">{{ sheets_count | default(1) }}</span> листах<br>
 Руководитель организации или иное уполномоченное лицо<br>
 <span class="small">{{ executor_position | default('Генеральный директор') }}</span>
-<span class="ul"></span> <span class="small">(подпись)</span> <span class="ul"></span> <span class="small">(ф.и.о.)</span><br>
+<span class="sig-line"></span> <span class="small">(подпись)</span> <span class="sig-line"></span> <span class="small">(ф.и.о.)</span><br>
 Главный бухгалтер или иное уполномоченное лицо<br>
-<span class="ul" style="min-width:40mm;"></span> <span class="small">(подпись)</span> <span class="ul" style="min-width:40mm;"></span> <span class="small">(ф.и.о.)</span><br>
+<span class="sig-line" style="min-width:40mm;"></span> <span class="small">(подпись)</span> <span class="sig-line" style="min-width:40mm;"></span> <span class="small">(ф.и.о.)</span><br>
 Индивидуальный предприниматель или иное уполномоченное лицо<br>
-<span class="ul" style="min-width:40mm;"></span> <span class="small">(подпись)</span> <span class="ul" style="min-width:40mm;"></span> <span class="small">(ф.и.о.)</span><br>
+<span class="sig-line" style="min-width:40mm;"></span> <span class="small">(подпись)</span> <span class="sig-line" style="min-width:40mm;"></span> <span class="small">(ф.и.о.)</span><br>
 <span class="small">(реквизиты свидетельства о государственной регистрации ИП)</span>
-</div><div class="col" style="padding-left:3mm; border-left:1px solid #000;">
-Основание передачи (сдачи)/получения (приёмки): <span class="ul" style="min-width:80mm;">{{ basis_document }}</span> <span class="small">[10]</span><br>
-Данные о транспортировке и грузе: <span class="ul" style="min-width:95mm;">—</span> <span class="small">[11]</span><br>
+</div>
+
+<div style="margin-top: 3mm; border-top: 1px solid #ccc; padding-top: 2mm;">
+Основание передачи (сдачи)/получения (приёмки): <span class="sig-line" style="min-width:100mm;">{{ basis_document }}</span> <span class="small">[10]</span><br>
+Данные о транспортировке и грузе: <span class="sig-line" style="min-width:110mm;">—</span> <span class="small">[11]</span><br>
 Товар (груз) передал / услуги, результаты работ, права сдал <span class="small">[12]</span><br>
 <span class="small">{{ executor_position | default('Генеральный директор') }}</span>
-<span class="ul"></span> <span class="small">(подпись)</span> <span class="ul"></span> <span class="small">(ф.и.о.)</span><br>
-Дата отгрузки, передачи (сдачи) <span class="small">[13]</span>: «<span class="ul" style="min-width:6mm;">{{ doc_day }}</span>» <span class="ul" style="min-width:14mm;">{{ doc_month }}</span> <span class="ul" style="min-width:8mm;">{{ doc_year }}</span> г.<br>
+<span class="sig-line"></span> <span class="small">(подпись)</span> <span class="sig-line"></span> <span class="small">(ф.и.о.)</span><br>
+Дата отгрузки, передачи (сдачи) <span class="small">[13]</span>: «<span class="sig-line" style="min-width:6mm;">{{ doc_day }}</span>» <span class="sig-line" style="min-width:14mm;">{{ doc_month }}</span> <span class="sig-line" style="min-width:8mm;">{{ doc_year }}</span> г.<br>
 Ответственный за правильность оформления факта хозяйственной жизни <span class="small">[15]</span>:<br>
 <span class="small">{{ executor_position | default('Генеральный директор') }}</span>
-<span class="ul"></span> <span class="small">(подпись)</span> <span class="ul"></span> <span class="small">(ф.и.о.)</span><br>
+<span class="sig-line"></span> <span class="small">(подпись)</span> <span class="sig-line"></span> <span class="small">(ф.и.о.)</span><br>
 Наименование экономического субъекта — составителя документа <span class="small">[16]</span>: {{ executor_name }}<br>
 М.П.
 </div>
-</div>
 
-<div class="sig">
-<div class="col" style="width:100%; border-left:none; padding-left:0;">
+<div style="margin-top: 3mm; border-top: 1px solid #ccc; padding-top: 2mm;">
 Товар (груз) получил / услуги, результаты работ, права принял <span class="small">[17]</span>:
 <span class="small">{{ client_position | default('Генеральный директор') }}</span>
-<span class="ul"></span> <span class="small">(подпись)</span> <span class="ul"></span> <span class="small">(ф.и.о.)</span><br>
-Дата получения (приёмки) <span class="small">[18]</span>: «<span class="ul" style="min-width:6mm;"></span>» <span class="ul" style="min-width:14mm;"></span> 20<span class="ul" style="min-width:6mm;"></span> г.
+<span class="sig-line"></span> <span class="small">(подпись)</span> <span class="sig-line"></span> <span class="small">(ф.и.о.)</span><br>
+Дата получения (приёмки) <span class="small">[18]</span>: «<span class="sig-line" style="min-width:6mm;"></span>» <span class="sig-line" style="min-width:14mm;"></span> 20<span class="sig-line" style="min-width:6mm;"></span> г.
 Ответственный за правильность оформления факта хозяйственной жизни <span class="small">[20]</span>:
-<span class="ul"></span> <span class="small">(подпись)</span> <span class="ul"></span> <span class="small">(ф.и.о.)</span><br>
+<span class="sig-line"></span> <span class="small">(подпись)</span> <span class="sig-line"></span> <span class="small">(ф.и.о.)</span><br>
 Наименование экономического субъекта — составителя документа <span class="small">[21]</span>: {{ client_name }}
 М.П.
 </div>
-</div>
 
-<div class="small" style="margin-top:2mm; text-align:center;">
+<div class="footer">
 УПД сгенерирован в системе «СпецТехника Про» • Форма по письму ФНС России от 21.10.2013 № ММВ-20-3/96@ в редакции постановления Правительства РФ от 23.01.2026 № 26 (действует с 01.04.2026) • Ставка НДС 22%
 </div>
 

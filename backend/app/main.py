@@ -76,6 +76,20 @@ async def lifespan(app: FastAPI):
     else:
         print("⚠️ MinIO connection failed. Check credentials and bucket name.")
 
+    # Проверка системных шрифтов (только диагностика, регистрация в reportlab_pdf_generator)
+    try:
+        from pathlib import Path
+
+        for p in [
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        ]:
+            print(
+                f"{'✅' if p.exists() else '⚠️'} Font {p.name}: {p.stat().st_size if p.exists() else 0} bytes"
+            )
+    except Exception as e:
+        print(f"⚠️ Font check failed: {e}")
+
     yield  # <-- Приложение работает
 
     # --- Shutdown ---
