@@ -7,11 +7,15 @@
 # ───────────────────────────────────────────────────────────
 FROM python:3.12-slim AS builder
 
-# Установка системных шрифтов для кириллицы (ReportLab)
+# Установка системных шрифтов для кириллицы (ReportLab) + openssl для верификации подписей
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends fonts-dejavu && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        fonts-dejavu \
+        fonts-dejavu-core \
+        fonts-dejavu-extra \
+        openssl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 

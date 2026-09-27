@@ -923,3 +923,52 @@ def send_act_to_diadoc(
         raise HTTPException(
             status_code=500, detail=f"Failed to send to Diadoc: {str(e)}"
         )
+
+
+@router.get("/{act_id}/mock-files")
+def list_mock_diadoc_files(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Список mock-файлов (XML/SIG), сохранённых при эмуляции отправки в Диадок.
+    Полезно для проверки корректности генерации ЭДО-пакета без реального ключа.
+    """
+    from pathlib import Path
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    mock_dir = Path("/tmp/diadoc_mock")
+    if not mock_dir.exists():
+        return {
+            "act_id": act_id,
+            "document_number": act.document_number,
+            "files": [],
+            "total_files": 0,
+            "note": "No mock files yet. Use POST /acts/{id}/send-to-diadoc first.",
+        }
+
+    doc_base = act.document_number.replace("/", "_").replace(" ", "-")
+    files = []
+    for f in mock_dir.glob(f"*{doc_base}*"):
+        stat = f.stat()
+        files.append(
+            {
+                "filename": f.name,
+                "path": str(f),
+                "size_bytes": stat.st_size,
+                "created": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            }
+        )
+
+    return {
+        "act_id": act_id,
+        "document_number": act.document_number,
+        "mock_directory": str(mock_dir),
+        "files": files,
+        "total_files": len(files),
+    }
