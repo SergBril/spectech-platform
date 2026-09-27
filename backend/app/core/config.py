@@ -18,6 +18,11 @@ class Settings(BaseSettings):
         "postgresql+psycopg://spectech:spectech_dev_password@localhost:5432/spectech"
     )
 
+    # Diadoc (EDO)
+    DIADOC_API_KEY: str = ""
+    DIADOC_BOX_ID: str = ""
+    DIADOC_USE_SANDBOX: bool = True
+
     # Redis settings
     redis_host: str = "redis"
     redis_port_number: int = Field(

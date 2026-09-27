@@ -848,3 +848,78 @@ def verify_upd_signature(
         raise HTTPException(
             status_code=500, detail=f"Signature verification failed: {str(e)}"
         )
+
+
+@router.post("/{act_id}/send-to-diadoc")
+def send_act_to_diadoc(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Отправить подписанный УПД в Диадок (электронный документооборот).
+
+    Процесс:
+    1. Генерация XML УПД
+    2. Создание отсоединённой подписи (.sig)
+    3. Отправка пакета в Диадок API
+
+    Требует настройки переменных окружения:
+    - DIADOC_API_KEY
+    - DIADOC_BOX_ID
+    - DIADOC_USE_SANDBOX (true/false)
+    """
+    from app.models.company import Company
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
+    from app.services.diadoc_service import diadoc_service
+    from app.services.edoxml.signature_service import create_detached_signature
+    from app.services.edoxml.upd_xml_generator import generate_upd_xml
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    client = db.get(Contractor, act.client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    company = db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    request = db.get(Request, act.request_id) if act.request_id else None
+
+    try:
+        # Генерация XML
+        xml_bytes = generate_upd_xml(act, company, client, request)
+
+        # Создание подписи
+        signature_bytes = create_detached_signature(xml_bytes)
+
+        # Отправка в Диадок
+        result = diadoc_service.send_signed_package(
+            xml_bytes=xml_bytes,
+            sig_bytes=signature_bytes,
+            document_number=act.document_number,
+        )
+
+        if result.get("status") == "success":
+            logger.info(
+                f"✅ Act {act.document_number} sent to Diadoc: "
+                f"message_id={result.get('message_id')}"
+            )
+        else:
+            logger.error(
+                f"❌ Failed to send act {act.document_number} to Diadoc: "
+                f"{result.get('error')}"
+            )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Failed to send to Diadoc: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to send to Diadoc: {str(e)}"
+        )
