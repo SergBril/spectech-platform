@@ -612,3 +612,62 @@ def download_torg12_pdf(
         raise HTTPException(
             status_code=500, detail=f"Failed to generate TORG-12: {str(e)}"
         )
+
+
+@router.get("/{act_id}/xml")
+def download_upd_xml(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Скачать XML УПД для электронного документооборота (формат ФНС 5.03).
+
+    Формат: КНД 1115133 (ФайлОбмИнФХЖ4)
+    Кодировка: windows-1251
+    XSD: упрощённая схема для валидации структуры
+    """
+    from app.models.company import Company
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
+    from app.services.edoxml.upd_xml_generator import (
+        generate_upd_xml,
+        validate_upd_xml,
+    )
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    client = db.get(Contractor, act.client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    company = db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    request = db.get(Request, act.request_id) if act.request_id else None
+
+    try:
+        xml_bytes = generate_upd_xml(act, company, client, request)
+
+        is_valid, errors = validate_upd_xml(xml_bytes)
+        if is_valid:
+            logger.info(f"✅ UPD XML for act {act_id} passed XSD validation")
+        else:
+            logger.warning(f"⚠️ UPD XML for act {act_id} warnings: {errors}")
+
+        filename = f"UPD-{act.document_number}.xml"
+        return Response(
+            content=xml_bytes,
+            media_type="application/xml",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(xml_bytes)),
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate UPD XML: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate XML: {str(e)}")
