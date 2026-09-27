@@ -126,3 +126,6 @@ logs.txt
 
 # Local font files (installed via apt-get in Dockerfile, not needed in repo)
 backend/fonts/
+
+# Test certificates for EDO (generated at runtime, not for production)
+backend/app/services/edoxml/certificates/
