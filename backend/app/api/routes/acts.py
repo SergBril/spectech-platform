@@ -671,3 +671,180 @@ def download_upd_xml(
     except Exception as e:
         logger.error(f"Failed to generate UPD XML: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate XML: {str(e)}")
+
+
+@router.get("/{act_id}/signed-xml")
+def download_signed_upd_xml(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Скачать XML УПД + отсоединённую подпись (.sig) в одном ZIP-архиве.
+
+    Возвращает архив с двумя файлами:
+    - UPD-ACT-2026-XXXX.xml (документ в windows-1251)
+    - UPD-ACT-2026-XXXX.xml.sig (отсоединённая подпись CMS/PKCS#7 DER)
+
+    Такой формат используется для загрузки в Диадок/СБИС/Контур.Экстерн.
+    """
+    import io
+    import zipfile
+
+    from app.models.company import Company
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
+    from app.services.edoxml.signature_service import create_detached_signature
+    from app.services.edoxml.upd_xml_generator import generate_upd_xml
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    client = db.get(Contractor, act.client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    company = db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    request = db.get(Request, act.request_id) if act.request_id else None
+
+    try:
+        # Генерация XML
+        xml_bytes = generate_upd_xml(act, company, client, request)
+
+        # Создание отсоединённой подписи
+        signature_bytes = create_detached_signature(xml_bytes)
+
+        # Упаковка в ZIP (формат для ЭДО)
+        base_name = f"UPD-{act.document_number}"
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(f"{base_name}.xml", xml_bytes)
+            zf.writestr(f"{base_name}.xml.sig", signature_bytes)
+        zip_bytes = zip_buffer.getvalue()
+
+        logger.info(
+            f"✅ Signed UPD package created for act {act_id}: "
+            f"XML={len(xml_bytes)} bytes, SIG={len(signature_bytes)} bytes"
+        )
+
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{base_name}-signed.zip"',
+                "Content-Length": str(len(zip_bytes)),
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to create signed package: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create signed package: {str(e)}"
+        )
+
+
+@router.get("/{act_id}/signature")
+def download_upd_signature(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Скачать только отсоединённую подпись (.sig) для XML УПД.
+
+    Формат: CMS/PKCS#7 detached в DER кодировке.
+    Используется если XML уже есть и нужна только подпись.
+    """
+    from app.models.company import Company
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
+    from app.services.edoxml.signature_service import create_detached_signature
+    from app.services.edoxml.upd_xml_generator import generate_upd_xml
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    client = db.get(Contractor, act.client_id)
+    company = db.get(Company, company_id)
+    request = db.get(Request, act.request_id) if act.request_id else None
+
+    if not client or not company:
+        raise HTTPException(status_code=404, detail="Client or company not found")
+
+    try:
+        xml_bytes = generate_upd_xml(act, company, client, request)
+        signature_bytes = create_detached_signature(xml_bytes)
+
+        filename = f"UPD-{act.document_number}.xml.sig"
+        return Response(
+            content=signature_bytes,
+            media_type="application/pkcs7-signature",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(signature_bytes)),
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to create signature: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create signature: {str(e)}"
+        )
+
+
+@router.get("/{act_id}/signature/verify")
+def verify_upd_signature(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Проверить валидность подписи XML УПД (генерирует XML+подпись и проверяет).
+
+    Возвращает JSON с результатом проверки.
+    """
+    from app.models.company import Company
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
+    from app.services.edoxml.signature_service import (
+        create_detached_signature,
+        verify_detached_signature,
+    )
+    from app.services.edoxml.upd_xml_generator import generate_upd_xml
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    client = db.get(Contractor, act.client_id)
+    company = db.get(Company, company_id)
+    request = db.get(Request, act.request_id) if act.request_id else None
+
+    if not client or not company:
+        raise HTTPException(status_code=404, detail="Client or company not found")
+
+    try:
+        xml_bytes = generate_upd_xml(act, company, client, request)
+        signature_bytes = create_detached_signature(xml_bytes)
+        is_valid = verify_detached_signature(xml_bytes, signature_bytes)
+
+        return {
+            "act_id": act_id,
+            "document_number": act.document_number,
+            "xml_size": len(xml_bytes),
+            "signature_size": len(signature_bytes),
+            "signature_valid": is_valid,
+            "algorithm": "RSA-SHA256 (development mode)",
+            "note": "Для боевого ЭДО используйте ГОСТ Р 34.10-2012 через КриптоПро",
+        }
+    except Exception as e:
+        logger.error(f"Signature verification failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Signature verification failed: {str(e)}"
+        )
