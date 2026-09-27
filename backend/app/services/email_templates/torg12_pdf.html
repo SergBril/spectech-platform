@@ -4,43 +4,44 @@
 <meta charset="UTF-8">
 <title>ТОРГ-12 № {{ document_number }}</title>
 <style>
-@page { size: A4 landscape; margin: 7mm 10mm; }
+@page { size: A4 landscape; margin: 8mm 10mm; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: Arial, sans-serif; font-size: 7.5pt; line-height: 1.25; color: #000; }
 .page { width: 277mm; margin: 0 auto; }
-.hdr-left { display: inline-block; width: 190mm; vertical-align: top; }
-.hdr-right { display: inline-block; width: 84mm; vertical-align: top; text-align: right; }
-.req { margin: 1px 0; }
-.req .lbl { display: inline-block; width: 55mm; vertical-align: top; }
-.req .val { display: inline-block; width: 130mm; border-bottom: 1px solid #000; vertical-align: top; padding: 0 1mm; min-height: 9px; word-wrap: break-word; overflow-wrap: break-word; }
-table { border-collapse: collapse; width: 100%; margin-top: 2mm; table-layout: fixed; }
-th, td { border: 1px solid #000; padding: 2px 3px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; font-size: 7pt; }
-th { background: #f2f2f2; font-weight: bold; text-align: center; }
-.c { text-align: center; } .r { text-align: right; } .b { font-weight: bold; }
-.sig { margin-top: 3mm; }
-.sig .col { display: inline-block; width: 49%; vertical-align: top; }
-.ul { display: inline-block; border-bottom: 1px solid #000; min-width: 30mm; height: 8px; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 3mm; }
+th, td { border: 1px solid #000; padding: 2px 3px; vertical-align: top; font-size: 6.5pt; }
+th { background: #e8e8e8; font-weight: bold; text-align: center; }
+.c { text-align: center; }
+.r { text-align: right; }
+.b { font-weight: bold; }
+.sig-line { display: inline-block; border-bottom: 1px solid #000; min-width: 30mm; height: 8px; }
 .small { font-size: 6pt; color: #444; }
-.colnum { font-size: 6pt; background: #e6e6e6; font-weight: bold; text-align: center; }
+.footer { margin-top: 3mm; text-align: center; font-size: 6pt; color: #666; border-top: 1px solid #ccc; padding-top: 2mm; }
 </style>
 </head>
 <body>
 <div class="page">
 
-<div class="hdr-left">
-    <div class="req"><span class="lbl">Организация</span><span class="val b">{{ executor_name }}</span></div>
-    <div class="req"><span class="lbl">Структурное подразделение</span><span class="val">—</span></div>
-    <div class="req"><span class="lbl">Основание</span><span class="val">{{ basis_document }}</span></div>
-    <div class="req"><span class="lbl">Товар (груз) передал по доверенности №</span><span class="val">—</span></div>
-</div><div class="hdr-right">
-    Форма по ОКУД <b>0330212</b><br>
-    Товарная накладная № <b>{{ document_number }}</b><br>
-    Дата составления <b>{{ document_date }}</b><br>
-    Утв. Постановлением Госкомстата РФ от 25.12.1998 № 132
-</div>
+<!-- ШАПКА -->
+<table style="margin-bottom: 3mm;">
+<tr>
+<td style="width: 190mm; vertical-align: top;">
+Организация: <b>{{ executor_name }}</b><br>
+Структурное подразделение: —<br>
+Основание: {{ basis_document }}<br>
+Товар (груз) передал по доверенности № —
+</td>
+<td style="width: 87mm; vertical-align: top; text-align: right;">
+Форма по ОКУД <b>0330212</b><br>
+Товарная накладная № <b>{{ document_number }}</b><br>
+Дата составления <b>{{ document_date }}</b><br>
+Утв. Постановлением Госкомстата РФ от 25.12.1998 № 132
+</td>
+</tr>
+</table>
 
+<!-- ТАБЛИЦА СТОРОН -->
 <table>
-<thead>
 <tr>
 <th style="width:22mm;">Сторона</th>
 <th>Организация, адрес, телефон</th>
@@ -48,8 +49,6 @@ th { background: #f2f2f2; font-weight: bold; text-align: center; }
 <th style="width:38mm;">Расчётный счёт</th>
 <th style="width:38mm;">Корр. счёт</th>
 </tr>
-</thead>
-<tbody>
 <tr>
 <td class="b">Грузоотправитель</td>
 <td>{{ executor_name }}, {{ executor_address }}</td>
@@ -78,15 +77,14 @@ th { background: #f2f2f2; font-weight: bold; text-align: center; }
 <td>{{ client_account | default('—') }}</td>
 <td>{{ client_correspondent_account | default('—') }}</td>
 </tr>
-</tbody>
 </table>
 
+<!-- ТАБЛИЦА ТОВАРОВ -->
 <table>
-<thead>
-<tr class="colnum">
+<tr class="small" style="background:#d0d0d0;">
 <td style="width:6mm;">1</td>
 <td style="width:9mm;">2</td>
-<td>3</td>
+<td style="width:65mm;">3</td>
 <td style="width:8mm;">4</td>
 <td style="width:7mm;">5</td>
 <td style="width:9mm;">6</td>
@@ -101,24 +99,22 @@ th { background: #f2f2f2; font-weight: bold; text-align: center; }
 <td style="width:13mm;">15</td>
 </tr>
 <tr>
-<th style="width:6mm;">№ п/п</th>
-<th style="width:9mm;">Код товара</th>
+<th>№ п/п</th>
+<th>Код товара</th>
 <th>Наименование и краткое описание товара</th>
-<th style="width:8mm;">Сорт</th>
-<th style="width:7mm;">Ед. изм. код</th>
-<th style="width:9mm;">Ед. изм. наим.</th>
-<th style="width:11mm;">Количество</th>
-<th style="width:14mm;">Цена</th>
-<th style="width:15mm;">Сумма</th>
-<th style="width:9mm;">НДС, ставка</th>
-<th style="width:13mm;">НДС, сумма</th>
-<th style="width:15mm;">Сумма с НДС</th>
-<th style="width:9mm;">Кол-во мест</th>
-<th style="width:10mm;">Вид упаковки</th>
-<th style="width:13mm;">Масса нетто/брутто</th>
+<th>Сорт</th>
+<th>Ед. изм. код</th>
+<th>Ед. изм. наим.</th>
+<th>Количество</th>
+<th>Цена</th>
+<th>Сумма</th>
+<th>НДС, ставка</th>
+<th>НДС, сумма</th>
+<th>Сумма с НДС</th>
+<th>Кол-во мест</th>
+<th>Вид упаковки</th>
+<th>Масса нетто/брутто</th>
 </tr>
-</thead>
-<tbody>
 {% for item in items %}
 <tr>
 <td class="c">{{ loop.index }}</td>
@@ -150,35 +146,35 @@ th { background: #f2f2f2; font-weight: bold; text-align: center; }
 <td class="r">{{ "%.2f"|format(total_amount) }}</td>
 <td></td><td></td><td></td>
 </tr>
-</tbody>
 </table>
 
 <div style="margin-top:2mm;">
-Всего наименований <span class="ul" style="min-width:10mm;">{{ items|length }}</span>,
-мест <span class="ul" style="min-width:10mm;">—</span>,
-масса нетто <span class="ul" style="min-width:10mm;">—</span>,
-брутто <span class="ul" style="min-width:10mm;">—</span><br>
+Всего наименований <span class="sig-line" style="min-width:10mm;">{{ items|length }}</span>,
+мест <span class="sig-line" style="min-width:10mm;">—</span>,
+масса нетто <span class="sig-line" style="min-width:10mm;">—</span>,
+брутто <span class="sig-line" style="min-width:10mm;">—</span><br>
 <b>Всего сумма прописью:</b> {{ total_in_words }}
 </div>
 
-<div class="sig">
-<div class="col">
+<!-- ПОДПИСИ -->
+<div style="margin-top: 3mm;">
 Отпуск груза разрешил: <span class="small">{{ executor_position | default('Генеральный директор') }}</span>
-<span class="ul"></span> <span class="small">(подпись)</span> <span class="ul"></span> <span class="small">(ф.и.о.)</span><br>
+<span class="sig-line"></span> <span class="small">(подпись)</span> <span class="sig-line"></span> <span class="small">(ф.и.о.)</span><br>
 Главный (старший) бухгалтер:
-<span class="ul" style="min-width:40mm;"></span> <span class="small">(подпись)</span> <span class="ul" style="min-width:40mm;"></span> <span class="small">(ф.и.о.)</span><br>
+<span class="sig-line" style="min-width:40mm;"></span> <span class="small">(подпись)</span> <span class="sig-line" style="min-width:40mm;"></span> <span class="small">(ф.и.о.)</span><br>
 М.П.
-</div><div class="col" style="padding-left:3mm; border-left:1px solid #000;">
+</div>
+
+<div style="margin-top: 3mm; border-top: 1px solid #ccc; padding-top: 2mm;">
 Груз принял: <span class="small">{{ client_position | default('Генеральный директор') }}</span>
-<span class="ul"></span> <span class="small">(подпись)</span> <span class="ul"></span> <span class="small">(ф.и.о.)</span><br>
+<span class="sig-line"></span> <span class="small">(подпись)</span> <span class="sig-line"></span> <span class="small">(ф.и.о.)</span><br>
 Груз получил (водитель/экспедитор):
-<span class="ul" style="min-width:40mm;"></span> <span class="small">(подпись)</span> <span class="ul" style="min-width:40mm;"></span> <span class="small">(ф.и.о.)</span><br>
+<span class="sig-line" style="min-width:40mm;"></span> <span class="small">(подпись)</span> <span class="sig-line" style="min-width:40mm;"></span> <span class="small">(ф.и.о.)</span><br>
 {% if driver_name %}<span class="small">Водитель: {{ driver_name }}{% if vehicle_plate %}, авто: {{ vehicle_plate }}{% endif %}</span><br>{% endif %}
 М.П.
 </div>
-</div>
 
-<div class="small" style="margin-top:2mm; text-align:center;">
+<div class="footer">
 Товарная накладная (ТОРГ-12) сформирована в системе «СпецТехника Про» • Форма по ОКУД 0330212, утв. Постановлением Госкомстата РФ от 25.12.1998 № 132 (бумажная форма для внутренней логистики; электронный документооборот с 01.01.2026 осуществляется посредством УПД)
 </div>
 

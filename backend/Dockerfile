@@ -7,6 +7,12 @@
 # ───────────────────────────────────────────────────────────
 FROM python:3.12-slim AS builder
 
+# Установка системных шрифтов для кириллицы (ReportLab)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends fonts-dejavu && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /build
 
 # Install build dependencies (fonts NOT needed for compilation)

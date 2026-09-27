@@ -123,3 +123,6 @@ update_client.sql
 # Marketing demo videos (generated artifacts)
 marketing/demo-videos/output/
 logs.txt
+
+# Local font files (installed via apt-get in Dockerfile, not needed in repo)
+backend/fonts/
