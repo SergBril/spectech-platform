@@ -1,0 +1,6 @@
+# Override для разработки — монтирует тесты и исходники напрямую
+services:
+  backend:
+    volumes:
+      - ./backend/tests:/app/tests:ro
+      - ./backend/app:/app/app:ro
