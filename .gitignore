@@ -129,3 +129,7 @@ backend/fonts/
 
 # Test certificates for EDO (generated at runtime, not for production)
 backend/app/services/edoxml/certificates/
+
+# Diadoc mock files (generated at runtime)
+diadoc_mock/
+*.sig
