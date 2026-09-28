@@ -16,7 +16,7 @@ depends_on = None
 
 
 def upgrade():
-    # === 1. Создаём Enum типы ДО их использования ===
+    # === 1. Создаём Enum типы ===
     op.execute(
         """
         DO $$ BEGIN
@@ -73,7 +73,10 @@ def upgrade():
     """
     )
 
-    # === 2. Изменяем типы колонок на Enum (с USING для безопасной конвертации) ===
+    # === 2. Изменяем типы колонок (с DROP DEFAULT для безопасности) ===
+
+    # email_logs.status
+    op.execute("ALTER TABLE email_logs ALTER COLUMN status DROP DEFAULT;")
     op.execute(
         """
         ALTER TABLE email_logs
@@ -81,7 +84,12 @@ def upgrade():
         USING status::text::emailstatus;
     """
     )
+    op.execute(
+        "ALTER TABLE email_logs ALTER COLUMN status SET DEFAULT 'pending'::emailstatus;"
+    )
 
+    # email_templates.template_type
+    op.execute("ALTER TABLE email_templates ALTER COLUMN template_type DROP DEFAULT;")
     op.execute(
         """
         ALTER TABLE email_templates
@@ -90,6 +98,8 @@ def upgrade():
     """
     )
 
+    # maintenance_orders.order_type
+    op.execute("ALTER TABLE maintenance_orders ALTER COLUMN order_type DROP DEFAULT;")
     op.execute(
         """
         ALTER TABLE maintenance_orders
@@ -98,6 +108,8 @@ def upgrade():
     """
     )
 
+    # maintenance_orders.status
+    op.execute("ALTER TABLE maintenance_orders ALTER COLUMN status DROP DEFAULT;")
     op.execute(
         """
         ALTER TABLE maintenance_orders
@@ -106,12 +118,17 @@ def upgrade():
     """
     )
 
+    # maintenance_orders.priority
+    op.execute("ALTER TABLE maintenance_orders ALTER COLUMN priority DROP DEFAULT;")
     op.execute(
         """
         ALTER TABLE maintenance_orders
         ALTER COLUMN priority TYPE maintenancepriority
         USING priority::text::maintenancepriority;
     """
+    )
+    op.execute(
+        "ALTER TABLE maintenance_orders ALTER COLUMN priority SET DEFAULT 'medium'::maintenancepriority;"
     )
 
     # === 3. Индексы для телеметрии ===
@@ -155,15 +172,21 @@ def downgrade():
     op.drop_index("idx_alerts_status_severity", table_name="alerts")
     op.drop_index("idx_alerts_vehicle", table_name="alerts")
 
-    op.execute("ALTER TABLE email_logs ALTER COLUMN status TYPE VARCHAR(20)")
     op.execute(
-        "ALTER TABLE email_templates ALTER COLUMN template_type TYPE VARCHAR(50)"
+        "ALTER TABLE email_logs ALTER COLUMN status TYPE VARCHAR(20) USING status::text"
     )
     op.execute(
-        "ALTER TABLE maintenance_orders ALTER COLUMN order_type TYPE VARCHAR(20)"
+        "ALTER TABLE email_templates ALTER COLUMN template_type TYPE VARCHAR(50) USING template_type::text"
     )
-    op.execute("ALTER TABLE maintenance_orders ALTER COLUMN status TYPE VARCHAR(20)")
-    op.execute("ALTER TABLE maintenance_orders ALTER COLUMN priority TYPE VARCHAR(20)")
+    op.execute(
+        "ALTER TABLE maintenance_orders ALTER COLUMN order_type TYPE VARCHAR(20) USING order_type::text"
+    )
+    op.execute(
+        "ALTER TABLE maintenance_orders ALTER COLUMN status TYPE VARCHAR(20) USING status::text"
+    )
+    op.execute(
+        "ALTER TABLE maintenance_orders ALTER COLUMN priority TYPE VARCHAR(20) USING priority::text"
+    )
 
     op.execute("DROP TYPE IF EXISTS emailstatus")
     op.execute("DROP TYPE IF EXISTS emailtemplatetype")
