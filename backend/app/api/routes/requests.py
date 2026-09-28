@@ -7,6 +7,7 @@ from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
 from app.models.dispatch import Request, RequestAssignment, RequestStatusLog
+from app.models.shift import ShiftTaskStatus
 from app.schemas.request import RequestAssign, RequestCreate, RequestRead, RequestUpdate
 
 router = APIRouter()
@@ -205,6 +206,37 @@ def assign_request(
             comment=f"Назначена техника: {vehicle.name}",
         )
     )
+    # Автоматически создаём ShiftTask на первую дату
+    from app.models.shift import ShiftTask
+
+    # Проверка: не создан ли уже ShiftTask для этого назначения
+    existing_task = (
+        db.query(ShiftTask)
+        .filter(
+            ShiftTask.request_id == request_id,
+            ShiftTask.assignment_id == assignment.id,
+        )
+        .first()
+    )
+
+    if not existing_task:
+        shift_date = payload.planned_start.date()
+        shift_task = ShiftTask(
+            request_id=request_id,
+            assignment_id=assignment.id,
+            operator_id=payload.operator_id,
+            vehicle_id=payload.vehicle_id,
+            shift_date=shift_date,
+            shift_number=1,
+            status=ShiftTaskStatus.draft,
+            company_id=company_id,
+        )
+        db.add(shift_task)
+        db.commit()
+        db.refresh(shift_task)
+        logger.info(
+            f"✅ Auto-created ShiftTask #{shift_task.id} for assignment #{assignment.id}"
+        )
 
     db.commit()
     db.refresh(request)
