@@ -1,5 +1,8 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user, require_permission
@@ -9,6 +12,8 @@ from app.models.catalog import Vehicle
 from app.models.dispatch import Request, RequestAssignment, RequestStatusLog
 from app.models.shift import ShiftTaskStatus
 from app.schemas.request import RequestAssign, RequestCreate, RequestRead, RequestUpdate
+
+logger = logging.getLogger("spectech.requests")
 
 router = APIRouter()
 
@@ -167,6 +172,7 @@ def assign_request(
     planned_start = payload.planned_start or request.planned_start
     planned_end = payload.planned_end or request.planned_end
 
+    # Проверка пересечений с другими назначениями этой техники
     overlap = db.scalar(
         select(RequestAssignment).where(
             RequestAssignment.vehicle_id == payload.vehicle_id,
@@ -178,69 +184,119 @@ def assign_request(
 
     if overlap:
         raise HTTPException(
-            status_code=409, detail="Vehicle is already assigned for this period"
+            status_code=409,
+            detail=f"Vehicle {vehicle.name} already assigned for this period "
+            f"(conflict with request #{overlap.request_id})",
         )
 
-    assignment = RequestAssignment(
-        request_id=request.id,
-        vehicle_id=payload.vehicle_id,
-        operator_id=payload.operator_id,
-        planned_start=planned_start,
-        planned_end=planned_end,
-        status="planned",
-    )
-    db.add(assignment)
-    db.flush()
-
-    old_status = request.status
-    request.status = "assigned"
-    request.assigned_vehicle_id = payload.vehicle_id
-    request.assigned_operator_id = payload.operator_id
-
-    db.add(
-        RequestStatusLog(
-            request_id=request.id,
-            from_status=old_status,
-            to_status="assigned",
-            changed_by_user_id=current_user.id,
-            comment=f"Назначена техника: {vehicle.name}",
-        )
-    )
-    # Автоматически создаём ShiftTask на первую дату
-    from app.models.shift import ShiftTask
-
-    # Проверка: не создан ли уже ShiftTask для этого назначения
-    existing_task = (
-        db.query(ShiftTask)
+    # 🆕 ПРОВЕРКА: нет ли уже активного назначения для этой заявки
+    existing_assignment = (
+        db.query(RequestAssignment)
         .filter(
-            ShiftTask.request_id == request_id,
-            ShiftTask.assignment_id == assignment.id,
+            RequestAssignment.request_id == request_id,
+            RequestAssignment.status.in_(["planned", "confirmed", "active"]),
         )
         .first()
     )
 
-    if not existing_task:
-        shift_date = payload.planned_start.date()
-        shift_task = ShiftTask(
-            request_id=request_id,
-            assignment_id=assignment.id,
-            operator_id=payload.operator_id,
-            vehicle_id=payload.vehicle_id,
-            shift_date=shift_date,
-            shift_number=1,
-            status=ShiftTaskStatus.draft,
-            company_id=company_id,
-        )
-        db.add(shift_task)
-        db.commit()
-        db.refresh(shift_task)
+    if existing_assignment:
+        # Идемпотентность: возвращаем существующее назначение
         logger.info(
-            f"✅ Auto-created ShiftTask #{shift_task.id} for assignment #{assignment.id}"
+            f"♻️  Request #{request_id} already has active assignment "
+            f"#{existing_assignment.id}"
+        )
+        db.refresh(request)
+        return request
+
+    try:
+        # Создаём RequestAssignment
+        assignment = RequestAssignment(
+            request_id=request.id,
+            vehicle_id=payload.vehicle_id,
+            operator_id=payload.operator_id,
+            planned_start=planned_start,
+            planned_end=planned_end,
+            status="planned",
+        )
+        db.add(assignment)
+        db.flush()  # Получаем assignment.id
+
+        # Обновляем Request
+        old_status = request.status
+        request.status = "assigned"
+        request.assigned_vehicle_id = payload.vehicle_id
+        request.assigned_operator_id = payload.operator_id
+
+        # Лог статуса
+        db.add(
+            RequestStatusLog(
+                request_id=request.id,
+                from_status=(
+                    old_status.value if hasattr(old_status, "value") else old_status
+                ),
+                to_status="assigned",
+                changed_by_user_id=current_user.id,
+                comment=f"Назначена техника: {vehicle.name}",
+            )
         )
 
-    db.commit()
-    db.refresh(request)
-    return request
+        # 🆕 АВТОСОЗДАНИЕ ShiftTask на первую дату
+        from app.models.shift import ShiftTask
+
+        existing_task = (
+            db.query(ShiftTask)
+            .filter(
+                ShiftTask.request_id == request_id,
+                ShiftTask.assignment_id == assignment.id,
+            )
+            .first()
+        )
+
+        if not existing_task:
+            shift_date = planned_start.date()
+            shift_task = ShiftTask(
+                request_id=request_id,
+                assignment_id=assignment.id,
+                operator_id=payload.operator_id,
+                vehicle_id=payload.vehicle_id,
+                shift_date=shift_date,
+                shift_number=1,
+                status=ShiftTaskStatus.draft,
+                company_id=company_id,
+            )
+            db.add(shift_task)
+            logger.info(
+                f"✅ Auto-created ShiftTask for assignment #{assignment.id} "
+                f"on date {shift_date}"
+            )
+
+        # 🆕 ОДИН commit в конце (было два!)
+        db.commit()
+        db.refresh(request)
+
+        logger.info(
+            f"✅ Request #{request_id} assigned: vehicle={vehicle.name}, "
+            f"assignment=#{assignment.id}"
+        )
+        return request
+
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"❌ IntegrityError on request #{request_id} assign: {e}")
+        raise HTTPException(
+            status_code=409,
+            detail="Назначение уже существует или нарушена уникальность данных. "
+            "Проверьте, не назначена ли уже техника на эту заявку.",
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(
+            f"❌ Unexpected error on request #{request_id} assign: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при назначении техники: {str(e)}",
+        )
 
 
 @router.patch("/{request_id}", response_model=RequestRead)
