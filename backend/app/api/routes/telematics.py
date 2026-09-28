@@ -1145,3 +1145,51 @@ def list_wialon_mappings():
     ]
 
     return {"mappings": mappings, "total": len(mappings)}
+
+
+# === FUEL THEFT DETECTOR ===
+
+
+@router.post("/fuel/detect-theft")
+def detect_fuel_theft(
+    vehicle_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Запустить детектор сливов топлива.
+
+    Если vehicle_id указан — проверяет только эту технику.
+    Если не указана — проверяет всю технику компании.
+
+    Возвращает список обнаруженных сливов.
+    """
+    from app.services.telematics.fuel_theft_detector import fuel_theft_detector
+
+    if vehicle_id:
+        _check_vehicle_access(db, vehicle_id, company_id)
+        theft = fuel_theft_detector.check_vehicle(db, vehicle_id)
+        detected = [theft] if theft else []
+    else:
+        detected = fuel_theft_detector.check_all_vehicles(db, company_id)
+
+    return {
+        "checked_vehicles": 1 if vehicle_id else "all",
+        "thefts_detected": len(detected),
+        "thefts": [
+            {
+                "id": t.id,
+                "vehicle_id": t.vehicle_id,
+                "volume_liters": float(t.volume),
+                "fuel_before": t.fuel_level_before,
+                "fuel_after": t.fuel_level_after,
+                "occurred_at": t.occurred_at.isoformat(),
+                "location": {
+                    "latitude": t.location_latitude,
+                    "longitude": t.location_longitude,
+                },
+            }
+            for t in detected
+        ],
+    }
