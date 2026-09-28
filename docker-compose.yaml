@@ -2,11 +2,18 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: timescale/timescaledb:latest-pg16
+    container_name: spectech-platform-postgres-1
+    command: >
+      postgres
+      -c shared_preload_libraries='timescaledb'
+      -c max_worker_processes=64
+      -c max_parallel_workers=8
+      -c max_parallel_workers_per_gather=4
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-spectech}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-spectech}
-      POSTGRES_DB: ${POSTGRES_DB:-spectech}
+      POSTGRES_USER: spectech
+      POSTGRES_PASSWORD: spectech  # pragma: allowlist secret
+      POSTGRES_DB: spectech
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -44,7 +51,7 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}  # pragma: allowlist secret
     volumes:
       - minio_data:/data
     ports:
@@ -65,7 +72,7 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-spectech}:${POSTGRES_PASSWORD:-spectech}@postgres:5432/${POSTGRES_DB:-spectech}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-in-production}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-in-production}  # pragma: allowlist secret
       CORS_ORIGINS: http://localhost:8080,http://localhost:3000,http://localhost:5173
       ENVIRONMENT: ${ENVIRONMENT:-production}
       DEBUG: ${DEBUG:-false}
@@ -74,14 +81,14 @@ services:
       SMTP_HOST: mailhog
       SMTP_PORT: "1025"
       SMTP_USER: ""
-      SMTP_PASSWORD: ""
+      SMTP_PASSWORD: ""  # pragma: allowlist secret
       SMTP_FROM_EMAIL: noreply@spectech.pro
       SMTP_FROM_NAME: СпецТехника Про
       SMTP_USE_TLS: "false"
       FRONTEND_URL: http://localhost:8080
       # 🆕 DaData API
-      DADATA_API_KEY: ${DADATA_API_KEY}
-      DADATA_TOKEN: ${DADATA_TOKEN}
+      DADATA_API_KEY: ${DADATA_API_KEY}  # pragma: allowlist secret
+      DADATA_TOKEN: ${DADATA_TOKEN}  # pragma: allowlist secret
     volumes:
       - uploads_data:/app/uploads
       - logs_data:/app/logs

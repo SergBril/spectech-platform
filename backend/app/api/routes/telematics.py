@@ -1076,3 +1076,72 @@ def get_dashboard_summary(
             },
             "updated_at": None,
         }
+
+
+# === WIALON ADAPTER ===
+
+
+@router.post("/wialon/webhook")
+def receive_wialon_webhook(
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    """
+    Принять webhook от Wialon.
+
+    Wialon отправляет данные о позициях техники в формате JSON.
+    Адаптер парсит payload и сохраняет точки в gps_points.
+
+    Пример payload:
+    {
+        "unit_id": 1001,
+        "type": "message",
+        "time": 1727539200,
+        "pos": {
+            "x": 37.6176,
+            "y": 55.7558,
+            "s": 45.5,
+            "c": 180
+        },
+        "param": {
+            "avl_fuel_level": 150.0,
+            "avl_engine_hours": 757.5,
+            "avl_driver_id": 1
+        }
+    }
+    """
+    from app.services.telematics.wialon_adapter import wialon_adapter
+
+    response = wialon_adapter.process_webhook(db, payload)
+
+    if response.status == "success":
+        return response
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "status": response.status,
+                "message": response.message,
+                "errors": response.errors,
+            },
+        )
+
+
+@router.get("/wialon/mappings")
+def list_wialon_mappings():
+    """
+    Получить маппинг Wialon unit_id → vehicle_id.
+
+    В production должен читаться из БД (таблица wialon_mappings).
+    """
+    from app.services.telematics.wialon_adapter import wialon_adapter
+
+    mappings = [
+        {
+            "wialon_unit_id": unit_id,
+            "vehicle_id": vehicle_id,
+        }
+        for unit_id, vehicle_id in wialon_adapter.UNIT_TO_VEHICLE_MAP.items()
+    ]
+
+    return {"mappings": mappings, "total": len(mappings)}
