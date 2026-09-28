@@ -1,4 +1,4 @@
-from datetime import UTC
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
-from app.models.shift import ShiftReport, ShiftTask
+from app.models.shift import ShiftReport, ShiftReportStatus, ShiftTask
 from app.schemas.shift import (
     ShiftReportCreate,
     ShiftReportRead,
@@ -149,4 +149,81 @@ def update_shift_report(
 
     db.commit()
     db.refresh(report)
+    return report
+
+
+@router.patch("/reports/{report_id}/approve", response_model=ShiftReportRead)
+def approve_shift_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Клиент подтверждает отчёт за смену.
+
+    Меняет статус: client_review → approved
+    Записывает финальные значения (final_moto_hours = operator_moto_hours).
+    """
+    report = db.get(ShiftReport, report_id)
+    if not report or report.company_id != company_id:
+        raise HTTPException(status_code=404, detail="ShiftReport not found")
+
+    if report.status not in (
+        ShiftReportStatus.client_review,
+        ShiftReportStatus.submitted,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot approve report in status {report.status}",
+        )
+
+    # Клиент подтвердил — финальные значения = значения оператора
+    report.client_status = "approved"
+    report.client_responded_at = datetime.now(UTC)
+    report.final_moto_hours = report.operator_moto_hours
+    report.final_odometer = report.operator_odometer
+    report.final_fuel_used = report.operator_fuel_used
+    report.status = ShiftReportStatus.approved
+
+    db.commit()
+    db.refresh(report)
+
+    return report
+
+
+@router.patch("/reports/{report_id}/dispute", response_model=ShiftReportRead)
+def dispute_shift_report(
+    report_id: int,
+    payload: dict,  # {"client_moto_hours": 8.5, "client_comment": "..."}
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Клиент оспаривает отчёт за смену.
+
+    Меняет статус: client_review → disputed
+    Клиент указывает свои значения моточасов и комментарий.
+    """
+    report = db.get(ShiftReport, report_id)
+    if not report or report.company_id != company_id:
+        raise HTTPException(status_code=404, detail="ShiftReport not found")
+
+    if report.status != ShiftReportStatus.client_review:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot dispute report in status {report.status}",
+        )
+
+    report.client_status = "disputed"
+    report.client_moto_hours = payload.get("client_moto_hours")
+    report.client_odometer = payload.get("client_odometer")
+    report.client_comment = payload.get("client_comment")
+    report.client_responded_at = datetime.now(UTC)
+    report.status = ShiftReportStatus.disputed
+
+    db.commit()
+    db.refresh(report)
+
     return report

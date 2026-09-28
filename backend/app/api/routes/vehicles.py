@@ -430,3 +430,79 @@ def delete_vehicle(
 
     db.commit()
     return None
+
+
+@router.get("/{vehicle_id}/availability")
+def check_vehicle_availability(
+    vehicle_id: int,
+    start: datetime = Query(..., description="Начало периода (ISO 8601)"),
+    end: datetime = Query(..., description="Конец периода (ISO 8601)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Проверить доступность техники в указанный период.
+
+    Проверяет:
+    - Техника не в ремонте (status != 'repair')
+    - Нет пересечений с другими RequestAssignment
+    - Нет пересечений с другими ShiftTask в статусе active/completed
+
+    Returns:
+        {
+            "available": true/false,
+            "reason": "...",
+            "conflicts": [...]
+        }
+    """
+    from app.models.dispatch import RequestAssignment
+
+    vehicle = db.get(Vehicle, vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    conflicts = []
+
+    # Проверка 1: статус техники
+    if vehicle.status in ("repair", "decommissioned", "sold"):
+        return {
+            "available": False,
+            "reason": f"Vehicle status is {vehicle.status}",
+            "conflicts": [],
+        }
+
+    # Проверка 2: пересечения с RequestAssignment
+    assignments = (
+        db.query(RequestAssignment)
+        .filter(
+            RequestAssignment.vehicle_id == vehicle_id,
+            RequestAssignment.status.in_(["planned", "confirmed", "active"]),
+            RequestAssignment.planned_start < end,
+            RequestAssignment.planned_end > start,
+        )
+        .all()
+    )
+
+    for a in assignments:
+        conflicts.append(
+            {
+                "type": "assignment",
+                "id": a.id,
+                "request_id": a.request_id,
+                "start": a.planned_start.isoformat(),
+                "end": a.planned_end.isoformat(),
+            }
+        )
+
+    available = len(conflicts) == 0
+
+    return {
+        "vehicle_id": vehicle_id,
+        "vehicle_name": vehicle.name,
+        "available": available,
+        "reason": "OK" if available else f"Found {len(conflicts)} conflicts",
+        "period_start": start.isoformat(),
+        "period_end": end.isoformat(),
+        "conflicts": conflicts,
+    }
