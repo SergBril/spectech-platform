@@ -1,32 +1,12 @@
-# docker-compose.override.yaml
-# Автоматически применяется при docker-compose up
-# Добавляет volume mounts для разработки
-
+# Override для разработки — монтирует исходники для hot-reload
 services:
   backend:
     volumes:
-      # Монтируем исходники для hot-reload
-      - ./backend/app:/app/app:ro
-      - ./backend/tests:/app/tests:ro
-      - ./backend/scripts:/app/scripts:ro
-      - ./backend/pytest.ini:/app/pytest.ini:ro
-      # Сохраняем существующие volumes
+      - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
+      - ./backend/scripts:/app/scripts
+      - ./backend/alembic:/app/alembic
       - ./backend/uploads:/app/uploads
       - ./backend/logs:/app/logs
     environment:
       - ENVIRONMENT=development
-      - PYTHONPATH=/app
-    # Включаем auto-reload для разработки
-    command: >
-      bash -c "
-        uvicorn app.main:app
-        --host 0.0.0.0
-        --port 8000
-        --reload
-        --reload-dir /app/app
-      "
-
-  frontend:
-    volumes:
-      - ./frontend/src:/app/src:ro
-      - ./frontend/public:/app/public:ro
