@@ -213,3 +213,53 @@ class FinanceDashboard(BaseModel):
     invoices_count: int = 0
     acts_count: int = 0
     payouts_count: int = 0
+
+
+# === Sprint 4: Reconciliation-based Invoice Generation ===
+
+
+class GenerateInvoiceRequest(BaseModel):
+    """Запрос на автоматическую генерацию счёта из сверки данных."""
+
+    reconciliation_id: int = Field(gt=0, description="ID сверки данных")
+    invoice_date: date | None = Field(
+        default=None, description="Дата счёта (по умолчанию сегодня)"
+    )
+    due_date: date | None = Field(default=None, description="Срок оплаты (опционально)")
+    include_fuel_compensation: bool = Field(
+        default=True,
+        description="Включить компенсацию топлива в счёт",
+    )
+    vat_rate: Decimal | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        decimal_places=2,
+        description="Ставка НДС (если None — используется ставка клиента)",
+    )
+
+
+class GenerateInvoiceResponse(BaseModel):
+    """Ответ на генерацию счёта."""
+
+    success: bool
+    invoice_id: int | None = None
+    document_number: str | None = None
+    total: Decimal | None = None
+    message: str
+
+
+class FinanceSummary(BaseModel):
+    """Финансовая сводка за период."""
+
+    period_start: date
+    period_end: date
+    revenue: Decimal = Decimal("0")
+    expenses: Decimal = Decimal("0")
+    profit: Decimal = Decimal("0")
+    outstanding_invoices: int = 0
+    outstanding_amount: Decimal = Decimal("0")
+    paid_invoices: int = 0
+    paid_amount: Decimal = Decimal("0")
+    pending_payouts: int = 0
+    pending_payout_amount: Decimal = Decimal("0")

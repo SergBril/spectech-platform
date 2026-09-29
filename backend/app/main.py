@@ -29,6 +29,7 @@ from app.api.routes import (
     email_templates,
     export,
     files,
+    finance,
     invoices,
     maintenance,
     marketplace,
@@ -220,6 +221,7 @@ app.include_router(email_templates.router, prefix="/api/v1")
 app.include_router(email_bulk.router, prefix="/api/v1")
 app.include_router(catalog.router, prefix="/api/v1")
 app.include_router(signature.router, prefix="/api/v1/signature", tags=["signature"])
+app.include_router(finance.router, prefix="/api/v1/finance", tags=["Финансы"])
 
 
 # 6. Кастомизация OpenAPI
