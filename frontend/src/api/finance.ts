@@ -37,6 +37,9 @@ export interface Invoice {
   items: InvoiceItem[];
   created_at: string;
   updated_at: string;
+  // Добавьте эти поля:
+  tax_system?: string;
+  is_vat_included?: boolean;
 }
 
 export interface InvoiceCreate {
@@ -59,6 +62,10 @@ export interface ActCreate {
   act_date: string;
   status?: ActStatus;
   comment?: string;
+  // Добавьте эти поля:
+  tax_system?: string;
+  vat_rate?: number;
+  is_vat_included?: boolean;
 }
 
 export interface Act {
@@ -76,6 +83,10 @@ export interface Act {
   comment: string | null;
   created_at: string;
   updated_at: string;
+  // Добавьте эти поля:
+  tax_system?: string;
+  vat_rate?: string;
+  is_vat_included?: boolean;
 }
 
 export interface Payout {
@@ -127,6 +138,88 @@ export interface PaymentsDashboard {
   invoices_count: number;
   acts_count: number;
   payouts_count: number;
+}
+
+// === PAYOUT BATCH (Sprint 4 Task 3) ===
+export interface PayoutBatchRequest {
+  date_from: string;
+  date_to: string;
+  commission_rate?: number;
+}
+
+export interface PayoutBatchResult {
+  period_start: string;
+  period_end: string;
+  total_payouts: number;
+  total_gross: number;
+  total_commission: number;
+  total_net: number;
+  commission_rate: number;
+  payouts: Array<{
+    payout_id: number;
+    document_number: string;
+    owner_id: number;
+    vehicle_id: number;
+    vehicle_name: string;
+    gross_amount: number;
+    commission: number;
+    net_amount: number;
+    moto_hours: number;
+    shifts_count: number;
+  }>;
+}
+
+export interface PayoutsSummary {
+  period_start: string;
+  period_end: string;
+  total_payouts: number;
+  total_gross: number;
+  total_commission: number;
+  total_net: number;
+  pending_payouts: number;
+}
+
+// === FINANCE DASHBOARD V2 (Sprint 4 Task 4) ===
+export interface ClientRevenue {
+  client_id: number;
+  client_name: string;
+  total_revenue: number;
+  invoices_count: number;
+}
+
+export interface VehicleRevenue {
+  vehicle_id: number;
+  vehicle_name: string;
+  moto_hours: number;
+  shifts_count: number;
+}
+
+export interface FinanceDashboardV2 {
+  period: {
+    start: string;
+    end: string;
+  };
+  revenue: {
+    total: number;
+    paid: number;
+    outstanding: number;
+  };
+  expenses: {
+    total: number;
+    payouts: number;
+    commission: number;
+  };
+  profit: {
+    gross: number;
+    net: number;
+    margin_percent: number;
+  };
+  metrics: {
+    invoices_count: number;
+    avg_invoice: number;
+    payouts_count: number;
+    moto_hours_total: number;
+  };
 }
 
 export const financeApi = {
@@ -279,5 +372,67 @@ export const financeApi = {
   async resendActEmail(id: number): Promise<Act> {
     const response = await apiClient.post<Act>(`/acts/${id}/resend-email`);
     return response.data;
+  },
+
+  // === PAYOUT BATCH (Sprint 4 Task 3) ===
+  calculatePayoutsBatch: async (data: PayoutBatchRequest): Promise<PayoutBatchResult> => {
+    const params = new URLSearchParams({
+      date_from: data.date_from,
+      date_to: data.date_to,
+    });
+    if (data.commission_rate !== undefined) {
+      params.append('commission_rate', data.commission_rate.toString());
+    }
+    const response = await apiClient.post(`/finance/payouts/calculate?${params}`);
+    return response.data;
+  },
+
+  approvePayout: async (id: number): Promise<Payout> => {
+    const response = await apiClient.post(`/finance/payouts/${id}/approve`);
+    return response.data;
+  },
+
+  payPayout: async (id: number): Promise<Payout> => {
+    const response = await apiClient.post(`/finance/payouts/${id}/pay`);
+    return response.data;
+  },
+
+  getPayoutsSummary: async (dateFrom: string, dateTo: string): Promise<PayoutsSummary> => {
+    const params = new URLSearchParams({
+      date_from: dateFrom,
+      date_to: dateTo,
+    });
+    const response = await apiClient.get(`/finance/payouts/summary?${params}`);
+    return response.data;
+  },
+
+  // === FINANCE DASHBOARD V2 (Sprint 4 Task 4) ===
+  getFinanceDashboardV2: async (dateFrom: string, dateTo: string): Promise<FinanceDashboardV2> => {
+    const params = new URLSearchParams({
+      date_from: dateFrom,
+      date_to: dateTo,
+    });
+    const response = await apiClient.get(`/finance/dashboard?${params}`);
+    return response.data;
+  },
+
+  getRevenueByClient: async (dateFrom: string, dateTo: string, limit: number = 10): Promise<ClientRevenue[]> => {
+    const params = new URLSearchParams({
+      date_from: dateFrom,
+      date_to: dateTo,
+      limit: limit.toString(),
+    });
+    const response = await apiClient.get(`/finance/revenue-by-client?${params}`);
+    return response.data.clients || [];
+  },
+
+  getRevenueByVehicle: async (dateFrom: string, dateTo: string, limit: number = 10): Promise<VehicleRevenue[]> => {
+    const params = new URLSearchParams({
+      date_from: dateFrom,
+      date_to: dateTo,
+      limit: limit.toString(),
+    });
+    const response = await apiClient.get(`/finance/revenue-by-vehicle?${params}`);
+    return response.data.vehicles || [];
   },
 };

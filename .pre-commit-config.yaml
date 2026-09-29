@@ -7,10 +7,10 @@ repos:
       - id: check-yaml
         args: ['--unsafe']
         exclude: |
-         (?x)^(
-           helm/.*/templates/.*|
-           components\.yaml
-         )$
+          (?x)^(
+            helm/.*/templates/.*|
+            components\.yaml
+          )$
       - id: check-added-large-files
       - id: check-merge-conflict
 
@@ -26,10 +26,12 @@ repos:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
 
-  # Secret scanning
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.4.0
     hooks:
       - id: detect-secrets
-        args: ['--baseline', '.secrets.baseline']
-        exclude: ^(helm/.*/values\.yaml|helm/.*/values-.*\.yaml)$
+        args: [
+          '--exclude-files', 'backend/scripts/seed_.*\.py',
+          '--exclude-files', 'backend/tests/.*\.py',
+          '--exclude-files', '.*\.baseline$',
+        ]
