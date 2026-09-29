@@ -4,26 +4,29 @@ import { useAuth } from '../contexts/AuthContext';
 import { CompanySwitcher } from './CompanySwitcher';
 import {
   Home, FileText, Truck, Fuel, Wrench, ShoppingBag,
-  Users, DollarSign, Receipt, Bell, LogOut, Mail
+  Users, DollarSign, Receipt, Bell, LogOut, Mail,
+  type LucideIcon,
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 
 interface NavItem {
   path: string;
   label: string;
+  icon?: LucideIcon;  // ✅ Добавлено опциональное поле icon
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { path: '/', label: 'Дашборд' },
-  { path: '/requests', label: 'Заявки' },
-  { path: '/vehicles', label: 'Техника' },
-  { path: '/fuel/analytics', label: '⛽ Топливо', icon: Fuel },
+  { path: '/', label: '🏠 Дашборд' },
+  { path: '/requests', label: '📋 Заявки' },
+  { path: '/vehicles', label: '🚜 Техника' },
+  { path: '/fuel/analytics', label: '⛽ Топливо' },
   { path: '/maintenance', label: '🔧 ТО и Ремонты' },
-  { path: '/marketplace', label: '🎯 Маркетплейс' },  // ← ДОБАВИТЬ
-  { path: '/contractors', label: 'Контрагенты' },
-  { path: '/finance', label: 'Финансы' },
-  { path: '/invoices', label: 'Счета' },
-  { path: '/email-logs', label: '📧 Email', icon: Mail },
+  { path: '/marketplace', label: '🎯 Маркетплейс' },
+  { path: '/contractors', label: '👥 Контрагенты' },
+  { path: '/finance', label: '💰 Финансы' },
+  { path: '/invoices', label: '📄 Счета' },
+  { path: '/reconciliation', label: '📊 Сверки' },  // ✅ НОВАЯ ССЫЛКА
+  { path: '/email-logs', label: '📧 Email' },
 ];
 
 export const Navbar: React.FC = () => {
@@ -52,12 +55,12 @@ export const Navbar: React.FC = () => {
             </h1>
 
             {/* Меню навигации */}
-            <div className="hidden md:flex items-center space-x-1">
+            <div className="hidden md:flex items-center space-x-1 overflow-x-auto">
               {NAV_ITEMS.map((item) => (
                 <button
                   key={item.path}
                   onClick={() => navigate(item.path)}
-                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
                     isActive(item.path)
                       ? 'bg-blue-50 text-blue-700'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -68,7 +71,7 @@ export const Navbar: React.FC = () => {
               ))}
             </div>
 
-            {/* 🆕 Переключатель компаний */}
+            {/* Переключатель компаний */}
             <CompanySwitcher />
           </div>
 
