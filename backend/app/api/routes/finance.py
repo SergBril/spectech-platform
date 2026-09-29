@@ -508,3 +508,289 @@ def get_revenue_by_vehicle(
         "period": {"start": date_from.isoformat(), "end": date_to.isoformat()},
         "vehicles": vehicles,
     }
+
+
+# === RECONCILIATION ENDPOINTS (Sprint 5A) ===
+
+
+@router.get("/reconciliations")
+def list_reconciliations(
+    status: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    shift_task_id: int | None = None,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Список сверок данных (только своей компании)."""
+    from app.models.shift import ShiftTask
+    from app.models.telematics import ShiftDataReconciliation
+
+    stmt = select(ShiftDataReconciliation).where(
+        ShiftDataReconciliation.company_id == company_id
+    )
+
+    if status:
+        stmt = stmt.where(ShiftDataReconciliation.reconciliation_status == status)
+    if date_from:
+        stmt = stmt.join(ShiftTask).where(ShiftTask.shift_date >= date_from)
+    if date_to:
+        if not date_from:
+            stmt = stmt.join(ShiftTask)
+        stmt = stmt.where(ShiftTask.shift_date <= date_to)
+    if shift_task_id:
+        stmt = stmt.where(ShiftDataReconciliation.shift_task_id == shift_task_id)
+
+    stmt = (
+        stmt.order_by(ShiftDataReconciliation.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+
+    reconciliations = db.scalars(stmt).all()
+
+    return [
+        {
+            "id": r.id,
+            "shift_task_id": r.shift_task_id,
+            "operator_moto_hours": (
+                float(r.operator_moto_hours) if r.operator_moto_hours else None
+            ),
+            "operator_odometer": r.operator_odometer,
+            "operator_fuel_used": (
+                float(r.operator_fuel_used) if r.operator_fuel_used else None
+            ),
+            "telematics_moto_hours": (
+                float(r.telematics_moto_hours) if r.telematics_moto_hours else None
+            ),
+            "telematics_odometer": r.telematics_odometer,
+            "telematics_fuel_used": (
+                float(r.telematics_fuel_used) if r.telematics_fuel_used else None
+            ),
+            "telematics_data_points_count": r.telematics_data_points_count,
+            "planned_moto_hours": (
+                float(r.planned_moto_hours) if r.planned_moto_hours else None
+            ),
+            "planned_odometer": r.planned_odometer,
+            "moto_hours_diff_percent": (
+                float(r.moto_hours_diff_percent) if r.moto_hours_diff_percent else None
+            ),
+            "odometer_diff_percent": (
+                float(r.odometer_diff_percent) if r.odometer_diff_percent else None
+            ),
+            "fuel_diff_percent": (
+                float(r.fuel_diff_percent) if r.fuel_diff_percent else None
+            ),
+            "reconciliation_status": r.reconciliation_status,
+            "final_moto_hours": (
+                float(r.final_moto_hours) if r.final_moto_hours else None
+            ),
+            "final_odometer": r.final_odometer,
+            "final_fuel_used": float(r.final_fuel_used) if r.final_fuel_used else None,
+            "decision_source": r.decision_source,
+            "decision_comment": r.decision_comment,
+            "decided_by": r.decided_by,
+            "decided_at": r.decided_at.isoformat() if r.decided_at else None,
+            "company_id": r.company_id,
+            "created_at": r.created_at.isoformat(),
+            "updated_at": r.updated_at.isoformat(),
+        }
+        for r in reconciliations
+    ]
+
+
+@router.get("/reconciliations/stats")
+def get_reconciliation_stats(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Статистика по сверкам (количество по статусам)."""
+    from app.models.shift import ShiftTask
+    from app.models.telematics import ShiftDataReconciliation
+
+    stmt = select(ShiftDataReconciliation).where(
+        ShiftDataReconciliation.company_id == company_id
+    )
+
+    if date_from:
+        stmt = stmt.join(ShiftTask).where(ShiftTask.shift_date >= date_from)
+    if date_to:
+        if not date_from:
+            stmt = stmt.join(ShiftTask)
+        stmt = stmt.where(ShiftTask.shift_date <= date_to)
+
+    reconciliations = db.scalars(stmt).all()
+
+    stats = {
+        "total": len(reconciliations),
+        "pending": 0,
+        "auto_approved": 0,
+        "discrepancy_detected": 0,
+        "manual_review": 0,
+        "resolved": 0,
+    }
+
+    for r in reconciliations:
+        status = r.reconciliation_status
+        if status in stats:
+            stats[status] += 1
+
+    return stats
+
+
+@router.get("/reconciliations/{reconciliation_id}")
+def get_reconciliation(
+    reconciliation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Получить детали сверки по ID."""
+    from app.models.telematics import ShiftDataReconciliation
+
+    reconciliation = db.get(ShiftDataReconciliation, reconciliation_id)
+    if not reconciliation or reconciliation.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Reconciliation not found")
+
+    return {
+        "id": reconciliation.id,
+        "shift_task_id": reconciliation.shift_task_id,
+        "operator_moto_hours": (
+            float(reconciliation.operator_moto_hours)
+            if reconciliation.operator_moto_hours
+            else None
+        ),
+        "operator_odometer": reconciliation.operator_odometer,
+        "operator_fuel_used": (
+            float(reconciliation.operator_fuel_used)
+            if reconciliation.operator_fuel_used
+            else None
+        ),
+        "telematics_moto_hours": (
+            float(reconciliation.telematics_moto_hours)
+            if reconciliation.telematics_moto_hours
+            else None
+        ),
+        "telematics_odometer": reconciliation.telematics_odometer,
+        "telematics_fuel_used": (
+            float(reconciliation.telematics_fuel_used)
+            if reconciliation.telematics_fuel_used
+            else None
+        ),
+        "telematics_data_points_count": reconciliation.telematics_data_points_count,
+        "planned_moto_hours": (
+            float(reconciliation.planned_moto_hours)
+            if reconciliation.planned_moto_hours
+            else None
+        ),
+        "planned_odometer": reconciliation.planned_odometer,
+        "moto_hours_diff_percent": (
+            float(reconciliation.moto_hours_diff_percent)
+            if reconciliation.moto_hours_diff_percent
+            else None
+        ),
+        "odometer_diff_percent": (
+            float(reconciliation.odometer_diff_percent)
+            if reconciliation.odometer_diff_percent
+            else None
+        ),
+        "fuel_diff_percent": (
+            float(reconciliation.fuel_diff_percent)
+            if reconciliation.fuel_diff_percent
+            else None
+        ),
+        "reconciliation_status": reconciliation.reconciliation_status,
+        "final_moto_hours": (
+            float(reconciliation.final_moto_hours)
+            if reconciliation.final_moto_hours
+            else None
+        ),
+        "final_odometer": reconciliation.final_odometer,
+        "final_fuel_used": (
+            float(reconciliation.final_fuel_used)
+            if reconciliation.final_fuel_used
+            else None
+        ),
+        "decision_source": reconciliation.decision_source,
+        "decision_comment": reconciliation.decision_comment,
+        "decided_by": reconciliation.decided_by,
+        "decided_at": (
+            reconciliation.decided_at.isoformat() if reconciliation.decided_at else None
+        ),
+        "company_id": reconciliation.company_id,
+        "created_at": reconciliation.created_at.isoformat(),
+        "updated_at": reconciliation.updated_at.isoformat(),
+    }
+
+
+@router.post("/reconciliations/{reconciliation_id}/resolve")
+def resolve_reconciliation(
+    reconciliation_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Разрешить конфликт в сверке (manual_review → resolved)."""
+    from datetime import UTC, datetime
+
+    from app.models.telematics import ShiftDataReconciliation
+
+    reconciliation = db.get(ShiftDataReconciliation, reconciliation_id)
+    if not reconciliation or reconciliation.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Reconciliation not found")
+
+    if reconciliation.reconciliation_status not in (
+        "manual_review",
+        "discrepancy_detected",
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot resolve reconciliation with status '{reconciliation.reconciliation_status}'. Must be 'manual_review' or 'discrepancy_detected'.",
+        )
+
+    # Обновляем данные
+    reconciliation.decision_source = payload.get("decision_source", "manual")
+    reconciliation.final_moto_hours = payload.get("final_moto_hours")
+    reconciliation.final_odometer = payload.get("final_odometer")
+    reconciliation.final_fuel_used = payload.get("final_fuel_used")
+    reconciliation.decision_comment = payload.get("decision_comment")
+    reconciliation.decided_by = current_user.id
+    reconciliation.decided_at = datetime.now(UTC)
+    reconciliation.reconciliation_status = "resolved"
+
+    db.commit()
+    db.refresh(reconciliation)
+
+    logger.info(
+        f"✅ Reconciliation #{reconciliation_id} resolved by user {current_user.id}: "
+        f"source={reconciliation.decision_source}"
+    )
+
+    return {
+        "id": reconciliation.id,
+        "reconciliation_status": reconciliation.reconciliation_status,
+        "decision_source": reconciliation.decision_source,
+        "final_moto_hours": (
+            float(reconciliation.final_moto_hours)
+            if reconciliation.final_moto_hours
+            else None
+        ),
+        "final_odometer": reconciliation.final_odometer,
+        "final_fuel_used": (
+            float(reconciliation.final_fuel_used)
+            if reconciliation.final_fuel_used
+            else None
+        ),
+        "decided_by": reconciliation.decided_by,
+        "decided_at": (
+            reconciliation.decided_at.isoformat() if reconciliation.decided_at else None
+        ),
+        "message": "Reconciliation resolved successfully",
+    }
