@@ -12,6 +12,8 @@ import ActFormModal from '../components/ActFormModal';
 import NotificationBell from '../components/NotificationBell';
 import Navbar from '../components/Navbar';
 import PayoutBatchModal from '../components/PayoutBatchModal';
+import FinancialCharts from '../components/FinancialCharts';
+import { financeApi as financeApiV2, type FinanceDashboardV2 } from '../api/finance';
 
 const INVOICE_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
@@ -69,6 +71,40 @@ export const FinancePage: React.FC = () => {
   const [paymentTarget, setPaymentTarget] = useState<Invoice | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
   const [deleteActTarget, setDeleteActTarget] = useState<Act | null>(null);
+  // Период для расширенной аналитики
+  const [periodPreset, setPeriodPreset] = useState<'month' | 'prev_month' | 'quarter' | 'year'>('month');
+  const [dashboardV2, setDashboardV2] = useState<FinanceDashboardV2 | null>(null);
+
+  // Вычисляем даты периода
+  const getPeriodDates = () => {
+    const now = new Date();
+    let from: Date;
+    let to: Date = now;
+
+    switch (periodPreset) {
+      case 'month':
+        from = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'prev_month':
+        from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        to = new Date(now.getFullYear(), now.getMonth(), 0);
+        break;
+      case 'quarter':
+        const quarterStart = Math.floor(now.getMonth() / 3) * 3;
+        from = new Date(now.getFullYear(), quarterStart, 1);
+        break;
+      case 'year':
+        from = new Date(now.getFullYear(), 0, 1);
+        break;
+    }
+
+    return {
+      from: from.toISOString().split('T')[0],
+      to: to.toISOString().split('T')[0],
+    };
+  };
+
+  const periodDates = getPeriodDates();
   const [isPayoutBatchModalOpen, setIsPayoutBatchModalOpen] = useState(false);
 
   const canView = hasPermission('finance', 'view');
@@ -80,6 +116,20 @@ export const FinancePage: React.FC = () => {
     if (!canView) return;
     loadData();
   }, [canView]);
+
+  useEffect(() => {
+    if (!canView) return;
+    loadDashboardV2();
+  }, [canView, periodPreset]);
+
+  const loadDashboardV2 = async () => {
+    try {
+      const data = await financeApiV2.getFinanceDashboardV2(periodDates.from, periodDates.to);
+      setDashboardV2(data);
+    } catch (err) {
+      console.error('Failed to load dashboard V2:', err);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -384,41 +434,93 @@ export const FinancePage: React.FC = () => {
 
           {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">{error}</div>}
 
-          {/* Metrics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-gray-500">Общий доход</h3>
-                <span className="text-3xl">💰</span>
+          {/* Period Selector */}
+          <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">Период:</span>
+              <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                {[
+                  { key: 'month', label: 'Этот месяц' },
+                  { key: 'prev_month', label: 'Прошлый месяц' },
+                  { key: 'quarter', label: 'Квартал' },
+                  { key: 'year', label: 'Год' },
+                ].map((p) => (
+                  <button
+                    key={p.key}
+                    onClick={() => setPeriodPreset(p.key as any)}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      periodPreset === p.key
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
               </div>
-              <div className="text-3xl font-bold text-gray-900 mb-2">{formatMoney(dashboard?.total_revenue)}</div>
-              <div className="text-sm text-gray-600">Счетов: {dashboard?.invoices_count || 0}</div>
             </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-gray-500">Оплачено</h3>
-                <span className="text-3xl">✅</span>
-              </div>
-              <div className="text-3xl font-bold text-green-600 mb-2">{formatMoney(dashboard?.total_paid)}</div>
-              <div className="text-sm text-gray-600">Актов: {dashboard?.acts_count || 0}</div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-gray-500">Комиссия</h3>
-                <span className="text-3xl">📊</span>
-              </div>
-              <div className="text-3xl font-bold text-blue-600 mb-2">{formatMoney(dashboard?.total_commission_earned)}</div>
-              <div className="text-sm text-gray-600">Заработано</div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-gray-500">Задолженность</h3>
-                <span className="text-3xl">⚠️</span>
-              </div>
-              <div className="text-3xl font-bold text-orange-600 mb-2">{formatMoney(dashboard?.total_outstanding)}</div>
-              <div className="text-sm text-gray-600">Выплат: {dashboard?.payouts_count || 0}</div>
+            <div className="text-sm text-gray-500">
+              {new Date(periodDates.from).toLocaleDateString('ru-RU')} — {new Date(periodDates.to).toLocaleDateString('ru-RU')}
             </div>
           </div>
+
+          {/* Metrics Cards (расширенные) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-gray-500">Выручка</h3>
+                <span className="text-3xl">💰</span>
+              </div>
+              <div className="text-3xl font-bold text-gray-900 mb-2">
+                {formatMoney(dashboardV2?.revenue.total ?? dashboard?.total_revenue)}
+              </div>
+              <div className="text-sm text-gray-600">
+                Оплачено: {formatMoney(dashboardV2?.revenue.paid ?? dashboard?.total_paid)}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-gray-500">Прибыль</h3>
+                <span className="text-3xl">📈</span>
+              </div>
+              <div className="text-3xl font-bold text-green-600 mb-2">
+                {formatMoney(dashboardV2?.profit.gross ?? 0)}
+              </div>
+              <div className="text-sm text-gray-600">
+                Маржа: <span className="font-semibold text-green-600">{dashboardV2?.profit.margin_percent.toFixed(1) ?? '—'}%</span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-gray-500">Средний чек</h3>
+                <span className="text-3xl">🧾</span>
+              </div>
+              <div className="text-3xl font-bold text-blue-600 mb-2">
+                {formatMoney(dashboardV2?.metrics.avg_invoice ?? 0)}
+              </div>
+              <div className="text-sm text-gray-600">
+                Счетов: {dashboardV2?.metrics.invoices_count ?? dashboard?.invoices_count ?? 0}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-gray-500">Моточасы</h3>
+                <span className="text-3xl">⏱️</span>
+              </div>
+              <div className="text-3xl font-bold text-purple-600 mb-2">
+                {(dashboardV2?.metrics.moto_hours_total ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 1 })}
+              </div>
+              <div className="text-sm text-gray-600">
+                Выплат: {dashboardV2?.metrics.payouts_count ?? dashboard?.payouts_count ?? 0}
+              </div>
+            </div>
+          </div>
+
+          {/* Графики: Top clients + Top vehicles */}
+          <FinancialCharts dateFrom={periodDates.from} dateTo={periodDates.to} />
 
           {/* Tabs */}
           <div className="bg-white rounded-lg shadow overflow-hidden">
