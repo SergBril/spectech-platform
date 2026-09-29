@@ -329,3 +329,65 @@ class UploadedFile(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class ShiftDataReconciliation(Base):
+    """Результаты сверки данных оператор vs телематика."""
+
+    __tablename__ = "shift_data_reconciliation"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shift_task_id: Mapped[int] = mapped_column(
+        ForeignKey("shift_tasks.id"), nullable=False
+    )
+
+    # Данные оператора
+    operator_moto_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    operator_odometer: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    operator_fuel_used: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Данные телеметрии
+    telematics_moto_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    telematics_odometer: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    telematics_fuel_used: Mapped[float | None] = mapped_column(Float, nullable=True)
+    telematics_data_points_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Плановые данные
+    planned_moto_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    planned_odometer: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Расхождения
+    moto_hours_diff_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    odometer_diff_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fuel_diff_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Статус сверки
+    reconciliation_status: Mapped[str] = mapped_column(
+        String(20), default="pending", nullable=False
+    )  # pending, auto_approved, discrepancy_detected, manual_review, resolved
+
+    # Финальные значения (после решения)
+    final_moto_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    final_odometer: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    final_fuel_used: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Решение
+    decision_source: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )  # operator, telematics, average, manual
+    decision_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decided_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    company_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

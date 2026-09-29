@@ -1193,3 +1193,65 @@ def detect_fuel_theft(
             for t in detected
         ],
     }
+
+
+# === RECONCILIATION SERVICE ===
+
+
+@router.post("/shifts/{shift_task_id}/reconcile")
+def reconcile_shift_data(
+    shift_task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Выполнить сверку данных оператор vs телематика для сменного задания.
+
+    Сравнивает данные из shift_reports с gps_points за период смены.
+    Автоматически подтверждает если расхождение < 5%.
+    """
+    from app.models.shift import ShiftTask
+    from app.services.telematics.reconciliation_service import reconciliation_service
+
+    # Проверяем доступ к ShiftTask
+    shift_task = db.get(ShiftTask, shift_task_id)
+    if not shift_task or shift_task.company_id != company_id:
+        raise HTTPException(status_code=404, detail="ShiftTask not found")
+
+    # Выполняем сверку
+    reconciliation = reconciliation_service.reconcile_shift_task(db, shift_task_id)
+
+    if not reconciliation:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to perform reconciliation",
+        )
+
+    return {
+        "shift_task_id": shift_task_id,
+        "reconciliation_id": reconciliation.id,
+        "status": reconciliation.reconciliation_status,
+        "operator_data": {
+            "moto_hours": reconciliation.operator_moto_hours,
+            "odometer": reconciliation.operator_odometer,
+            "fuel_used": reconciliation.operator_fuel_used,
+        },
+        "telematics_data": {
+            "moto_hours": reconciliation.telematics_moto_hours,
+            "odometer": reconciliation.telematics_odometer,
+            "fuel_used": reconciliation.telematics_fuel_used,
+            "data_points_count": reconciliation.telematics_data_points_count,
+        },
+        "differences": {
+            "moto_hours_diff_percent": reconciliation.moto_hours_diff_percent,
+            "odometer_diff_percent": reconciliation.odometer_diff_percent,
+            "fuel_diff_percent": reconciliation.fuel_diff_percent,
+        },
+        "decision_source": reconciliation.decision_source,
+        "final_values": {
+            "moto_hours": reconciliation.final_moto_hours,
+            "odometer": reconciliation.final_odometer,
+            "fuel_used": reconciliation.final_fuel_used,
+        },
+    }
