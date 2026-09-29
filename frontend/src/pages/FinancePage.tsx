@@ -11,6 +11,7 @@ import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import ActFormModal from '../components/ActFormModal';
 import NotificationBell from '../components/NotificationBell';
 import Navbar from '../components/Navbar';
+import PayoutBatchModal from '../components/PayoutBatchModal';
 
 const INVOICE_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
@@ -68,6 +69,7 @@ export const FinancePage: React.FC = () => {
   const [paymentTarget, setPaymentTarget] = useState<Invoice | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
   const [deleteActTarget, setDeleteActTarget] = useState<Act | null>(null);
+  const [isPayoutBatchModalOpen, setIsPayoutBatchModalOpen] = useState(false);
 
   const canView = hasPermission('finance', 'view');
   const canEdit = hasPermission('finance', 'update');
@@ -651,10 +653,21 @@ export const FinancePage: React.FC = () => {
               {/* === ВЫПЛАТЫ === */}
               {activeTab === 'payouts' && (
                 <div>
+                  <div className="flex justify-end mb-4 gap-2">
+                    {canCreate && (
+                      <button
+                        onClick={() => setIsPayoutBatchModalOpen(true)}
+                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm font-semibold"
+                      >
+                        💰 Batch создать выплаты
+                      </button>
+                    )}
+                  </div>
                   {payouts.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">
                       <div className="text-5xl mb-4">💸</div>
                       <p>Выплат пока нет</p>
+                      <p className="text-sm mt-2">Нажмите "Batch создать выплаты" для массового создания</p>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
@@ -663,26 +676,65 @@ export const FinancePage: React.FC = () => {
                           <tr>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gross</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Комиссия</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Net</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {payouts.map((p) => (
                             <tr key={p.id} className="hover:bg-gray-50">
                               <td className="px-4 py-3 whitespace-nowrap">
-                                <button onClick={() => handleGoToRequest(p.request_id)} className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline">
+                                <span className="text-sm font-mono text-gray-900">
                                   {p.document_number || `#${p.id}`}
-                                </button>
+                                </span>
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(p.payout_date)}</td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(p.net_amount)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(p.gross_amount)}</td>
                               <td className="px-4 py-3 whitespace-nowrap text-sm text-orange-600">{formatMoney(p.platform_commission)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-green-600">{formatMoney(p.net_amount)}</td>
                               <td className="px-4 py-3 whitespace-nowrap">
                                 <span className={`px-2 py-1 text-xs font-semibold rounded-full ${PAYOUT_STATUS_LABELS[p.status]?.color || 'bg-gray-100'}`}>
                                   {PAYOUT_STATUS_LABELS[p.status]?.label || p.status}
                                 </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
+                                {p.status === 'draft' && canEdit && (
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await financeApi.approvePayout(p.id);
+                                        showToast.success('Выплата одобрена');
+                                        loadData();
+                                      } catch (err: any) {
+                                        showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
+                                      }
+                                    }}
+                                    className="text-blue-600 hover:text-blue-900 font-medium"
+                                    title="Одобрить"
+                                  >
+                                    ✓ Одобрить
+                                  </button>
+                                )}
+                                {p.status === 'sent' && canEdit && (
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await financeApi.payPayout(p.id);
+                                        showToast.success('Выплата отмечена как выплаченная');
+                                        loadData();
+                                      } catch (err: any) {
+                                        showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
+                                      }
+                                    }}
+                                    className="text-green-600 hover:text-green-900 font-medium"
+                                    title="Отметить как выплаченную"
+                                  >
+                                    💸 Выплатить
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -723,6 +775,15 @@ export const FinancePage: React.FC = () => {
 
       {deleteActTarget && (
         <DeleteConfirmDialog vehicleName={`акт ${deleteActTarget.document_number}`} onConfirm={handleDeleteAct} onCancel={() => setDeleteActTarget(null)} />
+      )}
+      {isPayoutBatchModalOpen && (
+        <PayoutBatchModal
+          onClose={() => setIsPayoutBatchModalOpen(false)}
+          onSuccess={() => {
+            setIsPayoutBatchModalOpen(false);
+            loadData();
+          }}
+        />
       )}
     </div>
   );
