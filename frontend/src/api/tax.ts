@@ -8,7 +8,7 @@ export const taxApi = {
     default_system: string;
     default_vat_rate: string;
   }> => {
-    const response = await apiClient.get('/tax/config');
+    const response = await apiClient.get('/tax/config');  // ← apiClient
     return response.data;
   },
 };

@@ -155,6 +155,21 @@ class InvoiceService:
             f"#{reconciliation_id}: total={total} RUB"
         )
 
+        # 🆕 АВТОГЕНЕРАЦИЯ PDF
+        try:
+            from app.services.finance_service import generate_and_save_invoice_pdf
+
+            pdf_result = generate_and_save_invoice_pdf(invoice.id, db)
+            logger.info(
+                f"📄 PDF auto-generated for invoice #{invoice.id}: "
+                f"{pdf_result.get('path', 'unknown path')}"
+            )
+        except Exception as pdf_err:
+            # Не блокируем создание счёта из-за ошибки PDF
+            logger.warning(
+                f"⚠️ PDF auto-generation failed for invoice #{invoice.id}: {pdf_err}"
+            )
+
         return invoice
 
     def _generate_document_number(self, db: Session, invoice_date: date | None) -> str:

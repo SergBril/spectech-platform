@@ -16,7 +16,6 @@ from app.schemas.finance import (
     InvoiceUpdate,
 )
 from app.services.finance_service import create_invoice, generate_and_save_invoice_pdf
-from app.services.pdf_generator import generate_invoice_pdf
 
 logger = logging.getLogger("spectech.invoices")
 
@@ -168,12 +167,15 @@ def download_invoice_pdf(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """Скачать счёт в формате PDF (только своей компании)."""
-    from sqlalchemy.orm import selectinload
+    """Скачать счёт в формате PDF."""
+    from app.models.contractor import Contractor
+    from app.models.finance import Invoice
+    from app.services.pdf_generator import generate_invoice_pdf
 
+    # ВАЖНО: загружаем items вместе с invoice через joinedload
     stmt = (
         select(Invoice)
-        .options(selectinload(Invoice.items))
+        .options(joinedload(Invoice.items))
         .where(Invoice.id == invoice_id, Invoice.company_id == company_id)
     )
     invoice = db.scalar(stmt)
@@ -184,23 +186,39 @@ def download_invoice_pdf(
     contractor = db.get(Contractor, invoice.client_id) if invoice.client_id else None
 
     try:
-        pdf_bytes = generate_invoice_pdf(
-            invoice=invoice,
-            contractor=contractor,
-        )
+        pdf_bytes = generate_invoice_pdf(invoice, contractor)
     except Exception as e:
-        logger.error(f"PDF generation error for invoice {invoice_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"PDF generation error: {str(e)}")
+        import traceback
 
-    filename = f"{invoice.document_number or f'invoice-{invoice_id}'}.pdf"
+        error_traceback = traceback.format_exc()
+        logger.error(
+            f"❌ PDF generation error for invoice {invoice_id}:\n{error_traceback}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF generation error: {str(e)}",
+        )
+
+    import urllib.parse
+
+    # ASCII-safe fallback filename (без кириллицы)
+    ascii_filename = f"invoice-{invoice_id}.pdf"
+
+    # UTF-8 filename для современных браузеров (RFC 5987)
+    original_filename = f"{invoice.document_number or f'invoice-{invoice_id}'}.pdf"
+    utf8_filename = urllib.parse.quote(original_filename)
+
+    # Content-Disposition с двумя filename:
+    # - filename (ASCII fallback для старых браузеров)
+    # - filename* (UTF-8 для современных браузеров)
+    content_disposition = (
+        f'attachment; filename="{ascii_filename}"; ' f"filename*=UTF-8''{utf8_filename}"
+    )
 
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Access-Control-Expose-Headers": "Content-Disposition",
-        },
+        headers={"Content-Disposition": content_disposition},
     )
 
 
