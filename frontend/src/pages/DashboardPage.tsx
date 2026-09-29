@@ -8,6 +8,7 @@ import { RevenueChart, StatusPieChart, TopRequestsChart, Sparkline } from '../co
 import { MetricCardSkeleton, ChartSkeleton } from '../components/Skeleton';
 import NotificationBell from '../components/NotificationBell';
 import Navbar from '../components/Navbar';
+import DashboardWidgets from '../components/DashboardWidgets';
 
 export const DashboardPage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -144,6 +145,9 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* === ФИНАНСОВО-ОПЕРАЦИОННЫЕ ВИДЖЕТЫ (Sprint 5A Task 4) === */}
+        <DashboardWidgets />
 
         {/* === ГРАФИКИ АНАЛИТИКИ (2 колонки) === */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
