@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -14,7 +14,7 @@ import RegisterPage from './pages/RegisterPage';
 import RequestsPage from './pages/RequestsPage';
 import DashboardPage from './pages/DashboardPage';
 import VehiclesPage from './pages/VehiclesPage';
-import MarketplacePage from './pages/MarketplacePage';  // ← ДОБАВИТЬ
+import MarketplacePage from './pages/MarketplacePage';  // в†ђ Р”РћР‘РђР’РРўР¬
 import FinancePage from './pages/FinancePage';
 import InvoicesPage from './pages/InvoicesPage';
 import RequestDetailPage from './pages/RequestDetailPage';
@@ -26,6 +26,7 @@ import MaintenanceAnalyticsPage from './pages/MaintenanceAnalyticsPage';
 import FuelAnalyticsPage from './pages/FuelAnalyticsPage';
 import EmailTemplatesPage from './pages/EmailTemplatesPage';
 import { EmailLogsPage } from './pages/EmailLogsPage';
+import ReconciliationPage from './pages/ReconciliationPage';
 
 import './index.css';
 
@@ -51,7 +52,7 @@ const AppRoutes = () => {
       <Route path="/maintenance/:id" element={<ProtectedRoute><MaintenanceDetailPage /></ProtectedRoute>} />
       <Route path="/maintenance/analytics" element={<ProtectedRoute><MaintenanceAnalyticsPage /></ProtectedRoute>} />
       <Route path="/fuel/analytics" element={<ProtectedRoute><FuelAnalyticsPage /></ProtectedRoute>} />
-      <Route path="/marketplace" element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />  // ← ДОБАВИТЬ
+      <Route path="/marketplace" element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />
       <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
       <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
       <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
@@ -62,6 +63,7 @@ const AppRoutes = () => {
       <Route path="/settings/company" element={<ProtectedRoute><CompanySettingsPage /></ProtectedRoute>} />
       <Route path="/contractors" element={<ProtectedRoute><ContractorsPage /></ProtectedRoute>} />
       <Route path="/contractors/:id" element={<ProtectedRoute><ContractorDetailPage /></ProtectedRoute>} />
+      <Route path="/reconciliation" element={<ProtectedRoute><ReconciliationPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
