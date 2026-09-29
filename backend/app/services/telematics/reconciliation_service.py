@@ -9,7 +9,7 @@ import logging
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from app.models.dispatch import ShiftReport, ShiftTask
+from app.models.shift import ShiftReport, ShiftTask
 from app.models.telematics import GpsPoint, ShiftDataReconciliation
 
 logger = logging.getLogger("spectech.reconciliation_service")
@@ -50,8 +50,22 @@ class ReconciliationService:
             return None
 
         # 3. Определяем период смены
-        work_start = shift_report.operator_work_start or shift_task.shift_date
-        work_end = shift_report.operator_work_end or shift_task.shift_date
+        # Используем явные значения или defaults
+        if shift_report.operator_work_start:
+            work_start = shift_report.operator_work_start
+        else:
+            # Если нет явного времени начала — берём начало дня смены
+            work_start = datetime.combine(
+                shift_task.shift_date, datetime.min.time()
+            ).replace(tzinfo=UTC)
+
+        if shift_report.operator_work_end:
+            work_end = shift_report.operator_work_end
+        else:
+            # Если нет явного времени окончания — берём конец дня смены
+            work_end = datetime.combine(
+                shift_task.shift_date, datetime.max.time()
+            ).replace(tzinfo=UTC)
 
         # 4. Получаем телеметрию за период смены
         telemetry_points = (
@@ -164,9 +178,9 @@ class ReconciliationService:
         if not telemetry_points:
             return 0.0
 
-        engine_on_count = sum(1 for p in telemetry_points if p.engine_on)
-        # Предполагаем что точки приходят каждые 30 секунд
-        moto_hours = engine_on_count * 30 / 3600  # секунды → часы
+        engine_on_count = sum(1 for p in telemetry_points if p.engine_on is True)
+        # Предполагаем что точки приходят каждые 5 минут (300 секунд)
+        moto_hours = engine_on_count * 300 / 3600  # секунды → часы
         return round(moto_hours, 2)
 
     def _calculate_odometer(self, telemetry_points: list[GpsPoint]) -> int:
@@ -196,6 +210,7 @@ class ReconciliationService:
         last_point = telemetry_points[-1]
 
         if first_point.fuel_level is None or last_point.fuel_level is None:
+            logger.warning("fuel_level is None in first or last point")
             return 0.0
 
         fuel_used = first_point.fuel_level - last_point.fuel_level
