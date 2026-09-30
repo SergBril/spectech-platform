@@ -35,11 +35,10 @@ class TestDocumentNumberGeneration:
 
         from app.models.dispatch import Request
 
-        # Создаём тестовые заявки
         requests_list = []
         for i in range(5):
             req = Request(
-                client_id=None,  # nullable
+                client_id=company.id,  # ← ИСПРАВЛЕНО: используем company вместо sample_contractor
                 status="new",
                 request_type="one_time",
                 work_type=f"Test work {i}",
