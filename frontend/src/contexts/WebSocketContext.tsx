@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useEffect, useRef, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 
 interface WebSocketContextType {
+  lastMessage: MessageEvent | null;
   ws: WebSocket | null;
   connect: () => void;
   disconnect: () => void;
@@ -13,8 +14,9 @@ const WebSocketContext = createContext<WebSocketContextType | undefined>(undefin
 export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { token, isAuthenticated } = useAuth();
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isConnectingRef = useRef(false);
+  const [lastMessage, setLastMessage] = useState<MessageEvent | null>(null);
 
   const connect = useCallback(() => {
     if (!isAuthenticated || !token) {
@@ -48,6 +50,7 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
       try {
         const data = JSON.parse(event.data);
         console.log('📨 WebSocket message:', data);
+        setLastMessage(event);  // ← ДОБАВИТЬ
       } catch (e) {
         console.error('❌ WebSocket: failed to parse message', e);
       }
@@ -111,7 +114,7 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
   }, [isAuthenticated, disconnect]);
 
   return (
-    <WebSocketContext.Provider value={{ ws: wsRef.current, connect, disconnect, sendMessage }}>
+    <WebSocketContext.Provider value={{ lastMessage, ws: wsRef.current, connect, disconnect, sendMessage }}>
       {children}
     </WebSocketContext.Provider>
   );

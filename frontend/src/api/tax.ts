@@ -1,3 +1,4 @@
+import apiClient from './client';
 export const taxApi = {
   /**
    * Получить конфигурацию для форм (системы + ставки НДС)
