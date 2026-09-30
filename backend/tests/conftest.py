@@ -105,7 +105,6 @@ def company(db_session: Session):
         legal_name="Test Company LLC",
         inn="7700000000",
         kpp="770001001",
-        # ogrn убран — этого поля нет в модели
     )
     db_session.add(company)
     db_session.commit()
