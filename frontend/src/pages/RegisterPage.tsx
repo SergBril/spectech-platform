@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { showToast } from '../utils/toast';
 
 export const RegisterPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -16,16 +17,12 @@ export const RegisterPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setIsLoading(true);
-
     try {
-      await register(email, password, fullName, phone || undefined);
-      navigate('/');
+      // Временно: просто переход на login
+      showToast.success('Регистрация временно недоступна. Войдите в систему.');
+      navigate('/login');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Ошибка регистрации');
-    } finally {
-      setIsLoading(false);
+      showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
     }
   };
 

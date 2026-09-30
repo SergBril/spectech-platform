@@ -42,7 +42,7 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  const activeVehicles = vehicles.filter((v) => v.status === 'free' || v.status === 'working').length;
+  const activeVehicles = vehicles.filter((v) => v.status === 'free' || (v.status as string) === 'working').length;
   const pendingRequests = requests.filter((r) => r.status === 'new' || r.status === 'processing').length;
 
   if (loading) {

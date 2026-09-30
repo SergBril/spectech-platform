@@ -1,6 +1,7 @@
 import React from 'react';
 
 interface Props {
+  title?: string;
   vehicleName: string;
   onConfirm: () => void;
   onCancel: () => void;

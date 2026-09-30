@@ -6,6 +6,8 @@ interface User {
   id: number;
   email: string;
   full_name: string;
+  phone?: string | null;
+  company_id: number;  // ← ДОБАВИТЬ
   is_superuser: boolean;
   role?: string;
 }

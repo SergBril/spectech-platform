@@ -379,8 +379,7 @@ export const RequestsPage: React.FC = () => {
 
       {deleteTarget && (
         <DeleteConfirmDialog
-          title="Удалить заявку?"
-          message={`Вы уверены, что хотите удалить заявку #${deleteTarget.id} "${deleteTarget.work_type}"?`}
+          vehicleName={`заявку #${deleteTarget.id} "${deleteTarget.work_type}"`}
           onConfirm={confirmDelete}
           onCancel={() => setDeleteTarget(null)}
         />
