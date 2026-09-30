@@ -69,41 +69,19 @@ logger = logging.getLogger("spectech.app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- Startup ---
-    print("🚀 SpectechPlatform v0.1.0 starting...")
+    logger.info("🚀 SpectechPlatform v0.1.0 starting...")
 
-    # Startup: check MinIO connection (skip in tests)
-    import os
-
-    if os.getenv("ENVIRONMENT") != "testing":
-        try:
-            if minio_service.check_connection():
-                logger.info("✅ MinIO connection established")
-            else:
-                logger.warning("⚠️ MinIO connection failed, file uploads will not work")
-        except Exception as e:
-            logger.warning(f"⚠️ MinIO connection error (non-fatal): {e}")
-    else:
+    # ✅ Пропускаем MinIO в режиме тестирования
+    if settings.environment == "testing":
         logger.info("🧪 Testing mode: skipping MinIO connection check")
+    elif minio_service.check_connection():
+        logger.info("✅ MinIO connection successful")
+    else:
+        logger.warning("⚠️ MinIO connection failed")
 
-    # Проверка системных шрифтов (только диагностика, регистрация в reportlab_pdf_generator)
-    try:
-        from pathlib import Path
+    yield
 
-        for p in [
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-        ]:
-            print(
-                f"{'✅' if p.exists() else '⚠️'} Font {p.name}: {p.stat().st_size if p.exists() else 0} bytes"
-            )
-    except Exception as e:
-        print(f"⚠️ Font check failed: {e}")
-
-    yield  # <-- Приложение работает
-
-    # --- Shutdown ---
-    print("👋 SpectechPlatform shutting down...")
+    logger.info("👋 Shutting down...")
 
 
 # 1. Создание приложения
