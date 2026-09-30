@@ -1,0 +1,11 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.0, pytest-8.3.3, pluggy-1.6.0 -- C:\Users\osavi\spectech-platform\backend\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\osavi\spectech-platform\backend
+configfile: pytest.ini
+plugins: anyio-4.14.2, Faker-40.38.0, asyncio-0.24.0, cov-5.0.0, mock-3.16.0
+asyncio: mode=Mode.AUTO, default_loop_scope=function
+collecting ... collected 109 items
+
+tests/integration/test_auth_api.py::TestAuthAPI::test_login_invalid_credentials ERROR [  0%]
+tests/integration/test_auth_api.py::TestAuthAPI::test_login_missing_fields ^C
