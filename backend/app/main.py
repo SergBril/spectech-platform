@@ -72,11 +72,19 @@ async def lifespan(app: FastAPI):
     # --- Startup ---
     print("🚀 SpectechPlatform v0.1.0 starting...")
 
-    # Проверка MinIO
-    if minio_service.check_connection():
-        print("✅ MinIO connection successful!")
+    # Startup: check MinIO connection (skip in tests)
+    import os
+
+    if os.getenv("ENVIRONMENT") != "testing":
+        try:
+            if minio_service.check_connection():
+                logger.info("✅ MinIO connection established")
+            else:
+                logger.warning("⚠️ MinIO connection failed, file uploads will not work")
+        except Exception as e:
+            logger.warning(f"⚠️ MinIO connection error (non-fatal): {e}")
     else:
-        print("⚠️ MinIO connection failed. Check credentials and bucket name.")
+        logger.info("🧪 Testing mode: skipping MinIO connection check")
 
     # Проверка системных шрифтов (только диагностика, регистрация в reportlab_pdf_generator)
     try:
