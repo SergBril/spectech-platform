@@ -71,17 +71,20 @@ logger = logging.getLogger("spectech.app")
 async def lifespan(app: FastAPI):
     logger.info("🚀 SpectechPlatform v0.1.0 starting...")
 
-    # ✅ Пропускаем MinIO в режиме тестирования
-    if settings.environment == "testing":
-        logger.info("🧪 Testing mode: skipping MinIO connection check")
-    elif minio_service.check_connection():
-        logger.info("✅ MinIO connection successful")
-    else:
-        logger.warning("⚠️ MinIO connection failed")
+    # Пропускаем подключение к MinIO в тестовом режиме
+    if not settings.TESTING:
+        try:
+            if minio_service.check_connection():
+                logger.info("✅ MinIO connection OK")
+                minio_service.ensure_bucket_exists()
+            else:
+                logger.warning("⚠️ MinIO connection failed")
+        except Exception as e:
+            logger.warning(f"⚠️ MinIO connection failed: {e}")
 
     yield
 
-    logger.info("👋 Shutting down...")
+    logger.info("👋 SpectechPlatform shutting down...")
 
 
 # 1. Создание приложения

@@ -17,6 +17,12 @@ logger = logging.getLogger("spectech.requests")
 
 router = APIRouter()
 
+# Статусы техники, при которых назначение невозможно
+UNAVAILABLE_VEHICLE_STATUSES = {"repair", "decommissioned", "sold"}
+
+# Статусы RequestAssignment, которые блокируют назначение
+BLOCKING_ASSIGNMENT_STATUSES = ("planned", "confirmed", "active")
+
 
 @router.get("", response_model=list[RequestRead])
 def list_requests(
@@ -47,7 +53,7 @@ def list_requests(
 
     requests_list = db.scalars(stmt).all()
 
-    # 🆕 Enrichment: добавляем client_name, vehicle_category_name
+    # Enrichment: добавляем client_name, vehicle_category_name
     enriched = []
     for req in requests_list:
         data = RequestRead.model_validate(req).model_dump()
@@ -91,7 +97,7 @@ def create_request(
 
     request = Request(
         **payload.model_dump(),
-        company_id=company_id,  # 🆕 Используем company_id из зависимости
+        company_id=company_id,
         created_by=current_user.id,
     )
     db.add(request)
@@ -158,25 +164,45 @@ def assign_request(
     _: None = Depends(require_permission("requests", "assign")),
 ):
     """Назначить технику на заявку (только своей компании)."""
+
+    # ── Валидация заявки ───────────────────────────────────────────────
     request = db.get(Request, request_id)
     if not request or request.company_id != company_id:
         raise HTTPException(status_code=404, detail="Request not found")
 
     if request.status in ("closed", "cancelled"):
-        raise HTTPException(status_code=409, detail="Request is closed or cancelled")
+        raise HTTPException(
+            status_code=409, detail=f"Request is {request.status} — cannot assign"
+        )
 
+    # ── Валидация техники ──────────────────────────────────────────────
     vehicle = db.get(Vehicle, payload.vehicle_id)
     if not vehicle or vehicle.company_id != company_id:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
+    # Проверка статуса техники
+    if vehicle.status in UNAVAILABLE_VEHICLE_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Vehicle '{vehicle.name}' has status '{vehicle.status}' — assignment not allowed",
+        )
+
+    # ── Определяем период назначения ───────────────────────────────────
     planned_start = payload.planned_start or request.planned_start
     planned_end = payload.planned_end or request.planned_end
 
-    # Проверка пересечений с другими назначениями этой техники
+    if planned_start >= planned_end:
+        raise HTTPException(
+            status_code=422, detail="planned_start must be before planned_end"
+        )
+
+    # ── Проверка пересечений с ДРУГИМИ назначениями ────────────────────
     overlap = db.scalar(
         select(RequestAssignment).where(
             RequestAssignment.vehicle_id == payload.vehicle_id,
-            RequestAssignment.status != "cancelled",
+            RequestAssignment.request_id
+            != request_id,  # ИСКЛЮЧАЕМ ТЕКУЩУЮ ЗАЯВКУ (для идемпотентности)
+            RequestAssignment.status.in_(BLOCKING_ASSIGNMENT_STATUSES),
             RequestAssignment.planned_start < planned_end,
             RequestAssignment.planned_end > planned_start,
         )
@@ -185,31 +211,30 @@ def assign_request(
     if overlap:
         raise HTTPException(
             status_code=409,
-            detail=f"Vehicle {vehicle.name} already assigned for this period "
-            f"(conflict with request #{overlap.request_id})",
+            detail=f"Vehicle '{vehicle.name}' already assigned to request #{overlap.request_id} "
+            f"for this period ({overlap.planned_start:%d.%m %H:%M} — {overlap.planned_end:%d.%m %H:%M})",
         )
 
-    # 🆕 ПРОВЕРКА: нет ли уже активного назначения для этой заявки
+    # ── Idempotency: если уже есть активное назначение для этой заявки ─
     existing_assignment = (
         db.query(RequestAssignment)
         .filter(
             RequestAssignment.request_id == request_id,
-            RequestAssignment.status.in_(["planned", "confirmed", "active"]),
+            RequestAssignment.status.in_(BLOCKING_ASSIGNMENT_STATUSES),
         )
         .first()
     )
 
     if existing_assignment:
-        # Идемпотентность: возвращаем существующее назначение
         logger.info(
-            f"♻️  Request #{request_id} already has active assignment "
+            f"Request #{request_id} already has active assignment "
             f"#{existing_assignment.id}"
         )
         db.refresh(request)
         return request
 
     try:
-        # Создаём RequestAssignment
+        # ── Создаём RequestAssignment ──────────────────────────────────
         assignment = RequestAssignment(
             request_id=request.id,
             vehicle_id=payload.vehicle_id,
@@ -219,15 +244,15 @@ def assign_request(
             status="planned",
         )
         db.add(assignment)
-        db.flush()  # Получаем assignment.id
+        db.flush()
 
-        # Обновляем Request
+        # ── Обновляем Request ──────────────────────────────────────────
         old_status = request.status
         request.status = "assigned"
         request.assigned_vehicle_id = payload.vehicle_id
         request.assigned_operator_id = payload.operator_id
 
-        # Лог статуса
+        # ── Лог статуса ────────────────────────────────────────────────
         db.add(
             RequestStatusLog(
                 request_id=request.id,
@@ -240,58 +265,63 @@ def assign_request(
             )
         )
 
-        # 🆕 АВТОСОЗДАНИЕ ShiftTask на первую дату
+        # ── Авто-создание ShiftTask на первую дату (только если есть оператор) ──
         from app.models.shift import ShiftTask
 
-        existing_task = (
-            db.query(ShiftTask)
-            .filter(
-                ShiftTask.request_id == request_id,
-                ShiftTask.assignment_id == assignment.id,
+        if payload.operator_id is not None:
+            existing_task = (
+                db.query(ShiftTask)
+                .filter(
+                    ShiftTask.request_id == request_id,
+                    ShiftTask.assignment_id == assignment.id,
+                )
+                .first()
             )
-            .first()
-        )
 
-        if not existing_task:
-            shift_date = planned_start.date()
-            shift_task = ShiftTask(
-                request_id=request_id,
-                assignment_id=assignment.id,
-                operator_id=payload.operator_id,
-                vehicle_id=payload.vehicle_id,
-                shift_date=shift_date,
-                shift_number=1,
-                status=ShiftTaskStatus.draft,
-                company_id=company_id,
-            )
-            db.add(shift_task)
+            if not existing_task:
+                shift_date = planned_start.date()
+                shift_task = ShiftTask(
+                    request_id=request_id,
+                    assignment_id=assignment.id,
+                    operator_id=payload.operator_id,
+                    vehicle_id=payload.vehicle_id,
+                    shift_date=shift_date,
+                    shift_number=1,
+                    status=ShiftTaskStatus.draft,
+                    company_id=company_id,
+                )
+                db.add(shift_task)
+                logger.info(
+                    f"Auto-created ShiftTask for assignment #{assignment.id} "
+                    f"on date {shift_date}, operator #{payload.operator_id}"
+                )
+        else:
             logger.info(
-                f"✅ Auto-created ShiftTask for assignment #{assignment.id} "
-                f"on date {shift_date}"
+                f"Skipping ShiftTask creation: no operator assigned "
+                f"for request #{request_id}"
             )
 
-        # 🆕 ОДИН commit в конце (было два!)
         db.commit()
         db.refresh(request)
 
         logger.info(
-            f"✅ Request #{request_id} assigned: vehicle={vehicle.name}, "
+            f"Request #{request_id} assigned: vehicle={vehicle.name}, "
             f"assignment=#{assignment.id}"
         )
         return request
 
     except IntegrityError as e:
         db.rollback()
-        logger.error(f"❌ IntegrityError on request #{request_id} assign: {e}")
+        logger.error(f"IntegrityError on request #{request_id} assign: {e}")
         raise HTTPException(
             status_code=409,
-            detail="Назначение уже существует или нарушена уникальность данных. "
-            "Проверьте, не назначена ли уже техника на эту заявку.",
+            detail="Назначение уже существует или нарушена уникальность данных.",
         )
     except Exception as e:
         db.rollback()
         logger.error(
-            f"❌ Unexpected error on request #{request_id} assign: {e}", exc_info=True
+            f"Unexpected error on request #{request_id} assign: {e}",
+            exc_info=True,
         )
         raise HTTPException(
             status_code=500,
@@ -320,7 +350,7 @@ async def update_request(
     if "status" in update_data and update_data["status"] != old_status:
         new_status = update_data["status"]
 
-        # Безопасная конвертация enum → string
+        # Безопасная конвертация enum -> string
         old_status_str = (
             old_status.value if hasattr(old_status, "value") else str(old_status)
         )
@@ -334,7 +364,7 @@ async def update_request(
                 from_status=old_status,
                 to_status=new_status,
                 changed_by_user_id=current_user.id,
-                comment=f"Статус изменён вручную: {old_status_str} → {new_status_str}",
+                comment=f"Статус изменён вручную: {old_status_str} -> {new_status_str}",
             )
         )
 

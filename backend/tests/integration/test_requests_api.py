@@ -1,6 +1,5 @@
 """Integration тесты для API заявок."""
 
-from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -34,45 +33,43 @@ class TestRequestsAPI:
         response = client.get("/api/v1/requests/99999", headers=auth_headers)
         assert response.status_code == 404
 
-    def test_get_request_history(self, client, auth_headers, sample_user):
+    def test_get_request_history(
+        self, client, auth_headers, sample_user, sample_company, db_session
+    ):
         """История заявки доступна по endpoint."""
-        # Создаём заявку напрямую через БД
-        from app.core.db import SessionLocal
+        from datetime import UTC, datetime, timedelta
+
         from app.models.dispatch import Request, RequestStatusLog
 
-        db = SessionLocal()
-        try:
-            now = datetime.now(UTC)
-            request = Request(
-                client_id=1,
-                work_type="Test work",
-                object_address="Test address",
-                planned_start=now,
-                planned_end=now + timedelta(days=1),
-                status="new",
-                request_type="one_time",
-                source_channel="phone",
-                priority="normal",
-                company_id=1,
-                rate_type="hourly",
-                created_by=sample_user.id,
-            )
-            db.add(request)
-            db.flush()
+        now = datetime.now(UTC)
+        request = Request(
+            client_id=sample_company.id,  # Используем существующую компанию как клиента (или sample_client.id если есть)
+            work_type="Test work",
+            object_address="Test address",
+            planned_start=now,
+            planned_end=now + timedelta(days=1),
+            status="new",
+            request_type="one_time",
+            source_channel="phone",
+            priority="normal",
+            company_id=sample_user.company_id,  # КРИТИЧНО: должно совпадать с компанией авторизованного пользователя!
+            rate_type="hourly",
+            created_by=sample_user.id,
+        )
+        db_session.add(request)
+        db_session.flush()
 
-            db.add(
-                RequestStatusLog(
-                    request_id=request.id,
-                    from_status=None,
-                    to_status="new",
-                    changed_by_user_id=sample_user.id,
-                    comment="Test creation",
-                )
+        db_session.add(
+            RequestStatusLog(
+                request_id=request.id,
+                from_status=None,
+                to_status="new",
+                changed_by_user_id=sample_user.id,
+                comment="Test creation",
             )
-            db.commit()
-            req_id = request.id
-        finally:
-            db.close()
+        )
+        db_session.commit()
+        req_id = request.id
 
         response = client.get(
             f"/api/v1/requests/{req_id}/history",

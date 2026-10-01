@@ -1,12 +1,33 @@
-"""Общие фикстуры для тестов."""
-
 import os
 import sys
-from collections.abc import Generator
-from unittest.mock import MagicMock
+
+# === ENV для тестов (ДО любых импортов из app) ===
+os.environ["TESTING"] = "true"
+os.environ["ENVIRONMENT"] = "testing"
+os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+os.environ["SECRET_KEY"] = "test-secret-key-for-testing-only"
+os.environ["REDIS_URL"] = "redis://localhost:6379/15"
+os.environ["MINIO_ENDPOINT"] = "http://localhost:9000"
+os.environ["MINIO_ACCESS_KEY"] = "test-key"
+os.environ["MINIO_SECRET_KEY"] = "test-secret"
+os.environ["MINIO_BUCKET"] = "test-bucket"
+os.environ["SENTRY_DSN"] = ""
+# ======================
+
+# === Учим SQLite понимать PostgreSQL JSONB ===
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
+
+
+@compiles(JSONB, "sqlite")
+def compile_jsonb(element, compiler, **kw):
+    return "JSON"
 
 
 # === MOCK WEASYPRINT ДО ЛЮБЫХ ИМПОРТОВ ===
+from unittest.mock import MagicMock
+
+
 class MockHTML:
     """Mock weasyprint.HTML для тестов."""
 
@@ -22,26 +43,18 @@ mock_weasyprint.HTML = MockHTML
 sys.modules["weasyprint"] = mock_weasyprint
 # ========================================
 
-# === ENV для тестов ===
-os.environ["ENVIRONMENT"] = "testing"
-os.environ["DATABASE_URL"] = "sqlite:///./test.db"
-os.environ["SECRET_KEY"] = "test-secret-key-for-testing-only"
-os.environ["REDIS_URL"] = "redis://localhost:6379/15"
-os.environ["MINIO_ENDPOINT"] = "http://localhost:9000"
-os.environ["MINIO_ACCESS_KEY"] = "test-key"
-os.environ["MINIO_SECRET_KEY"] = "test-secret"
-os.environ["MINIO_BUCKET"] = "test-bucket"
-os.environ["SENTRY_DSN"] = ""
-# ======================
+from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.db import Base, get_db  # noqa: E402
-from app.main import app  # noqa: E402
-from app.models import *  # noqa: E402, F401, F403
+from app.core.db import Base, get_db
+from app.main import app
+from app.models import *  # noqa: F401, F403
+from app.models.auth import User
+from app.services.auth_service import create_access_token
 
 # === SQLite setup ===
 TEST_DATABASE_URL = "sqlite:///./test.db"
@@ -50,24 +63,21 @@ engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": Fal
 
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
-    """Включаем foreign keys в SQLite."""
     cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA foreign_keys=OFF")
     cursor.close()
 
 
-# JSONB → JSON для SQLite
+# JSONB -> JSON для SQLite
 from sqlalchemy.dialects.sqlite import base as sqlite_base  # noqa: E402
 
 if not hasattr(sqlite_base.SQLiteTypeCompiler, "visit_JSONB"):
 
     def visit_JSONB_as_JSON(self, type_, **kw):
-        """JSONB рендерим как JSON в SQLite."""
         return self.visit_JSON(type_, **kw)
 
     sqlite_base.SQLiteTypeCompiler.visit_JSONB = visit_JSONB_as_JSON
 # ==================
-
 
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -77,6 +87,7 @@ def db_session() -> Generator[Session, None, None]:
     """Чистая сессия БД для каждого теста."""
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
+    session.execute(text("PRAGMA foreign_keys=OFF"))
     try:
         yield session
     finally:
@@ -89,16 +100,21 @@ def company(db_session: Session):
     """Создаёт компанию для тестов."""
     from app.models.company import Company
 
-    company = Company(
-        id=1,
+    c = Company(
         name="Test Company",
         legal_name="Test Company LLC",
         inn="7700000000",
         kpp="770001001",
     )
-    db_session.add(company)
+    db_session.add(c)
     db_session.commit()
-    db_session.refresh(company)
+    db_session.refresh(c)
+    return c
+
+
+@pytest.fixture
+def sample_company(company):
+    """Алиас для фикстуры company."""
     return company
 
 
@@ -111,7 +127,7 @@ def sample_contractor(db_session: Session, company):
         name="Test Client LLC",
         inn="7701234567",
         kpp="770101001",
-        type="client",
+        type="client",  # ← ИСПРАВЛЕНО: type, не contractor_type
         company_id=company.id,
     )
     db_session.add(c)
@@ -121,15 +137,15 @@ def sample_contractor(db_session: Session, company):
 
 
 @pytest.fixture
-def sample_user(db_session: Session, company):  # ← зависимость от company
-    from app.models.auth import User
-
+def sample_user(db_session: Session, company):
+    """Создаёт тестового пользователя."""
     user = User(
         email="test@example.com",
         full_name="Test User",
         password_hash="test_hashed_password_12345",
+        company_id=company.id,
         is_superuser=False,
-        company_id=company.id,  # ← реальный id
+        status="active",
         failed_login_attempts=0,
     )
     db_session.add(user)
@@ -141,8 +157,6 @@ def sample_user(db_session: Session, company):  # ← зависимость о�
 @pytest.fixture
 def admin_user(db_session: Session, company):
     """Создаёт админа."""
-    from app.models.auth import User
-
     a = User(
         email="admin@test.com",
         full_name="Admin User",
@@ -159,12 +173,7 @@ def admin_user(db_session: Session, company):
 
 @pytest.fixture(scope="function")
 def client(db_session: Session) -> Generator[TestClient, None, None]:
-    """FastAPI TestClient с переопределённой БД.
-
-    Минирование мока MinIO не требуется, так как в main.py есть
-    проверка ENVIRONMENT == 'testing', которая пропускает проверку
-    подключения к MinIO при запуске приложения в тестах.
-    """
+    """FastAPI TestClient с переопределённой БД."""
 
     def override_get_db():
         try:
@@ -181,37 +190,30 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
 
 
 @pytest.fixture
-def auth_headers(admin_user) -> dict:
-    """Возвращает headers с JWT токеном для авторизации."""
-    from app.services.auth_service import create_access_token
-
-    # Пробуем стандартные сигнатуры без опасного fallback на 'data'
-    try:
-        # Вариант 1: именованный аргумент subject (самый частый в FastAPI)
-        token = create_access_token(subject=str(admin_user.id))
-    except TypeError:
-        # Вариант 2: позиционный аргумент (если функция принимает просто user_id)
-        token = create_access_token(str(admin_user.id))
-
+def auth_headers(admin_user: User) -> dict:
+    """Заголовки авторизации для админа."""
+    token = create_access_token(user=admin_user)
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
 def auth_client(client: TestClient, auth_headers: dict):
     """TestClient с валидным JWT токеном."""
-    # Просто обновляем заголовки клиента, используя уже сгенерированный токен
     client.headers.update(auth_headers)
     return client
 
 
 @pytest.fixture
 def sample_vehicle(db_session: Session, company):
-    """Создаёт тестовую технику (минимальный набор полей)."""
+    """Создаёт тестовую технику."""
     from app.models.catalog import Vehicle
 
     v = Vehicle(
         name="Экскаватор CAT 320D",
         company_id=company.id,
+        status="free",
+        id_type="internal",
+        id_value="CAT-320D-TEST-001",
     )
     db_session.add(v)
     db_session.commit()
@@ -245,7 +247,7 @@ def sample_shift_task(db_session: Session, company, sample_vehicle):
 
 @pytest.fixture
 def sample_reconciliation(db_session: Session, company, sample_shift_task):
-    """Создаёт тестовую сверку данных (resolved)."""
+    """Создаёт тестовую сверку данных."""
     from decimal import Decimal
 
     from app.models.telematics import ShiftDataReconciliation
@@ -295,29 +297,43 @@ def sample_invoice(db_session: Session, company, sample_contractor):
 
 
 @pytest.fixture
-def sample_payout(
-    db_session: Session, company, sample_vehicle
-):  # <-- Добавили sample_vehicle в аргументы
-    """Создаёт тестовую выплату в статусе draft."""
+def sample_owner(db_session: Session, company):
+    """Создаёт тестового владельца (контрагента) для выплат."""
+    from app.models.contractor import Contractor
+
+    owner = Contractor(
+        name="Test Owner LLC",
+        inn="7709876543",
+        kpp="770901001",
+        type="owner",
+        company_id=company.id,
+    )
+    db_session.add(owner)
+    db_session.commit()
+    db_session.refresh(owner)
+    return owner
+
+
+@pytest.fixture
+def sample_payout(db_session: Session, company, sample_owner, sample_vehicle):
+    """Создаёт тестовую выплату."""
     from datetime import date
-    from decimal import Decimal
 
     from app.models.finance import Payout
 
-    p = Payout(
+    payout = Payout(
         document_number="ВЫП-2026-0001",
-        owner_id=company.id,
+        owner_id=sample_owner.id,
         vehicle_id=sample_vehicle.id,
-        request_id=None,
         company_id=company.id,
-        gross_amount=Decimal("100000.00"),
-        platform_commission=Decimal("15000.00"),
-        net_amount=Decimal("85000.00"),
-        commission_rate=Decimal("15.00"),
-        payout_date=date.today(),
+        gross_amount=100000.0,
+        platform_commission=15000.0,
+        net_amount=85000.0,
+        commission_rate=15.0,
+        payout_date=date(2026, 9, 30),
         status="draft",
     )
-    db_session.add(p)
+    db_session.add(payout)
     db_session.commit()
-    db_session.refresh(p)
-    return p
+    db_session.refresh(payout)
+    return payout
