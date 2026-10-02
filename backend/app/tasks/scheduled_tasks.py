@@ -244,3 +244,27 @@ def system_health_check():
             "error": str(e),
             "checked_at": datetime.now(UTC).isoformat(),
         }
+
+# === DISPUTE MANAGEMENT TASKS ===
+from celery.schedules import crontab
+
+# Автоэскалация просроченных споров каждые 5 минут
+celery_app.conf.beat_schedule["auto-escalate-disputes"] = {
+    "task": "auto_escalate_overdue_disputes",
+    "schedule": crontab(minute="*/5"),
+    "options": {"expires": 300},  # Задача истекает через 5 минут
+}
+
+# Проверка нарушений SLA каждые 30 минут
+celery_app.conf.beat_schedule["check-sla-breaches"] = {
+    "task": "check_sla_breaches",
+    "schedule": crontab(minute="*/30"),
+    "options": {"expires": 1800},
+}
+
+# Генерация метрик по спорам каждый час
+celery_app.conf.beat_schedule["generate-dispute-metrics"] = {
+    "task": "generate_dispute_metrics",
+    "schedule": crontab(minute=0),  # Каждый час в :00
+    "options": {"expires": 3600},
+}
