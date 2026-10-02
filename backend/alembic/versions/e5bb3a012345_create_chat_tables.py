@@ -4,14 +4,15 @@ Revision ID: e5bb3a012345
 Revises: d4aa2c19fc9c
 Create Date: 2026-09-21
 """
-from typing import Sequence, Union
+
+from collections.abc import Sequence
 
 from alembic import op
 
 revision: str = "e5bb3a012345"  # pragma: allowlist secret
-down_revision: Union[str, None] = "d4aa2c19fc9c"  # pragma: allowlist secret
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "d4aa2c19fc9c"  # pragma: allowlist secret
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

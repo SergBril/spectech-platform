@@ -49,6 +49,7 @@ from app.api.routes import (
     vehicles,
 )
 from app.api.routes import websocket as ws_routes
+from app.api.routes import disputes
 from app.core.config import settings
 from app.core.exception_handlers import (
     general_exception_handler,
@@ -211,6 +212,7 @@ app.include_router(email_bulk.router, prefix="/api/v1")
 app.include_router(catalog.router, prefix="/api/v1")
 app.include_router(signature.router, prefix="/api/v1/signature", tags=["signature"])
 app.include_router(finance.router, prefix="/api/v1/finance", tags=["Финансы"])
+app.include_router(disputes.router, prefix="/api/v1/disputes", tags=["disputes"])
 
 
 # 6. Кастомизация OpenAPI
