@@ -1,5 +1,6 @@
 # Auth
 from app.models.auth import User, UserSession
+from app.models.dispute import Dispute, DisputeStatus, DisputeType, InitiatorRole, AssignedRole
 
 # Catalog
 from app.models.catalog import (
