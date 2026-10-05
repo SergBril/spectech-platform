@@ -330,7 +330,7 @@ def sample_payout(db_session: Session, company, sample_owner, sample_vehicle):
         platform_commission=15000.0,
         net_amount=85000.0,
         commission_rate=15.0,
-        payout_date=date(2026, 9, 30),
+        payout_date=date.today(),
         status="draft",
     )
     db_session.add(payout)
