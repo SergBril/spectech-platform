@@ -48,7 +48,7 @@ class ShiftTask(Base):
         ForeignKey("request_assignments.id"), nullable=True
     )
     operator_id: Mapped[int] = mapped_column(
-        ForeignKey("employees.contractor_id"), nullable=False
+        ForeignKey("employees.contractor_id"), nullable=True
     )
     vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), nullable=False)
     shift_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -82,7 +82,7 @@ class ShiftReport(Base):
         ForeignKey("shift_tasks.id"), nullable=False
     )
     operator_id: Mapped[int] = mapped_column(
-        ForeignKey("employees.contractor_id"), nullable=False
+        ForeignKey("employees.contractor_id"), nullable=True
     )
     operator_moto_hours: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2), nullable=True
@@ -136,9 +136,15 @@ class ShiftReport(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     # === Фотоотчёт и электронные подписи (Блок 2.8) ===
-    operator_photos: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)
+    operator_photos: Mapped[list | None] = mapped_column(
+        JSON, nullable=True, default=list
+    )
     operator_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
-    operator_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    
+    operator_signed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     client_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
-    client_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    client_signed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
