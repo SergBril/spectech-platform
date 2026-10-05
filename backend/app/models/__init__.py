@@ -121,3 +121,10 @@ from app.models.maintenance import (
     MaintenancePriority,
     MaintenanceWork,
 )  # noqa: F401
+
+from app.models.downtime import (
+    DowntimeEvent,
+    DowntimeCause,
+    DowntimeStatus,
+    FaultParty,
+)
