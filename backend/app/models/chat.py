@@ -1,4 +1,6 @@
 """Модели для чата по заявке."""
+
+import enum
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
@@ -7,6 +9,27 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.core.db import Base
+
+
+class ChatMessageType(str, enum.Enum):
+    """Типы сообщений в чате."""
+
+    text = "text"
+    photo = "photo"
+    document = "document"
+    voice = "voice"
+    location = "location"
+    system_event = "system_event"
+
+
+class ChatParticipantRole(str, enum.Enum):
+    """Роли участников чата."""
+
+    client = "client"
+    client_rep = "client_rep"
+    dispatcher = "dispatcher"
+    owner = "owner"
+    operator = "operator"
 
 
 class RequestChat(Base):
@@ -47,14 +70,10 @@ class ChatMessage(Base):
     chat_id: Mapped[int] = mapped_column(
         ForeignKey("request_chats.id", ondelete="CASCADE"), nullable=False
     )
-    sender_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id"), nullable=True
-    )
-    sender_type: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="user"
-    )
-    message_type: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="text"
+    sender_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    sender_type: Mapped[str] = mapped_column(String(20), nullable=False, default="user")
+    message_type: Mapped[ChatMessageType] = mapped_column(
+        String(20), nullable=False, default=ChatMessageType.text.value
     )
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     attachments: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -82,7 +101,9 @@ class ChatParticipant(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    role: Mapped[ChatParticipantRole] = mapped_column(
+        String(20), nullable=False, default=ChatParticipantRole.client.value
+    )
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
