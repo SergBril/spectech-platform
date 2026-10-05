@@ -1,7 +1,7 @@
 """add_disputes_table
 
 Revision ID: bb817b656eaf
-Revises: 8965d7fc3af6
+Revises: add_overbooking_protection
 Create Date: 2026-10-02 08:24:46.176615
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'bb817b656eaf'
-down_revision: Union[str, None] = '8965d7fc3af6'
+down_revision: Union[str, None] = 'add_overbooking_protection'  # pragma: allowlist secret
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
