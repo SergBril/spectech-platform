@@ -120,6 +120,11 @@ class Vehicle(Base):
         nullable=True,
         comment="Ставка за смену (руб)",
     )
+    downtime_hourly_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2),
+        nullable=True,
+        comment="Ставка простоя за час (руб). Если не указана — используется 50% от hourly_rate",
+    )
     photos: Mapped[dict | None] = mapped_column(
         JSON,
         nullable=True,
