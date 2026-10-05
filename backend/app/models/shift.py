@@ -135,3 +135,10 @@ class ShiftReport(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    # === Фотоотчёт и электронные подписи (Блок 2.8) ===
+    operator_photos: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)
+    operator_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    operator_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    client_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    client_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

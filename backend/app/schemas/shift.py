@@ -67,6 +67,11 @@ class ShiftReportRead(BaseModel):
     operator_idle_hours: Decimal | None = None
     operator_comment: str | None = None
     operator_submitted_at: datetime | None = None
+    operator_photos: list | None = None
+    operator_signature: str | None = None
+    operator_signed_at: datetime | None = None
+    client_signature: str | None = None
+    client_signed_at: datetime | None = None
     client_moto_hours: Decimal | None = None
     client_odometer: int | None = None
     client_comment: str | None = None
