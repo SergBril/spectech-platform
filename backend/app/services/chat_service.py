@@ -48,7 +48,7 @@ class ChatService:
     def _add_default_participants(db: Session, chat: RequestChat, request_id: int):
         """
         Добавляет участников по умолчанию.
-
+    
         ВАЖНО: ChatParticipant.user_id — это FK на users.id,
         поэтому добавляем только тех, у кого точно есть user_id:
         - created_by (диспетчер, создавший заявку) — это users.id
