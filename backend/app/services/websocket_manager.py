@@ -5,8 +5,8 @@ WebSocket Connection Manager.
 1. GPS/Telemetry: connect(websocket, user_id, company_id)
 2. Чаты: connect_chat(websocket, chat_id)
 """
+
 import logging
-from typing import Dict, List, Set
 
 from fastapi import WebSocket
 
@@ -19,21 +19,19 @@ class ConnectionManager:
     def __init__(self):
         # === GPS/Telemetry (старый режим) ===
         # user_id -> websocket
-        self.user_connections: Dict[int, WebSocket] = {}
+        self.user_connections: dict[int, WebSocket] = {}
         # company_id -> set of user_ids
-        self.company_users: Dict[int, Set[int]] = {}
+        self.company_users: dict[int, set[int]] = {}
 
         # === Чаты (новый режим) ===
         # chat_id -> список websocket
-        self.chat_connections: Dict[int, List[WebSocket]] = {}
+        self.chat_connections: dict[int, list[WebSocket]] = {}
 
     # ============================================================
     # GPS/Telemetry методы (для существующего websocket.py)
     # ============================================================
 
-    async def connect(
-        self, websocket: WebSocket, user_id: int, company_id: int = 0
-    ):
+    async def connect(self, websocket: WebSocket, user_id: int, company_id: int = 0):
         """Подключение для GPS/телеметрии (старый API)."""
         await websocket.accept()
         self.user_connections[user_id] = websocket
@@ -41,9 +39,7 @@ class ConnectionManager:
             if company_id not in self.company_users:
                 self.company_users[company_id] = set()
             self.company_users[company_id].add(user_id)
-        logger.info(
-            "GPS WS connected: user=%s, company=%s", user_id, company_id
-        )
+        logger.info("GPS WS connected: user=%s, company=%s", user_id, company_id)
 
     def disconnect(self, websocket: WebSocket):
         """Отключение GPS/телеметрии (старый API)."""
