@@ -1,6 +1,8 @@
 """Endpoints для чата по заявке (REST + WebSocket)."""
+
 import logging
 from datetime import datetime
+from typing import Optional
 
 from fastapi import (
     APIRouter,
@@ -17,7 +19,13 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.db import SessionLocal, get_db
 from app.models.auth import User
-from app.models.chat import ChatMessage, ChatParticipant, RequestChat
+from app.models.chat import (
+    ChatMessage,
+    ChatMessageType,
+    ChatParticipant,
+    ChatParticipantRole,
+    RequestChat,
+)
 from app.services.auth_service import decode_access_token
 from app.services.chat_service import chat_service
 from app.services.websocket_manager import manager
@@ -27,17 +35,24 @@ logger = logging.getLogger("spectech.chat")
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
-# === Pydantic схемы ===
+# ============================================================
+# Pydantic схемы (ВАЖЕН ПОРЯДОК ОПРЕДЕЛЕНИЯ!)
+# ============================================================
 
 
 class MessageCreate(BaseModel):
+    """Схема создания сообщения."""
+
     content: str = Field(..., min_length=1, max_length=5000)
-    message_type: str = Field(default="text")
+    message_type: ChatMessageType = Field(default=ChatMessageType.text)
     attachments: dict | None = None
     reply_to_message_id: int | None = None
+    mentions: dict | None = None
 
 
 class MessageRead(BaseModel):
+    """Схема чтения сообщения."""
+
     id: int
     chat_id: int
     sender_id: int | None = None
@@ -54,6 +69,8 @@ class MessageRead(BaseModel):
 
 
 class ChatRead(BaseModel):
+    """Схема чтения чата."""
+
     id: int
     request_id: int
     request_title: str | None = None
@@ -63,7 +80,17 @@ class ChatRead(BaseModel):
     created_at: datetime
 
 
-# === Вспомогательная функция ===
+class MessagesCursorResponse(BaseModel):
+    """Ответ с cursor-based пагинацией."""
+
+    messages: list[MessageRead]
+    next_cursor: int | None = None
+    has_more: bool = False
+
+
+# ============================================================
+# Вспомогательная функция
+# ============================================================
 
 
 def _message_to_read(msg: ChatMessage, db: Session) -> MessageRead:
@@ -77,7 +104,9 @@ def _message_to_read(msg: ChatMessage, db: Session) -> MessageRead:
         sender_id=msg.sender_id,
         sender_name=sender_name,
         sender_type=msg.sender_type,
-        message_type=msg.message_type,
+        message_type=msg.message_type.value
+        if hasattr(msg.message_type, "value")
+        else msg.message_type,
         content=msg.content,
         attachments=msg.attachments,
         reply_to_message_id=msg.reply_to_message_id,
@@ -86,7 +115,9 @@ def _message_to_read(msg: ChatMessage, db: Session) -> MessageRead:
     )
 
 
-# === REST Endpoints ===
+# ============================================================
+# REST Endpoints
+# ============================================================
 
 
 @router.get("/requests/{request_id}", response_model=ChatRead)
@@ -96,10 +127,15 @@ def get_chat_by_request(
     current_user: User = Depends(get_current_user),
 ):
     """Получить чат по заявке. Создаёт чат, если его нет."""
-    chat = chat_service.ensure_chat_exists(db, request_id)
+    try:
+        chat = chat_service.ensure_chat_exists(db, request_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Request not found")
 
     if not chat_service.is_participant(db, chat.id, current_user.id):
-        chat_service.add_participant(db, chat.id, current_user.id, "participant")
+        chat_service.add_participant(
+            db, chat.id, current_user.id, ChatParticipantRole.client.value
+        )
 
     last_msg = (
         db.query(ChatMessage)
@@ -109,14 +145,7 @@ def get_chat_by_request(
     )
     last_message = _message_to_read(last_msg, db) if last_msg else None
 
-    unread_count = (
-        db.query(ChatMessage)
-        .filter(
-            ChatMessage.chat_id == chat.id,
-            ChatMessage.sender_id != current_user.id,
-        )
-        .count()
-    )
+    unread_count = chat_service.get_unread_count(db, chat.id, current_user.id)
 
     participants_count = (
         db.query(ChatParticipant)
@@ -138,26 +167,37 @@ def get_chat_by_request(
     )
 
 
-@router.get("/requests/{request_id}/messages", response_model=list[MessageRead])
-def get_chat_messages(
+@router.get("/requests/{request_id}/messages", response_model=MessagesCursorResponse)
+def get_chat_messages_cursor(
     request_id: int,
+    cursor: int | None = Query(default=None, description="ID последнего сообщения"),
     limit: int = Query(default=50, ge=1, le=200),
+    message_type: ChatMessageType | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """История сообщений чата по заявке."""
+    """История сообщений чата с cursor-based пагинацией."""
     chat = chat_service.get_chat_by_request(db, request_id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
-    stmt = (
-        select(ChatMessage)
-        .where(ChatMessage.chat_id == chat.id)
-        .order_by(ChatMessage.created_at.asc())
-        .limit(limit)
+    messages, has_more = chat_service.get_messages_cursor(
+        db=db,
+        chat_id=chat.id,
+        cursor=cursor,
+        limit=limit,
+        message_type=message_type.value if message_type else None,
     )
-    messages = db.scalars(stmt).all()
-    return [_message_to_read(msg, db) for msg in messages]
+
+    # messages[0] - самое старое сообщение на текущей странице (после reverse)
+    # Для следующей страницы нужны сообщения с id < messages[0].id
+    next_cursor = messages[0].id if messages and has_more else None
+
+    return MessagesCursorResponse(
+        messages=[_message_to_read(msg, db) for msg in messages],
+        next_cursor=next_cursor,
+        has_more=has_more,
+    )
 
 
 @router.post(
@@ -172,26 +212,34 @@ def send_message_to_chat(
     current_user: User = Depends(get_current_user),
 ):
     """Отправить сообщение в чат по заявке (REST)."""
-    chat = chat_service.ensure_chat_exists(db, request_id)
+    try:
+        chat = chat_service.ensure_chat_exists(db, request_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Request not found")
 
     if not chat_service.is_participant(db, chat.id, current_user.id):
-        chat_service.add_participant(db, chat.id, current_user.id, "participant")
+        chat_service.add_participant(
+            db, chat.id, current_user.id, ChatParticipantRole.client.value
+        )
 
     message = chat_service.send_message(
         db=db,
         chat_id=chat.id,
         sender_id=current_user.id,
         content=data.content,
-        message_type=data.message_type,
+        message_type=data.message_type.value,
         attachments=data.attachments,
         reply_to_message_id=data.reply_to_message_id,
+        mentions=data.mentions,
     )
     chat_service.mark_as_read(db, message.id, current_user.id)
 
     return _message_to_read(message, db)
 
 
-# === WebSocket Endpoint ===
+# ============================================================
+# WebSocket Endpoint
+# ============================================================
 
 
 @router.websocket("/ws/{chat_id}")
@@ -225,7 +273,9 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
 
         # 3. Добавляем в участники
         if not chat_service.is_participant(db, chat.id, user.id):
-            chat_service.add_participant(db, chat.id, user.id, "participant")
+            chat_service.add_participant(
+                db, chat.id, user.id, ChatParticipantRole.client.value
+            )
 
         # 4. Подключаем
         await manager.connect_chat(websocket, chat_id)
