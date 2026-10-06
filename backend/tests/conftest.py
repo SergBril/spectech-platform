@@ -50,7 +50,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.db import Base, get_db
+from app.core.db import SessionLocal, Base, get_db
 from app.main import app
 from app.models import *  # noqa: F401, F403
 from app.models.auth import User
@@ -93,6 +93,28 @@ def db_session() -> Generator[Session, None, None]:
     finally:
         session.close()
         Base.metadata.drop_all(bind=engine)
+
+@pytest.fixture(scope="function")
+def db_session():
+    """Создаёт сессию БД, создаёт таблицы и очищает их после теста."""
+    # Создаём все таблицы (если их нет)
+    from app.core.db import engine, Base
+    Base.metadata.create_all(bind=engine)
+    
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.rollback()
+        # Очищаем все таблицы после теста (безопасно)
+        try:
+            for table in reversed(Base.metadata.sorted_tables):
+                db.execute(table.delete())
+            db.commit()
+        except Exception:
+            # Игнорируем ошибки очистки (например, если таблица не существует)
+            pass
+        db.close()
 
 
 @pytest.fixture
@@ -155,20 +177,26 @@ def sample_user(db_session: Session, company):
 
 
 @pytest.fixture
-def admin_user(db_session: Session, company):
-    """Создаёт админа."""
-    a = User(
+def admin_user(db_session: Session) -> User:
+    """Создаёт тестового администратора или возвращает существующего."""
+    # Проверяем, существует ли уже такой пользователь
+    existing = db_session.query(User).filter(User.email == "admin@test.com").first()
+    if existing:
+        return existing
+    
+    # Создаём нового, если не нашли
+    user = User(
         email="admin@test.com",
         full_name="Admin User",
         password_hash="admin_hashed_password_12345",
         is_superuser=True,
-        company_id=company.id,
-        failed_login_attempts=0,
+        status="active",
+        company_id=2,
     )
-    db_session.add(a)
+    db_session.add(user)
     db_session.commit()
-    db_session.refresh(a)
-    return a
+    db_session.refresh(user)
+    return user
 
 
 @pytest.fixture(scope="function")
@@ -201,6 +229,15 @@ def auth_client(client: TestClient, auth_headers: dict):
     """TestClient с валидным JWT токеном."""
     client.headers.update(auth_headers)
     return client
+
+@pytest.fixture
+def auth_token(auth_headers: dict) -> str:
+    """Извлекает JWT токен из auth_headers фикстуры."""
+    auth_header = auth_headers.get("Authorization", "")
+    # auth_header имеет вид "Bearer <token>"
+    if auth_header.startswith("Bearer "):
+        return auth_header[len("Bearer "):]
+    raise ValueError("Cannot extract token from auth_headers")
 
 
 @pytest.fixture
