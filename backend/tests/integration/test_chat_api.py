@@ -194,6 +194,68 @@ class TestChatAPI:
         response = client.get("/api/v1/chat/requests/1")
         assert response.status_code == 401
 
+    def test_upload_file_to_chat(self, client: TestClient, auth_headers: dict):
+        """Тест: загрузка файла в MinIO и отправка сообщения с file_url."""
+        import io
+        from unittest.mock import patch
+
+        # 1. Создаём заявку и чат
+        response = client.post(
+            "/api/v1/requests",
+            json={
+                "client_id": 1,
+                "vehicle_category_id": 1,
+                "planned_start": "2026-01-15T09:00:00",
+                "planned_end": "2026-01-15T18:00:00",
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 201
+        request_id = response.json()["id"]
+
+        # 2. Мокаем storage_service, чтобы не зависеть от реального MinIO
+        mock_result = {
+            "path": f"chat/{request_id}/test_photo.jpg",
+            "url": f"http://localhost:9000/spectech-docs/chat/{request_id}/test_photo.jpg",
+            "size": 1024,
+            "content_type": "image/jpeg",
+            "original_filename": "test_photo.jpg",
+        }
+
+        with patch(
+            "app.api.routes.chat.storage_service.upload_file",
+            return_value=mock_result,
+        ):
+            file_content = b"fake image bytes for testing"
+            files = {"file": ("test_photo.jpg", io.BytesIO(file_content), "image/jpeg")}
+
+            response = client.post(
+                f"/api/v1/chat/requests/{request_id}/upload",
+                files=files,
+                headers=auth_headers,
+            )
+
+        assert response.status_code == 201
+        upload_data = response.json()
+        assert upload_data["url"] == mock_result["url"]
+        assert upload_data["original_filename"] == "test_photo.jpg"
+        assert upload_data["content_type"] == "image/jpeg"
+
+        # 3. Отправляем сообщение с загруженным file_url
+        response = client.post(
+            f"/api/v1/chat/requests/{request_id}/messages",
+            json={
+                "content": "Вот фото объекта",
+                "message_type": ChatMessageType.photo.value,
+                "file_url": upload_data["url"],
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 201
+        msg_data = response.json()
+        assert msg_data["file_url"] == upload_data["url"]
+        assert msg_data["message_type"] == ChatMessageType.photo.value
+
     def test_chat_not_found(self, client: TestClient, auth_headers: dict):
         """Тест: чат не найден."""
         response = client.get(
