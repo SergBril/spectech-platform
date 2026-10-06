@@ -327,6 +327,64 @@ class TestDowntimeAPI:
         assert "client" in data["by_fault_party"]
         assert "operator" in data["by_fault_party"]
 
+    def test_upload_photo_and_create_downtime_with_photos(
+        self, auth_client: Client, shift_task: ShiftTask, vehicle_with_rate
+    ):
+        """Тест: загрузка фото и создание простоя с фото-доказательствами."""
+        import io
+        from unittest.mock import patch
+
+        now = datetime.now(timezone.utc)
+
+        # 1. Мокаем storage_service
+        mock_result = {
+            "path": f"downtime/1/test_photo.jpg",
+            "url": f"http://localhost:9000/spectech-docs/downtime/1/test_photo.jpg",
+            "size": 2048,
+            "content_type": "image/jpeg",
+            "original_filename": "test_photo.jpg",
+        }
+
+        with patch(
+            "app.api.routes.downtime.storage_service.upload_file",
+            return_value=mock_result,
+        ):
+            file_content = b"fake image bytes for downtime photo"
+            files = {"file": ("test_photo.jpg", io.BytesIO(file_content), "image/jpeg")}
+
+            # 2. Загружаем фото
+            upload_response = auth_client.post(
+                "/api/v1/downtime/upload",
+                files=files,
+            )
+            assert upload_response.status_code == 201
+            upload_data = upload_response.json()
+            assert upload_data["url"] == mock_result["url"]
+
+        # 3. Создаём простой с загруженным фото
+        create_response = auth_client.post(
+            "/api/v1/downtime",
+            json={
+                "shift_task_id": shift_task.id,
+                "started_at": now.isoformat(),
+                "ended_at": (now + timedelta(hours=1)).isoformat(),
+                "cause_category": "technical",
+                "description": "Сломался двигатель",
+                "photos": [
+                    {
+                        "url": upload_data["url"],
+                        "filename": upload_data["original_filename"],
+                    }
+                ],
+            },
+        )
+
+        assert create_response.status_code == 201
+        downtime_data = create_response.json()
+        assert downtime_data["photos"] is not None
+        assert len(downtime_data["photos"]) == 1
+        assert downtime_data["photos"][0]["url"] == upload_data["url"]
+
     def test_downtime_fallback_to_hourly_rate(
         self, auth_client: Client, shift_task: ShiftTask, sample_vehicle
     ):

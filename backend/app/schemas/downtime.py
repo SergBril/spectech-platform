@@ -18,7 +18,7 @@ class DowntimeCreate(BaseModel):
     cause_category: DowntimeCause
     fault_party: FaultParty | None = None
     description: str | None = Field(default=None, max_length=2000)
-    photos: list | None = None
+    photos: list[dict] | None = None
 
 
 class DowntimeEnd(BaseModel):
@@ -49,7 +49,7 @@ class DowntimeRead(BaseModel):
     cause_category: str
     fault_party: str
     description: str | None = None
-    photos: list | None = None
+    photos: list[dict] | None = None
 
     billable: bool
     hourly_rate: Decimal
