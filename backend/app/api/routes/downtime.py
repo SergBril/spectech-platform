@@ -95,6 +95,50 @@ def get_downtime_stats(
         date_to=date_to,
     )
 
+from fastapi import UploadFile, File
+from app.services import storage_service
+from pydantic import BaseModel
+
+class PhotoUploadResponse(BaseModel):
+    """Ответ после загрузки фото простоя."""
+    path: str
+    url: str
+    size: int
+    content_type: str
+    original_filename: str
+
+@router.post("/upload", response_model=PhotoUploadResponse, status_code=201)
+async def upload_downtime_photo(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Загружает фото-доказательство простоя в MinIO.
+    Полученный `url` затем передаётся в `POST /downtime` в поле `photos`.
+    """
+    # Валидация типа файла (только изображения)
+    allowed_types = ["image/jpeg", "image/png", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}"
+        )
+    
+    # Загружаем в MinIO
+    try:
+        result = storage_service.upload_file(
+            file_obj=file.file,
+            filename=file.filename or "unknown.jpg",
+            folder=f"downtime/{company_id}",
+            content_type=file.content_type,
+        )
+        return PhotoUploadResponse(**result)
+    except Exception as e:
+        logger.error(f"Photo upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
+
 
 @router.get("/{downtime_id}", response_model=DowntimeRead)
 def get_downtime(
