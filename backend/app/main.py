@@ -47,7 +47,10 @@ from app.api.routes import (
     tax,
     telematics,
     vehicles,
+    downtime,
 )
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from app.api.routes import websocket as ws_routes
 from app.api.routes import disputes
 from app.core.config import settings
@@ -61,7 +64,7 @@ from app.core.metrics import setup_metrics
 from app.core.middleware import RequestLoggingMiddleware
 from app.core.sentry_config import init_sentry
 from app.models import *  # noqa: F401, F403
-from app.services.minio_service import minio_service
+from app.services import storage_service
 
 # Настройка логирования
 setup_logging("INFO")
@@ -75,11 +78,8 @@ async def lifespan(app: FastAPI):
     # Пропускаем подключение к MinIO в тестовом режиме
     if not settings.TESTING:
         try:
-            if minio_service.check_connection():
-                logger.info("✅ MinIO connection OK")
-                minio_service.ensure_bucket_exists()
-            else:
-                logger.warning("⚠️ MinIO connection failed")
+            storage_service.ensure_bucket_exists()
+            logger.info("✅ MinIO (S3) connection OK")
         except Exception as e:
             logger.warning(f"⚠️ MinIO connection failed: {e}")
 
@@ -213,6 +213,11 @@ app.include_router(catalog.router, prefix="/api/v1")
 app.include_router(signature.router, prefix="/api/v1/signature", tags=["signature"])
 app.include_router(finance.router, prefix="/api/v1/finance", tags=["Финансы"])
 app.include_router(disputes.router, prefix="/api/v1/disputes", tags=["disputes"])
+app.include_router(downtime.router, prefix="/api/v1/downtime", tags=["downtime"])
+
+uploads_dir = Path("uploads")
+uploads_dir.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
 
 # 6. Кастомизация OpenAPI

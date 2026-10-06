@@ -178,22 +178,22 @@ class DowntimeService:
         if event.ended_at is not None:
             raise ValueError(f"Downtime {downtime_id} already ended")
 
-        # Если ended_at не передан — используем текущее время (UTC)
+        # Если время не передано, берем текущее в UTC
         if ended_at is None:
             ended_at = datetime.now(UTC)
 
-        # Нормализуем часовые пояса (naive → UTC)
+        # ➕ ИСПРАВЛЕНИЕ: Нормализуем часовые пояса (naive -> aware UTC)
         st = event.started_at
         if st.tzinfo is None:
             st = st.replace(tzinfo=timezone.utc)
-
+            
         et = ended_at
         if et.tzinfo is None:
             et = et.replace(tzinfo=timezone.utc)
 
         # Сохраняем нормализованное время окончания в БД
         event.ended_at = et
-
+        
         # Теперь оба объекта aware, вычитание безопасно
         delta = et - st
         event.duration_minutes = max(0, int(delta.total_seconds() // 60))
