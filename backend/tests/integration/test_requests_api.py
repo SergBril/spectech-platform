@@ -1,6 +1,5 @@
 """Integration тесты для API заявок."""
 
-
 import pytest
 
 

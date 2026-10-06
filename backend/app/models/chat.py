@@ -1,5 +1,4 @@
 """Модели для чата по заявке."""
-
 import enum
 from datetime import datetime
 
@@ -13,7 +12,6 @@ from app.core.db import Base
 
 class ChatMessageType(str, enum.Enum):
     """Типы сообщений в чате."""
-
     text = "text"
     photo = "photo"
     document = "document"
@@ -24,7 +22,6 @@ class ChatMessageType(str, enum.Enum):
 
 class ChatParticipantRole(str, enum.Enum):
     """Роли участников чата."""
-
     client = "client"
     client_rep = "client_rep"
     dispatcher = "dispatcher"
@@ -34,7 +31,6 @@ class ChatParticipantRole(str, enum.Enum):
 
 class RequestChat(Base):
     """Чат по заявке — один чат на одну заявку."""
-
     __tablename__ = "request_chats"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -47,7 +43,6 @@ class RequestChat(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    # Relationships (только к своим детям, БЕЗ связи с Request)
     messages = relationship(
         "ChatMessage",
         back_populates="chat",
@@ -63,19 +58,22 @@ class RequestChat(Base):
 
 class ChatMessage(Base):
     """Сообщение в чате."""
-
     __tablename__ = "chat_messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    chat_id: Mapped[int] = mapped_column(ForeignKey("request_chats.id", ondelete="CASCADE"), nullable=False)
+    chat_id: Mapped[int] = mapped_column(
+        ForeignKey("request_chats.id", ondelete="CASCADE"), nullable=False
+    )
     sender_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     sender_type: Mapped[str] = mapped_column(String(20), nullable=False, default="user")
     message_type: Mapped[ChatMessageType] = mapped_column(
         String(20), nullable=False, default=ChatMessageType.text.value
     )
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # ИСПРАВЛЕНИЕ: Указана длина String(2048), чтобы SQLAlchemy не игнорировал колонку
+    
+    # ИСПРАВЛЕНИЕ: Явно указана длина String(2048) и выровнены отступы (4 пробела)
     file_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    
     attachments: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     reply_to_message_id: Mapped[int | None] = mapped_column(
         ForeignKey("chat_messages.id"), nullable=True
@@ -91,7 +89,6 @@ class ChatMessage(Base):
 
 class ChatParticipant(Base):
     """Участник чата."""
-
     __tablename__ = "chat_participants"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

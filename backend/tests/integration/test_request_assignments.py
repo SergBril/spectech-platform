@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from starlette.testclient import Response
+from httpx import Response
 
 
 class TestRequestAssignmentOverbooking:
