@@ -1,7 +1,7 @@
 """Сервис учёта простоев техники (Блок 2.10 ТЗ)."""
 
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select, func
@@ -168,7 +168,7 @@ class DowntimeService:
     def end_downtime(
         db: Session,
         downtime_id: int,
-        ended_at: datetime,
+        ended_at: datetime | None = None,
     ) -> DowntimeEvent:
         """Завершает простой и пересчитывает сумму."""
         event = db.get(DowntimeEvent, downtime_id)
@@ -178,13 +178,24 @@ class DowntimeService:
         if event.ended_at is not None:
             raise ValueError(f"Downtime {downtime_id} already ended")
 
-        event.ended_at = ended_at
-        
-        # Нормализуем часовые пояса (если один aware, а другой naive - приводим к UTC)
-        st = event.started_at if event.started_at.tzinfo else event.started_at.replace(tzinfo=UTC)
-        et = ended_at if ended_at.tzinfo else ended_at.replace(tzinfo=UTC)
+        # Если ended_at не передан — используем текущее время (UTC)
+        if ended_at is None:
+            ended_at = datetime.now(UTC)
+
+        # Нормализуем часовые пояса (naive → UTC)
+        st = event.started_at
+        if st.tzinfo is None:
+            st = st.replace(tzinfo=timezone.utc)
+
+        et = ended_at
+        if et.tzinfo is None:
+            et = et.replace(tzinfo=timezone.utc)
+
+        # Сохраняем нормализованное время окончания в БД
+        event.ended_at = et
+
+        # Теперь оба объекта aware, вычитание безопасно
         delta = et - st
-        
         event.duration_minutes = max(0, int(delta.total_seconds() // 60))
 
         if event.billable:
