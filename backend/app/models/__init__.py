@@ -10,7 +10,15 @@ from app.models.catalog import (
     EquipmentAttributeValue,
     Vehicle,
 )
-from app.models.chat import ChatMessage, ChatParticipant, RequestChat  # noqa: F401
+
+# Chat
+from app.models.chat import (
+    ChatMessage,
+    ChatMessageType,
+    ChatParticipant,
+    ChatParticipantRole,
+    RequestChat,
+)  # noqa: F401
 
 # Company
 from app.models.company import Company
@@ -37,7 +45,7 @@ from app.models.marketplace import MarketplaceOffer  # noqa: F401
 from app.models.rbac import Permission, Role, RolePermission, UserRole
 
 # Shift
-from app.models.shift import ShiftReport, ShiftTask
+from app.models.shift import ShiftReport, ShiftReportStatus, ShiftTask, ShiftTaskStatus
 
 # Telematics (models + enums)
 from app.models.telematics import (
@@ -52,8 +60,37 @@ from app.models.telematics import (
     GeofenceType,
     GpsPoint,
     Notification,
+    ShiftDataReconciliation,
     UploadedFile,
 )
+
+# Maintenance (ТО и Ремонты)
+from app.models.maintenance import (
+    MaintenanceOrder,
+    MaintenanceOrderStatus,
+    MaintenanceOrderType,
+    MaintenancePart,
+    MaintenancePriority,
+    MaintenanceWork,
+)  # noqa: F401
+
+# Downtime (Учёт простоев)
+from app.models.downtime import (
+    DowntimeCause,
+    DowntimeEvent,
+    DowntimeStatus,
+    FaultParty,
+)  # noqa: F401
+
+# Rental (Аренда)
+from app.models.rental import (
+    PrepaymentStatus,
+    RateType,
+    Rental,
+    RentalItem,
+    RentalStatus,
+)  # noqa: F401
+
 
 __all__ = [
     # Auth
@@ -77,7 +114,15 @@ __all__ = [
     "RequestAssignment",
     # Shift
     "ShiftTask",
+    "ShiftTaskStatus",
     "ShiftReport",
+    "ShiftReportStatus",
+    # Chat
+    "ChatMessage",
+    "ChatMessageType",
+    "ChatParticipant",
+    "ChatParticipantRole",
+    "RequestChat",
     # RBAC
     "Role",
     "Permission",
@@ -103,6 +148,7 @@ __all__ = [
     "GeofenceType",
     "AlertSeverity",
     "AlertStatus",
+    "ShiftDataReconciliation",
     # Maintenance
     "MaintenanceOrder",
     "MaintenanceOrderType",
@@ -110,21 +156,15 @@ __all__ = [
     "MaintenancePriority",
     "MaintenancePart",
     "MaintenanceWork",
+    # Downtime
+    "DowntimeEvent",
+    "DowntimeCause",
+    "DowntimeStatus",
+    "FaultParty",
+    # Rental
+    "Rental",
+    "RentalItem",
+    "RentalStatus",
+    "RateType",
+    "PrepaymentStatus",
 ]
-
-# Maintenance (ТО и Ремонты)
-from app.models.maintenance import (
-    MaintenanceOrder,
-    MaintenanceOrderStatus,
-    MaintenanceOrderType,
-    MaintenancePart,
-    MaintenancePriority,
-    MaintenanceWork,
-)  # noqa: F401
-
-from app.models.downtime import (
-    DowntimeEvent,
-    DowntimeCause,
-    DowntimeStatus,
-    FaultParty,
-)
