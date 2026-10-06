@@ -67,15 +67,15 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    chat_id: Mapped[int] = mapped_column(
-        ForeignKey("request_chats.id", ondelete="CASCADE"), nullable=False
-    )
+    chat_id: Mapped[int] = mapped_column(ForeignKey("request_chats.id", ondelete="CASCADE"), nullable=False)
     sender_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     sender_type: Mapped[str] = mapped_column(String(20), nullable=False, default="user")
     message_type: Mapped[ChatMessageType] = mapped_column(
         String(20), nullable=False, default=ChatMessageType.text.value
     )
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # ИСПРАВЛЕНИЕ: Указана длина String(2048), чтобы SQLAlchemy не игнорировал колонку
+    file_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     attachments: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     reply_to_message_id: Mapped[int | None] = mapped_column(
         ForeignKey("chat_messages.id"), nullable=True
