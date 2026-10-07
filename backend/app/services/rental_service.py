@@ -6,11 +6,12 @@ from decimal import Decimal, ROUND_HALF_UP
 from app.models.finance import Invoice, InvoiceItem, Act, DocumentStatus
 from app.services.finance_service import generate_document_number
 from app.core.constants import TaxSystem
-
+from collections import defaultdict
 from fastapi import HTTPException
 from sqlalchemy import and_
 from sqlalchemy.orm import Session, selectinload
-
+from app.models.catalog import Vehicle
+from app.models.finance import Invoice, InvoiceItem, Act, Payout, DocumentStatus
 from app.models.rental import (
     PrepaymentStatus,
     RateType,
@@ -599,14 +600,17 @@ class RentalService:
         return rental
 
     @staticmethod
-    def _create_documents_from_rental(db: Session, rental: Rental) -> tuple[Invoice, Act]:
+    def _create_documents_from_rental(db: Session, rental: Rental) -> tuple[Invoice, Act, list[Payout]]:
         """
-        Создаёт пару документов (Invoice + Act) на основе завершённой аренды.
-        Возвращает кортеж (invoice, act).
+        Создаёт полный пакет документов при завершении аренды:
+        - Invoice (счёт клиенту)
+        - Act (акт выполненных работ)
+        - Payout(s) (выплаты собственникам техники)
         """
         invoice = RentalService._create_invoice_from_rental(db, rental)
         act = RentalService._create_act_from_rental(db, rental, invoice)
-        return invoice, act
+        payouts = RentalService._create_payouts_from_rental(db, rental)
+        return invoice, act, payouts
 
     @staticmethod
     def _create_invoice_from_rental(db: Session, rental: Rental) -> Invoice:
@@ -715,6 +719,120 @@ class RentalService:
             act.id, act.document_number, rental.id, act.total_amount,
         )
         return act
+
+    @staticmethod
+    def _create_payouts_from_rental(db: Session, rental: Rental) -> list[Payout]:
+        """
+        Создаёт Payout для каждого собственника техники в аренде.
+        Группирует сумму, если у одного собственника несколько машин.
+        
+        Формула:
+            gross = доля техники в общей сумме аренды (пропорционально)
+            commission = gross × commission_rate (по умолчанию 10%)
+            net = gross - commission
+        """
+        from datetime import date
+        
+        # Суммируем стоимости всех позиций для пропорционального расчёта
+        total_items_cost = Decimal("0")
+        for item in rental.items:
+            item_cost = Decimal(str(item.unit_price or 0)) * Decimal(str(item.quantity or 1))
+            total_items_cost += item_cost
+        
+        if total_items_cost == Decimal("0"):
+            logger.warning(f"Rental #{rental.id} has zero total, skipping payouts")
+            return []
+        
+        # Группируем суммы по собственникам (owner_id)
+        owner_data = defaultdict(lambda: {
+            "gross": Decimal("0"),
+            "vehicle_ids": [],
+        })
+        
+        total_rental_amount = rental.total_amount
+        
+        for item in rental.items:
+            vehicle = db.get(Vehicle, item.vehicle_id)
+            if not vehicle:
+                logger.warning(
+                    f"Vehicle {item.vehicle_id} not found, skipping"
+                )
+                continue
+            
+            if not vehicle.owner_id:
+                logger.warning(
+                    f"Vehicle {item.vehicle_id} has no owner, skipping payout"
+                )
+                continue
+            
+            # Пропорциональная доля этой позиции в общей сумме
+            item_cost = Decimal(str(item.unit_price or 0)) * Decimal(str(item.quantity or 1))
+            share = item_cost / total_items_cost
+            owner_share = total_rental_amount * share
+            
+            owner_data[vehicle.owner_id]["gross"] += owner_share
+            owner_data[vehicle.owner_id]["vehicle_ids"].append(vehicle.id)
+        
+        # Создаём Payout для каждого собственника
+        payouts = []
+        commission_rate = rental.commission_rate or Decimal("10.00")
+        
+        # Генерируем базовый номер и добавляем суффикс для уникальности
+        base_doc_number = generate_document_number(db, "PAY")
+        # Удаляем префикс "PAY-" для добавления суффикса
+        base_number_part = base_doc_number.replace("PAY-", "")
+        
+        for idx, (owner_id, data) in enumerate(owner_data.items(), start=1):
+            gross_amount = data["gross"].quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            commission = (gross_amount * commission_rate / Decimal("100")).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            net_amount = gross_amount - commission
+            
+            # Уникальный номер: PAY-2026-0001-1, PAY-2026-0001-2 и т.д.
+            unique_doc_number = f"PAY-{base_number_part}-{idx}"
+            
+            payout = Payout(
+                document_number=unique_doc_number,
+                rental_id=rental.id,
+                owner_id=owner_id,
+                vehicle_id=data["vehicle_ids"][0] if data["vehicle_ids"] else None,
+                request_id=rental.request_id,
+                company_id=rental.company_id,
+                gross_amount=gross_amount,
+                platform_commission=commission,
+                net_amount=net_amount,
+                commission_rate=commission_rate,
+                payout_date=date.today(),
+                status=DocumentStatus.draft,
+                calculation_details={
+                    "rental_id": rental.id,
+                    "source": "auto_from_rental",
+                    "formula": f"gross × {commission_rate}% commission",
+                    "gross_amount": str(gross_amount),
+                    "commission_rate": str(commission_rate),
+                    "commission": str(commission),
+                    "net_amount": str(net_amount),
+                    "vehicle_ids": data["vehicle_ids"],
+                },
+                comment=f"Автосоздан при завершении аренды #{rental.id}",
+            )
+            db.add(payout)
+            payouts.append(payout)
+        
+        if payouts:
+            db.commit()
+            for p in payouts:
+                db.refresh(p)
+            
+            logger.info(
+                "Auto-created %d Payout(s) for Rental #%s (commission_rate=%s%%)",
+                len(payouts), rental.id, commission_rate,
+            )
+        
+        return payouts
 
 
 rental_service = RentalService()
