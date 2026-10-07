@@ -263,3 +263,77 @@ class TestChatAPI:
             headers=auth_headers,
         )
         assert response.status_code == 404
+
+    def test_upload_multiple_files_to_chat(self, client: TestClient, auth_headers: dict):
+        """Тест: batch-загрузка нескольких файлов в чат."""
+        import io
+        from unittest.mock import patch
+
+        # 1. Создаём заявку и чат
+        response = client.post(
+            "/api/v1/requests",
+            json={
+                "client_id": 1,
+                "vehicle_category_id": 1,
+                "planned_start": "2026-01-15T09:00:00Z",
+                "planned_end": "2026-01-15T18:00:00Z",
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 201
+        request_id = response.json()["id"]
+
+        # 2. Мокаем storage_service
+        def mock_upload(file_obj, filename, folder, content_type):
+            return {
+                "path": f"{folder}/{filename}",
+                "url": f"http://localhost:9000/spectech-docs/{folder}/{filename}",
+                "size": 1024,
+                "content_type": content_type,
+                "original_filename": filename,
+            }
+
+        with patch(
+            "app.api.routes.chat.storage_service.upload_file",
+            side_effect=mock_upload,
+        ):
+            # 3. Загружаем 3 файла
+            files = [
+                ("files", ("photo1.jpg", io.BytesIO(b"image1"), "image/jpeg")),
+                ("files", ("photo2.jpg", io.BytesIO(b"image2"), "image/jpeg")),
+                ("files", ("document.pdf", io.BytesIO(b"pdf"), "application/pdf")),
+            ]
+
+            response = client.post(
+                f"/api/v1/chat/requests/{request_id}/upload-multiple",
+                files=files,
+                headers=auth_headers,
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert len(data) == 3
+        
+        # Проверяем, что все файлы загружены
+        filenames = [item["original_filename"] for item in data]
+        assert "photo1.jpg" in filenames
+        assert "photo2.jpg" in filenames
+        assert "document.pdf" in filenames
+
+        # 4. Отправляем сообщение со всеми файлами
+        file_urls = [item["url"] for item in data]
+        response = client.post(
+            f"/api/v1/chat/requests/{request_id}/messages",
+            json={
+                "content": "Вот все документы",
+                "message_type": ChatMessageType.document.value,
+                "attachments": {
+                    "files": [
+                        {"url": url, "name": name}
+                        for url, name in zip(file_urls, filenames)
+                    ]
+                },
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 201
