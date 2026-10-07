@@ -84,10 +84,38 @@ class Settings(BaseSettings):
     # Sentry
     sentry_dsn: str | None = None
 
+    # === Telegram Notifications (опционально) ===
+    TELEGRAM_ENABLED: bool = Field(
+        default=False,
+        description="Включить Telegram уведомления (может не работать в РФ без прокси)",
+    )
+    TELEGRAM_BOT_TOKEN: str = Field(
+        default="",
+        description="Токен Telegram бота (получить у @BotFather)",
+    )
+    TELEGRAM_DEFAULT_CHAT_ID: str = Field(
+        default="",
+        description="Chat ID для системных уведомлений (эскалации споров)",
+    )
+    TELEGRAM_TIMEOUT_SECONDS: int = Field(
+        default=5,
+        description="Таймаут отправки (если Telegram заблокирован — быстро упадём)",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+    )
+
+    # === Background Tasks ===
+    SCHEDULER_ENABLED: bool = Field(
+        default=True,
+        description="Включить планировщик фоновых задач",
+    )
+    SCHEDULER_INTERVAL_MINUTES: int = Field(
+        default=5,
+        description="Интервал проверки просроченных споров (минуты)",
     )
 
 
