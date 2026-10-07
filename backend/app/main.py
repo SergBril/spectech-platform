@@ -2,7 +2,7 @@
 
 import logging
 from contextlib import asynccontextmanager
-
+from app.tasks.scheduler import start_scheduler, stop_scheduler
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,6 +48,8 @@ from app.api.routes import (
     telematics,
     vehicles,
     downtime,
+    rentals,
+    bank_statements,
 )
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -75,6 +77,9 @@ logger = logging.getLogger("spectech.app")
 async def lifespan(app: FastAPI):
     logger.info("🚀 SpectechPlatform v0.1.0 starting...")
 
+    # Запускаем планировщик фоновых задач
+    start_scheduler()
+
     # Пропускаем подключение к MinIO в тестовом режиме
     if not settings.TESTING:
         try:
@@ -85,6 +90,8 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Останавливаем планировщик
+    stop_scheduler()
     logger.info("👋 SpectechPlatform shutting down...")
 
 
@@ -186,7 +193,7 @@ app.include_router(rbac.router, prefix="/api/v1/rbac", tags=["rbac"])
 app.include_router(me.router, prefix="/api/v1", tags=["me"])
 app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["finance"])
 app.include_router(acts.router, prefix="/api/v1/acts", tags=["finance"])
-app.include_router(payouts.router, prefix="/api/v1/payouts", tags=["finance"])
+app.include_router(payouts.router, prefix="/api/v1/finance/payouts", tags=["finance"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["finance"])
 app.include_router(telematics.router, prefix="/api/v1/telematics", tags=["telematics"])
 app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
@@ -214,6 +221,12 @@ app.include_router(signature.router, prefix="/api/v1/signature", tags=["signatur
 app.include_router(finance.router, prefix="/api/v1/finance", tags=["Финансы"])
 app.include_router(disputes.router, prefix="/api/v1/disputes", tags=["disputes"])
 app.include_router(downtime.router, prefix="/api/v1/downtime", tags=["downtime"])
+app.include_router(rentals.router, prefix="/api/v1", tags=["📋 Rentals (Аренда)"])
+app.include_router(
+    bank_statements.router,
+    prefix="/api/v1/finance",
+    tags=["finance"],
+)
 
 uploads_dir = Path("uploads")
 uploads_dir.mkdir(exist_ok=True)
