@@ -246,28 +246,6 @@ def sample_vehicle(db_session: Session, company):
 
 
 @pytest.fixture
-def sample_shift_task(db_session: Session, company, sample_vehicle):
-    """Создаёт тестовое сменное задание."""
-    from app.models.shift import ShiftTask
-
-    st = ShiftTask(
-        request_id=None,
-        vehicle_id=sample_vehicle.id,
-        operator_id=None,
-        shift_date=date.today() - timedelta(days=1),
-        planned_moto_hours=8.0,
-        planned_start_time="08:00",
-        planned_end_time="17:00",
-        status="completed",
-        company_id=company.id,
-    )
-    db_session.add(st)
-    db_session.commit()
-    db_session.refresh(st)
-    return st
-
-
-@pytest.fixture
 def sample_reconciliation(db_session: Session, company, sample_shift_task):
     """Создаёт тестовую сверку данных."""
     from app.models.telematics import ShiftDataReconciliation
@@ -351,3 +329,245 @@ def sample_payout(db_session: Session, company, sample_contractor, sample_vehicl
     db_session.commit()
     db_session.refresh(payout)
     return payout
+
+@pytest.fixture
+def sample_rental_client(db_session: Session, company):
+    """Клиент для аренды (contractor с типом client)."""
+    from app.models.contractor import Contractor
+    client = Contractor(
+        name="Rental Client LLC",
+        inn="7711111111",
+        kpp="771101001",
+        type="client",
+        company_id=company.id,
+    )
+    db_session.add(client)
+    db_session.commit()
+    db_session.refresh(client)
+    return client
+
+
+@pytest.fixture
+def sample_rental_vehicle(db_session: Session, company, sample_contractor):
+    """Техника для аренды с собственником."""
+    from app.models.catalog import Vehicle
+    v = Vehicle(
+        name="Самосвал КАМАЗ 65115",
+        company_id=company.id,
+        owner_id=sample_contractor.id,  # ← ДОБАВЛЕНО: собственник
+        status="free",
+        id_type="internal",
+        id_value="KAMAZ-65115-RENT-001",
+        hourly_rate=Decimal("2500.00"),
+    )
+    db_session.add(v)
+    db_session.commit()
+    db_session.refresh(v)
+    return v
+
+
+@pytest.fixture
+def sample_rental(
+    db_session: Session, company, sample_rental_client, sample_rental_vehicle
+):
+    """Базовая аренда в статусе DRAFT с одной позицией."""
+    from app.models.rental import (
+        Rental, RentalItem, RentalStatus, RateType, PrepaymentStatus,
+    )
+    
+    start = datetime.now(UTC).replace(hour=9, minute=0, second=0, microsecond=0)
+    end = start + timedelta(hours=8)
+    
+    rental = Rental(
+        client_id=sample_rental_client.id,
+        company_id=company.id,
+        start_date=start,
+        end_date=end,
+        rate_type=RateType.HOURLY,
+        status=RentalStatus.DRAFT,
+        prepayment_status=PrepaymentStatus.NONE,
+        base_price=Decimal("0"),
+        discount=Decimal("0"),
+        total_amount=Decimal("0"),
+    )
+    db_session.add(rental)
+    db_session.flush()
+    
+    item = RentalItem(
+        rental_id=rental.id,
+        vehicle_id=sample_rental_vehicle.id,
+        quantity=1,
+        unit_price=Decimal("2500.00"),
+    )
+    db_session.add(item)
+    db_session.flush()
+    
+    # Пересчёт стоимости
+    rental.base_price = Decimal("20000.00")  # 8 часов × 2500
+    rental.total_amount = Decimal("20000.00")
+    
+    db_session.commit()
+    db_session.refresh(rental)
+    return rental
+
+@pytest.fixture
+def sample_shift_report(db_session: Session, company, sample_shift_task):
+    """Создаёт тестовый сменный отчёт."""
+    from app.models.shift import ShiftReport, ShiftReportStatus
+    
+    report = ShiftReport(
+        shift_task_id=sample_shift_task.id,
+        operator_moto_hours=8.0,
+        final_moto_hours=8.0,
+        status=ShiftReportStatus.draft,
+        company_id=company.id,
+    )
+    db_session.add(report)
+    db_session.commit()
+    db_session.refresh(report)
+    return report
+
+
+@pytest.fixture
+def sample_dispute(db_session: Session, company, sample_shift_report, sample_user):
+    """Создаёт тестовый спор в статусе dispatcher_review."""
+    from app.models.dispute import Dispute, DisputeStatus, DisputeType, InitiatorRole
+    
+    dispute = Dispute(
+        shift_report_id=sample_shift_report.id,
+        request_id=sample_shift_report.shift_task.request_id or 1,
+        company_id=company.id,
+        status=DisputeStatus.dispatcher_review,
+        dispute_type=DisputeType.hours,
+        opened_at=datetime.now(UTC),
+        sla_deadline=datetime.now(UTC) + timedelta(hours=3),
+        initiator_id=sample_user.id,
+        initiator_role=InitiatorRole.operator,
+        operator_version={"moto_hours": 10.0},
+        client_version={"moto_hours": 8.0},
+    )
+    db_session.add(dispute)
+    db_session.commit()
+    db_session.refresh(dispute)
+    return dispute
+
+
+@pytest.fixture
+def sample_dispute_escalated(db_session, sample_dispute):
+    """Спор, эскалированный на уровень manager."""
+    from app.models.dispute import DisputeStatus, AssignedRole
+    from datetime import datetime, UTC, timedelta
+    
+    sample_dispute.status = DisputeStatus.escalated_to_manager
+    sample_dispute.assigned_role = AssignedRole.manager
+    sample_dispute.escalated_at = datetime.now(UTC) - timedelta(hours=20)
+    sample_dispute.escalation_deadline = datetime.now(UTC) + timedelta(hours=4)
+    db_session.commit()
+    db_session.refresh(sample_dispute)
+    return sample_dispute
+
+@pytest.fixture
+def dispute_test_data(db_session: Session, company):
+    """Создаёт полный набор тестовых данных для тестов диспутов (ORM)."""
+    from datetime import datetime, timedelta, date
+    from decimal import Decimal
+    from app.models.shift import ShiftReport, ShiftTask, ShiftReportStatus
+    from app.models.dispatch import Request
+    from app.models.contractor import Contractor, Employee
+    from app.models.catalog import Vehicle
+    
+    # Создаём клиента
+    client_contractor = Contractor(
+        name="Test Client for Dispute",
+        inn="7701111111",
+        kpp="770101001",
+        type="client",
+        company_id=company.id,
+    )
+    db_session.add(client_contractor)
+    db_session.commit()
+    db_session.refresh(client_contractor)
+
+    # Создаём оператора (контрагент + сотрудник)
+    operator_contractor = Contractor(
+        name="Test Operator for Dispute",
+        inn="770222222222",
+        type="employee",
+        company_id=company.id,
+    )
+    db_session.add(operator_contractor)
+    db_session.commit()
+    db_session.refresh(operator_contractor)
+
+    employee = Employee(
+        contractor_id=operator_contractor.id,
+        position="Оператор экскаватора",
+        role_in_system="operator",
+    )
+    db_session.add(employee)
+    db_session.commit()
+
+    # Создаём технику
+    vehicle = Vehicle(
+        name="Test Excavator for Dispute",
+        id_type="internal",
+        id_value="DISP-TEST-001",
+        status="free",
+        company_id=company.id,
+    )
+    db_session.add(vehicle)
+    db_session.commit()
+    db_session.refresh(vehicle)
+
+    # Создаём заявку
+    now = datetime.now()
+    request = Request(
+        client_id=client_contractor.id,
+        status="in_progress",
+        request_type="one_time",
+        work_type="Earthworks",
+        planned_start=now,
+        planned_end=now + timedelta(days=1),
+        company_id=company.id,
+    )
+    db_session.add(request)
+    db_session.commit()
+    db_session.refresh(request)
+
+    # Создаём сменное задание
+    shift_task = ShiftTask(
+        request_id=request.id,
+        operator_id=operator_contractor.id,
+        vehicle_id=vehicle.id,
+        shift_date=date.today(),
+        shift_number=1,
+        status="completed",
+        company_id=company.id,
+    )
+    db_session.add(shift_task)
+    db_session.commit()
+    db_session.refresh(shift_task)
+
+    # Создаём сменный отчёт
+    shift_report = ShiftReport(
+        shift_task_id=shift_task.id,
+        operator_id=operator_contractor.id,
+        operator_moto_hours=Decimal("8.0"),
+        operator_odometer=150,
+        status=ShiftReportStatus.client_review,
+        company_id=company.id,
+    )
+    db_session.add(shift_report)
+    db_session.commit()
+    db_session.refresh(shift_report)
+
+    return {
+        "company": company,
+        "client": client_contractor,
+        "operator_contractor": operator_contractor,
+        "employee": employee,
+        "vehicle": vehicle,
+        "request": request,
+        "shift_task": shift_task,
+        "shift_report": shift_report,
+    }
