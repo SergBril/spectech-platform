@@ -1,8 +1,11 @@
 """Сервис аренды техники — бизнес-логика."""
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from app.models.finance import Invoice, InvoiceItem, DocumentStatus
+from app.services.finance_service import generate_document_number
+from app.core.constants import TaxSystem
 
 from fastapi import HTTPException
 from sqlalchemy import and_
@@ -512,7 +515,7 @@ class RentalService:
     ) -> Rental:
         """
         Завершить аренду (ACTIVE → COMPLETED).
-        Принимает фактические данные и пересчитывает стоимость.
+        Принимает фактические данные, пересчитывает стоимость и создаёт Invoice.
         """
         rental = RentalService.get_rental(db, rental_id, company_id)
 
@@ -582,7 +585,97 @@ class RentalService:
             "Rental #%s closed: actual=%s, penalty=%s, total=%s",
             rental.id, actual_amount, overdue_penalty, rental.total_amount,
         )
+
+        # 🆕 Автосоздание Invoice при завершении аренды
+        try:
+            RentalService._create_invoice_from_rental(db, rental)
+        except Exception as e:
+            # Логируем ошибку, но не прерываем завершение аренды
+            logger.error(
+                "Failed to auto-create Invoice for Rental #%s: %s",
+                rental.id, str(e), exc_info=True
+            )
+
         return rental
+
+    @staticmethod
+    def _create_invoice_from_rental(db: Session, rental: Rental) -> Invoice:
+        """
+        Создаёт Invoice на основе завершённой аренды.
+        Включает основную услугу + штраф за просрочку (если есть).
+        """
+        from datetime import timedelta
+        
+        # Расчёт НДС (20% по умолчанию для ОСНО)
+        vat_rate = Decimal("20.00")
+        subtotal = rental.total_amount
+        vat_amount = (subtotal * vat_rate / Decimal("100")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        total = subtotal + vat_amount
+
+        # Создание Invoice
+        invoice = Invoice(
+            document_number=generate_document_number(db, "INV"),
+            rental_id=rental.id,
+            request_id=rental.request_id,  # Может быть None
+            client_id=rental.client_id,
+            company_id=rental.company_id,
+            subtotal=subtotal,
+            vat_amount=vat_amount,
+            vat_rate=vat_rate,
+            total=total,
+            paid_amount=Decimal("0.00"),
+            invoice_date=date.today(),
+            due_date=date.today() + timedelta(days=30),
+            status=DocumentStatus.draft,
+            tax_system=TaxSystem.OSNO.value,
+            is_vat_included=False,  # НДС начисляется сверху
+            comment=f"Автосоздан при завершении аренды #{rental.id}",
+        )
+        db.add(invoice)
+        db.flush()  # Получаем invoice.id
+
+        # Создание позиции счёта (InvoiceItem)
+        # Формируем описание на основе типа тарификации
+        rate_type_desc = {
+            RateType.HOURLY: "Аренда техники (почасовая)",
+            RateType.SHIFT: "Аренда техники (посменная)",
+            RateType.TRIP: "Аренда техники (за ходку)",
+            RateType.VOLUME: "Аренда техники (за объём)",
+            RateType.MILEAGE: "Аренда техники (по пробегу)",
+            RateType.COMBINED: "Аренда техники (комбинированная)",
+        }
+        description = rate_type_desc.get(rental.rate_type, "Аренда техники")
+
+        # Определяем единицу измерения
+        unit_map = {
+            RateType.HOURLY: "моточас",
+            RateType.SHIFT: "смена",
+            RateType.TRIP: "ходка",
+            RateType.VOLUME: "м³",
+            RateType.MILEAGE: "км",
+            RateType.COMBINED: "усл.",
+        }
+        unit = unit_map.get(rental.rate_type, "усл.")
+
+        invoice_item = InvoiceItem(
+            invoice_id=invoice.id,
+            description=f"{description} (Договор аренды #{rental.id})",
+            quantity=Decimal("1"),
+            unit=unit,
+            unit_price=rental.total_amount,
+            amount=rental.total_amount,
+        )
+        db.add(invoice_item)
+        db.commit()
+        db.refresh(invoice)
+
+        logger.info(
+            "Auto-created Invoice #%s (document_number=%s) for Rental #%s: total=%s",
+            invoice.id, invoice.document_number, rental.id, total,
+        )
+        return invoice
 
 
 rental_service = RentalService()
