@@ -1,7 +1,7 @@
 """Service for handling disputes with SLA tracking."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,6 +23,13 @@ INITIAL_SLA_HOURS = 3
 MANAGER_ESCALATION_HOURS = 24
 CEO_ESCALATION_HOURS = 48
 
+def _ensure_aware(dt: datetime | None) -> datetime | None:
+    """Гарантирует, что datetime имеет timezone (UTC)."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt
 
 def open_dispute(
     db: Session,
@@ -55,8 +62,8 @@ def open_dispute(
     if not request:
         raise ValueError(f"Request {shift_task.request_id} not found")
 
-    # Calculate SLA deadline
-    now = datetime.utcnow()
+    # Calculate SLA deadline (✅ ИСПРАВЛЕНО: используем UTC)
+    now = datetime.now(UTC)
     sla_deadline = now + timedelta(hours=INITIAL_SLA_HOURS)
 
     # Create dispute
@@ -106,7 +113,8 @@ def escalate_dispute(
     if not dispute:
         raise ValueError(f"Dispute {dispute_id} not found")
 
-    now = datetime.utcnow()
+    # ✅ ИСПРАВЛЕНО: используем UTC
+    now = datetime.now(UTC)
 
     if dispute.status == DisputeStatus.dispatcher_review:
         dispute.status = DisputeStatus.escalated_to_manager
@@ -150,8 +158,15 @@ def resolve_dispute(
     if dispute.status == DisputeStatus.resolved:
         raise ValueError(f"Dispute {dispute_id} already resolved")
 
-    now = datetime.utcnow()
-    resolution_time = (now - dispute.opened_at).total_seconds() / 60
+    # ✅ ИСПРАВЛЕНО: используем UTC
+    now = datetime.now(UTC)
+    
+    # Нормализуем opened_at для безопасного расчёта
+    opened_at = _ensure_aware(dispute.opened_at)
+    if opened_at:
+        resolution_time = (now - opened_at).total_seconds() / 60
+    else:
+        resolution_time = 0
 
     # Update dispute
     dispute.status = DisputeStatus.resolved
@@ -161,7 +176,8 @@ def resolve_dispute(
     dispute.resolution_time_minutes = int(resolution_time)
 
     # Check if SLA was breached
-    if now > dispute.sla_deadline:
+    sla_deadline = _ensure_aware(dispute.sla_deadline)
+    if sla_deadline and now > sla_deadline:
         dispute.sla_breached = True
 
     # Update shift report with final values
@@ -188,21 +204,28 @@ def resolve_dispute(
 
 
 def get_overdue_disputes(db: Session) -> list[Dispute]:
-    """
-    Returns all disputes that have exceeded their SLA deadline.
-    """
-    now = datetime.utcnow()
+    """Returns all disputes that have exceeded their SLA deadline."""
+    now = datetime.now(UTC)
 
+    # Получаем все активные споры
     stmt = select(Dispute).where(
         Dispute.status.in_([
             DisputeStatus.dispatcher_review,
             DisputeStatus.escalated_to_manager,
             DisputeStatus.escalated_to_ceo,
         ]),
-        Dispute.sla_deadline < now,
     )
-
-    return list(db.scalars(stmt).all())
+    
+    all_disputes = list(db.scalars(stmt).all())
+    
+    # Фильтруем по SLA вручную (для надёжности с таймзонами)
+    overdue = []
+    for d in all_disputes:
+        sla = _ensure_aware(d.sla_deadline)
+        if sla and now > sla:
+            overdue.append(d)
+    
+    return overdue
 
 
 def auto_escalate_overdue(db: Session) -> int:
