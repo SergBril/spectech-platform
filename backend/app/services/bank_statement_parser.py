@@ -35,12 +35,12 @@ EXCLUSION_PATTERNS = [
 @dataclass
 class ParsedTransaction:
     """Распарсенная транзакция."""
-    document_type: str  # payment_order/bank_order/demand_order
+    document_type: str
     number: str
     date: date
     amount: Decimal
     processed_date: date
-    direction: str  # incoming/outgoing
+    direction: str
     
     # Плательщик
     payer_name: str
@@ -62,20 +62,24 @@ class ParsedTransaction:
     purpose: str | None = None
     
     # Дополнительные данные
-    payment_type: str | None = None  # ВидОплаты
-    priority: int | None = None  # Очередность
+    payment_type: str | None = None
+    priority: int | None = None
     
-    # Вспомогательные
     raw_data: dict = field(default_factory=dict)
     
     @property
     def counterparty_name(self) -> str:
-        """Контрагент — тот, кто НЕ является нашим счётом."""
         return self.payee_name if self.direction == "outgoing" else self.payer_name
     
     @property
     def counterparty_inn(self) -> str | None:
         return self.payee_inn if self.direction == "outgoing" else self.payer_inn
+    
+    # 🆕 ДОБАВЬТЕ ЭТО СВОЙСТВО:
+    @property
+    def counterparty_kpp(self) -> str | None:
+        """КПП контрагента (плательщик для входящих, получатель для исходящих)."""
+        return self.payee_kpp if self.direction == "outgoing" else self.payer_kpp
     
     @property
     def counterparty_account(self) -> str | None:
@@ -85,13 +89,27 @@ class ParsedTransaction:
     def counterparty_bank(self) -> str | None:
         return self.payee_bank if self.direction == "outgoing" else self.payer_bank
     
+    # 🆕 ДОБАВЬТЕ ЭТО СВОЙСТВО:
+    @property
+    def counterparty_bik(self) -> str | None:
+        """БИК банка контрагента."""
+        return self.payee_bik if self.direction == "outgoing" else self.payer_bik
+    
     @property
     def bank_transaction_id(self) -> str:
-        """Уникальный ID транзакции в банке."""
-        return f"{self.document_type}_{self.number}_{self.date.isoformat()}"
+        """
+        Уникальный ID транзакции в банке.
+        
+        Формат: {тип}_{номер}_{дата}_{сумма}
+        Сумма добавлена, потому что в одном документе может быть
+        несколько проводок с одинаковым номером и датой
+        (например, налоги + пени в одной инкассовой).
+        """
+        # Нормализуем сумму: убираем точки для ID
+        amount_str = str(self.amount).replace(".", "_").replace(",", "_")
+        return f"{self.document_type}_{self.number}_{self.date.isoformat()}_{amount_str}"
     
     def extract_invoice_number(self) -> str | None:
-        """Извлекает номер счёта из назначения платежа."""
         if not self.purpose:
             return None
         for pattern in INVOICE_NUMBER_PATTERNS:
@@ -101,13 +119,11 @@ class ParsedTransaction:
         return None
     
     def should_be_excluded(self) -> tuple[bool, str | None]:
-        """Проверяет, нужно ли исключить транзакцию из обработки."""
         if not self.purpose:
             return False, None
         for pattern in EXCLUSION_PATTERNS:
             if pattern.search(self.purpose):
                 return True, f"Matched exclusion pattern: {pattern.pattern}"
-        # Банковский ордер и инкассовое — обычно не привязываем
         if self.document_type in ("bank_order", "demand_order"):
             return True, f"Document type {self.document_type} is excluded by default"
         return False, None

@@ -89,7 +89,7 @@ class BankStatement(Base):
 
     # Статус обработки
     status: Mapped[StatementStatus] = mapped_column(
-        Enum(StatementStatus), default=StatementStatus.processing
+        String(20), default=StatementStatus.processing.value
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -132,13 +132,13 @@ class BankTransaction(Base):
 
     # Основные данные
     document_type: Mapped[TransactionType] = mapped_column(
-        Enum(TransactionType), nullable=False
+        String(30), nullable=False
     )
     document_number: Mapped[str] = mapped_column(String(50), nullable=False)
     document_date: Mapped[date] = mapped_column(Date, nullable=False)
     
     direction: Mapped[TransactionDirection] = mapped_column(
-        Enum(TransactionDirection), nullable=False
+        String(20), nullable=False
     )
     amount: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), nullable=False
@@ -161,7 +161,7 @@ class BankTransaction(Base):
 
     # Авто-матчинг
     match_status: Mapped[MatchStatus] = mapped_column(
-        Enum(MatchStatus), default=MatchStatus.unmatched
+        String(20), default=MatchStatus.unmatched.value
     )
     matched_invoice_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("invoices.id"), nullable=True
