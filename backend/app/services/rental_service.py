@@ -3,7 +3,7 @@
 import logging
 from datetime import UTC, datetime, date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
-from app.models.finance import Invoice, InvoiceItem, DocumentStatus
+from app.models.finance import Invoice, InvoiceItem, Act, DocumentStatus
 from app.services.finance_service import generate_document_number
 from app.core.constants import TaxSystem
 
@@ -588,15 +588,25 @@ class RentalService:
 
         # 🆕 Автосоздание Invoice при завершении аренды
         try:
-            RentalService._create_invoice_from_rental(db, rental)
+            RentalService._create_documents_from_rental(db, rental)
         except Exception as e:
             # Логируем ошибку, но не прерываем завершение аренды
             logger.error(
-                "Failed to auto-create Invoice for Rental #%s: %s",
+                "Failed to auto-create documents for Rental #%s: %s",
                 rental.id, str(e), exc_info=True
             )
 
         return rental
+
+    @staticmethod
+    def _create_documents_from_rental(db: Session, rental: Rental) -> tuple[Invoice, Act]:
+        """
+        Создаёт пару документов (Invoice + Act) на основе завершённой аренды.
+        Возвращает кортеж (invoice, act).
+        """
+        invoice = RentalService._create_invoice_from_rental(db, rental)
+        act = RentalService._create_act_from_rental(db, rental, invoice)
+        return invoice, act
 
     @staticmethod
     def _create_invoice_from_rental(db: Session, rental: Rental) -> Invoice:
@@ -637,7 +647,6 @@ class RentalService:
         db.flush()  # Получаем invoice.id
 
         # Создание позиции счёта (InvoiceItem)
-        # Формируем описание на основе типа тарификации
         rate_type_desc = {
             RateType.HOURLY: "Аренда техники (почасовая)",
             RateType.SHIFT: "Аренда техники (посменная)",
@@ -648,7 +657,6 @@ class RentalService:
         }
         description = rate_type_desc.get(rental.rate_type, "Аренда техники")
 
-        # Определяем единицу измерения
         unit_map = {
             RateType.HOURLY: "моточас",
             RateType.SHIFT: "смена",
@@ -668,14 +676,45 @@ class RentalService:
             amount=rental.total_amount,
         )
         db.add(invoice_item)
-        db.commit()
-        db.refresh(invoice)
+        db.flush()
 
         logger.info(
-            "Auto-created Invoice #%s (document_number=%s) for Rental #%s: total=%s",
+            "Auto-created Invoice #%s (%s) for Rental #%s: total=%s",
             invoice.id, invoice.document_number, rental.id, total,
         )
         return invoice
+
+    @staticmethod
+    def _create_act_from_rental(db: Session, rental: Rental, invoice: Invoice) -> Act:
+        """
+        Создаёт Act (Акт выполненных работ) на основе завершённой аренды.
+        Парный документ к Invoice с теми же суммами.
+        """
+        # Используем те же суммы, что и в Invoice
+        act = Act(
+            document_number=generate_document_number(db, "ACT"),
+            rental_id=rental.id,
+            request_id=rental.request_id,  # Может быть None
+            client_id=rental.client_id,
+            company_id=rental.company_id,
+            total_amount=invoice.total,  # Итоговая сумма с НДС
+            vat_amount=invoice.vat_amount,
+            vat_rate=invoice.vat_rate,
+            tax_system=TaxSystem.OSNO.value,
+            is_vat_included=True,  # В акте НДС обычно включён
+            act_date=date.today(),
+            status=DocumentStatus.sent,  # Сразу отправляем клиенту на подпись
+            comment=f"Автосоздан при завершении аренды #{rental.id}",
+        )
+        db.add(act)
+        db.commit()
+        db.refresh(act)
+
+        logger.info(
+            "Auto-created Act #%s (%s) for Rental #%s: total=%s",
+            act.id, act.document_number, rental.id, act.total_amount,
+        )
+        return act
 
 
 rental_service = RentalService()
