@@ -1,7 +1,7 @@
 """Endpoints для чата по заявке (REST + WebSocket)."""
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import (
     APIRouter,
@@ -172,6 +172,55 @@ async def upload_chat_file(
         logger.error(f"File upload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
 
+@router.post(
+    "/requests/{request_id}/upload-multiple",
+    response_model=list[FileUploadResponse],
+    status_code=201,
+    summary="Загрузить несколько файлов в хранилище чата",
+)
+async def upload_multiple_chat_files(
+    request_id: int,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Загружает несколько файлов в MinIO за один запрос.
+    Возвращает список метаданных для каждого файла.
+    """
+    # 1. Проверяем, что заявка существует
+    try:
+        chat = chat_service.ensure_chat_exists(db, request_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    # 2. Автоматически добавляем пользователя в участники
+    if not chat_service.is_participant(db, chat.id, current_user.id):
+        chat_service.add_participant(
+            db, chat.id, current_user.id, ChatParticipantRole.client.value
+        )
+
+    # 3. Загружаем все файлы
+    results = []
+    for file in files:
+        try:
+            result = storage_service.upload_file(
+                file_obj=file.file,
+                filename=file.filename or "unknown",
+                folder=f"chat/{request_id}",
+                content_type=file.content_type,
+            )
+            results.append(FileUploadResponse(**result))
+        except Exception as e:
+            logger.error(f"File upload failed for {file.filename}: {e}")
+            # Продолжаем загрузку остальных файлов, но логируем ошибку
+            continue
+    
+    if not results:
+        raise HTTPException(status_code=500, detail="All file uploads failed")
+    
+    return results
+
 
 @router.get("/requests/{request_id}", response_model=ChatRead)
 def get_chat_by_request(
@@ -334,11 +383,28 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
         await manager.connect_chat(websocket, chat_id)
 
         # 5. Системное сообщение о входе
-        chat_service.send_system_event(
+        system_msg = chat_service.send_system_event(
             db=db,
             chat_id=chat_id,
             event_type="user_joined",
             data={"user_id": user.id, "email": user.email},
+        )
+        # Отправляем через WebSocket
+        await manager.broadcast_to_chat(
+            chat_id,
+            {
+                "type": "message",
+                "data": {
+                    "id": system_msg.id,
+                    "chat_id": chat_id,
+                    "sender_id": None,
+                    "sender_email": "system",
+                    "message_type": "system_event",
+                    "content": system_msg.content,
+                    "attachments": system_msg.attachments,
+                    "created_at": system_msg.created_at.isoformat(),
+                },
+            },
         )
 
         # 6. Основной цикл
@@ -389,11 +455,28 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
         manager.disconnect_chat(websocket, chat_id)
         if user:
             try:
-                chat_service.send_system_event(
+                system_msg = chat_service.send_system_event(
                     db=db,
                     chat_id=chat_id,
                     event_type="user_left",
                     data={"user_id": user.id},
+                )
+                # Отправляем через WebSocket
+                await manager.broadcast_to_chat(
+                    chat_id,
+                    {
+                        "type": "message",
+                        "data": {
+                            "id": system_msg.id,
+                            "chat_id": chat_id,
+                            "sender_id": None,
+                            "sender_email": "system",
+                            "message_type": "system_event",
+                            "content": system_msg.content,
+                            "attachments": system_msg.attachments,
+                            "created_at": system_msg.created_at.isoformat(),
+                        },
+                    },
                 )
             except Exception:
                 pass

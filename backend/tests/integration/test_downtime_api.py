@@ -410,3 +410,65 @@ class TestDowntimeAPI:
         assert float(data["hourly_rate"]) == 500.0
         # 2ч × 500 = 1000
         assert float(data["total_amount"]) == 1000.0
+
+    def test_upload_multiple_photos_for_downtime(
+        self, auth_client: Client, shift_task: ShiftTask, vehicle_with_rate
+    ):
+        """Тест: batch-загрузка нескольких фото для простоя."""
+        import io
+        from unittest.mock import patch
+
+        now = datetime.now(timezone.utc)
+
+        # 1. Мокаем storage_service
+        def mock_upload(file_obj, filename, folder, content_type):
+            return {
+                "path": f"{folder}/{filename}",
+                "url": f"http://localhost:9000/spectech-docs/{folder}/{filename}",
+                "size": 2048,
+                "content_type": content_type,
+                "original_filename": filename,
+            }
+
+        with patch(
+            "app.api.routes.downtime.storage_service.upload_file",
+            side_effect=mock_upload,
+        ):
+            # 2. Загружаем 3 фото
+            files = [
+                ("files", ("engine.jpg", io.BytesIO(b"img1"), "image/jpeg")),
+                ("files", ("dashboard.jpg", io.BytesIO(b"img2"), "image/jpeg")),
+                ("files", ("damage.jpg", io.BytesIO(b"img3"), "image/jpeg")),
+            ]
+
+            upload_response = auth_client.post(
+                "/api/v1/downtime/upload-multiple",
+                files=files,
+            )
+
+        assert upload_response.status_code == 201
+        upload_data = upload_response.json()
+        assert len(upload_data) == 3
+
+        # 3. Создаём простой со всеми фото
+        photos = [
+            {"url": item["url"], "filename": item["original_filename"]}
+            for item in upload_data
+        ]
+
+        create_response = auth_client.post(
+            "/api/v1/downtime",
+            json={
+                "shift_task_id": shift_task.id,
+                "started_at": now.isoformat(),
+                "ended_at": (now + timedelta(hours=2)).isoformat(),
+                "cause_category": "technical",
+                "description": "Множественные повреждения",
+                "photos": photos,
+            },
+        )
+
+        assert create_response.status_code == 201
+        downtime_data = create_response.json()
+        assert downtime_data["photos"] is not None
+        assert len(downtime_data["photos"]) == 3
