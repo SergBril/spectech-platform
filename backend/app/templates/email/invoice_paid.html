@@ -1,0 +1,99 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h1 style="color: #27ae60; border-bottom: 3px solid #27ae60; padding-bottom: 10px;">
+        ✅ Оплата получена!
+    </h1>
+    
+    <div style="background: #e8f5e9; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #27ae60;">
+        <h2 style="margin-top: 0; color: #27ae60;">Уважаемый(ая) {{ client_name }}!</h2>
+        <p>Мы получили оплату по вашему счёту. Благодарим за сотрудничество!</p>
+    </div>
+    
+    <h3>📄 Детали оплаты</h3>
+    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Номер счёта:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{ invoice.document_number }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Полученная сумма:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">
+                <b style="color: #27ae60; font-size: 1.2em;">{{ "%.2f"|format(payment_amount) }} ₽</b>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Дата оплаты:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{ payment_date.strftime('%d.%m.%Y') }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Плательщик:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{ payer_name }}</td>
+        </tr>
+        {% if payer_inn %}
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>ИНН плательщика:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{ payer_inn }}</td>
+        </tr>
+        {% endif %}
+    </table>
+    
+    <h3>💰 Статус счёта</h3>
+    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Сумма счёта:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{ "%.2f"|format(invoice.total) }} ₽</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Оплачено:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd; color: #27ae60;">
+                <b>{{ "%.2f"|format(invoice.paid_amount) }} ₽</b>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Остаток к оплате:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">
+                {% set remaining = invoice.total - invoice.paid_amount %}
+                {% if remaining > 0 %}
+                    <span style="color: #e74c3c; font-weight: bold;">{{ "%.2f"|format(remaining) }} ₽</span>
+                {% else %}
+                    <span style="color: #27ae60; font-weight: bold;">0.00 ₽ (оплачен полностью)</span>
+                {% endif %}
+            </td>
+        </tr>
+        <tr style="background: #ecf0f1;">
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Статус:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">
+                {% if invoice.status.value == 'paid' %}
+                    <span style="color: #27ae60; font-weight: bold;">✅ Оплачен полностью</span>
+                {% elif invoice.status.value == 'partially_paid' %}
+                    <span style="color: #f39c12; font-weight: bold;">⏳ Частично оплачен</span>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+    
+    <div style="text-align: center; margin: 30px 0;">
+        <a href="{{ frontend_url }}/invoices/{{ invoice.id }}" 
+           style="display: inline-block; background: #27ae60; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+            📋 Просмотреть счёт
+        </a>
+    </div>
+    
+    {% if invoice.status.value == 'partially_paid' %}
+    <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+        <p><b>⏰ Напоминание:</b> Пожалуйста, завершите оплату оставшейся суммы в установленный срок.</p>
+    </div>
+    {% endif %}
+    
+    <p style="color: #7f8c8d; font-size: 0.9em; margin-top: 30px;">
+        Это автоматическое уведомление. Если у вас есть вопросы, ответьте на это письмо 
+        или свяжитесь с нами по телефону поддержки.
+    </p>
+    
+    <p style="color: #7f8c8d; font-size: 0.9em;">
+        Спасибо, что выбираете <b>СпецТехника Про</b>! 🚜
+    </p>
+</div>
+{% endblock %}

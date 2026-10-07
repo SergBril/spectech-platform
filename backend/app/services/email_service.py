@@ -442,6 +442,117 @@ class EmailService:
             },
         )
 
+    def send_rental_completed(
+        self, rental, invoice, client_email: str, client_name: str
+    ) -> bool:
+        """Уведомление клиенту о завершении аренды + счёт."""
+        subject = f"✅ Аренда #{rental.id} завершена — счёт {invoice.document_number}"
+        return self.send_email(
+            to_email=client_email,
+            subject=subject,
+            template_name="email/rental_completed.html",
+            context={
+                "rental": rental,
+                "invoice": invoice,
+                "client_name": client_name,
+                "subject": subject,
+            },
+        )
+
+    def send_payout_created(
+        self, payout, owner_email: str, owner_name: str
+    ) -> bool:
+        """Уведомление собственнику о созданной выплате."""
+        subject = f"💰 Выплата {payout.document_number} на {payout.net_amount} ₽"
+        return self.send_email(
+            to_email=owner_email,
+            subject=subject,
+            template_name="email/payout_created.html",
+            context={
+                "payout": payout,
+                "owner_name": owner_name,
+                "subject": subject,
+            },
+        )
+
+    def send_dispute_opened(
+        self, dispute, dispatcher_email: str, dispatcher_name: str
+    ) -> bool:
+        """Уведомление диспетчеру о новом споре."""
+        subject = f"⚖️ Новый спор #{dispute.id} требует вашего участия"
+        return self.send_email(
+            to_email=dispatcher_email,
+            subject=subject,
+            template_name="email/dispute_opened.html",
+            context={
+                "dispute": dispute,
+                "dispatcher_name": dispatcher_name,
+                "subject": subject,
+            },
+        )
+
+    def send_dispute_escalated(
+        self, dispute, manager_email: str, manager_name: str,
+        from_role: str, to_role: str, reason: str = "SLA breach"
+    ) -> bool:
+        """Уведомление менеджеру/CEO об эскалации спора."""
+        subject = f"🚨 ЭСКАЛАЦИЯ: спор #{dispute.id} требует внимания"
+        return self.send_email(
+            to_email=manager_email,
+            subject=subject,
+            template_name="email/dispute_escalated.html",
+            context={
+                "dispute": dispute,
+                "manager_name": manager_name,
+                "from_role": from_role,
+                "to_role": to_role,
+                "reason": reason,
+                "subject": subject,
+            },
+        )
+
+    def send_invoice_paid(
+        self,
+        invoice,
+        payment_amount,
+        payment_date,
+        payer_name: str,
+        payer_inn: str | None,
+        client_email: str,
+        client_name: str,
+    ) -> bool:
+        """
+        Уведомление клиенту о получении оплаты по счёту.
+        
+        Args:
+            invoice: Объект Invoice
+            payment_amount: Сумма полученного платежа
+            payment_date: Дата платежа
+            payer_name: Наименование плательщика
+            payer_inn: ИНН плательщика
+            client_email: Email клиента
+            client_name: Имя клиента
+        """
+        if invoice.status.value == "paid":
+            subject = f"✅ Счёт {invoice.document_number} полностью оплачен"
+        else:
+            subject = f"💰 Получена оплата по счёту {invoice.document_number}"
+        
+        return self.send_email(
+            to_email=client_email,
+            subject=subject,
+            template_name="email/invoice_paid.html",
+            context={
+                "invoice": invoice,
+                "payment_amount": payment_amount,
+                "payment_date": payment_date,
+                "payer_name": payer_name,
+                "payer_inn": payer_inn,
+                "client_name": client_name,
+                "subject": subject,
+            },
+        )
+
 
 # Singleton instance
 email_service = EmailService()
