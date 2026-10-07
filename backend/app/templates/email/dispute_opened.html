@@ -1,0 +1,47 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h1 style="color: #2c3e50; border-bottom: 3px solid #f39c12; padding-bottom: 10px;">
+        ⚖️ Новый спор требует вашего внимания
+    </h1>
+    
+    <div style="background: #fff3cd; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #f39c12;">
+        <h2 style="margin-top: 0; color: #f39c12;">Требуется участие диспетчера!</h2>
+        <p>Открыт новый спор по сменному отчёту. SLA: 3 часа.</p>
+    </div>
+    
+    <h3>📋 Детали спора</h3>
+    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Номер спора:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">#{{ dispute.id }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Тип:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{ dispute.dispute_type.value }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Инициатор:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{ dispute.initiator_role.value }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>SLA deadline:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">
+                <b style="color: #e74c3c;">{{ dispute.sla_deadline.strftime('%d.%m.%Y %H:%M') }}</b>
+            </td>
+        </tr>
+    </table>
+    
+    <div style="text-align: center; margin: 30px 0;">
+        <a href="{{ frontend_url }}/disputes/{{ dispute.id }}" 
+           style="display: inline-block; background: #f39c12; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+            🔍 Рассмотреть спор
+        </a>
+    </div>
+    
+    <p style="color: #e74c3c; font-size: 0.9em; margin-top: 30px; text-align: center;">
+        ⏰ Если спор не будет рассмотрен в течение 3 часов, он будет автоматически эскалирован на менеджера.
+    </p>
+</div>
+{% endblock %}

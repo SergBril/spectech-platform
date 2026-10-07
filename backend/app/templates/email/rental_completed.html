@@ -1,0 +1,49 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">
+        ✅ Аренда завершена
+    </h1>
+    
+    <div style="background: #ecf0f1; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #27ae60;">
+        <h2 style="margin-top: 0; color: #27ae60;">Уважаемый(ая) {{ client_name }}!</h2>
+        <p>Ваша аренда успешно завершена. Ниже — детали и счёт на оплату.</p>
+    </div>
+    
+    <h3>📋 Детали аренды #{{ rental.id }}</h3>
+    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Период:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">
+                {{ rental.start_date.strftime('%d.%m.%Y') }} — 
+                {{ rental.end_date.strftime('%d.%m.%Y') }}
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"><b>Сумма:</b></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">
+                <b style="color: #27ae60; font-size: 1.2em;">{{ "%.2f"|format(rental.total_amount) }} ₽</b>
+            </td>
+        </tr>
+    </table>
+    
+    <h3>📄 Счёт на оплату</h3>
+    <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
+        <p><b>Номер:</b> {{ invoice.document_number }}</p>
+        <p><b>Сумма с НДС:</b> {{ "%.2f"|format(invoice.total) }} ₽</p>
+        <p><b>Оплатить до:</b> {{ invoice.due_date.strftime('%d.%m.%Y') }}</p>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+        <a href="{{ frontend_url }}/invoices/{{ invoice.id }}" 
+           style="display: inline-block; background: #3498db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+            💳 Оплатить счёт
+        </a>
+    </div>
+    
+    <p style="color: #7f8c8d; font-size: 0.9em; margin-top: 30px;">
+        Это автоматическое уведомление. Если у вас есть вопросы, ответьте на это письмо.
+    </p>
+</div>
+{% endblock %}

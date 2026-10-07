@@ -1,6 +1,11 @@
+"""API routes for payouts (выплаты собственникам)."""
+
+from datetime import date, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user
@@ -17,6 +22,36 @@ from app.services.finance_service import (
 from app.services.pdf_service import generate_payout_pdf
 
 router = APIRouter()
+
+
+# ============================================================
+# Схемы ответов для workflow (approve / pay)
+# ============================================================
+
+
+class PayoutWorkflowResponse(BaseModel):
+    """Ответ на действия approve/pay."""
+    status: str = "success"
+    message: str
+    payout_id: int
+    old_status: str
+    new_status: str
+
+
+class PayoutsSummaryResponse(BaseModel):
+    """Сводка по выплатам за период."""
+    date_from: date
+    date_to: date
+    total_payouts: int
+    total_gross: float
+    total_commission: float
+    total_net: float
+    pending_payouts: int
+
+
+# ============================================================
+# CRUD
+# ============================================================
 
 
 @router.get("", response_model=list[PayoutRead])
@@ -80,6 +115,55 @@ def create_payout(
     return payout
 
 
+@router.get("/summary", response_model=PayoutsSummaryResponse)
+def get_payouts_summary(
+    date_from: date = Query(..., description="Начало периода"),
+    date_to: date = Query(..., description="Конец периода"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Сводка по выплатам за период.
+    Возвращает суммы gross, commission, net и количество pending выплат.
+    """
+    base_filter = [
+        Payout.company_id == company_id,
+        Payout.payout_date >= date_from,
+        Payout.payout_date <= date_to,
+    ]
+
+    # Агрегаты
+    totals = (
+        db.query(
+            func.count(Payout.id).label("total"),
+            func.coalesce(func.sum(Payout.gross_amount), 0).label("gross"),
+            func.coalesce(func.sum(Payout.platform_commission), 0).label("commission"),
+            func.coalesce(func.sum(Payout.net_amount), 0).label("net"),
+        )
+        .filter(*base_filter)
+        .first()
+    )
+
+    # Pending (draft) выплаты
+    pending_count = (
+        db.query(func.count(Payout.id))
+        .filter(*base_filter, Payout.status == DocumentStatus.draft)
+        .scalar()
+        or 0
+    )
+
+    return PayoutsSummaryResponse(
+        date_from=date_from,
+        date_to=date_to,
+        total_payouts=int(totals.total or 0),
+        total_gross=float(totals.gross or 0),
+        total_commission=float(totals.commission or 0),
+        total_net=float(totals.net or 0),
+        pending_payouts=int(pending_count),
+    )
+
+
 @router.get("/{payout_id}", response_model=PayoutRead)
 def get_payout(
     payout_id: int,
@@ -115,14 +199,22 @@ def update_payout(
     return payout
 
 
-@router.post("/{payout_id}/approve", response_model=PayoutRead)
+# ============================================================
+# Workflow: approve / pay
+# ============================================================
+
+
+@router.post("/{payout_id}/approve", response_model=PayoutWorkflowResponse)
 def approve_payout(
     payout_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """Одобрить выплату (только своей компании)."""
+    """
+    Одобрить выплату (draft → sent).
+    Только выплаты своей компании и только в статусе draft.
+    """
     payout = db.get(Payout, payout_id)
     if not payout or payout.company_id != company_id:
         raise HTTPException(status_code=404, detail="Payout not found")
@@ -130,13 +222,57 @@ def approve_payout(
     if payout.status != DocumentStatus.draft:
         raise HTTPException(
             status_code=409,
-            detail=f"Only draft payouts can be approved. Current: {payout.status}",
+            detail=f"Only draft payouts can be approved. Current status: {payout.status}",
         )
 
+    old_status = payout.status.value if hasattr(payout.status, "value") else str(payout.status)
     payout.status = DocumentStatus.sent
     db.commit()
     db.refresh(payout)
-    return payout
+
+    return PayoutWorkflowResponse(
+        status="success",
+        message=f"Payout #{payout_id} approved successfully",
+        payout_id=payout.id,
+        old_status=old_status,
+        new_status=DocumentStatus.sent.value,
+    )
+
+
+@router.post("/{payout_id}/pay", response_model=PayoutWorkflowResponse)
+def pay_payout(
+    payout_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Отметить выплату как выплаченную (sent → paid).
+    Только выплаты в статусе sent.
+    """
+    payout = db.get(Payout, payout_id)
+    if not payout or payout.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Payout not found")
+
+    if payout.status != DocumentStatus.sent:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Only sent payouts can be marked as paid. Current status: {payout.status}. Must be 'sent' first.",
+        )
+
+    old_status = payout.status.value if hasattr(payout.status, "value") else str(payout.status)
+    payout.status = DocumentStatus.paid
+    payout.paid_at = datetime.utcnow()
+    db.commit()
+    db.refresh(payout)
+
+    return PayoutWorkflowResponse(
+        status="success",
+        message=f"Payout #{payout_id} marked as paid",
+        payout_id=payout.id,
+        old_status=old_status,
+        new_status=DocumentStatus.paid.value,
+    )
 
 
 @router.get("/{payout_id}/pdf", response_class=FileResponse)

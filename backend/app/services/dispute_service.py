@@ -95,6 +95,41 @@ def open_dispute(
         f"SLA deadline: {sla_deadline}"
     )
 
+    # 🆕 Отправляем уведомления диспетчеру
+    try:
+        from app.services.notification_dispatcher import notification_dispatcher
+        from app.models.auth import User
+        import asyncio
+        
+        # Получаем ответственного диспетчера (для простоты — первого admin)
+        # В реальности нужно использовать role-based assignment
+        dispatcher = (
+            db.query(User)
+            .filter(User.is_active == True)
+            .first()
+        )
+        
+        if dispatcher:
+            dispatcher_email = dispatcher.email
+            dispatcher_name = dispatcher.full_name if hasattr(dispatcher, 'full_name') else dispatcher.email
+            dispatcher_user_id = dispatcher.id
+            
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(
+                    notification_dispatcher.notify_dispute_opened(
+                        db=db,
+                        dispute=dispute,
+                        dispatcher_email=dispatcher_email,
+                        dispatcher_name=dispatcher_name,
+                        dispatcher_user_id=dispatcher_user_id,
+                    )
+                )
+            except RuntimeError:
+                logger.info("No event loop, skipping dispute notifications")
+    except Exception as e:
+        logger.error(f"Failed to send dispute notifications: {e}")
+
     return dispute
 
 
@@ -132,6 +167,55 @@ def escalate_dispute(
 
     else:
         raise ValueError(f"Cannot escalate dispute in status {dispute.status}")
+
+        # 🆕 Отправляем уведомления об эскалации
+        try:
+            from app.services.notification_dispatcher import notification_dispatcher
+            from app.models.auth import User
+            import asyncio
+            
+            # Определяем роли
+            if dispute.status == DisputeStatus.escalated_to_manager:
+                from_role = "dispatcher"
+                to_role = "manager"
+            else:
+                from_role = "manager"
+                to_role = "CEO"
+            
+            # Получаем менеджера (для простоты — второго admin)
+            manager = (
+                db.query(User)
+                .filter(User.is_active == True)
+                .offset(1)
+                .first()
+            ) or (
+                db.query(User)
+                .filter(User.is_active == True)
+                .first()
+            )
+            
+            if manager:
+                manager_email = manager.email
+                manager_name = manager.full_name if hasattr(manager, 'full_name') else manager.email
+                manager_user_id = manager.id
+                
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(
+                        notification_dispatcher.notify_dispute_escalated(
+                            db=db,
+                            dispute=dispute,
+                            manager_email=manager_email,
+                            manager_name=manager_name,
+                            from_role=from_role,
+                            to_role=to_role,
+                            manager_user_id=manager_user_id,
+                        )
+                    )
+                except RuntimeError:
+                    logger.info("No event loop, skipping escalation notifications")
+        except Exception as e:
+            logger.error(f"Failed to send escalation notifications: {e}")
 
     db.commit()
     db.refresh(dispute)

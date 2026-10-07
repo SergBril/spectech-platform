@@ -91,6 +91,8 @@ from app.models.rental import (
     RentalStatus,
 )  # noqa: F401
 
+from app.models.review import Review  # noqa: F401
+
 
 __all__ = [
     # Auth

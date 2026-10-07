@@ -33,6 +33,7 @@ from app.api.routes import (
     invoices,
     maintenance,
     marketplace,
+    marketplace_listings,
     me,
     payments,
     payouts,
@@ -50,6 +51,7 @@ from app.api.routes import (
     downtime,
     rentals,
     bank_statements,
+    reviews,
 )
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -209,6 +211,11 @@ app.include_router(companies.router, prefix="/api/v1", tags=["companies"])
 app.include_router(
     marketplace.router, prefix="/api/v1", tags=["🎯 Marketplace (Отклики на заявки)"]
 )
+app.include_router(
+    marketplace_listings.router,
+    prefix="/api/v1",
+    tags=["🛒 Marketplace (Управление объявлениями)"],
+)
 app.include_router(chat.router, prefix="/api/v1", tags=["💬 Chat (Чат по заявке)"])
 app.include_router(public.router, prefix="/api/v1", tags=["🌐 Public (Маркетплейс)"])
 app.include_router(
@@ -224,8 +231,13 @@ app.include_router(downtime.router, prefix="/api/v1/downtime", tags=["downtime"]
 app.include_router(rentals.router, prefix="/api/v1", tags=["📋 Rentals (Аренда)"])
 app.include_router(
     bank_statements.router,
-    prefix="/api/v1/finance",
-    tags=["finance"],
+    prefix="/api/v1/banking",
+    tags=["💳 Banking (Банковские выписки)"],
+)
+app.include_router(
+    reviews.router,
+    prefix="/api/v1",
+    tags=["⭐ Reviews (Отзывы и рейтинги)"],
 )
 
 uploads_dir = Path("uploads")
