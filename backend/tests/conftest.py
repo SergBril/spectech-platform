@@ -1,6 +1,9 @@
 import os
 import sys
 
+from datetime import datetime, UTC, date, timedelta
+from decimal import Decimal
+
 # === ENV для тестов (ДО любых импортов из app) ===
 os.environ["TESTING"] = "true"
 os.environ["ENVIRONMENT"] = "testing"
@@ -54,6 +57,7 @@ from app.core.db import SessionLocal, Base, get_db
 from app.main import app
 from app.models import *  # noqa: F401, F403
 from app.models.auth import User
+from app.models.finance import Invoice, Payout  # ← ДОБАВЛЕНО
 from app.services.auth_service import create_access_token
 
 # === SQLite setup ===
@@ -94,28 +98,6 @@ def db_session() -> Generator[Session, None, None]:
         session.close()
         Base.metadata.drop_all(bind=engine)
 
-@pytest.fixture(scope="function")
-def db_session():
-    """Создаёт сессию БД, создаёт таблицы и очищает их после теста."""
-    # Создаём все таблицы (если их нет)
-    from app.core.db import engine, Base
-    Base.metadata.create_all(bind=engine)
-    
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.rollback()
-        # Очищаем все таблицы после теста (безопасно)
-        try:
-            for table in reversed(Base.metadata.sorted_tables):
-                db.execute(table.delete())
-            db.commit()
-        except Exception:
-            # Игнорируем ошибки очистки (например, если таблица не существует)
-            pass
-        db.close()
-
 
 @pytest.fixture
 def company(db_session: Session):
@@ -149,7 +131,7 @@ def sample_contractor(db_session: Session, company):
         name="Test Client LLC",
         inn="7701234567",
         kpp="770101001",
-        type="client",  # ← ИСПРАВЛЕНО: type, не contractor_type
+        type="client",
         company_id=company.id,
     )
     db_session.add(c)
@@ -177,21 +159,26 @@ def sample_user(db_session: Session, company):
 
 
 @pytest.fixture
-def admin_user(db_session: Session) -> User:
-    """Создаёт тестового администратора или возвращает существующего."""
+def admin_user(db_session: Session, company) -> User:
+    """Создаёт тестового администратора (привязан к тестовой компании)."""
     # Проверяем, существует ли уже такой пользователь
     existing = db_session.query(User).filter(User.email == "admin@test.com").first()
     if existing:
+        # Если пользователь существует, но привязан к другой компании (остался от других тестов)
+        if existing.company_id != company.id:
+            existing.company_id = company.id
+            db_session.commit()
+            db_session.refresh(existing)
         return existing
     
-    # Создаём нового, если не нашли
+    # Создаём нового с правильным company_id
     user = User(
         email="admin@test.com",
         full_name="Admin User",
         password_hash="admin_hashed_password_12345",
         is_superuser=True,
         status="active",
-        company_id=2,
+        company_id=company.id,  # ← ИСПРАВЛЕНО: используем company.id вместо хардкода 2
     )
     db_session.add(user)
     db_session.commit()
@@ -230,11 +217,11 @@ def auth_client(client: TestClient, auth_headers: dict):
     client.headers.update(auth_headers)
     return client
 
+
 @pytest.fixture
 def auth_token(auth_headers: dict) -> str:
     """Извлекает JWT токен из auth_headers фикстуры."""
     auth_header = auth_headers.get("Authorization", "")
-    # auth_header имеет вид "Bearer <token>"
     if auth_header.startswith("Bearer "):
         return auth_header[len("Bearer "):]
     raise ValueError("Cannot extract token from auth_headers")
@@ -261,8 +248,6 @@ def sample_vehicle(db_session: Session, company):
 @pytest.fixture
 def sample_shift_task(db_session: Session, company, sample_vehicle):
     """Создаёт тестовое сменное задание."""
-    from datetime import date, timedelta
-
     from app.models.shift import ShiftTask
 
     st = ShiftTask(
@@ -285,8 +270,6 @@ def sample_shift_task(db_session: Session, company, sample_vehicle):
 @pytest.fixture
 def sample_reconciliation(db_session: Session, company, sample_shift_task):
     """Создаёт тестовую сверку данных."""
-    from decimal import Decimal
-
     from app.models.telematics import ShiftDataReconciliation
 
     r = ShiftDataReconciliation(
@@ -308,11 +291,6 @@ def sample_reconciliation(db_session: Session, company, sample_shift_task):
 @pytest.fixture
 def sample_invoice(db_session: Session, company, sample_contractor):
     """Создаёт тестовый счёт."""
-    from datetime import date, timedelta
-    from decimal import Decimal
-
-    from app.models.finance import Invoice
-
     inv = Invoice(
         document_number="TEST-2026-0001",
         request_id=None,
@@ -352,23 +330,22 @@ def sample_owner(db_session: Session, company):
 
 
 @pytest.fixture
-def sample_payout(db_session: Session, company, sample_owner, sample_vehicle):
-    """Создаёт тестовую выплату."""
-    from datetime import date
-
-    from app.models.finance import Payout
-
+def sample_payout(db_session: Session, company, sample_contractor, sample_vehicle):
+    """Создаёт тестовую выплату в статусе draft."""
+    from app.models.finance import DocumentStatus
+    
     payout = Payout(
-        document_number="ВЫП-2026-0001",
-        owner_id=sample_owner.id,
+        document_number=f"PAY-TEST-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
+        owner_id=sample_contractor.id,
         vehicle_id=sample_vehicle.id,
         company_id=company.id,
-        gross_amount=100000.0,
-        platform_commission=15000.0,
-        net_amount=85000.0,
-        commission_rate=15.0,
+        gross_amount=Decimal("100000.00"),
+        platform_commission=Decimal("15000.00"),
+        net_amount=Decimal("85000.00"),
+        commission_rate=Decimal("15.00"),
         payout_date=date.today(),
-        status="draft",
+        status=DocumentStatus.draft,
+        calculation_details={"test": True},
     )
     db_session.add(payout)
     db_session.commit()
