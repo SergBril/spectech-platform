@@ -4,7 +4,24 @@ import logging
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML
+# Lazy import — WeasyPrint загружается только при генерации PDF,
+# чтобы не блокировать запуск приложения на Windows без GTK
+_weasyprint = None
+
+def _get_weasyprint():
+    """Ленивая загрузка WeasyPrint с понятным сообщением об ошибке."""
+    global _weasyprint
+    if _weasyprint is None:
+        try:
+            from weasyprint import HTML
+            _weasyprint = HTML
+        except (OSError, ImportError) as e:
+            raise RuntimeError(
+                "WeasyPrint не может загрузиться. На Windows нужны GTK runtime.\n"
+                "Установите GTK3: https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases\n"
+                f"Оригинальная ошибка: {e}"
+            ) from e
+    return _weasyprint
 
 from app.services.pdf_form_filler import fill_torg12_pdf, fill_upd_pdf
 from app.services.translations import translate_unit

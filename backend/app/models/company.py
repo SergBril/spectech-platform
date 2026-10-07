@@ -67,3 +67,17 @@ class Company(Base):
         server_default="false",
         comment="Верифицирована ли компания",
     )
+
+    # === ⭐ РЕЙТИНГИ И ОТЗЫВЫ ===
+    average_rating: Mapped[float | None] = mapped_column(
+        Numeric(3, 2), nullable=True,
+        comment="Средний рейтинг компании (1.00 - 5.00)",
+    )
+    total_reviews: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+        comment="Общее количество отзывов",
+    )
+    rating_distribution: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True,
+        comment='Распределение оценок: {"5": 10, "4": 3, "3": 1, "2": 0, "1": 0}',
+    )

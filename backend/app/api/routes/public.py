@@ -11,7 +11,7 @@ import logging
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -288,6 +288,217 @@ def list_public_vehicles(
 
     except Exception as e:
         logger.exception("❌ Error in list_public_vehicles: %s", e)
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+# === Endpoints: Детальная страница техники ===
+
+
+@router.get("/vehicles/{vehicle_id}", response_model=PublicVehicleRead)
+def get_public_vehicle_details(
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    🌐 Детальная страница техники (публичная).
+    
+    Возвращает только опубликованную технику.
+    """
+    try:
+        from app.services.marketplace_service import marketplace_service
+        
+        vehicle = marketplace_service.get_vehicle_details(db, vehicle_id)
+        if not vehicle:
+            raise HTTPException(status_code=404, detail="Vehicle not found or not published")
+        
+        return _build_vehicle_response(vehicle)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("❌ Error in get_public_vehicle_details: %s", e)
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+class VehicleAvailabilityResponse(BaseModel):
+    """Календарь доступности техники."""
+    vehicle_id: int
+    vehicle_name: str
+    from_date: str
+    to_date: str
+    calendar: list[dict]
+    
+    model_config = {"from_attributes": True}
+
+
+@router.get(
+    "/vehicles/{vehicle_id}/availability",
+    response_model=VehicleAvailabilityResponse,
+)
+def get_vehicle_availability(
+    vehicle_id: int,
+    from_date: str | None = Query(
+        default=None,
+        description="Начальная дата (YYYY-MM-DD), по умолчанию сегодня",
+    ),
+    to_date: str | None = Query(
+        default=None,
+        description="Конечная дата (YYYY-MM-DD), по умолчанию +30 дней",
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    🌐 Календарь доступности техники на основе Rental.
+    
+    Возвращает список дат с флагом `available` и `rental_id` (если занята).
+    """
+    from datetime import date as DateType
+    from app.services.marketplace_service import marketplace_service
+    
+    try:
+        vehicle = marketplace_service.get_vehicle_details(db, vehicle_id)
+        if not vehicle:
+            raise HTTPException(status_code=404, detail="Vehicle not found or not published")
+        
+        # Парсим даты
+        from_dt = DateType.fromisoformat(from_date) if from_date else None
+        to_dt = DateType.fromisoformat(to_date) if to_date else None
+        
+        calendar = marketplace_service.get_availability_calendar(
+            db, vehicle_id, from_dt, to_dt
+        )
+        
+        return VehicleAvailabilityResponse(
+            vehicle_id=vehicle.id,
+            vehicle_name=vehicle.name,
+            from_date=calendar[0]["date"] if calendar else "",
+            to_date=calendar[-1]["date"] if calendar else "",
+            calendar=calendar,
+        )
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("❌ Error in get_vehicle_availability: %s", e)
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+# === Endpoints: Создание заявки из витрины ===
+
+
+class PublicRequestCreate(BaseModel):
+    """Схема создания заявки из публичной витрины."""
+    work_type: str = Field(..., min_length=1, max_length=255, description="Тип работ")
+    planned_start: str = Field(..., description="Начало (ISO format)")
+    planned_end: str = Field(..., description="Окончание (ISO format)")
+    comment: str | None = Field(default=None, max_length=2000, description="Комментарий")
+    
+    # Контакты (для связи с заказчиком)
+    contact_name: str = Field(..., min_length=1, max_length=255)
+    contact_phone: str = Field(..., min_length=10, max_length=20)
+    contact_email: str | None = Field(default=None)
+
+
+class PublicRequestResponse(BaseModel):
+    """Ответ с созданной заявкой."""
+    request_id: int
+    vehicle_id: int
+    vehicle_name: str
+    status: str
+    planned_start: str
+    planned_end: str
+    message: str
+    
+    model_config = {"from_attributes": True}
+
+
+@router.post(
+    "/vehicles/{vehicle_id}/request",
+    response_model=PublicRequestResponse,
+    status_code=201,
+)
+def create_request_from_listing(
+    vehicle_id: int,
+    data: PublicRequestCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    🌐 Создание заявки из публичной витрины (без регистрации).
+    
+    Отправляет уведомление собственнику техники.
+    
+    **Примечание:** В production здесь должна быть проверка reCAPTCHA
+    или регистрация через телефон/email для защиты от спама.
+    """
+    from datetime import datetime as dt
+    from app.services.marketplace_service import marketplace_service
+    from app.models.contractor import Contractor
+    
+    try:
+        # 1. Проверяем технику
+        vehicle = marketplace_service.get_vehicle_details(db, vehicle_id)
+        if not vehicle:
+            raise HTTPException(status_code=404, detail="Vehicle not found or not published")
+        
+        # 2. Парсим даты
+        try:
+            planned_start = dt.fromisoformat(data.planned_start)
+            planned_end = dt.fromisoformat(data.planned_end)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid datetime format: {e}")
+        
+        if planned_start >= planned_end:
+            raise HTTPException(
+                status_code=400,
+                detail="planned_end must be after planned_start",
+            )
+        
+        # 3. Создаём или находим Contractor (клиента) по контактным данным
+        # В production: через регистрацию или привязку к user
+        # Сейчас: создаём временного contractor для заявки
+        client_contractor = Contractor(
+            name=data.contact_name,
+            type="client",
+            contact_phone=data.contact_phone,
+            contact_email=data.contact_email,
+            email=data.contact_email,
+            company_id=vehicle.company_id,  # Привязываем к компании маркетплейса
+        )
+        db.add(client_contractor)
+        db.flush()
+        
+        # 4. Создаём заявку
+        request = marketplace_service.create_request_from_listing(
+            db=db,
+            vehicle_id=vehicle_id,
+            client_contractor_id=client_contractor.id,
+            company_id=vehicle.company_id or 1,
+            work_type=data.work_type,
+            planned_start=planned_start,
+            planned_end=planned_end,
+            comment=data.comment,
+        )
+        
+        return PublicRequestResponse(
+            request_id=request.id,
+            vehicle_id=vehicle_id,
+            vehicle_name=vehicle.name,
+            status=request.status.value if hasattr(request.status, "value") else str(request.status),
+            planned_start=planned_start.isoformat(),
+            planned_end=planned_end.isoformat(),
+            message=(
+                f"✅ Заявка #{request.id} создана. "
+                f"Собственник техники '{vehicle.name}' получит уведомление."
+            ),
+        )
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("❌ Error in create_request_from_listing: %s", e)
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 

@@ -261,6 +261,103 @@ class PaymentsService:
             f"remaining: {invoice.total - invoice.paid_amount}"
         )
 
+    def apply_payment(
+        self,
+        db: Session,
+        transaction_id: int,
+        invoice_id: int,
+        amount: Decimal | None = None,
+        applied_by: int | None = None,
+    ) -> Payment:
+        """Применяет банковскую транзакцию к Invoice."""
+        tx = db.get(BankTransaction, transaction_id)
+        if not tx:
+            raise ValueError(f"Transaction {transaction_id} not found")
+
+        invoice = db.get(Invoice, invoice_id)
+        if not invoice:
+            raise ValueError(f"Invoice {invoice_id} not found")
+
+        if invoice.company_id != tx.company_id:
+            raise ValueError("Transaction and invoice belong to different companies")
+
+        payment_amount = amount or tx.amount
+
+        remaining = invoice.total - invoice.paid_amount
+        if payment_amount > remaining:
+            logger.warning(
+                f"Payment amount {payment_amount} exceeds remaining {remaining}, "
+                f"adjusting to {remaining}"
+            )
+            payment_amount = remaining
+
+        payment = Payment(
+            invoice_id=invoice.id,
+            amount=payment_amount,
+            method=PaymentMethod.bank_transfer,
+            payment_date=tx.processed_date,
+            external_transaction_id=tx.bank_transaction_id,
+            bank_transaction_id=tx.bank_transaction_id,
+            payer_name=tx.counterparty_name,
+            payer_inn=tx.counterparty_inn,
+            payer_account=tx.counterparty_account,
+            purpose=tx.purpose,
+            comment=f"Оплата по банковской выписке от {tx.processed_date}",
+        )
+        db.add(payment)
+        db.flush()
+
+        tx.payment_id = payment.id
+        tx.matched_invoice_id = invoice.id
+        tx.matched_amount = payment_amount
+        tx.match_status = MatchStatus.manual_matched
+
+        invoice.paid_amount += payment_amount
+
+        if invoice.paid_amount >= invoice.total:
+            invoice.status = DocumentStatus.paid
+        else:
+            invoice.status = DocumentStatus.partially_paid
+
+        db.commit()
+        db.refresh(payment)
+        db.refresh(invoice)
+
+        logger.info(
+            f"✅ Payment applied: {payment_amount} to Invoice {invoice.document_number}, "
+            f"remaining: {invoice.total - invoice.paid_amount}"
+        )
+
+        # 🆕 ОТПРАВКА УВЕДОМЛЕНИЙ
+        try:
+            from app.services.payment_notifications import payment_notification_service
+            
+            # Пытаемся отправить уведомления асинхронно
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                # Если есть event loop — создаём задачу
+                loop.create_task(
+                    payment_notification_service.notify_invoice_paid(
+                        db=db,
+                        invoice=invoice,
+                        payment_amount=payment_amount,
+                        payment_date=tx.processed_date,
+                        payer_name=tx.counterparty_name,
+                        payer_inn=tx.counterparty_inn,
+                        client_user_id=None,  # можно получить из Contractor -> User
+                    )
+                )
+                logger.info("Notification task scheduled")
+            except RuntimeError:
+                # Нет event loop (sync контекст) — пропускаем
+                logger.info("No event loop, skipping async notifications")
+        except Exception as e:
+            # Не ломаем основную операцию при ошибке уведомлений
+            logger.error(f"Failed to send payment notifications: {e}")
+
+        return payment
+
         return payment
 
     def get_unmatched_transactions(

@@ -46,6 +46,7 @@ async def upload_bank_statement(
             "id": statement.id,
             "file_name": statement.file_name,
             "status": statement.status,
+            "account_number": statement.account_number,
             "total_transactions": statement.total_transactions,
             "matched_transactions": statement.matched_transactions,
             "unmatched_transactions": statement.unmatched_transactions,

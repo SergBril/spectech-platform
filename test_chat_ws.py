@@ -1,4 +1,5 @@
 """Простой тест WebSocket чата."""
+
 import asyncio
 import json
 import websockets
@@ -15,11 +16,15 @@ async def test_chat():
         print("✅ WebSocket connected!")
 
         # Отправляем сообщение
-        await ws.send(json.dumps({
-            "type": "message",
-            "content": "Привет из WebSocket! Это real-time!",
-            "message_type": "text",
-        }))
+        await ws.send(
+            json.dumps(
+                {
+                    "type": "message",
+                    "content": "Привет из WebSocket! Это real-time!",
+                    "message_type": "text",
+                }
+            )
+        )
         print("📤 Message sent")
 
         # Получаем ответ
@@ -27,7 +32,7 @@ async def test_chat():
             response = await asyncio.wait_for(ws.recv(), timeout=5)
             data = json.loads(response)
             print(f"📥 Received: {data['type']}")
-            if data['type'] == 'message':
+            if data["type"] == "message":
                 print(f"   Content: {data['data']['content']}")
         except asyncio.TimeoutError:
             print("⏰ No response received (timeout)")

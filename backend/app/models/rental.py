@@ -128,6 +128,12 @@ class Rental(Base):
     )
     prepayment_paid_at = Column(DateTime(timezone=True), nullable=True)
 
+    # 🆕 Комиссия платформы (для расчёта Payout собственнику)
+    commission_rate = Column(
+        Numeric(5, 2), default=Decimal("10.00"), nullable=False,
+        comment="Процент комиссии платформы для выплат собственникам (по умолчанию 10%)"
+    )
+
     # Метаданные
     comment = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
