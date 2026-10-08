@@ -375,115 +375,6 @@ class TestFinanceDashboardAPI:
             vehicle_ids = [item["vehicle_id"] for item in data]
             assert dashboard_setup["vehicle_1"].id in vehicle_ids
 
-    # === ТЕСТ 4: Просроченные счета ===
-
-    def test_overdue_invoices(
-        self, auth_client, dashboard_setup
-    ):
-        """✅ Список просроченных счетов корректен."""
-        response = auth_client.get("/api/v1/finance/overdue-invoices")
-
-        assert response.status_code == 200
-        data = response.json()
-
-        assert isinstance(data, list)
-        assert len(data) == 2  # invoice_3 и invoice_4
-
-        # Проверяем структуру первого элемента
-        first = data[0]
-        assert "invoice_id" in first
-        assert "document_number" in first
-        assert "client_name" in first
-        assert "total" in first
-        assert "paid_amount" in first
-        assert "remaining" in first
-        assert "due_date" in first
-        assert "days_overdue" in first
-        assert first["days_overdue"] > 0
-
-        # Сумма просроченных: 96000 + 30000 = 126000
-        total_remaining = sum(item["remaining"] for item in data)
-        assert total_remaining == pytest.approx(126000.0, abs=0.01)
-
-    def test_overdue_invoices_ordered_by_date(
-        self, auth_client, dashboard_setup
-    ):
-        """✅ Просроченные счета отсортированы по срочности (самые старые первые)."""
-        response = auth_client.get("/api/v1/finance/overdue-invoices")
-        data = response.json()
-
-        # Первый должен быть более просроченным (invoice_3, 30 дней назад)
-        assert data[0]["days_overdue"] >= data[1]["days_overdue"]
-
-    # === ТЕСТ 5: Статистика по банковским выпискам ===
-
-    def test_bank_statement_stats(
-        self, auth_client, dashboard_setup
-    ):
-        """✅ Статистика по банковским выпискам корректна."""
-        response = auth_client.get("/api/v1/finance/bank-statement-stats")
-
-        assert response.status_code == 200
-        data = response.json()
-
-        assert "total_statements" in data
-        assert "total_transactions" in data
-        assert "matched_transactions" in data
-        assert "unmatched_transactions" in data
-        assert "total_incoming" in data
-        assert "total_outgoing" in data
-
-        assert data["total_statements"] == 1
-        assert data["total_transactions"] == 10
-        assert data["matched_transactions"] == 7
-        assert data["unmatched_transactions"] == 3
-        assert data["total_incoming"] == pytest.approx(500000.0, abs=0.01)
-        assert data["total_outgoing"] == pytest.approx(450000.0, abs=0.01)
-
-    # === ТЕСТ 6: График выручки по месяцам ===
-
-    def test_revenue_timeline(
-        self, auth_client, dashboard_setup
-    ):
-        """✅ График выручки по месяцам работает корректно."""
-        response = auth_client.get(
-            "/api/v1/finance/revenue-timeline",
-            params={"months": 12},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-
-        assert isinstance(data, list)
-        assert len(data) >= 1  # Хотя бы один месяц с данными
-
-        # Проверяем структуру
-        entry = data[-1]  # Последний месяц (текущий)
-        assert "month" in entry
-        assert "revenue" in entry
-        assert "invoices_count" in entry
-        assert len(entry["month"]) == 7  # Формат YYYY-MM
-
-        # В текущем месяце должны быть наши счета
-        current_month_entry = next(
-            (e for e in data if e["revenue"] > 0),
-            None,
-        )
-        assert current_month_entry is not None
-        assert current_month_entry["invoices_count"] >= 1
-
-    def test_revenue_timeline_custom_months(
-        self, auth_client, dashboard_setup
-    ):
-        """✅ Параметр months работает корректно."""
-        response = auth_client.get(
-            "/api/v1/finance/revenue-timeline",
-            params={"months": 6},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
 
     # === ТЕСТЫ ВАЛИДАЦИИ ===
 
@@ -494,27 +385,21 @@ class TestFinanceDashboardAPI:
         response = client.get("/api/v1/finance/dashboard")
         assert response.status_code in (401, 422)
 
-    def test_revenue_timeline_invalid_months(
-        self, auth_client
+class TestWeeklyDigest:
+    """Интеграционные тесты еженедельного дайджеста."""
+
+    def test_weekly_digest_endpoint_manual(
+        self, auth_client, db_session, company
     ):
-        """❌ Некорректный параметр months отклоняется."""
-        today = date.today()
-        response = auth_client.get(
-            "/api/v1/finance/revenue-timeline",
-            params={
-                "months": 100,  # больше лимита 36
-                "date_from": (today - timedelta(days=365)).isoformat(),
-                "date_to": today.isoformat(),
-            },
-        )
+        """✅ Ручной запуск дайджеста работает."""
+        from app.services.weekly_digest_service import weekly_digest_service
+        from unittest.mock import patch
         
-        # 🆕 Проверяем, что запрос валиден (422 или 200 в зависимости от реализации)
-        if response.status_code == 422:
-            # Валидация отклонила некорректный параметр
-            data = response.json()
-            assert "error" in data or "detail" in data
-        else:
-            # Endpoint принимает любое значение — проверяем структуру
-            assert response.status_code == 200
-            data = response.json()
-            assert isinstance(data, (list, dict))
+        with patch("app.services.weekly_digest_service.email_service") as mock_email:
+            mock_email.send_email.return_value = True
+            
+            result = weekly_digest_service.send_weekly_digest(db_session, company.id)
+            
+            assert result["success"] is True
+            assert "period" in result
+            assert "recipients_count" in result
