@@ -484,14 +484,15 @@ export const MarketplacePage: React.FC = () => {
                 {companies.map((company) => (
                   <div
                     key={company.id}
-                    className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+                    onClick={() => navigate(`/companies/${company.id}`)}
+                    className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-lg hover:border-blue-300 transition-all cursor-pointer group"
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center space-x-2">
                         <span className="text-3xl">🏢</span>
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {company.name}
+                          <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                            {company.name} <span className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">→</span>
                           </h3>
                           {company.is_verified && (
                             <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
