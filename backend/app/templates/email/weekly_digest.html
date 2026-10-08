@@ -1,0 +1,166 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; background: #f8f9fa;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px; color: white; text-align: center; margin-bottom: 30px;">
+        <h1 style="margin: 0; font-size: 28px;">📊 Еженедельный отчёт</h1>
+        <p style="margin: 10px 0 0 0; opacity: 0.9;">
+            {{ company_name }} | {{ period_start }} — {{ period_end }}
+        </p>
+    </div>
+
+    <!-- КЛЮЧЕВЫЕ МЕТРИКИ -->
+    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 30px;">
+        <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #27ae60;">
+            <div style="color: #7f8c8d; font-size: 12px; text-transform: uppercase;">💰 Выручка</div>
+            <div style="font-size: 24px; font-weight: bold; color: #27ae60;">
+                {{ "%.0f"|format(metrics.total_revenue) }} ₽
+            </div>
+            <div style="color: #95a5a6; font-size: 12px; margin-top: 5px;">
+                Оплачено: {{ "%.0f"|format(metrics.total_paid) }} ₽
+            </div>
+        </div>
+
+        <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #3498db;">
+            <div style="color: #7f8c8d; font-size: 12px; text-transform: uppercase;">🏆 Комиссия платформы</div>
+            <div style="font-size: 24px; font-weight: bold; color: #3498db;">
+                {{ "%.0f"|format(metrics.total_commission) }} ₽
+            </div>
+            <div style="color: #95a5a6; font-size: 12px; margin-top: 5px;">
+                От {{ metrics.active_rentals }} активных аренд
+            </div>
+        </div>
+
+        <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #e74c3c;">
+            <div style="color: #7f8c8d; font-size: 12px; text-transform: uppercase;">⏰ Просроченные счета</div>
+            <div style="font-size: 24px; font-weight: bold; color: #e74c3c;">
+                {{ metrics.overdue_invoices_count }}
+            </div>
+            <div style="color: #95a5a6; font-size: 12px; margin-top: 5px;">
+                На сумму {{ "%.0f"|format(metrics.overdue_invoices_amount) }} ₽
+            </div>
+        </div>
+
+        <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #f39c12;">
+            <div style="color: #7f8c8d; font-size: 12px; text-transform: uppercase;">📋 Непривязанные платежи</div>
+            <div style="font-size: 24px; font-weight: bold; color: #f39c12;">
+                {{ metrics.unmatched_transactions }}
+            </div>
+            <div style="color: #95a5a6; font-size: 12px; margin-top: 5px;">
+                Требуют внимания бухгалтера
+            </div>
+        </div>
+    </div>
+
+    <!-- ТОП КЛИЕНТОВ -->
+    {% if top_clients %}
+    <div style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 20px;">
+        <h2 style="margin-top: 0; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;">
+            🏆 Топ-5 клиентов по выручке
+        </h2>
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: #ecf0f1;">
+                    <th style="padding: 10px; text-align: left;">#</th>
+                    <th style="padding: 10px; text-align: left;">Клиент</th>
+                    <th style="padding: 10px; text-align: right;">Счетов</th>
+                    <th style="padding: 10px; text-align: right;">Выручка</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for client in top_clients %}
+                <tr style="border-bottom: 1px solid #ecf0f1;">
+                    <td style="padding: 10px;">{{ loop.index }}</td>
+                    <td style="padding: 10px;">{{ client.client_name }}</td>
+                    <td style="padding: 10px; text-align: right;">{{ client.invoices_count }}</td>
+                    <td style="padding: 10px; text-align: right; font-weight: bold; color: #27ae60;">
+                        {{ "%.0f"|format(client.total_revenue) }} ₽
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- ТОП ТЕХНИКИ -->
+    {% if top_vehicles %}
+    <div style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 20px;">
+        <h2 style="margin-top: 0; color: #2c3e50; border-bottom: 2px solid #9b59b6; padding-bottom: 10px;">
+            🚜 Топ-5 техники по выручке
+        </h2>
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: #ecf0f1;">
+                    <th style="padding: 10px; text-align: left;">#</th>
+                    <th style="padding: 10px; text-align: left;">Техника</th>
+                    <th style="padding: 10px; text-align: right;">Аренд</th>
+                    <th style="padding: 10px; text-align: right;">Выручка</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vehicle in top_vehicles %}
+                <tr style="border-bottom: 1px solid #ecf0f1;">
+                    <td style="padding: 10px;">{{ loop.index }}</td>
+                    <td style="padding: 10px;">{{ vehicle.vehicle_name }}</td>
+                    <td style="padding: 10px; text-align: right;">{{ vehicle.rentals_count }}</td>
+                    <td style="padding: 10px; text-align: right; font-weight: bold; color: #9b59b6;">
+                        {{ "%.0f"|format(vehicle.total_revenue) }} ₽
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- ПРОСРОЧЕННЫЕ СЧЕТА -->
+    {% if overdue_invoices %}
+    <div style="background: #fff5f5; padding: 25px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #e74c3c;">
+        <h2 style="margin-top: 0; color: #c0392b;">
+            ⚠️ Просроченные счета ({{ overdue_invoices|length }})
+        </h2>
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th style="padding: 8px; text-align: left; background: #fadbd8;">Номер</th>
+                    <th style="padding: 8px; text-align: left; background: #fadbd8;">Клиент</th>
+                    <th style="padding: 8px; text-align: right; background: #fadbd8;">Сумма</th>
+                    <th style="padding: 8px; text-align: right; background: #fadbd8;">Дней просрочки</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in overdue_invoices[:5] %}
+                <tr style="border-bottom: 1px solid #fadbd8;">
+                    <td style="padding: 8px;">{{ invoice.document_number }}</td>
+                    <td style="padding: 8px;">{{ invoice.client_name }}</td>
+                    <td style="padding: 8px; text-align: right; color: #c0392b; font-weight: bold;">
+                        {{ "%.0f"|format(invoice.remaining) }} ₽
+                    </td>
+                    <td style="padding: 8px; text-align: right;">{{ invoice.days_overdue }} дн.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if overdue_invoices|length > 5 %}
+        <p style="color: #7f8c8d; font-size: 12px; margin-top: 10px;">
+            ... и ещё {{ overdue_invoices|length - 5 }} просроченных счетов
+        </p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- КНОПКА -->
+    <div style="text-align: center; margin: 30px 0;">
+        <a href="{{ frontend_url }}/dashboard" 
+           style="display: inline-block; background: #3498db; color: white; padding: 15px 40px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+            📊 Открыть полный дашборд
+        </a>
+    </div>
+
+    <p style="color: #7f8c8d; font-size: 12px; text-align: center; margin-top: 30px;">
+        Это автоматический еженедельный отчёт.<br>
+        Отписаться можно в <a href="{{ frontend_url }}/settings/notifications">настройках уведомлений</a>.
+    </p>
+</div>
+{% endblock %}

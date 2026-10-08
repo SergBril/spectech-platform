@@ -227,7 +227,9 @@ class FinanceReportsService:
                 func.sum(ShiftDataReconciliation.final_moto_hours).label("moto_hours"),
                 func.count(ShiftDataReconciliation.id).label("shifts_count"),
             )
-            .join(ShiftTask, ShiftDataReconciliation.shift_task_id == ShiftTask.id)
+            .select_from(Vehicle)
+            .join(ShiftTask, ShiftTask.vehicle_id == Vehicle.id)
+            .join(ShiftDataReconciliation, ShiftDataReconciliation.shift_task_id == ShiftTask.id)
             .filter(
                 ShiftDataReconciliation.company_id == company_id,
                 ShiftTask.shift_date >= period_start,
