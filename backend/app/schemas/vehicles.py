@@ -111,6 +111,24 @@ class VehicleBase(BaseModel):
         description="ID компании",
         examples=[1],
     )
+    # 🆕 Поля для маркетплейса
+    is_available_for_rent: bool = Field(
+        False,
+        description="Доступна ли техника для аренды на маркетплейсе",
+        examples=[True],
+    )
+    hourly_rate: Decimal | None = Field(
+        None,
+        ge=0,
+        description="Почасовая ставка аренды (₽/час)",
+        examples=[Decimal("2500.00")],
+    )
+    shift_rate: Decimal | None = Field(
+        None,
+        ge=0,
+        description="Посменная ставка аренды (₽/смена)",
+        examples=[Decimal("20000.00")],
+    )
 
 
 class VehicleCreate(VehicleBase):
@@ -139,6 +157,10 @@ class VehicleUpdate(BaseModel):
     attributes: dict[str, Any] | None = None
     owner_id: int | None = None
     company_id: int | None = None
+    # 🆕 Поля для маркетплейса
+    is_available_for_rent: bool | None = None
+    hourly_rate: Decimal | None = Field(None, ge=0)
+    shift_rate: Decimal | None = Field(None, ge=0)
 
 
 class AttributeValueRead(BaseModel):

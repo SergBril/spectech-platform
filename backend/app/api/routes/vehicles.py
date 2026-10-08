@@ -331,6 +331,73 @@ def get_vehicle(
 
     return _enrich_vehicle(vehicle)
 
+# ============================================================
+# PATCH /vehicles/{id} — частичное обновление техники
+# ============================================================
+@router.patch(
+    "/{vehicle_id}",
+    response_model=VehicleRead,
+    summary="Частичное обновление техники",
+    description="Обновляет отдельные поля техники (например, is_available_for_rent).",
+)
+def update_vehicle_partial(
+    vehicle_id: int,
+    payload: VehicleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+    _: None = Depends(require_permission("vehicles", "update")),
+):
+    """Частичное обновление техники (только своей компании)."""
+    vehicle = db.get(Vehicle, vehicle_id)
+
+    if not vehicle or vehicle.is_deleted or vehicle.company_id != company_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Техника не найдена",
+        )
+
+    update_data = payload.model_dump(exclude_unset=True, exclude={"attributes"})
+
+    # Проверка уникальности id_value
+    if "id_value" in update_data and update_data["id_value"] != vehicle.id_value:
+        existing = db.scalar(
+            select(Vehicle).where(
+                Vehicle.id_value == update_data["id_value"],
+                Vehicle.company_id == company_id,
+                Vehicle.id != vehicle_id,
+            )
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Техника с id_value '{update_data['id_value']}' уже существует",
+            )
+
+    # Обновление подкатегории
+    subcategory_id = update_data.pop("subcategory_id", None)
+    if subcategory_id:
+        sub = db.get(Category, subcategory_id)
+        if not sub or sub.level != 2:
+            raise HTTPException(
+                status_code=400,
+                detail="Некорректная подкатегория",
+            )
+        update_data["category_id"] = sub.parent_id
+
+    for field, value in update_data.items():
+        setattr(vehicle, field, value)
+
+    # Обновление атрибутов (если пришли)
+    if payload.attributes is not None and subcategory_id:
+        _clear_vehicle_attributes(db, vehicle.id)
+        _save_vehicle_attributes(db, vehicle.id, subcategory_id, payload.attributes)
+
+    db.commit()
+
+    vehicle = _load_vehicle_with_relations(db, vehicle_id)
+    return _enrich_vehicle(vehicle)
+
 
 # ============================================================
 # PUT /vehicles/{id} — обновить технику
