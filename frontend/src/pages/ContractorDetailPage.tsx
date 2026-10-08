@@ -41,10 +41,12 @@ export const ContractorDetailPage: React.FC = () => {
   const { hasPermission } = useAuth();
 
   const [contractor, setContractor] = useState<Contractor | null>(null);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [acts, setActs] = useState<Act[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [acts, setActs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [history, setHistory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'invoices' | 'acts'>('invoices');
+  const [finance, setFinance] = useState<any>(null);
 
   const canCreateFinance = hasPermission('finance', 'create');
 
