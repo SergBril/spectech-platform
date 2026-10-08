@@ -45,43 +45,41 @@ export const DashboardPage: React.FC = () => {
   const activeVehicles = vehicles.filter((v) => v.status === 'free' || (v.status as string) === 'working').length;
   const pendingRequests = requests.filter((r) => r.status === 'new' || r.status === 'processing').length;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Layout />
+if (loading) {
+  return (
+    <Layout>
+      <div className="space-y-8">
+        <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-lg p-6 animate-pulse">
+          <div className="w-64 h-8 bg-blue-400 rounded mb-2 opacity-50" />
+          <div className="w-96 h-5 bg-blue-400 rounded opacity-50" />
+        </div>
 
-        <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-lg p-6 animate-pulse">
-            <div className="w-64 h-8 bg-blue-400 rounded mb-2 opacity-50" />
-            <div className="w-96 h-5 bg-blue-400 rounded opacity-50" />
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <MetricCardSkeleton />
-            <MetricCardSkeleton />
-            <MetricCardSkeleton />
-            <MetricCardSkeleton />
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ChartSkeleton />
+          <ChartSkeleton />
+        </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ChartSkeleton />
-            <ChartSkeleton />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <ChartSkeleton height={250} />
           </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-              <ChartSkeleton height={250} />
-            </div>
-            <div className="space-y-6">
-              <ChartSkeleton height={100} />
-              <ChartSkeleton height={80} />
-              <ChartSkeleton height={80} />
-            </div>
+          <div className="space-y-6">
+            <ChartSkeleton height={100} />
+            <ChartSkeleton height={80} />
+            <ChartSkeleton height={80} />
           </div>
-        </main>
+        </div>
       </div>
-    );
-  }
+    </Layout>
+  );
+}
 
   return (
     <Layout>
