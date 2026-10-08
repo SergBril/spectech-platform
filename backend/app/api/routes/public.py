@@ -501,6 +501,83 @@ def create_request_from_listing(
         logger.exception("❌ Error in create_request_from_listing: %s", e)
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
+# === Endpoints: Рейтинг и отзывы компании ===
+
+
+@router.get("/companies/{company_id}/rating")
+def get_public_company_rating(
+    company_id: int,
+    db: Session = Depends(get_db),
+):
+    """🌐 Рейтинг компании (средний балл и количество отзывов)."""
+    try:
+        company = db.get(Company, company_id)
+        if not company or not company.is_active:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # TODO: когда будет таблица Review - заменить на реальный подсчёт
+        # Сейчас возвращаем захардкоженные значения из PublicCompanyRead
+        return {
+            "average_rating": 4.5,  # Заглушка
+            "total_reviews": 10,    # Заглушка
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("❌ Error in get_public_company_rating: %s", e)
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@router.get("/companies/{company_id}/reviews")
+def get_public_company_reviews(
+    company_id: int,
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """🌐 Отзывы о компании."""
+    try:
+        company = db.get(Company, company_id)
+        if not company or not company.is_active:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # TODO: когда будет таблица Review - заменить на реальные отзывы
+        # Сейчас возвращаем мок-данные для демонстрации
+        mock_reviews = [
+            {
+                "id": 1,
+                "rating": 5,
+                "comment": "Отличная компания! Техника в хорошем состоянии, операторы профессионалы. Доставили вовремя, всё работает как часы. Рекомендую!",
+                "reviewer_contractor_name": "ООО \"СтройМонтаж\"",
+                "reviewer_name": "Иван Петров",
+                "created_at": "2026-09-15T10:30:00+00:00",
+            },
+            {
+                "id": 2,
+                "rating": 4,
+                "comment": "Хороший сервис, адекватные цены. Единственный минус - немного задержали доставку, но в целом довольны сотрудничеством.",
+                "reviewer_contractor_name": "ИП Сидоров А.В.",
+                "reviewer_name": "Алексей Сидоров",
+                "created_at": "2026-08-22T14:15:00+00:00",
+            },
+            {
+                "id": 3,
+                "rating": 5,
+                "comment": "Работаем уже второй год. Всегда есть нужная техника в наличии, гибкие условия оплаты. Менеджеры на связи 24/7.",
+                "reviewer_contractor_name": "АО \"МегаСтрой\"",
+                "reviewer_name": "Ольга Козлова",
+                "created_at": "2026-07-10T09:45:00+00:00",
+            },
+        ]
+
+        return mock_reviews[:limit]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("❌ Error in get_public_company_reviews: %s", e)
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
 
 # === Endpoints: Категории техники ===
 
