@@ -25,6 +25,7 @@ router = APIRouter()
 @router.get("", response_model=list[InvoiceRead])
 def list_invoices(
     status_filter: str | None = Query(default=None, alias="status"),
+    contractor_id: int | None = Query(default=None, description="Фильтр по контрагенту (client_id)"),  # 🆕
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -34,12 +35,16 @@ def list_invoices(
     """Список счетов (только своей компании)."""
     stmt = (
         select(Invoice)
-        .where(Invoice.company_id == company_id)  # 🆕
+        .where(Invoice.company_id == company_id)
         .options(joinedload(Invoice.items))
     )
 
     if status_filter:
         stmt = stmt.where(Invoice.status == status_filter)
+
+    # 🆕 Фильтр по контрагенту
+    if contractor_id is not None:
+        stmt = stmt.where(Invoice.client_id == contractor_id)
 
     stmt = stmt.order_by(Invoice.created_at.desc()).offset(offset).limit(limit)
     return db.scalars(stmt).unique().all()
