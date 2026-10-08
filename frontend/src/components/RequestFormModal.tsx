@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type {
   Request,
   RequestCreate,
@@ -8,11 +8,20 @@ import type {
   SourceChannel,
   Priority,
 } from '../api/requests';
+import apiClient from '../api/client';
+
+interface Contractor {
+  id: number;
+  name: string;
+  type: string;
+}
 
 interface Props {
   request: Request | null;
   onClose: () => void;
   onSave: (data: RequestCreate) => Promise<void>;
+  vehicleId?: number;
+  vehicleName?: string;
 }
 
 const REQUEST_TYPES: { value: RequestType; label: string }[] = [
@@ -62,22 +71,107 @@ const toLocalDatetime = (iso: string | null | undefined) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) => {
+export const RequestFormModal: React.FC<Props> = ({
+  request,
+  onClose,
+  onSave,
+  vehicleId,
+  vehicleName,
+}) => {
   const [workType, setWorkType] = useState(request?.work_type || '');
   const [objectAddress, setObjectAddress] = useState(request?.object_address || '');
   const [requestType, setRequestType] = useState<RequestType>(request?.request_type || 'one_time');
   const [plannedStart, setPlannedStart] = useState(toLocalDatetime(request?.planned_start));
   const [plannedEnd, setPlannedEnd] = useState(toLocalDatetime(request?.planned_end));
-  const [shiftDuration, setShiftDuration] = useState(request?.shift_duration_hours?.toString() || '');
+  const [shiftDuration, setShiftDuration] = useState(request?.shift_duration_hours?.toString() || '8');
   const [clientRate, setClientRate] = useState(request?.client_rate?.toString() || '');
   const [rateType, setRateType] = useState<RateType>((request?.rate_type as RateType) || 'hourly');
   const [estimatedAmount, setEstimatedAmount] = useState(request?.estimated_amount?.toString() || '');
-  const [sourceChannel, setSourceChannel] = useState<SourceChannel>((request?.source_channel as SourceChannel) || 'phone');
+  const [sourceChannel, setSourceChannel] = useState<SourceChannel>((request?.source_channel as SourceChannel) || (vehicleId ? 'web' : 'phone'));
   const [priority, setPriority] = useState<Priority>((request?.priority as Priority) || 'normal');
   const [status, setStatus] = useState<RequestStatus>(request?.status || 'new');
   const [comment, setComment] = useState(request?.comment || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // 🆕 Автоматически определяем client_id
+  const [myContractorId, setMyContractorId] = useState<number | null>(null);
+  const [loadingContractor, setLoadingContractor] = useState(true);
+
+  // 🆕 Загружаем contractor_id текущего пользователя
+  useEffect(() => {
+    const loadMyContractor = async () => {
+      try {
+        // Пробуем получить свой contractor
+        const res = await apiClient.get('/contractors/me');
+        if (res.data?.id) {
+          setMyContractorId(res.data.id);
+        }
+      } catch (e) {
+        // Fallback: получаем список и берём первый client
+        try {
+          const res = await apiClient.get('/contractors?type=client&limit=1');
+          const contractors = Array.isArray(res.data) ? res.data : res.data?.items || [];
+          if (contractors.length > 0) {
+            setMyContractorId(contractors[0].id);
+          }
+        } catch (err) {
+          console.warn('Failed to load contractor:', err);
+        }
+      } finally {
+        setLoadingContractor(false);
+      }
+    };
+
+    loadMyContractor();
+  }, []);
+
+  // 🆕 АВТО-РАСЧЁТ суммы: часы × ставка
+  useEffect(() => {
+    const hours = parseFloat(shiftDuration) || 0;
+    const rate = parseFloat(clientRate) || 0;
+
+    if (hours > 0 && rate > 0 && !request) {
+      let total = 0;
+
+      switch (rateType) {
+        case 'hourly':
+          total = hours * rate;
+          break;
+        case 'daily':
+        case 'shift':
+          // Смена = 8 часов по умолчанию
+          total = rate;
+          break;
+        case 'fixed':
+          total = rate;
+          break;
+      }
+
+      if (total > 0) {
+        setEstimatedAmount(total.toString());
+      }
+    }
+  }, [shiftDuration, clientRate, rateType, request]);
+
+  // Если передано vehicleId — подставляем ставку техники как дефолт
+  useEffect(() => {
+    if (vehicleId && !request && !clientRate) {
+      // Загружаем информацию о технике для автозаполнения ставки
+      apiClient.get(`/public/vehicles/${vehicleId}`)
+        .then(res => {
+          const vehicle = res.data;
+          if (vehicle.hourly_rate && !clientRate) {
+            setClientRate(vehicle.hourly_rate.toString());
+            setRateType('hourly');
+          } else if (vehicle.shift_rate && !clientRate) {
+            setClientRate(vehicle.shift_rate.toString());
+            setRateType('shift');
+          }
+        })
+        .catch(() => {});
+    }
+  }, [vehicleId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,6 +190,12 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
       return;
     }
 
+    // 🆕 Проверяем наличие client_id
+    if (!myContractorId) {
+      setError('Не удалось определить вашу компанию. Обратитесь к администратору.');
+      return;
+    }
+
     setSaving(true);
     try {
       const payload: any = {
@@ -108,7 +208,13 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
         source_channel: sourceChannel,
         priority: priority,
         comment: comment.trim() || undefined,
+        client_id: myContractorId, // 🆕 ОБЯЗАТЕЛЬНОЕ поле
       };
+
+      // 🆕 Добавляем vehicle_id для заявок с маркетплейса
+      if (vehicleId) {
+        payload.vehicle_id = vehicleId;
+      }
 
       if (shiftDuration) payload.shift_duration_hours = parseFloat(shiftDuration);
       if (clientRate) payload.client_rate = parseFloat(clientRate);
@@ -119,8 +225,10 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
       }
 
       await onSave(payload);
-    } catch (err) {
+    } catch (err: any) {
       setSaving(false);
+      const msg = err.response?.data?.detail || err.response?.data?.message || 'Ошибка при сохранении';
+      setError(msg);
     }
   };
 
@@ -134,6 +242,21 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
             </h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
           </div>
+
+          {/* 🆕 Выбранная техника */}
+          {vehicleId && vehicleName && (
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-xs text-blue-600 uppercase font-semibold mb-1">Выбранная техника</p>
+              <p className="text-lg font-bold text-gray-900">🚜 {vehicleName}</p>
+            </div>
+          )}
+
+          {/* 🆕 Индикатор загрузки contractor */}
+          {loadingContractor && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+              ⏳ Определение вашей компании...
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
@@ -218,7 +341,7 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Длительность смены (ч)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Длительность (ч)</label>
                 <input
                   type="number"
                   step="0.5"
@@ -230,7 +353,7 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ставка клиента</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ставка (₽)</label>
                 <input
                   type="number"
                   step="100"
@@ -256,14 +379,21 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ожидаемая сумма (₽)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ожидаемая сумма (₽)
+                <span className="text-xs text-gray-500 ml-2">
+                  {parseFloat(shiftDuration) > 0 && parseFloat(clientRate) > 0 && (
+                    <span className="text-blue-600">✨ авторасчёт</span>
+                  )}
+                </span>
+              </label>
               <input
                 type="number"
                 step="100"
                 min="0"
                 value={estimatedAmount}
                 onChange={(e) => setEstimatedAmount(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
                 placeholder="40000"
               />
             </div>
@@ -320,9 +450,9 @@ export const RequestFormModal: React.FC<Props> = ({ request, onClose, onSave }) 
               <button
                 type="submit"
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                disabled={saving}
+                disabled={saving || loadingContractor}
               >
-                {saving ? 'Сохранение...' : (request ? 'Сохранить' : 'Создать')}
+                {saving ? 'Сохранение...' : (request ? 'Сохранить' : 'Создать заявку')}
               </button>
             </div>
           </form>

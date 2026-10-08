@@ -7,7 +7,7 @@ import { financeApi, type PaymentsDashboard } from '../api/finance';
 import { RevenueChart, StatusPieChart, TopRequestsChart, Sparkline } from '../components/AnalyticsCharts';
 import { MetricCardSkeleton, ChartSkeleton } from '../components/Skeleton';
 import NotificationBell from '../components/NotificationBell';
-import Navbar from '../components/Navbar';
+import Layout from '../components/Layout';
 import DashboardWidgets from '../components/DashboardWidgets';
 
 export const DashboardPage: React.FC = () => {
@@ -48,9 +48,9 @@ export const DashboardPage: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Navbar />
+        <Layout />
 
-        <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 space-y-8">
+        <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-lg p-6 animate-pulse">
             <div className="w-64 h-8 bg-blue-400 rounded mb-2 opacity-50" />
             <div className="w-96 h-5 bg-blue-400 rounded opacity-50" />
@@ -84,11 +84,8 @@ export const DashboardPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* === NAVBAR === */}
-      <Navbar />
-
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 space-y-8">
+    <Layout>
+      <div className="space-y-8">
         {/* === ПРИВЕТСТВИЕ === */}
         <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-lg p-6 text-white">
           <h2 className="text-2xl font-bold mb-2">Добро пожаловать, {user?.email?.split('@')[0]}!</h2>
@@ -97,6 +94,7 @@ export const DashboardPage: React.FC = () => {
 
         {/* === КЛЮЧЕВЫЕ МЕТРИКИ === */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* ... все ваши метрики без изменений ... */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -107,7 +105,6 @@ export const DashboardPage: React.FC = () => {
               <span className="text-4xl">🚜</span>
             </div>
           </div>
-
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -118,7 +115,6 @@ export const DashboardPage: React.FC = () => {
               <span className="text-4xl">📋</span>
             </div>
           </div>
-
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -131,7 +127,6 @@ export const DashboardPage: React.FC = () => {
               <span className="text-4xl">💰</span>
             </div>
           </div>
-
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -146,10 +141,10 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* === ФИНАНСОВО-ОПЕРАЦИОННЫЕ ВИДЖЕТЫ (Sprint 5A Task 4) === */}
+        {/* === ФИНАНСОВО-ОПЕРАЦИОННЫЕ ВИДЖЕТЫ === */}
         <DashboardWidgets />
 
-        {/* === ГРАФИКИ АНАЛИТИКИ (2 колонки) === */}
+        {/* === ГРАФИКИ АНАЛИТИКИ === */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <RevenueChart />
           <StatusPieChart />
@@ -189,38 +184,22 @@ export const DashboardPage: React.FC = () => {
         <div>
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Быстрые действия</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <button
-              onClick={() => navigate('/vehicles')}
-              className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow text-left"
-            >
+            <button onClick={() => navigate('/vehicles')} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow text-left">
               <span className="text-4xl">🚜</span>
               <h4 className="mt-3 text-lg font-semibold text-gray-900">Управление техникой</h4>
               <p className="text-sm text-gray-600">Просмотр и редактирование</p>
             </button>
-
-            <button
-              onClick={() => navigate('/requests')}
-              className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow text-left"
-            >
+            <button onClick={() => navigate('/requests')} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow text-left">
               <span className="text-4xl">📋</span>
               <h4 className="mt-3 text-lg font-semibold text-gray-900">Заявки</h4>
               <p className="text-sm text-gray-600">Управление заявками</p>
             </button>
-
-            <button
-              onClick={() => navigate('/finance')}
-              className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow text-left"
-            >
+            <button onClick={() => navigate('/finance')} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow text-left">
               <span className="text-4xl">💰</span>
               <h4 className="mt-3 text-lg font-semibold text-gray-900">Финансы</h4>
               <p className="text-sm text-gray-600">Счета, акты, выплаты</p>
             </button>
-
-            {/* 🆕 НОВАЯ КНОПКА: Контрагенты */}
-            <button
-              onClick={() => navigate('/contractors')}
-              className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow text-left"
-            >
+            <button onClick={() => navigate('/contractors')} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow text-left">
               <span className="text-4xl">👥</span>
               <h4 className="mt-3 text-lg font-semibold text-gray-900">Контрагенты</h4>
               <p className="text-sm text-gray-600">Клиенты и партнёры</p>
@@ -246,8 +225,8 @@ export const DashboardPage: React.FC = () => {
             </div>
           </dl>
         </div>
-      </main>
-    </div>
+      </div>
+    </Layout>
   );
 };
 
