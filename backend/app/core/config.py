@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     )
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     access_token_expire_minutes: int = Field(
-        default=60 * 24, alias="ACCESS_TOKEN_EXPIRE_MINUTES"
+        default=1440, alias="ACCESS_TOKEN_EXPIRE_MINUTES"
     )
     refresh_token_expire_days: int = Field(
         default=30, alias="REFRESH_TOKEN_EXPIRE_DAYS"
@@ -85,6 +85,12 @@ class Settings(BaseSettings):
     sentry_dsn: str | None = None
 
     # === Telegram Notifications (опционально) ===
+
+    TELEGRAM_PROXY_URL: str = Field(
+        default="",
+        description="Прокси для Telegram API (socks5://user:pass@host:port или http://...)",
+    )
+
     TELEGRAM_ENABLED: bool = Field(
         default=False,
         description="Включить Telegram уведомления (может не работать в РФ без прокси)",

@@ -48,57 +48,59 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (originalRequest?.responseType === 'blob') {
-      return Promise.reject(error);
-    }
-
+    // Если 401 и это не повторная попытка
     if (error.response?.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return apiClient(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
-      }
-
       originalRequest._retry = true;
-      isRefreshing = true;
-
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (!refreshToken) {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
-        return Promise.reject(error);
-      }
 
       try {
+        const refreshToken = localStorage.getItem('refresh_token');
+        
+        if (!refreshToken) {
+          console.warn('No refresh token, redirecting to login');
+          localStorage.removeItem('access_token');
+          window.location.href = '/login';
+          return Promise.reject(error);
+        }
+
+        console.log('🔄 Attempting to refresh token...');
+        
+        // Попытка обновить токен
         const response = await axios.post(
           `${API_BASE_URL}/auth/refresh`,
           { refresh_token: refreshToken }
         );
-        const { access_token } = response.data;
+
+        const { access_token, refresh_token: newRefreshToken } = response.data;
+        
         localStorage.setItem('access_token', access_token);
+        if (newRefreshToken) {
+          localStorage.setItem('refresh_token', newRefreshToken);
+        }
+        
+        console.log('✅ Token refreshed successfully');
+
+        // Повторяем оригинальный запрос с новым токеном
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
-        processQueue(null, access_token);
         return apiClient(originalRequest);
-      } catch (refreshError) {
-        processQueue(refreshError, null);
+        
+      } catch (refreshError: any) {
+        console.error('❌ Refresh token failed:', refreshError.response?.data || refreshError.message);
+        
+        // Refresh не сработал — выходим
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
+        
+        showToast.error('Сессия истекла. Войдите снова.');
+        
+        // Небольшая задержка перед редиректом, чтобы показать ошибку
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 1500);
+        
         return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
       }
     }
 
-    const errorMessage =
-      error.response?.data?.detail || error.message || 'Произошла ошибка';
-    console.error('API Error:', errorMessage);
     return Promise.reject(error);
   }
 );
