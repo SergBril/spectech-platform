@@ -6,13 +6,16 @@ import apiClient from '../api/client';
 interface Company {
   id: number;
   name: string;
+  legal_name?: string;
   description: string | null;
   city: string | null;
   phone: string | null;
-  email: string | null;
+  email?: string | null;
   website: string | null;
-  rating: number;
-  total_reviews: number;
+  logo_url?: string | null;
+  rating: number | null;
+  total_reviews?: number;
+  total_deals?: number;
   vehicles_count: number;
   is_verified: boolean;
   created_at: string;
@@ -41,7 +44,7 @@ interface Review {
 export const CompanyProfilePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  
+
   const [company, setCompany] = useState<Company | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -54,7 +57,7 @@ export const CompanyProfilePage: React.FC = () => {
 
   const fetchCompanyData = async () => {
     try {
-      console.log('🔍 Fetching company:', id);
+      // Параллельно загружаем все данные
       const [companyRes, ratingRes, vehiclesRes, reviewsRes] = await Promise.allSettled([
         apiClient.get(`/public/companies/${id}`),
         apiClient.get(`/public/companies/${id}/rating`),
@@ -62,35 +65,38 @@ export const CompanyProfilePage: React.FC = () => {
         apiClient.get(`/public/companies/${id}/reviews?limit=20`),
       ]);
 
-      console.log('📦 Responses:', { companyRes, ratingRes, vehiclesRes, reviewsRes });
-
-      // Основная информация
+      // Основная информация о компании
       if (companyRes.status === 'fulfilled') {
-        console.log('✅ Company data:', companyRes.value);
-        setCompany(companyRes.value);
-      } else {
-        console.error('❌ Company fetch failed:', companyRes.reason);
+        setCompany(companyRes.value.data);
       }
 
-      // Рейтинг (дополняет основную информацию)
-      if (ratingRes.status === 'fulfilled' && company) {
-        setCompany((prev) => prev ? { ...prev, ...ratingRes.data } : null);
+      // Рейтинг (дополняет company)
+      if (ratingRes.status === 'fulfilled') {
+        const ratingData = ratingRes.value.data;
+        setCompany((prev) =>
+          prev
+            ? {
+                ...prev,
+                rating: ratingData.average_rating ?? prev.rating,
+                total_reviews: ratingData.total_reviews ?? prev.total_reviews ?? 0,
+              }
+            : null
+        );
       }
 
       // Техника компании
       if (vehiclesRes.status === 'fulfilled') {
-        const data = vehiclesRes.data;
-        setVehicles(Array.isArray(data) ? data : data?.items || []);
+        const data = vehiclesRes.value.data;
+        setVehicles(Array.isArray(data) ? data : []);
       }
 
       // Отзывы
       if (reviewsRes.status === 'fulfilled') {
-        const data = reviewsRes.data;
-        setReviews(Array.isArray(data) ? data : data?.items || []);
+        const data = reviewsRes.value.data;
+        setReviews(Array.isArray(data) ? data : []);
       }
     } catch (error) {
       console.error('Error fetching company data:', error);
-      navigate('/marketplace');
     } finally {
       setLoading(false);
     }
@@ -119,7 +125,7 @@ export const CompanyProfilePage: React.FC = () => {
       {[1, 2, 3, 4, 5].map((star) => (
         <span
           key={star}
-          className={star <= Math.round(rating) ? 'text-yellow-400' : 'text-gray-300'}
+          className={`text-lg ${star <= Math.round(rating) ? 'text-yellow-400' : 'text-gray-300'}`}
         >
           ★
         </span>
@@ -153,6 +159,9 @@ export const CompanyProfilePage: React.FC = () => {
     );
   }
 
+  const rating = company.rating ?? 0;
+  const totalReviews = company.total_reviews ?? reviews.length;
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -174,7 +183,7 @@ export const CompanyProfilePage: React.FC = () => {
               <div className="flex items-start space-x-3 mb-4">
                 <span className="text-5xl">🏢</span>
                 <div className="flex-1">
-                  <div className="flex items-center space-x-2 mb-1">
+                  <div className="flex items-center space-x-2 mb-1 flex-wrap">
                     <h1 className="text-3xl font-bold text-gray-900">{company.name}</h1>
                     {company.is_verified && (
                       <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
@@ -182,14 +191,14 @@ export const CompanyProfilePage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center space-x-4 text-sm">
+                  <div className="flex items-center space-x-4 text-sm flex-wrap gap-y-2">
                     <div className="flex items-center space-x-1">
                       <span className="text-yellow-500 text-lg">⭐</span>
                       <span className="font-bold text-lg text-gray-900">
-                        {company.rating?.toFixed(1) || '—'}
+                        {rating > 0 ? rating.toFixed(1) : '—'}
                       </span>
                       <span className="text-gray-500">
-                        ({company.total_reviews || 0} отзывов)
+                        ({totalReviews} {totalReviews === 1 ? 'отзыв' : totalReviews < 5 ? 'отзыва' : 'отзывов'})
                       </span>
                     </div>
                     {company.city && (
@@ -239,16 +248,19 @@ export const CompanyProfilePage: React.FC = () => {
                     className="flex items-center text-gray-700 hover:text-blue-600"
                   >
                     <span className="mr-2">🌐</span>
-                    {company.website}
+                    {company.website.replace(/^https?:\/\//, '')}
                   </a>
                 )}
               </div>
 
               <button
-                onClick={() => navigate('/marketplace')}
+                onClick={() => {
+                  setActiveTab('vehicles');
+                  window.scrollTo({ top: 400, behavior: 'smooth' });
+                }}
                 className="mt-4 w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 font-medium text-sm"
               >
-                Посмотреть технику
+                🚜 Посмотреть технику ({vehicles.length})
               </button>
             </div>
           </div>
@@ -264,13 +276,13 @@ export const CompanyProfilePage: React.FC = () => {
           </div>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-center">
             <div className="text-3xl font-bold text-green-600 mb-1">
-              {company.rating?.toFixed(1) || '—'}
+              {rating > 0 ? rating.toFixed(1) : '—'}
             </div>
             <div className="text-sm text-gray-600">Средний рейтинг</div>
           </div>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-center">
             <div className="text-3xl font-bold text-yellow-600 mb-1">
-              {company.total_reviews || 0}
+              {totalReviews}
             </div>
             <div className="text-sm text-gray-600">Отзывов</div>
           </div>
@@ -281,7 +293,7 @@ export const CompanyProfilePage: React.FC = () => {
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab('vehicles')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'vehicles'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -291,13 +303,13 @@ export const CompanyProfilePage: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveTab('reviews')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'reviews'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              ⭐ Отзывы ({reviews.length})
+              ⭐ Отзывы ({totalReviews})
             </button>
           </nav>
         </div>
@@ -384,6 +396,7 @@ export const CompanyProfilePage: React.FC = () => {
             {reviews.length === 0 && (
               <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
                 <p className="text-gray-500 text-lg">Пока нет отзывов</p>
+                <p className="text-sm text-gray-400 mt-2">Будьте первым, кто оставит отзыв о компании</p>
               </div>
             )}
           </div>
