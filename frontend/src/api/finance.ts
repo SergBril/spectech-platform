@@ -224,7 +224,7 @@ export interface FinanceDashboardV2 {
 
 export const financeApi = {
   // === Invoices ===
-  async getInvoices(params?: { status?: InvoiceStatus; limit?: number; offset?: number }): Promise<Invoice[]> {
+  async getInvoices(params?: { status?: InvoiceStatus; limit?: number; offset?: number; contractor_id?: number; }): Promise<Invoice[]> {
     const response = await apiClient.get<Invoice[]>('/invoices', { params });
     return response.data;
   },
@@ -308,13 +308,28 @@ export const financeApi = {
   },
 
   // === Acts ===
-  async getActs(params?: { status?: ActStatus; limit?: number; offset?: number }): Promise<Act[]> {
+  async getActs(params?: { status?: ActStatus; limit?: number; offset?: number; contractor_id?: number; }): Promise<Act[]> {
     const response = await apiClient.get<Act[]>('/acts', { params });
     return response.data;
   },
 
   async getAct(id: number): Promise<Act> {
     const response = await apiClient.get<Act>(`/acts/${id}`);
+    return response.data;
+  },
+
+  async getContractorSummary(contractorId: number): Promise<{
+    contractor_id: number;
+    contractor_name: string;
+    total_invoices: number;
+    total_invoices_amount: number;
+    paid_amount: number;
+    unpaid_amount: number;
+    payment_percentage: number;
+    total_acts: number;
+    total_acts_amount: number;
+  }> {
+    const response = await apiClient.get(`/finance/contractors/${contractorId}/summary`);
     return response.data;
   },
 

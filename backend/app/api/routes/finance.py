@@ -2,7 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
-
+from app.models.contractor import Contractor
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import func, select
@@ -14,7 +14,7 @@ from app.models.auth import User
 from app.models.catalog import Vehicle
 from app.models.contractor import Contractor
 from app.models.dispatch import Request
-from app.models.finance import DocumentStatus, Invoice, Payout
+from app.models.finance import Act, DocumentStatus, Invoice, Payout
 from app.models.shift import ShiftTask
 from app.models.telematics import ShiftDataReconciliation
 from app.schemas.finance import (
@@ -367,7 +367,6 @@ def get_payouts_summary(
     company_id: int = Depends(get_current_company_id),
 ):
     """Сводка по выплатам за период."""
-    from sqlalchemy import func
 
     total_count = (
         db.query(func.count(Payout.id))
@@ -642,6 +641,75 @@ def get_reconciliation_stats(
             stats[status] += 1
 
     return stats
+
+# ============================================================
+# GET /finance/contractors/{contractor_id}/summary
+# ============================================================
+@router.get("/contractors/{contractor_id}/summary")
+def get_contractor_finance_summary(
+    contractor_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    💰 Финансовая сводка по контрагенту.
+    
+    Возвращает:
+    - Количество счетов и актов
+    - Общие суммы (счета, оплачено, задолженность)
+    - Процент оплаты
+    """
+    
+    # Проверяем существование контрагента
+    contractor = db.get(Contractor, contractor_id)
+    if not contractor or contractor.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Contractor not found")
+    
+    # === Счета ===
+    invoices_stats = db.query(
+        func.count(Invoice.id),
+        func.coalesce(func.sum(Invoice.total), 0),
+        func.coalesce(func.sum(Invoice.paid_amount), 0),
+    ).filter(
+        Invoice.company_id == company_id,
+        Invoice.client_id == contractor_id,
+        Invoice.status != DocumentStatus.cancelled,
+    ).one()
+    
+    total_invoices = invoices_stats[0] or 0
+    total_invoices_amount = float(invoices_stats[1] or 0)
+    paid_amount = float(invoices_stats[2] or 0)
+    unpaid_amount = total_invoices_amount - paid_amount
+    payment_percentage = (
+        round(paid_amount / total_invoices_amount * 100, 2)
+        if total_invoices_amount > 0
+        else 0.0
+    )
+    
+    # === Акты ===
+    acts_stats = db.query(
+        func.count(Act.id),
+        func.coalesce(func.sum(Act.total_amount), 0),
+    ).filter(
+        Act.company_id == company_id,
+        Act.client_id == contractor_id,
+    ).one()
+    
+    total_acts = acts_stats[0] or 0
+    total_acts_amount = float(acts_stats[1] or 0)
+    
+    return {
+        "contractor_id": contractor_id,
+        "contractor_name": contractor.name,
+        "total_invoices": total_invoices,
+        "total_invoices_amount": total_invoices_amount,
+        "paid_amount": paid_amount,
+        "unpaid_amount": unpaid_amount,
+        "payment_percentage": payment_percentage,
+        "total_acts": total_acts,
+        "total_acts_amount": total_acts_amount,
+    }
 
 
 @router.get("/reconciliations/{reconciliation_id}")
