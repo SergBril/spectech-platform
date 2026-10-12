@@ -443,4 +443,35 @@ export const financeApi = {
     });
     return res.data;
   },
+
+  // === BANK STATEMENTS ===
+  uploadBankStatement: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await apiClient.post('/banking/bank-statements', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+
+  getBankStatements: async (limit = 50, offset = 0) => {
+    const res = await apiClient.get('/banking/bank-statements', {
+      params: { limit, offset },
+    });
+    return res.data;
+  },
+
+  getUnmatchedPayments: async (limit = 50, offset = 0) => {
+    const res = await apiClient.get('/banking/payments/unmatched', {
+      params: { limit, offset },
+    });
+    return res.data;
+  },
+
+  applyPaymentToInvoice: async (transactionId: number, invoiceId: number, amount?: number) => {
+    const res = await apiClient.post('/banking/payments/apply', null, {
+      params: { transaction_id: transactionId, invoice_id: invoiceId, amount },
+    });
+    return res.data;
+  },
 };
