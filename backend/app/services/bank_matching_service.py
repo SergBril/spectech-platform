@@ -6,7 +6,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 
-from app.models.bank_transaction import BankTransaction, MatchStatus, TransactionType
+from app.models.bank_statement import BankTransaction, MatchStatus, TransactionType
 from app.models.finance import Invoice, Payout, DocumentStatus
 
 logger = logging.getLogger("spectech.bank_matching")
