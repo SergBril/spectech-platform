@@ -416,7 +416,7 @@ export const financeApi = {
   async getPayouts(params?: any): Promise<Payout[]> {
     const response = await apiClient.get('/finance/payouts', { params });
     return response.data;
-  }
+  },
 
   // === Payments ===
   async createPayment(data: PaymentCreate): Promise<Payment> {
