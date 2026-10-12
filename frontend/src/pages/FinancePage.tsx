@@ -14,6 +14,7 @@ import Layout from '../components/Layout';
 import PayoutBatchModal from '../components/PayoutBatchModal';
 import FinancialCharts from '../components/FinancialCharts';
 import { financeApi as financeApiV2, type FinanceDashboardV2 } from '../api/finance';
+import EmptyState from '../components/EmptyState';
 
 const INVOICE_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
@@ -590,10 +591,13 @@ export const FinancePage: React.FC = () => {
                   )}
                 </div>
                 {invoices.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">
-                    <div className="text-5xl mb-4">💰</div>
-                    <p>Счетов пока нет</p>
-                  </div>
+                  <EmptyState
+                    icon="💰"
+                    title="Счетов пока нет"
+                    description="Создайте первый счёт для клиента. Счёт можно отправить по email с PDF-вложением."
+                    actionLabel="+ Создать счёт"
+                    onAction={() => { setEditingInvoice(null); setIsInvoiceFormOpen(true); }}
+                 />
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -680,10 +684,13 @@ export const FinancePage: React.FC = () => {
                   )}
                 </div>
                 {acts.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">
-                    <div className="text-5xl mb-4">📄</div>
-                    <p>Актов пока нет</p>
-                  </div>
+                  <EmptyState
+                    icon="📄"
+                    title="Актов пока нет"
+                    description="Создайте акт выполненных работ. Подпишите онлайн или скачайте PDF для печати."
+                    actionLabel="+ Создать акт"
+                    onAction={() => { setEditingAct(null); setIsActFormOpen(true); }}
+                  />
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -778,11 +785,13 @@ export const FinancePage: React.FC = () => {
                   )}
                 </div>
                 {payouts.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">
-                    <div className="text-5xl mb-4">💸</div>
-                    <p>Выплат пока нет</p>
-                    <p className="text-sm mt-2">Нажмите "Batch создать выплаты" для массового создания</p>
-                  </div>
+                  <EmptyState
+                    icon="💸"
+                    title="Выплат пока нет"
+                    description="Создайте выплаты собственникам за использование техники. Batch-режим позволяет создать сразу несколько выплат."
+                    actionLabel="💰 Batch создать выплаты"
+                    onAction={() => setIsPayoutBatchModalOpen(true)}
+                  />
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
