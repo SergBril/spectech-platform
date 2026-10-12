@@ -186,7 +186,6 @@ export const FinancePage: React.FC = () => {
     }
   };
 
-  // 🆕 Отправить счёт повторно (с PDF вложением)
   const handleResendInvoiceEmail = async (inv: Invoice) => {
     if (!confirm(`Отправить счёт ${inv.document_number} клиенту повторно с PDF вложением?`)) return;
     try {
@@ -208,13 +207,22 @@ export const FinancePage: React.FC = () => {
     }
   };
 
+  // 🆕 Обновлённая функция — поддерживает payout PDF через fetch
   const handleDownloadPdf = async (type: 'invoice' | 'act' | 'payout', id: number, docNumber: string) => {
     try {
       let blob: Blob;
-      if (type === 'invoice') blob = await financeApi.downloadInvoicePdf(id);
-      else if (type === 'act') blob = await financeApi.downloadActPdf(id);
-      else {
-        showToast.warning('PDF для выплат пока не поддерживается');
+      if (type === 'invoice') {
+        blob = await financeApi.downloadInvoicePdf(id);
+      } else if (type === 'act') {
+        blob = await financeApi.downloadActPdf(id);
+      } else if (type === 'payout') {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`/api/v1/finance/payouts/${id}/pdf`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to download payout PDF');
+        blob = await response.blob();
+      } else {
         return;
       }
       downloadBlob(blob, `${docNumber}.pdf`);
@@ -224,7 +232,6 @@ export const FinancePage: React.FC = () => {
     }
   };
 
-  // 🆕 Скачать счёт-фактуру (только для ОСНО с НДС)
   const handleDownloadInvoiceFacture = async (act: Act) => {
     try {
       const blob = await financeApi.downloadInvoiceFacturePdf(act.id);
@@ -240,7 +247,6 @@ export const FinancePage: React.FC = () => {
     }
   };
 
-  // 🆕 Скачать УПД (Универсальный передаточный документ)
   const handleDownloadUpd = async (act: Act) => {
     try {
       const blob = await financeApi.downloadUpdPdf(act.id);
@@ -251,7 +257,6 @@ export const FinancePage: React.FC = () => {
     }
   };
 
-  // 🆕 Скачать ТОРГ-12 (Расходная накладная)
   const handleDownloadTorg12 = async (act: Act) => {
     try {
       const blob = await financeApi.downloadTorg12Pdf(act.id);
@@ -341,7 +346,6 @@ export const FinancePage: React.FC = () => {
     }
   };
 
-  // 🆕 Отправить акт повторно (с PDF вложением)
   const handleResendActEmail = async (act: Act) => {
     if (!confirm(`Отправить акт ${act.document_number} клиенту повторно с PDF вложением?`)) return;
     try {
@@ -371,6 +375,36 @@ export const FinancePage: React.FC = () => {
     }
   };
 
+  // 🆕 Экспорт выплат в CSV
+  const handleExportPayoutsCsv = () => {
+    const token = localStorage.getItem('access_token');
+    const params = new URLSearchParams();
+    if (periodDates.from) params.set('date_from', periodDates.from);
+    if (periodDates.to) params.set('date_to', periodDates.to);
+
+    fetch(`/api/v1/finance/payouts/csv?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to export CSV');
+        return res.blob();
+      })
+      .then((blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `payouts_${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        showToast.success('CSV экспортирован');
+      })
+      .catch((err) => {
+        showToast.error('Ошибка экспорта: ' + err.message);
+      });
+  };
+
   if (!canView) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -388,523 +422,506 @@ export const FinancePage: React.FC = () => {
   if (loading) {
     return (
       <Layout>
-      
-       <div className="px-4 py-6 sm:px-0">
-         <div className="flex justify-between items-center mb-6">
-           <div className="w-40 h-8 bg-gray-200 rounded animate-pulse" />
-           <div className="w-48 h-10 bg-gray-200 rounded animate-pulse" />
-         </div>
-         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-           <MetricCardSkeleton />
-           <MetricCardSkeleton />
-           <MetricCardSkeleton />
-           <MetricCardSkeleton />
-         </div>
-         <div className="bg-white rounded-lg shadow overflow-hidden">
-           <div className="border-b border-gray-200">
-             <div className="flex space-x-2 p-2">
-               {[1, 2, 3].map((i) => (
-                 <div key={i} className="w-32 h-10 bg-gray-100 rounded animate-pulse" />
-               ))}
-             </div>
-           </div>
-           <div className="p-6">
-             <TableSkeleton rows={5} columns={7} />
-           </div>
-         </div>
-       </div>
-     </Layout>
+        <div className="px-4 py-6 sm:px-0">
+          <div className="flex justify-between items-center mb-6">
+            <div className="w-40 h-8 bg-gray-200 rounded animate-pulse" />
+            <div className="w-48 h-10 bg-gray-200 rounded animate-pulse" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+          </div>
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="border-b border-gray-200">
+              <div className="flex space-x-2 p-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="w-32 h-10 bg-gray-100 rounded animate-pulse" />
+                ))}
+              </div>
+            </div>
+            <div className="p-6">
+              <TableSkeleton rows={5} columns={7} />
+            </div>
+          </div>
+        </div>
+      </Layout>
     );
   }
 
   return (
     <Layout>
-      
-     <div className="px-4 py-6 sm:px-0">
-       <div className="flex justify-between items-center mb-6">
-         <h2 className="text-2xl font-bold text-gray-900">Финансы</h2>
-         <button onClick={() => navigate('/invoices')} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-           Управление счетами →
-         </button>
-       </div>
+      <div className="px-4 py-6 sm:px-0">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">Финансы</h2>
+          <button onClick={() => navigate('/invoices')} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+            Управление счетами →
+          </button>
+        </div>
 
-       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">{error}</div>}
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">{error}</div>}
 
-       {/* Period Selector */}
-       <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
-         <div className="flex items-center gap-2">
-           <span className="text-sm font-medium text-gray-700">Период:</span>
-           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-             {[
-               { key: 'month', label: 'Этот месяц' },
-               { key: 'prev_month', label: 'Прошлый месяц' },
-               { key: 'quarter', label: 'Квартал' },
-               { key: 'year', label: 'Год' },
-             ].map((p) => (
-               <button
-                 key={p.key}
-                 onClick={() => setPeriodPreset(p.key as any)}
-                 className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                   periodPreset === p.key
-                     ? 'bg-blue-600 text-white'
-                     : 'text-gray-600 hover:bg-gray-200'
-                 }`}
-               >
-                 {p.label}
-               </button>
-             ))}
-           </div>
-         </div>
-         <div className="text-sm text-gray-500">
-           {new Date(periodDates.from).toLocaleDateString('ru-RU')} — {new Date(periodDates.to).toLocaleDateString('ru-RU')}
-         </div>
-       </div>
+        {/* Period Selector */}
+        <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Период:</span>
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              {[
+                { key: 'month', label: 'Этот месяц' },
+                { key: 'prev_month', label: 'Прошлый месяц' },
+                { key: 'quarter', label: 'Квартал' },
+                { key: 'year', label: 'Год' },
+              ].map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => setPeriodPreset(p.key as any)}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    periodPreset === p.key
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="text-sm text-gray-500">
+            {new Date(periodDates.from).toLocaleDateString('ru-RU')} — {new Date(periodDates.to).toLocaleDateString('ru-RU')}
+          </div>
+        </div>
 
-       {/* Metrics Cards (расширенные) */}
-       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-         <div className="bg-white rounded-lg shadow p-6">
-           <div className="flex items-center justify-between mb-4">
-             <h3 className="text-sm font-medium text-gray-500">Выручка</h3>
-             <span className="text-3xl">💰</span>
-           </div>
-           <div className="text-3xl font-bold text-gray-900 mb-2">
-             {formatMoney(dashboardV2?.revenue.total ?? dashboard?.total_revenue)}
-           </div>
-           <div className="text-sm text-gray-600">
-             Оплачено: {formatMoney(dashboardV2?.revenue.paid ?? dashboard?.total_paid)}
-           </div>
-         </div>
+        {/* Metrics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-500">Выручка</h3>
+              <span className="text-3xl">💰</span>
+            </div>
+            <div className="text-3xl font-bold text-gray-900 mb-2">
+              {formatMoney(dashboardV2?.revenue.total ?? dashboard?.total_revenue)}
+            </div>
+            <div className="text-sm text-gray-600">
+              Оплачено: {formatMoney(dashboardV2?.revenue.paid ?? dashboard?.total_paid)}
+            </div>
+          </div>
 
-         <div className="bg-white rounded-lg shadow p-6">
-           <div className="flex items-center justify-between mb-4">
-             <h3 className="text-sm font-medium text-gray-500">Прибыль</h3>
-             <span className="text-3xl">📈</span>
-           </div>
-           <div className="text-3xl font-bold text-green-600 mb-2">
-             {formatMoney(dashboardV2?.profit.gross ?? 0)}
-           </div>
-           <div className="text-sm text-gray-600">
-             Маржа: <span className="font-semibold text-green-600">{dashboardV2?.profit.margin_percent.toFixed(1) ?? '—'}%</span>
-           </div>
-         </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-500">Прибыль</h3>
+              <span className="text-3xl">📈</span>
+            </div>
+            <div className="text-3xl font-bold text-green-600 mb-2">
+              {formatMoney(dashboardV2?.profit.gross ?? 0)}
+            </div>
+            <div className="text-sm text-gray-600">
+              Маржа: <span className="font-semibold text-green-600">{dashboardV2?.profit.margin_percent.toFixed(1) ?? '—'}%</span>
+            </div>
+          </div>
 
-         <div className="bg-white rounded-lg shadow p-6">
-           <div className="flex items-center justify-between mb-4">
-             <h3 className="text-sm font-medium text-gray-500">Средний чек</h3>
-             <span className="text-3xl">🧾</span>
-           </div>
-           <div className="text-3xl font-bold text-blue-600 mb-2">
-             {formatMoney(dashboardV2?.metrics.avg_invoice ?? 0)}
-           </div>
-           <div className="text-sm text-gray-600">
-             Счетов: {dashboardV2?.metrics.invoices_count ?? dashboard?.invoices_count ?? 0}
-           </div>
-         </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-500">Средний чек</h3>
+              <span className="text-3xl">🧾</span>
+            </div>
+            <div className="text-3xl font-bold text-blue-600 mb-2">
+              {formatMoney(dashboardV2?.metrics.avg_invoice ?? 0)}
+            </div>
+            <div className="text-sm text-gray-600">
+              Счетов: {dashboardV2?.metrics.invoices_count ?? dashboard?.invoices_count ?? 0}
+            </div>
+          </div>
 
-         <div className="bg-white rounded-lg shadow p-6">
-           <div className="flex items-center justify-between mb-4">
-             <h3 className="text-sm font-medium text-gray-500">Моточасы</h3>
-             <span className="text-3xl">⏱️</span>
-           </div>
-           <div className="text-3xl font-bold text-purple-600 mb-2">
-             {(dashboardV2?.metrics.moto_hours_total ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 1 })}
-           </div>
-           <div className="text-sm text-gray-600">
-             Выплат: {dashboardV2?.metrics.payouts_count ?? dashboard?.payouts_count ?? 0}
-           </div>
-         </div>
-       </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-500">Моточасы</h3>
+              <span className="text-3xl">⏱️</span>
+            </div>
+            <div className="text-3xl font-bold text-purple-600 mb-2">
+              {(dashboardV2?.metrics.moto_hours_total ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 1 })}
+            </div>
+            <div className="text-sm text-gray-600">
+              Выплат: {dashboardV2?.metrics.payouts_count ?? dashboard?.payouts_count ?? 0}
+            </div>
+          </div>
+        </div>
 
-       {/* Графики: Top clients + Top vehicles */}
-       <FinancialCharts dateFrom={periodDates.from} dateTo={periodDates.to} />
+        {/* Графики */}
+        <FinancialCharts dateFrom={periodDates.from} dateTo={periodDates.to} />
 
-       {/* Tabs */}
-       <div className="bg-white rounded-lg shadow overflow-hidden">
-         <div className="border-b border-gray-200">
-           <nav className="flex">
-             {(['invoices', 'acts', 'payouts'] as const).map((tab) => (
-               <button
-                 key={tab}
-                 onClick={() => setActiveTab(tab)}
-                 className={`px-6 py-3 text-sm font-medium border-b-2 ${
-                   activeTab === tab ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-                 }`}
-               >
-                 {tab === 'invoices' ? `Счета (${invoices.length})` : tab === 'acts' ? `Акты (${acts.length})` : `Выплаты (${payouts.length})`}
-               </button>
-             ))}
-           </nav>
-         </div>
+        {/* Tabs */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="border-b border-gray-200">
+            <nav className="flex">
+              {(['invoices', 'acts', 'payouts'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 ${
+                    activeTab === tab ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab === 'invoices' ? `Счета (${invoices.length})` : tab === 'acts' ? `Акты (${acts.length})` : `Выплаты (${payouts.length})`}
+                </button>
+              ))}
+            </nav>
+          </div>
 
-         <div className="p-6">
-           {/* === СЧЕТА === */}
-           {activeTab === 'invoices' && (
-             <div>
-               <div className="flex justify-end mb-4 gap-2">
-                 <button
-                   onClick={handleExportInvoicesCsv}
-                   className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-sm"
-                   title="Экспорт всех счетов в CSV"
-                 >
-                   📥 Экспорт CSV
-                 </button>
-                 {canCreate && (
-                   <button
-                     onClick={() => { setEditingInvoice(null); setIsInvoiceFormOpen(true); }}
-                     className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
-                   >
-                     + Новый счёт
-                   </button>
-                 )}
-               </div>
-               {invoices.length === 0 ? (
-                 <div className="text-center py-12 text-gray-500">
-                   <div className="text-5xl mb-4">💰</div>
-                   <p>Счетов пока нет</p>
-                 </div>
-               ) : (
-                 <div className="overflow-x-auto">
-                   <table className="min-w-full divide-y divide-gray-200">
-                     <thead className="bg-gray-50">
-                       <tr>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Срок</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Оплачено</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
-                       </tr>
-                     </thead>
-                     <tbody className="bg-white divide-y divide-gray-200">
-                       {invoices.map((inv) => {
-                         const paid = parseFloat(inv.paid_amount || '0');
-                         const total = parseFloat(inv.total || '0');
-                         const canAcceptPayment = inv.status !== 'paid' && inv.status !== 'cancelled' && paid < total;
-                         // 🆕 Статусы, для которых показываем кнопку 📧
-                         const canResendEmail = ['sent', 'paid', 'partially_paid', 'overdue'].includes(inv.status);
-                         return (
-                           <tr key={inv.id} className="hover:bg-gray-50">
-                             <td className="px-4 py-3 whitespace-nowrap">
-                               <button onClick={() => handleGoToRequest(inv.request_id)} className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline">
-                                 {inv.document_number || `#${inv.id}`}
-                               </button>
-                             </td>
-                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(inv.invoice_date)}</td>
-                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(inv.due_date)}</td>
-                             <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(inv.total)}</td>
-                             <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">{formatMoney(inv.paid_amount)}</td>
-                             <td className="px-4 py-3 whitespace-nowrap">
-                               <span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>
-                                 {INVOICE_STATUS_LABELS[inv.status]?.label || inv.status}
-                               </span>
-                             </td>
-                             <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-                               <button onClick={() => handleDownloadPdf('invoice', inv.id, inv.document_number)} className="text-purple-600 hover:text-purple-900" title="PDF">📄</button>
-                               {inv.status === 'draft' && canEdit && (
-                                 <>
-                                   <button onClick={() => handleSendInvoice(inv)} className="text-blue-600 hover:text-blue-900" title="Отправить">✉️</button>
-                                   <button onClick={() => handleEditInvoice(inv)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
-                                   {canDelete && <button onClick={() => setDeleteTarget(inv)} className="text-red-600 hover:text-red-900" title="Удалить">🗑️</button>}
-                                 </>
-                               )}
-                               {canAcceptPayment && canEdit && (
-                                 <button onClick={() => setPaymentTarget(inv)} className="text-green-600 hover:text-green-900 font-medium" title="Принять оплату">💳</button>
-                               )}
-                               {/* 🆕 Кнопка "📧 Email" для sent/paid/partially_paid/overdue */}
-                               {canResendEmail && canEdit && (
-                                 <button onClick={() => handleResendInvoiceEmail(inv)} className="text-indigo-600 hover:text-indigo-900" title="Отправить PDF клиенту повторно">📧</button>
-                               )}
-                               {['sent', 'overdue', 'partially_paid'].includes(inv.status) && canEdit && (
-                                 <button onClick={() => handleCancelInvoice(inv)} className="text-orange-600 hover:text-orange-900" title="Отменить">❌</button>
-                               )}
-                             </td>
-                           </tr>
-                         );
-                       })}
-                     </tbody>
-                   </table>
-                 </div>
-               )}
-             </div>
-           )}
+          <div className="p-6">
+            {/* === СЧЕТА === */}
+            {activeTab === 'invoices' && (
+              <div>
+                <div className="flex justify-end mb-4 gap-2">
+                  <button
+                    onClick={handleExportInvoicesCsv}
+                    className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-sm"
+                    title="Экспорт всех счетов в CSV"
+                  >
+                    📥 Экспорт CSV
+                  </button>
+                  {canCreate && (
+                    <button
+                      onClick={() => { setEditingInvoice(null); setIsInvoiceFormOpen(true); }}
+                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+                    >
+                      + Новый счёт
+                    </button>
+                  )}
+                </div>
+                {invoices.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <div className="text-5xl mb-4">💰</div>
+                    <p>Счетов пока нет</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Срок</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Оплачено</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {invoices.map((inv) => {
+                          const paid = parseFloat(inv.paid_amount || '0');
+                          const total = parseFloat(inv.total || '0');
+                          const canAcceptPayment = inv.status !== 'paid' && inv.status !== 'cancelled' && paid < total;
+                          const canResendEmail = ['sent', 'paid', 'partially_paid', 'overdue'].includes(inv.status);
+                          return (
+                            <tr key={inv.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <button onClick={() => handleGoToRequest(inv.request_id)} className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline">
+                                  {inv.document_number || `#${inv.id}`}
+                                </button>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(inv.invoice_date)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(inv.due_date)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(inv.total)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">{formatMoney(inv.paid_amount)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>
+                                  {INVOICE_STATUS_LABELS[inv.status]?.label || inv.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
+                                <button onClick={() => handleDownloadPdf('invoice', inv.id, inv.document_number)} className="text-purple-600 hover:text-purple-900" title="PDF">📄</button>
+                                {inv.status === 'draft' && canEdit && (
+                                  <>
+                                    <button onClick={() => handleSendInvoice(inv)} className="text-blue-600 hover:text-blue-900" title="Отправить">✉️</button>
+                                    <button onClick={() => handleEditInvoice(inv)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
+                                    {canDelete && <button onClick={() => setDeleteTarget(inv)} className="text-red-600 hover:text-red-900" title="Удалить">🗑️</button>}
+                                  </>
+                                )}
+                                {canAcceptPayment && canEdit && (
+                                  <button onClick={() => setPaymentTarget(inv)} className="text-green-600 hover:text-green-900 font-medium" title="Принять оплату">💳</button>
+                                )}
+                                {canResendEmail && canEdit && (
+                                  <button onClick={() => handleResendInvoiceEmail(inv)} className="text-indigo-600 hover:text-indigo-900" title="Отправить PDF клиенту повторно">📧</button>
+                                )}
+                                {['sent', 'overdue', 'partially_paid'].includes(inv.status) && canEdit && (
+                                  <button onClick={() => handleCancelInvoice(inv)} className="text-orange-600 hover:text-orange-900" title="Отменить">❌</button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
 
-           {/* === АКТЫ === */}
-           {activeTab === 'acts' && (
-             <div>
-               <div className="flex justify-end mb-4 gap-2">
-                 <button
-                   onClick={handleExportActsCsv}
-                   className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-sm"
-                   title="Экспорт всех актов в CSV"
-                 >
-                   📥 Экспорт CSV
-                 </button>
-                 {canCreate && (
-                   <button
-                     onClick={() => { setEditingAct(null); setIsActFormOpen(true); }}
-                     className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
-                   >
-                     + Новый акт
-                   </button>
-                 )}
-               </div>
-               {acts.length === 0 ? (
-                 <div className="text-center py-12 text-gray-500">
-                   <div className="text-5xl mb-4">📄</div>
-                   <p>Актов пока нет</p>
-                 </div>
-               ) : (
-                 <div className="overflow-x-auto">
-                   <table className="min-w-full divide-y divide-gray-200">
-                     <thead className="bg-gray-50">
-                       <tr>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
-                       </tr>
-                     </thead>
-                     <tbody className="bg-white divide-y divide-gray-200">
-                       {acts.map((act) => {
-                         // 🆕 Статусы, для которых показываем кнопку 📧
-                         const canResendEmail = ['sent', 'paid', 'overdue'].includes(act.status);
-                         return (
-                           <tr key={act.id} className="hover:bg-gray-50">
-                             <td className="px-4 py-3 whitespace-nowrap">
-                               <button onClick={() => handleGoToRequest(act.request_id)} className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline">
-                                 {act.document_number || `#${act.id}`}
-                               </button>
-                             </td>
-                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(act.act_date)}</td>
-                             <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(act.total_amount)}</td>
-                             <td className="px-4 py-3 whitespace-nowrap">
-                               <span className={`px-2 py-1 text-xs font-semibold rounded-full ${ACT_STATUS_LABELS[act.status]?.color || 'bg-gray-100'}`}>
-                                 {ACT_STATUS_LABELS[act.status]?.label || act.status}
-                               </span>
-                             </td>
-                             <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-                               <button onClick={() => handleDownloadPdf('act', act.id, act.document_number)} className="text-purple-600 hover:text-purple-900" title="Акт PDF">📄</button>
-                               {/* 🆕 Кнопка УПД (для всех актов) */}
-                               <button
-                                 onClick={() => handleDownloadUpd(act)}
-                                 className="text-green-600 hover:text-green-900 font-semibold"
-                                 title="УПД (Универсальный передаточный документ)"
-                               >
-                                 📋УПД
-                               </button>
-                               {/* 🆕 Кнопка ТОРГ-12 (расходная накладная для товаров) */}
-                               <button
-                                 onClick={() => handleDownloadTorg12(act)}
-                                 className="text-purple-600 hover:text-purple-900"
-                                 title="ТОРГ-12 (Расходная накладная для товаров)"
-                               >
-                                 📦Т-12
-                               </button>
-                               {/* 🆕 Кнопка "Счёт-фактура" — только для ОСНО с НДС (legacy) */}
-                               {act.tax_system === 'osno' && parseFloat(act.vat_rate || '0') > 0 && (
-                                 <button
-                                   onClick={() => handleDownloadInvoiceFacture(act)}
-                                   className="text-orange-600 hover:text-orange-900"
-                                   title="Счёт-фактура (для ОСНО, legacy)"
-                                 >
-                                   🧾
-                                 </button>
-                               )}                                  {act.status === 'draft' && canEdit && (
-                                 <>
-                                   <button onClick={() => setEditingAct(act)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
-                                   <button
-                                     onClick={() => handleSignAct(act, 'client')}
-                                     className={act.signed_by_client_at ? 'text-gray-400' : 'text-green-600 hover:text-green-900'}
-                                     title={act.signed_by_client_at ? 'Уже подписан клиентом' : 'Подписать (клиент)'}
-                                     disabled={!!act.signed_by_client_at}
-                                   >
-                                     {act.signed_by_client_at ? '✅' : '✍️👤'}
-                                   </button>
-                                   <button
-                                     onClick={() => handleSignAct(act, 'executor')}
-                                     className={act.signed_by_executor_at ? 'text-gray-400' : 'text-blue-600 hover:text-blue-900'}
-                                     title={act.signed_by_executor_at ? 'Уже подписан исполнителем' : 'Подписать (исполнитель)'}
-                                     disabled={!!act.signed_by_executor_at}
-                                   >
-                                     {act.signed_by_executor_at ? '✅' : '✍️🏢'}
-                                   </button>
-                                   {canDelete && <button onClick={() => setDeleteActTarget(act)} className="text-red-600 hover:text-red-900" title="Удалить">🗑️</button>}
-                                 </>
-                               )}
-                               {/* 🆕 Кнопка "📧 Email" для sent/paid/overdue */}
-                               {canResendEmail && canEdit && (
-                                 <button onClick={() => handleResendActEmail(act)} className="text-indigo-600 hover:text-indigo-900" title="Отправить PDF клиенту повторно">📧</button>
-                               )}
-                             </td>
-                           </tr>
-                         );
-                       })}
-                     </tbody>
-                   </table>
-                 </div>
-               )}
-             </div>
-           )}
+            {/* === АКТЫ === */}
+            {activeTab === 'acts' && (
+              <div>
+                <div className="flex justify-end mb-4 gap-2">
+                  <button
+                    onClick={handleExportActsCsv}
+                    className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-sm"
+                    title="Экспорт всех актов в CSV"
+                  >
+                    📥 Экспорт CSV
+                  </button>
+                  {canCreate && (
+                    <button
+                      onClick={() => { setEditingAct(null); setIsActFormOpen(true); }}
+                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+                    >
+                      + Новый акт
+                    </button>
+                  )}
+                </div>
+                {acts.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <div className="text-5xl mb-4">📄</div>
+                    <p>Актов пока нет</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {acts.map((act) => {
+                          const canResendEmail = ['sent', 'paid', 'overdue'].includes(act.status);
+                          return (
+                            <tr key={act.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <button onClick={() => handleGoToRequest(act.request_id)} className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline">
+                                  {act.document_number || `#${act.id}`}
+                                </button>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(act.act_date)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(act.total_amount)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${ACT_STATUS_LABELS[act.status]?.color || 'bg-gray-100'}`}>
+                                  {ACT_STATUS_LABELS[act.status]?.label || act.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
+                                <button onClick={() => handleDownloadPdf('act', act.id, act.document_number)} className="text-purple-600 hover:text-purple-900" title="Акт PDF">📄</button>
+                                <button onClick={() => handleDownloadUpd(act)} className="text-green-600 hover:text-green-900 font-semibold" title="УПД">📋УПД</button>
+                                <button onClick={() => handleDownloadTorg12(act)} className="text-purple-600 hover:text-purple-900" title="ТОРГ-12">📦Т-12</button>
+                                {act.tax_system === 'osno' && parseFloat(act.vat_rate || '0') > 0 && (
+                                  <button onClick={() => handleDownloadInvoiceFacture(act)} className="text-orange-600 hover:text-orange-900" title="Счёт-фактура">🧾</button>
+                                )}
+                                {act.status === 'draft' && canEdit && (
+                                  <>
+                                    <button onClick={() => setEditingAct(act)} className="text-gray-600 hover:text-gray-900" title="Редактировать">✏️</button>
+                                    <button
+                                      onClick={() => handleSignAct(act, 'client')}
+                                      className={act.signed_by_client_at ? 'text-gray-400' : 'text-green-600 hover:text-green-900'}
+                                      title={act.signed_by_client_at ? 'Уже подписан клиентом' : 'Подписать (клиент)'}
+                                      disabled={!!act.signed_by_client_at}
+                                    >
+                                      {act.signed_by_client_at ? '✅' : '✍️👤'}
+                                    </button>
+                                    <button
+                                      onClick={() => handleSignAct(act, 'executor')}
+                                      className={act.signed_by_executor_at ? 'text-gray-400' : 'text-blue-600 hover:text-blue-900'}
+                                      title={act.signed_by_executor_at ? 'Уже подписан исполнителем' : 'Подписать (исполнитель)'}
+                                      disabled={!!act.signed_by_executor_at}
+                                    >
+                                      {act.signed_by_executor_at ? '✅' : '✍️🏢'}
+                                    </button>
+                                    {canDelete && <button onClick={() => setDeleteActTarget(act)} className="text-red-600 hover:text-red-900" title="Удалить">🗑️</button>}
+                                  </>
+                                )}
+                                {canResendEmail && canEdit && (
+                                  <button onClick={() => handleResendActEmail(act)} className="text-indigo-600 hover:text-indigo-900" title="Отправить PDF клиенту повторно">📧</button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
 
-           {/* === ВЫПЛАТЫ === */}
-           {activeTab === 'payouts' && (
-             <div>
-               <div className="flex justify-end mb-4 gap-2">
-                 {canCreate && (
-                   <button
-                     onClick={() => setIsPayoutBatchModalOpen(true)}
-                     className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm font-semibold"
-                   >
-                     💰 Batch создать выплаты
-                   </button>
-                 )}
-               </div>
-               {payouts.length === 0 ? (
-                 <div className="text-center py-12 text-gray-500">
-                   <div className="text-5xl mb-4">💸</div>
-                   <p>Выплат пока нет</p>
-                   <p className="text-sm mt-2">Нажмите "Batch создать выплаты" для массового создания</p>
-                 </div>
-               ) : (
-                 <div className="overflow-x-auto">
-                   <table className="min-w-full divide-y divide-gray-200">
-                     <thead className="bg-gray-50">
-                       <tr>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gross</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Комиссия</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Net</th>
-                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
-                       </tr>
-                     </thead>
-                     <tbody className="bg-white divide-y divide-gray-200">
-                       {payouts.map((p) => (
-                         <tr key={p.id} className="hover:bg-gray-50">
-                           <td className="px-4 py-3 whitespace-nowrap">
-                             <span className="text-sm font-mono text-gray-900">
-                               {p.document_number || `#${p.id}`}
-                             </span>
-                           </td>
-                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(p.payout_date)}</td>
-                           <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(p.gross_amount)}</td>
-                           <td className="px-4 py-3 whitespace-nowrap text-sm text-orange-600">{formatMoney(p.platform_commission)}</td>
-                           <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-green-600">{formatMoney(p.net_amount)}</td>
-                           <td className="px-4 py-3 whitespace-nowrap">
-                             <span className={`px-2 py-1 text-xs font-semibold rounded-full ${PAYOUT_STATUS_LABELS[p.status]?.color || 'bg-gray-100'}`}>
-                               {PAYOUT_STATUS_LABELS[p.status]?.label || p.status}
-                             </span>
-                           </td>
-                           <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-                             {p.status === 'draft' && canEdit && (
-                               <button
-                                 onClick={async () => {
-                                   try {
-                                     await financeApi.approvePayout(p.id);
-                                     showToast.success('Выплата одобрена');
-                                     loadData();
-                                   } catch (err: any) {
-                                     showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
-                                   }
-                                 }}
-                                 className="text-blue-600 hover:text-blue-900 font-medium"
-                                 title="Одобрить"
-                               >
-                                 ✓ Одобрить
-                               </button>
-                             )}
-                             {p.status === 'sent' && canEdit && (
-                               <button
-                                 onClick={async () => {
-                                   try {
-                                     await financeApi.payPayout(p.id);
-                                     showToast.success('Выплата отмечена как выплаченная');
-                                     loadData();
-                                   } catch (err: any) {
-                                     showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
-                                   }
-                                 }}
-                                 className="text-green-600 hover:text-green-900 font-medium"
-                                 title="Отметить как выплаченную"
-                               >
-                                 💸 Выплатить
-                               </button>
-                             )}
-                           </td>
-                         </tr>
-                       ))}
-                     </tbody>
-                   </table>
-                 </div>
-               )}
-             </div>
-           )}
-         </div>
-       </div>
+            {/* === ВЫПЛАТЫ === */}
+            {activeTab === 'payouts' && (
+              <div>
+                <div className="flex justify-end mb-4 gap-2">
+                  {/* 🆕 Кнопка CSV экспорта */}
+                  <button
+                    onClick={handleExportPayoutsCsv}
+                    className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-sm"
+                    title="Экспорт выплат в CSV"
+                  >
+                    📥 Экспорт CSV
+                  </button>
+                  {canCreate && (
+                    <button
+                      onClick={() => setIsPayoutBatchModalOpen(true)}
+                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm font-semibold"
+                    >
+                      💰 Batch создать выплаты
+                    </button>
+                  )}
+                </div>
+                {payouts.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <div className="text-5xl mb-4">💸</div>
+                    <p>Выплат пока нет</p>
+                    <p className="text-sm mt-2">Нажмите "Batch создать выплаты" для массового создания</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gross</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Комиссия</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Net</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {payouts.map((p) => (
+                          <tr key={p.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className="text-sm font-mono text-gray-900">
+                                {p.document_number || `#${p.id}`}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDate(p.payout_date)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatMoney(p.gross_amount)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-orange-600">{formatMoney(p.platform_commission)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-green-600">{formatMoney(p.net_amount)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${PAYOUT_STATUS_LABELS[p.status]?.color || 'bg-gray-100'}`}>
+                                {PAYOUT_STATUS_LABELS[p.status]?.label || p.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
+                              {/* 🆕 PDF кнопка */}
+                              <button
+                                onClick={() => handleDownloadPdf('payout', p.id, p.document_number || `PAY-${p.id}`)}
+                                className="text-purple-600 hover:text-purple-900"
+                                title="Скачать PDF"
+                              >
+                                📄
+                              </button>
+                              {/* ✓ Одобрить */}
+                              {p.status === 'draft' && canEdit && (
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await financeApi.approvePayout(p.id);
+                                      showToast.success('Выплата одобрена');
+                                      loadData();
+                                    } catch (err: any) {
+                                      showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
+                                    }
+                                  }}
+                                  className="text-blue-600 hover:text-blue-900 font-medium"
+                                  title="Одобрить"
+                                >
+                                  ✓
+                                </button>
+                              )}
+                              {/* 💸 Выплатить */}
+                              {p.status === 'sent' && canEdit && (
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await financeApi.payPayout(p.id);
+                                      showToast.success('Выплата отмечена как выплаченная');
+                                      loadData();
+                                    } catch (err: any) {
+                                      showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
+                                    }
+                                  }}
+                                  className="text-green-600 hover:text-green-900 font-medium"
+                                  title="Отметить как выплаченную"
+                                >
+                                  💸
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
 
-       {/* 🆕 МОДАЛЬНЫЕ ОКНА */}
-       {isInvoiceFormOpen && (
-         <InvoiceFormModal
-           invoice={editingInvoice}
-           onClose={() => {
-             setIsInvoiceFormOpen(false);
-             setEditingInvoice(null);
-           }}
-           onSave={handleSaveInvoice}
-         />
-       )}
+        {/* МОДАЛЬНЫЕ ОКНА */}
+        {isInvoiceFormOpen && (
+          <InvoiceFormModal
+            invoice={editingInvoice}
+            onClose={() => { setIsInvoiceFormOpen(false); setEditingInvoice(null); }}
+            onSave={handleSaveInvoice}
+          />
+        )}
 
-       {isActFormOpen && (
-         <ActFormModal
-           act={editingAct}
-           onClose={() => {
-             setIsActFormOpen(false);
-             setEditingAct(null);
-           }}
-           onSave={handleSaveAct}
-         />
-       )}
+        {isActFormOpen && (
+          <ActFormModal
+            act={editingAct}
+            onClose={() => { setIsActFormOpen(false); setEditingAct(null); }}
+            onSave={handleSaveAct}
+          />
+        )}
 
-       {paymentTarget && (
-         <PaymentModal
-           invoice={paymentTarget}
-           onClose={() => setPaymentTarget(null)}
-           onSuccess={handlePaymentSuccess}
-         />
-       )}
+        {paymentTarget && (
+          <PaymentModal
+            invoice={paymentTarget}
+            onClose={() => setPaymentTarget(null)}
+            onSuccess={handlePaymentSuccess}
+          />
+        )}
 
-       {deleteTarget && (
-         <DeleteConfirmDialog
-           title="Удалить счёт?"
-           message={`Вы уверены, что хотите удалить счёт ${deleteTarget.document_number}?`}
-           onConfirm={handleDeleteInvoice}
-           onCancel={() => setDeleteTarget(null)}
-         />
-       )}
+        {deleteTarget && (
+          <DeleteConfirmDialog
+            title="Удалить счёт?"
+            message={`Вы уверены, что хотите удалить счёт ${deleteTarget.document_number}?`}
+            onConfirm={handleDeleteInvoice}
+            onCancel={() => setDeleteTarget(null)}
+          />
+        )}
 
-       {deleteActTarget && (
-         <DeleteConfirmDialog
-           title="Удалить акт?"
-           message={`Вы уверены, что хотите удалить акт ${deleteActTarget.document_number}?`}
-           onConfirm={handleDeleteAct}
-           onCancel={() => setDeleteActTarget(null)}
-         />
-       )}
+        {deleteActTarget && (
+          <DeleteConfirmDialog
+            title="Удалить акт?"
+            message={`Вы уверены, что хотите удалить акт ${deleteActTarget.document_number}?`}
+            onConfirm={handleDeleteAct}
+            onCancel={() => setDeleteActTarget(null)}
+          />
+        )}
 
-       {isPayoutBatchModalOpen && (
-         <PayoutBatchModal
-           onClose={() => setIsPayoutBatchModalOpen(false)}
-           onSuccess={() => {
-             setIsPayoutBatchModalOpen(false);
-             loadData();
-           }}
-         />
-       )}
-     </div>
-   </Layout>
+        {isPayoutBatchModalOpen && (
+          <PayoutBatchModal
+            onClose={() => setIsPayoutBatchModalOpen(false)}
+            onSuccess={() => { setIsPayoutBatchModalOpen(false); loadData(); }}
+          />
+        )}
+      </div>
+    </Layout>
   );
 };
 
