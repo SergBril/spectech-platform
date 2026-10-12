@@ -14,10 +14,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
 
 from app.core.db import get_db
+from app.models.auth import User
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
+from app.api.deps import get_current_company_id, get_current_user, get_current_user_optional
 
 logger = logging.getLogger("spectech.public")
 
@@ -119,6 +122,10 @@ def _build_vehicle_response(
 
 # === Endpoints: Компании ===
 
+@router.get("/health", summary="Health check")
+def health_check():
+    """🌐 Проверка работоспособности."""
+    return {"status": "ok", "timestamp": "2026-10-12"}
 
 @router.get("/companies", response_model=list[PublicCompanyRead])
 def list_public_companies(
@@ -612,3 +619,132 @@ def list_public_categories(db: Session = Depends(get_db)):
     except Exception as e:
         logger.exception("❌ Error in list_public_categories: %s", e)
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+# ============================================================
+# 🌟 СОЗДАНИЕ ОТЗЫВА О КОМПАНИИ (публичный)
+# ============================================================
+
+
+class PublicCompanyReviewCreate(BaseModel):
+    """Схема для создания отзыва о компании."""
+    rating: int = Field(..., ge=1, le=5)
+    comment: str = Field(..., min_length=10, max_length=2000)
+    reviewer_name: str | None = Field(None, max_length=255)
+    reviewer_contractor_id: int | None = None
+
+
+@router.post("/companies/{company_id}/marketplace-reviews", status_code=201)
+def create_company_review(
+    company_id: int,
+    payload: PublicCompanyReviewCreate,
+    db: Session = Depends(get_db),
+):
+    """🌐 Создать отзыв о компании на маркетплейсе."""
+    from sqlalchemy import text
+
+    company = db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Компания не найдена")
+
+    # Проверяем дубликат по reviewer_name + company_id
+    existing = db.execute(
+        text("""
+            SELECT id FROM company_reviews 
+            WHERE company_id = :cid 
+              AND reviewer_name = :rname 
+              AND is_published = true
+        """),
+        {"cid": company_id, "rname": payload.reviewer_name or "Анонимный пользователь"},
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Вы уже оставляли отзыв об этой компании")
+
+    # Создаём отзыв (используем reviewer_user_id = NULL для анонимных)
+    result = db.execute(
+        text("""
+            INSERT INTO company_reviews
+                (company_id, reviewer_user_id, reviewer_name, reviewer_email,
+                 rating, comment, is_verified, is_published, moderation_status,
+                 created_at, updated_at)
+            VALUES
+                (:cid, NULL, :rname, :remail,
+                 :rating, :comment, false, true, 'approved',
+                 NOW(), NOW())
+            RETURNING id, rating, comment, created_at
+        """),
+        {
+            "cid": company_id,
+            "rname": payload.reviewer_name or "Анонимный пользователь",
+            "remail": None,
+            "rating": payload.rating,
+            "comment": payload.comment,
+        },
+    ).one()
+    db.commit()
+
+    return {
+        "id": result.id,
+        "rating": result.rating,
+        "comment": result.comment,
+        "created_at": result.created_at.isoformat() if result.created_at else None,
+        "message": "Отзыв успешно опубликован",
+    }
+
+@router.get("/companies/{company_id}/marketplace-reviews")
+def get_company_reviews_public(
+    company_id: int,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """🌐 Получить отзывы о компании."""
+    from sqlalchemy import text, func
+
+    company = db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Компания не найдена")
+
+    avg_result = db.execute(
+        text("SELECT COALESCE(AVG(rating), 0) as avg_rating, COUNT(*) as total FROM company_reviews WHERE company_id = :cid AND is_published = true"),
+        {"cid": company_id},
+    ).one()
+
+    dist_result = db.execute(
+        text("SELECT rating, COUNT(*) as cnt FROM company_reviews WHERE company_id = :cid AND is_published = true GROUP BY rating"),
+        {"cid": company_id},
+    ).all()
+    distribution = {str(i): 0 for i in range(1, 6)}
+    for row in dist_result:
+        distribution[str(row.rating)] = row.cnt
+
+    reviews_result = db.execute(
+        text("""
+            SELECT id, rating, comment, reviewer_name, is_verified, created_at
+            FROM company_reviews
+            WHERE company_id = :cid AND is_published = true
+            ORDER BY created_at DESC
+            LIMIT :limit OFFSET :offset
+        """),
+        {"cid": company_id, "limit": limit, "offset": offset},
+    ).all()
+
+    items = [
+        {
+            "id": r.id,
+            "rating": r.rating,
+            "comment": r.comment,
+            "reviewer_name": r.reviewer_name or "Аноним",
+            "reviewer_contractor_name": r.reviewer_name or "Аноним",
+            "is_verified": r.is_verified,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in reviews_result
+    ]
+
+    return {
+        "items": items,
+        "total": int(avg_result.total or 0),
+        "average_rating": float(avg_result.avg_rating or 0),
+        "rating_distribution": distribution,
+    }
