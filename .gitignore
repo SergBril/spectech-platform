@@ -139,3 +139,4 @@ diadoc_mock/
 migrate_layout.py 
 migrate_to_layout.py 
 curl 
+backend/test_pdf.py 
