@@ -23,7 +23,7 @@ from app.models.chat import (
 # Company
 from app.models.company import Company
 
-from app.models.bank_transaction import BankTransaction  # noqa: F401
+from app.models.bank_statement import BankStatement, BankTransaction  # noqa: F401
 
 # Contractor
 from app.models.contractor import Contractor, Employee, EmployeeCertificate
