@@ -30,7 +30,7 @@ try:
 except ImportError:
     # Fallback: пробуем альтернативное имя
     try:
-        from app.services.bank_parser import (
+        from app.services.bank_statement_parser import (
             ClientBankExchangeParser,
             extract_invoice_numbers_from_purpose,
         )
