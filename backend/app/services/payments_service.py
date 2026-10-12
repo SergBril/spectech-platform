@@ -18,19 +18,33 @@ from app.models.bank_statement import (
     TransactionType,
 )
 from app.models.finance import Invoice, Payment, DocumentStatus, PaymentMethod
-from app.services.bank_parser import (
-    ClientBankExchangeParser,
-    extract_invoice_numbers_from_purpose,
-)
 
 logger = logging.getLogger("spectech.payments")
+
+# Безопасный импорт парсера — может отсутствовать если файл был удалён
+try:
+    from app.services.bank_statement_parser import (
+        ClientBankExchangeParser,
+        extract_invoice_numbers_from_purpose,
+    )
+except ImportError:
+    # Fallback: пробуем альтернативное имя
+    try:
+        from app.services.bank_parser import (
+            ClientBankExchangeParser,
+            extract_invoice_numbers_from_purpose,
+        )
+    except ImportError:
+        logger.warning("⚠️ Bank statement parser not found. Upload will be disabled.")
+        ClientBankExchangeParser = None  # type: ignore
+        extract_invoice_numbers_from_purpose = None  # type: ignore
 
 
 class PaymentsService:
     """Сервис для обработки банковских выписок и платежей."""
 
     def __init__(self, our_account_number: str):
-        self.parser = ClientBankExchangeParser(our_account_number)
+        self.parser = ClientBankExchangeParser(our_account_number) if ClientBankExchangeParser else None
 
     def upload_statement(
         self,
@@ -40,6 +54,9 @@ class PaymentsService:
         uploaded_by: int | None = None,
     ) -> BankStatement:
         """Загружает банковскую выписку, парсит и создаёт транзакции."""
+        if not self.parser:
+            raise ValueError("Bank statement parser is not available. Check that bank_statement_parser.py exists in app/services/")
+
         logger.info(f"Uploading bank statement: {file_path.name}")
 
         parsed = self.parser.parse_file(file_path)
@@ -141,6 +158,10 @@ class PaymentsService:
 
     def auto_match_transactions(self, db: Session, statement_id: int) -> int:
         """Автоматически привязывает транзакции к Invoice по номеру счёта."""
+        if not extract_invoice_numbers_from_purpose:
+            logger.warning("⚠️ extract_invoice_numbers_from_purpose not available, skipping auto-match")
+            return 0
+
         stmt = select(BankTransaction).where(
             BankTransaction.statement_id == statement_id,
             BankTransaction.direction == TransactionDirection.incoming,
