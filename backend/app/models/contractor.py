@@ -1,6 +1,7 @@
 from datetime import date, datetime
+from decimal import Decimal
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -60,6 +61,24 @@ class Employee(Base):
     fire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), nullable=True, unique=True
+    )
+
+    # 💰 Поля зарплаты
+    salary_type: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, default=None,
+        comment="Тип расчёта: fixed_shift, hourly, per_km, shift_percent, combo"
+    )
+    salary_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True, default=None,
+        comment="Основная ставка (за смену/час/км)"
+    )
+    salary_rate_secondary: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True, default=None,
+        comment="Дополнительная ставка (для combo)"
+    )
+    salary_commission_percent: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 2), nullable=True, default=None,
+        comment="% от стоимости смены (для shift_percent/combo)"
     )
 
     contractor: Mapped["Contractor"] = relationship(
