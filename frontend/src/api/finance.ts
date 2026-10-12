@@ -222,6 +222,65 @@ export interface FinanceDashboardV2 {
   };
 }
 
+export interface CompanyReview {
+  id: number;
+  company_id: number;
+  reviewer_id: number | null;
+  rating: number;
+  comment: string | null;
+  reviewer_name: string | null;
+  reviewer_email: string | null;
+  is_verified: number;
+  is_published: number;
+  moderation_status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanyReviewListResponse {
+  items: CompanyReview[];
+  total: number;
+  average_rating: number;
+  rating_distribution: Record<number, number>;
+}
+
+export interface CompanyReviewCreate {
+  rating: number;
+  comment?: string;
+  reviewer_name?: string;
+  reviewer_email?: string;
+}
+
+export const reviewsApi = {
+  async getCompanyReviews(companyId: number, limit = 20, offset = 0): Promise<CompanyReviewListResponse> {
+    const response = await apiClient.get<CompanyReviewListResponse>(
+      `/public/companies/${companyId}/reviews`,
+      { params: { limit, offset } }
+    );
+    return response.data;
+  },
+
+  async createCompanyReview(companyId: number, data: CompanyReviewCreate): Promise<CompanyReview> {
+    const response = await apiClient.post<CompanyReview>(
+      `/public/companies/${companyId}/reviews`,
+      data
+    );
+    return response.data;
+  },
+
+  async updateReview(reviewId: number, data: Partial<CompanyReviewCreate>): Promise<CompanyReview> {
+    const response = await apiClient.patch<CompanyReview>(
+      `/reviews/${reviewId}`,
+      data
+    );
+    return response.data;
+  },
+
+  async deleteReview(reviewId: number): Promise<void> {
+    await apiClient.delete(`/reviews/${reviewId}`);
+  },
+};
+
 export const financeApi = {
   // === Invoices ===
   async getInvoices(params?: { status?: InvoiceStatus; limit?: number; offset?: number; contractor_id?: number; }): Promise<Invoice[]> {
@@ -354,11 +413,10 @@ export const financeApi = {
     return response.data;
   },
 
-  // === Payouts ===
-  async getPayouts(params?: { status?: PayoutStatus; limit?: number; offset?: number }): Promise<Payout[]> {
-    const response = await apiClient.get<Payout[]>('/payouts', { params });
+  async getPayouts(params?: any): Promise<Payout[]> {
+    const response = await apiClient.get('/finance/payouts', { params });
     return response.data;
-  },
+  }
 
   // === Payments ===
   async createPayment(data: PaymentCreate): Promise<Payment> {

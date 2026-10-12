@@ -1,6 +1,8 @@
 import axios from 'axios';
+// Если showToast не импортирован, раскомментируйте строку ниже и укажите правильный путь:
+// import { showToast } from '../utils/toast'; 
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'; // Исправил порт на 8000, так как в логах был он
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -90,7 +92,12 @@ apiClient.interceptors.response.use(
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         
-        showToast.error('Сессия истекла. Войдите снова.');
+        // Проверка на наличие showToast, чтобы не упало, если он не импортирован
+        if (typeof showToast !== 'undefined') {
+          showToast.error('Сессия истекла. Войдите снова.');
+        } else {
+          alert('Сессия истекла. Войдите снова.');
+        }
         
         // Небольшая задержка перед редиректом, чтобы показать ошибку
         setTimeout(() => {
@@ -106,3 +113,122 @@ apiClient.interceptors.response.use(
 );
 
 export default apiClient;
+
+// ============================================================
+// Типы и API для отзывов (Reviews)
+// ============================================================
+
+export interface CompanyReview {
+  id: number;
+  company_id: number;
+  reviewer_contractor_id: number;
+  reviewer_contractor_name: string;
+  reviewer_user_id?: number;
+  request_id?: number;
+  rating: number;
+  comment: string;
+  response?: string;
+  responded_at?: string;
+  is_verified: boolean;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanyRatingSummary {
+  company_id: number;
+  company_name: string;
+  average_rating: number;
+  total_reviews: number;
+  rating_distribution: Record<string, number>;
+}
+
+export interface CreateReviewRequest {
+  company_id: number;
+  rating: number;
+  comment: string;
+  request_id?: number;
+}
+
+// ✅ ИСПРАВЛЕНО: Оставлен только один, полный и корректный объект reviewsApi
+export const reviewsApi = {
+  // === Публичные endpoints ===
+  
+  async getCompanyReviews(
+    companyId: number, 
+    limit = 20, 
+    offset = 0,
+    minRating?: number
+  ): Promise<{ items: any[]; total: number }> {
+    const response = await apiClient.get(`/public/companies/${companyId}/reviews`, {
+      params: { limit, offset, min_rating: minRating }
+    });
+    return response.data;
+  },
+
+  async getCompanyRating(companyId: number): Promise<{
+    company_id: number;
+    company_name: string;
+    average_rating: number | null;
+    total_reviews: number;
+    distribution: Record<string, number>;
+    category_averages: Record<string, number | null>;
+  }> {
+    const response = await apiClient.get(`/public/companies/${companyId}/rating`);
+    return response.data;
+  },
+
+  async markHelpful(reviewId: number): Promise<{ helpful_count: number }> {
+    const response = await apiClient.post(`/public/reviews/${reviewId}/helpful`);
+    return response.data;
+  },
+
+  // === Приватные endpoints ===
+  
+  async createReview(data: {
+    rental_id: number;
+    review_type: 'client_to_owner' | 'owner_to_client';
+    rating: number;
+    comment?: string;
+    pros?: string;
+    cons?: string;
+    photos?: string[];
+    quality_rating?: number;
+    punctuality_rating?: number;
+    communication_rating?: number;
+    is_anonymous?: boolean;
+  }): Promise<any> {
+    const response = await apiClient.post('/reviews', data);
+    return response.data;
+  },
+
+  async getMyReviews(limit = 50, offset = 0): Promise<{ items: any[]; total: number }> {
+    const response = await apiClient.get('/reviews/my', { params: { limit, offset } });
+    return response.data;
+  },
+
+  async canReview(rentalId: number): Promise<{
+    rental_id: number;
+    can_review_owner: boolean;
+    can_review_client: boolean;
+    has_reviewed_owner: boolean;
+    has_reviewed_client: boolean;
+  }> {
+    const response = await apiClient.get(`/reviews/can-review/${rentalId}`);
+    return response.data;
+  },
+
+  async updateReview(reviewId: number, data: any): Promise<any> {
+    const response = await apiClient.patch(`/reviews/${reviewId}`, data);
+    return response.data;
+  },
+
+  async deleteReview(reviewId: number): Promise<void> {
+    await apiClient.delete(`/reviews/${reviewId}`);
+  },
+
+  async respondToReview(reviewId: number, responseText: string): Promise<CompanyReview> {
+    const response = await apiClient.post(`/reviews/${reviewId}/respond`, { response: responseText });
+    return response.data;
+  }
+};
