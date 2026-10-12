@@ -37,7 +37,6 @@ export interface Invoice {
   items: InvoiceItem[];
   created_at: string;
   updated_at: string;
-  // Добавьте эти поля:
   tax_system?: string;
   is_vat_included?: boolean;
 }
@@ -62,7 +61,6 @@ export interface ActCreate {
   act_date: string;
   status?: ActStatus;
   comment?: string;
-  // Добавьте эти поля:
   tax_system?: string;
   vat_rate?: number;
   is_vat_included?: boolean;
@@ -83,7 +81,6 @@ export interface Act {
   comment: string | null;
   created_at: string;
   updated_at: string;
-  // Добавьте эти поля:
   tax_system?: string;
   vat_rate?: string;
   is_vat_included?: boolean;
@@ -140,7 +137,6 @@ export interface PaymentsDashboard {
   payouts_count: number;
 }
 
-// === PAYOUT BATCH (Sprint 4 Task 3) ===
 export interface PayoutBatchRequest {
   date_from: string;
   date_to: string;
@@ -179,39 +175,23 @@ export interface PayoutsSummary {
   pending_payouts: number;
 }
 
-// === FINANCE DASHBOARD V2 (Sprint 4 Task 4) ===
 export interface ClientRevenue {
-  client_id: number;
   client_name: string;
   total_revenue: number;
-  invoices_count: number;
 }
 
 export interface VehicleRevenue {
-  vehicle_id: number;
   vehicle_name: string;
   moto_hours: number;
-  shifts_count: number;
 }
 
 export interface FinanceDashboardV2 {
-  period: {
-    start: string;
-    end: string;
-  };
   revenue: {
     total: number;
     paid: number;
-    outstanding: number;
-  };
-  expenses: {
-    total: number;
-    payouts: number;
-    commission: number;
   };
   profit: {
     gross: number;
-    net: number;
     margin_percent: number;
   };
   metrics: {
@@ -254,7 +234,7 @@ export interface CompanyReviewCreate {
 export const reviewsApi = {
   async getCompanyReviews(companyId: number, limit = 20, offset = 0): Promise<CompanyReviewListResponse> {
     const response = await apiClient.get<CompanyReviewListResponse>(
-      `/public/companies/${companyId}/reviews`,
+      `/public/companies/${companyId}/marketplace-reviews`,
       { params: { limit, offset } }
     );
     return response.data;
@@ -262,7 +242,7 @@ export const reviewsApi = {
 
   async createCompanyReview(companyId: number, data: CompanyReviewCreate): Promise<CompanyReview> {
     const response = await apiClient.post<CompanyReview>(
-      `/public/companies/${companyId}/reviews`,
+      `/public/companies/${companyId}/marketplace-reviews`,
       data
     );
     return response.data;
@@ -283,13 +263,13 @@ export const reviewsApi = {
 
 export const financeApi = {
   // === Invoices ===
-  async getInvoices(params?: { status?: InvoiceStatus; limit?: number; offset?: number; contractor_id?: number; }): Promise<Invoice[]> {
-    const response = await apiClient.get<Invoice[]>('/invoices', { params });
+  async getInvoices(params?: { status?: InvoiceStatus; limit?: number; offset?: number; contractor_id?: number }): Promise<Invoice[]> {
+    const response = await apiClient.get<Invoice[]>('/finance/invoices', { params });
     return response.data;
   },
 
   async getInvoice(id: number): Promise<Invoice> {
-    const response = await apiClient.get<Invoice>(`/invoices/${id}`);
+    const response = await apiClient.get<Invoice>(`/finance/invoices/${id}`);
     return response.data;
   },
 
@@ -308,113 +288,109 @@ export const financeApi = {
         amount: item.quantity * item.unit_price,
       })),
     };
-
-    console.log('📤 Creating invoice:', payload);
-    const response = await apiClient.post<Invoice>('/invoices', payload);
+    const response = await apiClient.post<Invoice>('/finance/invoices', payload);
     return response.data;
   },
 
   async updateInvoice(id: number, data: Partial<InvoiceCreate>): Promise<Invoice> {
-    const response = await apiClient.patch<Invoice>(`/invoices/${id}`, data);
+    const response = await apiClient.patch<Invoice>(`/finance/invoices/${id}`, data);
     return response.data;
   },
 
   async deleteInvoice(id: number): Promise<void> {
-    await apiClient.delete(`/invoices/${id}`);
+    await apiClient.delete(`/finance/invoices/${id}`);
   },
 
   async sendInvoice(id: number): Promise<Invoice> {
-    const response = await apiClient.post<Invoice>(`/invoices/${id}/send`);
+    const response = await apiClient.post<Invoice>(`/finance/invoices/${id}/send`);
     return response.data;
   },
 
   downloadInvoicePdf: async (invoiceId: number): Promise<Blob> => {
-    const response = await apiClient.get(`/invoices/${invoiceId}/pdf`, {
-      responseType: 'blob',
-    });
+    const response = await apiClient.get(`/finance/invoices/${invoiceId}/pdf`, { responseType: 'blob' });
     return response.data;
   },
 
-  /**
-   * Скачать PDF акта
-   */
   downloadActPdf: async (actId: number): Promise<Blob> => {
-    const response = await apiClient.get(`/acts/${actId}/pdf`, {
-      responseType: 'blob',
-    });
+    const response = await apiClient.get(`/finance/acts/${actId}/pdf`, { responseType: 'blob' });
     return response.data;
   },
 
   async downloadInvoiceFacturePdf(actId: number): Promise<Blob> {
-    const response = await apiClient.get(`/acts/${actId}/invoice-facture`, {
-      responseType: 'blob',
-    });
+    const response = await apiClient.get(`/finance/acts/${actId}/invoice-facture`, { responseType: 'blob' });
     return response.data;
   },
 
   async downloadUpdPdf(actId: number): Promise<Blob> {
-    const response = await apiClient.get(`/acts/${actId}/upd`, {
-      responseType: 'blob',
-    });
+    const response = await apiClient.get(`/finance/acts/${actId}/upd`, { responseType: 'blob' });
     return response.data;
   },
 
   async downloadTorg12Pdf(actId: number): Promise<Blob> {
-    const response = await apiClient.get(`/acts/${actId}/torg12`, {
-      responseType: 'blob',
-    });
+    const response = await apiClient.get(`/finance/acts/${actId}/torg12`, { responseType: 'blob' });
     return response.data;
   },
 
   // === Acts ===
-  async getActs(params?: { status?: ActStatus; limit?: number; offset?: number; contractor_id?: number; }): Promise<Act[]> {
-    const response = await apiClient.get<Act[]>('/acts', { params });
+  async getActs(params?: { status?: ActStatus; limit?: number; offset?: number; contractor_id?: number }): Promise<Act[]> {
+    const response = await apiClient.get<Act[]>('/finance/acts', { params });
     return response.data;
   },
 
   async getAct(id: number): Promise<Act> {
-    const response = await apiClient.get<Act>(`/acts/${id}`);
+    const response = await apiClient.get<Act>(`/finance/acts/${id}`);
     return response.data;
   },
 
-  async getContractorSummary(contractorId: number): Promise<{
-    contractor_id: number;
-    contractor_name: string;
-    total_invoices: number;
-    total_invoices_amount: number;
-    paid_amount: number;
-    unpaid_amount: number;
-    payment_percentage: number;
-    total_acts: number;
-    total_acts_amount: number;
-  }> {
+  async getContractorSummary(contractorId: number) {
     const response = await apiClient.get(`/finance/contractors/${contractorId}/summary`);
     return response.data;
   },
 
   async createAct(data: ActCreate): Promise<Act> {
-    const response = await apiClient.post<Act>('/acts', data);
+    const response = await apiClient.post<Act>('/finance/acts', data);
     return response.data;
   },
 
   async updateAct(id: number, data: Partial<ActCreate>): Promise<Act> {
-    const response = await apiClient.patch<Act>(`/acts/${id}`, data);
+    const response = await apiClient.patch<Act>(`/finance/acts/${id}`, data);
     return response.data;
   },
 
   async deleteAct(id: number): Promise<void> {
-    await apiClient.delete(`/acts/${id}`);
+    await apiClient.delete(`/finance/acts/${id}`);
   },
 
   async signAct(id: number, signedBy: 'client' | 'executor'): Promise<Act> {
-    const response = await apiClient.post<Act>(`/acts/${id}/sign`, {
-      signed_by: signedBy,
-    });
+    const response = await apiClient.post<Act>(`/finance/acts/${id}/sign`, { signed_by: signedBy });
     return response.data;
   },
 
+  // === Payouts ===
   async getPayouts(params?: any): Promise<Payout[]> {
     const response = await apiClient.get('/finance/payouts', { params });
+    return response.data;
+  },
+
+  calculatePayoutsBatch: async (data: PayoutBatchRequest): Promise<PayoutBatchResult> => {
+    const response = await apiClient.post('/finance/payouts/calculate', null, { params: data });
+    return response.data;
+  },
+
+  approvePayout: async (id: number): Promise<Payout> => {
+    const response = await apiClient.post(`/finance/payouts/${id}/approve`);
+    return response.data;
+  },
+
+  payPayout: async (id: number): Promise<Payout> => {
+    const response = await apiClient.post(`/finance/payouts/${id}/pay`);
+    return response.data;
+  },
+
+  getPayoutsSummary: async (dateFrom: string, dateTo: string): Promise<PayoutsSummary> => {
+    const response = await apiClient.get(`/finance/payouts/summary`, {
+      params: { date_from: dateFrom, date_to: dateTo },
+    });
     return response.data;
   },
 
@@ -435,93 +411,36 @@ export const financeApi = {
     return response.data;
   },
 
-  // 🆕 НОВАЯ ФУНКЦИЯ: Отправить счёт повторно (с PDF вложением)
+  // === Email Resend ===
   async resendInvoiceEmail(id: number): Promise<Invoice> {
-    const response = await apiClient.post<Invoice>(`/invoices/${id}/resend-email`);
+    const response = await apiClient.post<Invoice>(`/finance/invoices/${id}/resend-email`);
     return response.data;
   },
 
-  // 🆕 НОВАЯ ФУНКЦИЯ: Отправить акт повторно (с PDF вложением)
   async resendActEmail(id: number): Promise<Act> {
-    const response = await apiClient.post<Act>(`/acts/${id}/resend-email`);
+    const response = await apiClient.post<Act>(`/finance/acts/${id}/resend-email`);
     return response.data;
   },
 
-  calculatePayoutsBatch: async (data: PayoutBatchRequest): Promise<PayoutBatchResult> => {
-    // 🆕 ИСПРАВЛЕНО: используем payouts router
-    const response = await apiClient.post('/finance/payouts/calculate', null, { 
-      params: data 
-    });
-    return response.data;
-  },
-
-  approvePayout: async (id: number): Promise<Payout> => {
-    const response = await apiClient.post(`/finance/payouts/${id}/approve`);
-    return response.data;
-  },
-
-  payPayout: async (id: number): Promise<Payout> => {
-    const response = await apiClient.post(`/finance/payouts/${id}/pay`);
-    return response.data;
-  },
-
-  getPayoutsSummary: async (dateFrom: string, dateTo: string): Promise<PayoutsSummary> => {
-    const params = new URLSearchParams({
-      date_from: dateFrom,
-      date_to: dateTo,
-    });
-    const response = await apiClient.get(`/finance/payouts/summary?${params}`);
-    return response.data;
-  },
-
-  // === FINANCE DASHBOARD V2 (Sprint 4 Task 4) ===
+  // === FINANCE DASHBOARD V2 ===
   getFinanceDashboardV2: async (dateFrom: string, dateTo: string): Promise<FinanceDashboardV2> => {
-    const params = new URLSearchParams({
-      date_from: dateFrom,
-      date_to: dateTo,
-    });
-    const response = await apiClient.get(`/finance/dashboard?${params}`);
-    return response.data;
-  },
-
-  getRevenueByClient: async (dateFrom: string, dateTo: string, limit: number = 10): Promise<ClientRevenue[]> => {
-    const params = new URLSearchParams({
-      date_from: dateFrom,
-      date_to: dateTo,
-      limit: limit.toString(),
-    });
-    const response = await apiClient.get(`/finance/revenue-by-client?${params}`);
-    return response.data.clients || [];
-  },
-
-  getFinanceDashboardV2: async (dateFrom: string, dateTo: string) => {
     const res = await apiClient.get(`/finance/dashboard-v2`, {
       params: { date_from: dateFrom, date_to: dateTo },
     });
     return res.data;
   },
 
-  getRevenueByClient: async (dateFrom: string, dateTo: string, limit = 5) => {
+  getRevenueByClient: async (dateFrom: string, dateTo: string, limit = 5): Promise<ClientRevenue[]> => {
     const res = await apiClient.get(`/finance/revenue/by-client`, {
       params: { date_from: dateFrom, date_to: dateTo, limit },
     });
     return res.data;
   },
 
-  getRevenueByVehicle: async (dateFrom: string, dateTo: string, limit = 5) => {
+  getRevenueByVehicle: async (dateFrom: string, dateTo: string, limit = 5): Promise<VehicleRevenue[]> => {
     const res = await apiClient.get(`/finance/revenue/by-vehicle`, {
       params: { date_from: dateFrom, date_to: dateTo, limit },
     });
     return res.data;
-  },
-
-  getRevenueByVehicle: async (dateFrom: string, dateTo: string, limit: number = 10): Promise<VehicleRevenue[]> => {
-    const params = new URLSearchParams({
-      date_from: dateFrom,
-      date_to: dateTo,
-      limit: limit.toString(),
-    });
-    const response = await apiClient.get(`/finance/revenue-by-vehicle?${params}`);
-    return response.data.vehicles || [];
   },
 };
