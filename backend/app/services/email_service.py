@@ -477,15 +477,19 @@ class EmailService:
             )
 
             if isinstance(pdf_result, bytes):
-                pdf_attachment = {
-                    "filename": f"{payout.document_number}.pdf",
-                    "content": pdf_result,
-                }
-                logger.info(f"📎 PDF attached from memory ({len(pdf_result)} bytes)")
+                # ⚠️ КРИТИЧНО: Не прикрепляем пустой PDF — это ломает MIME заголовки
+                if len(pdf_result) > 100:  # Минимальный размер валидного PDF
+                    pdf_attachment = {
+                        "filename": f"{payout.document_number}.pdf",
+                        "content": pdf_result,
+                    }
+                    logger.info(f"📎 PDF attached from memory ({len(pdf_result)} bytes)")
+                else:
+                    logger.warning(f"⚠️ PDF too small or empty ({len(pdf_result)} bytes), sending WITHOUT attachment")
 
             elif isinstance(pdf_result, (str, Path)):
                 pdf_path = Path(pdf_result)
-                if pdf_path.exists():
+                if pdf_path.exists() and pdf_path.stat().st_size > 100:
                     with open(pdf_path, "rb") as f:
                         pdf_content = f.read()
                     pdf_attachment = {
@@ -494,6 +498,8 @@ class EmailService:
                     }
                     temp_path_to_cleanup = pdf_path
                     logger.info(f"📎 PDF attached from file: {pdf_path.name} ({len(pdf_content)} bytes)")
+                else:
+                    logger.warning(f"⚠️ PDF file missing or empty: {pdf_path}")
             else:
                 logger.warning(f"⚠️ Unexpected PDF result type: {type(pdf_result)}")
 
