@@ -410,8 +410,123 @@ def _generate_act_pdf_fpdf(act, contractor=None) -> bytes:
     return bytes(pdf.output())
 
 
-def generate_payout_pdf(*args, **kwargs):
-    return b""
+def generate_payout_pdf(payout, owner_name: str = "", vehicle_name: str = "", local_path: str = None) -> bytes:
+    """Генерирует PDF ведомости выплаты собственнику."""
+    try:
+        from fpdf import FPDF
+
+        pdf = FPDF()
+        pdf.add_page()
+
+        # Пытаемся добавить шрифт с поддержкой кириллицы
+        font_added = False
+        font_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/Arial.ttf",
+        ]
+
+        for fp in font_paths:
+            try:
+                from pathlib import Path
+                if Path(fp).exists():
+                    pdf.add_font("UniFont", "", fp, uni=True)
+                    pdf.add_font("UniFont", "B", fp, uni=True)
+                    font_added = True
+                    break
+            except Exception:
+                continue
+
+        if not font_added:
+            # Fallback на стандартный шрифт (без кириллицы)
+            pass
+
+        def _font(style="", size=10):
+            if font_added:
+                pdf.set_font("UniFont", style, size)
+            else:
+                pdf.set_font("Helvetica", style, size)
+
+        # Заголовок
+        _font("B", 18)
+        pdf.cell(0, 12, f"VEDOMOST VYPLATY", 0, 1, "C")
+        _font("", 10)
+        pdf.cell(0, 6, f"{payout.document_number or ''}", 0, 1, "C")
+        pdf.ln(5)
+
+        # Информация о выплате
+        _font("B", 12)
+        pdf.cell(0, 8, "DETALI VYPLATY", 0, 1)
+        pdf.ln(2)
+
+        details = [
+            ("Nomera dokumenta", payout.document_number or "N/A"),
+            ("Data vyplaty", str(payout.payout_date or "N/A")),
+            ("Status", str(getattr(payout.status, 'value', payout.status) if payout.status else "N/A")),
+            ("Sobstvennik", owner_name or "N/A"),
+            ("Tekhnika", vehicle_name or "N/A"),
+        ]
+
+        _font("", 10)
+        for label, value in details:
+            pdf.cell(70, 7, f"{label}:", 0, 0)
+            pdf.cell(0, 7, str(value), 0, 1)
+
+        pdf.ln(5)
+
+        # Финансовые детали
+        _font("B", 12)
+        pdf.cell(0, 8, "FINANSOVYE DETALI", 0, 1)
+        pdf.ln(2)
+
+        gross = float(payout.gross_amount or 0)
+        commission = float(payout.platform_commission or 0)
+        net = float(payout.net_amount or 0)
+        rate = float(payout.commission_rate or 0)
+
+        finance_rows = [
+            ("Gross suma", f"{gross:,.2f} RUB".replace(",", " ")),
+            (f"Komissiya platformy ({rate}%)", f"- {commission:,.2f} RUB".replace(",", " ")),
+            ("K vyplate (Net)", f"{net:,.2f} RUB".replace(",", " ")),
+        ]
+
+        for label, value in finance_rows:
+            _font("", 10)
+            pdf.cell(100, 7, f"{label}:", 0, 0)
+            _font("B", 10)
+            pdf.cell(0, 7, value, 0, 1)
+
+        pdf.ln(3)
+
+        # Выделяем итоговую сумму
+        _font("B", 14)
+        pdf.cell(100, 10, "ITOGO K VYPLATE:", 0, 0)
+        pdf.cell(0, 10, f"{net:,.2f} RUB".replace(",", " "), 0, 1)
+
+        # Подписи
+        pdf.ln(20)
+        _font("", 9)
+        pdf.cell(95, 7, "Podpis' menedzhera", 0, 0, "C")
+        pdf.cell(95, 7, "Podpis' sobstvennika", 0, 1, "C")
+        pdf.ln(15)
+        pdf.cell(95, 5, "M.P. / ________________", 0, 0, "C")
+        pdf.cell(95, 5, "M.P. / ________________", 0, 1, "C")
+
+        # Футер
+        pdf.ln(10)
+        _font("I", 8)
+        pdf.cell(0, 5, f'Dokument sgenerirovan: {datetime.now().strftime("%d.%m.%Y %H:%M")}', 0, 1, "C")
+        pdf.cell(0, 5, 'Sistema "SpecTekhnika Pro"', 0, 1, "C")
+
+        result = bytes(pdf.output())
+        if len(result) < 100:
+            logger.warning(f"⚠️ Generated payout PDF too small: {len(result)} bytes")
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ Failed to generate payout PDF: {e}", exc_info=True)
+        return b""
 
 
 def generate_maintenance_order_pdf(order_data: dict, local_path: str = None) -> bytes:
