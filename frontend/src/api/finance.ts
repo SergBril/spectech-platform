@@ -494,6 +494,27 @@ export const financeApi = {
     return response.data.clients || [];
   },
 
+  getFinanceDashboardV2: async (dateFrom: string, dateTo: string) => {
+    const res = await apiClient.get(`/finance/dashboard-v2`, {
+      params: { date_from: dateFrom, date_to: dateTo },
+    });
+    return res.data;
+  },
+
+  getRevenueByClient: async (dateFrom: string, dateTo: string, limit = 5) => {
+    const res = await apiClient.get(`/finance/revenue/by-client`, {
+      params: { date_from: dateFrom, date_to: dateTo, limit },
+    });
+    return res.data;
+  },
+
+  getRevenueByVehicle: async (dateFrom: string, dateTo: string, limit = 5) => {
+    const res = await apiClient.get(`/finance/revenue/by-vehicle`, {
+      params: { date_from: dateFrom, date_to: dateTo, limit },
+    });
+    return res.data;
+  },
+
   getRevenueByVehicle: async (dateFrom: string, dateTo: string, limit: number = 10): Promise<VehicleRevenue[]> => {
     const params = new URLSearchParams({
       date_from: dateFrom,
