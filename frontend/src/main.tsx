@@ -49,6 +49,8 @@ const GuestRoute = ({ children }: { children: JSX.Element }) => {
   return !isAuthenticated ? children : <Navigate to="/" replace />;
 };
 
+const BankStatementsPage = lazy(() => import('./pages/BankStatementsPage'));
+
 const AppRoutes = () => {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -77,6 +79,7 @@ const AppRoutes = () => {
         <Route path="/marketplace/:id" element={<ProtectedRoute><VehicleDetailPage /></ProtectedRoute>} />
         <Route path="/companies/:id" element={<ProtectedRoute><CompanyProfilePage /></ProtectedRoute>} />
         <Route path="/my-listings" element={<ProtectedRoute><MyListingsPage /></ProtectedRoute>} />
+        <Route path="/bank-statements" element={<ProtectedRoute><BankStatementsPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
