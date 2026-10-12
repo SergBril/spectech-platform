@@ -30,20 +30,22 @@ class SalaryService:
         if not employee.salary_type:
             raise ValueError(f"У сотрудника {employee.contractor_id} не задан тип зарплаты (salary_type)")
 
-        # Проверяем существующую запись за этот период
+        # Проверяем существующую запись за этот период (по сотруднику + пересечение дат)
         existing = db.query(SalaryRecord).filter(
             SalaryRecord.employee_contractor_id == employee.contractor_id,
-            SalaryRecord.period_start == period_start,
-            SalaryRecord.period_end == period_end,
             SalaryRecord.company_id == company_id,
-        ).first()
+            SalaryRecord.period_start <= period_end,
+            SalaryRecord.period_end >= period_start,
+        ).order_by(SalaryRecord.created_at.desc()).first()
 
         if existing:
-            logger.info(f"Salary record already exists for employee #{employee.contractor_id}, updating...")
+            logger.info(f"Salary record #{existing.id} already exists for employee #{employee.contractor_id}, updating...")
             shifts_data = SalaryService._get_shifts_data(
                 db, employee.contractor_id, period_start, period_end, company_id
             )
             gross, details = SalaryService._calculate_gross(employee, shifts_data)
+            existing.period_start = period_start
+            existing.period_end = period_end
             existing.shifts_count = shifts_data["shifts_count"]
             existing.total_hours = Decimal(str(shifts_data["total_hours"]))
             existing.total_km = Decimal(str(shifts_data["total_km"]))
@@ -95,11 +97,21 @@ class SalaryService:
         """Собирает данные о сменах сотрудника за период."""
         from app.models.shift import ShiftReport, ShiftTask
 
+        # Сначала проверяем без фильтра по датам
+        all_reports = db.query(ShiftReport).filter(
+            ShiftReport.operator_id == contractor_id
+        ).all()
+        
+        logger.info(f"🔍 Total reports for operator #{contractor_id}: {len(all_reports)}")
+        for r in all_reports:
+            task = db.get(ShiftTask, r.shift_task_id)
+            logger.info(f"   Report #{r.id}: task_date={task.shift_date if task else 'N/A'}, hours={r.operator_moto_hours}")
+
+        # Теперь с фильтром
         reports = (
             db.query(ShiftReport)
             .join(ShiftTask, ShiftReport.shift_task_id == ShiftTask.id)
             .filter(
-                ShiftTask.company_id == company_id,
                 ShiftReport.operator_id == contractor_id,
                 ShiftTask.shift_date >= period_start,
                 ShiftTask.shift_date <= period_end,
@@ -117,7 +129,8 @@ class SalaryService:
                 total_km += Decimal(str(report.operator_odometer))
 
         logger.info(
-            f"📊 Shifts data for employee #{contractor_id}: "
+            f"📊 Shifts data for employee #{contractor_id} "
+            f"({period_start} to {period_end}): "
             f"{len(reports)} shifts, {total_hours} hours, {total_km} km"
         )
 
