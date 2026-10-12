@@ -278,9 +278,7 @@ export const CompanyProfilePage: React.FC = () => {
         {/* Статистика */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-center">
-            <div className="text-3xl font-bold text-blue-600 mb-1">
-              {vehicles.length}
-            </div>
+            <div className="text-3xl font-bold text-blue-600 mb-1">{vehicles.length}</div>
             <div className="text-sm text-gray-600">Единиц техники</div>
           </div>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-center">
@@ -290,9 +288,7 @@ export const CompanyProfilePage: React.FC = () => {
             <div className="text-sm text-gray-600">Средний рейтинг</div>
           </div>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-center">
-            <div className="text-3xl font-bold text-yellow-600 mb-1">
-              {totalReviews}
-            </div>
+            <div className="text-3xl font-bold text-yellow-600 mb-1">{totalReviews}</div>
             <div className="text-sm text-gray-600">Отзывов</div>
           </div>
         </div>
@@ -376,9 +372,7 @@ export const CompanyProfilePage: React.FC = () => {
           <div className="space-y-4">
             {/* Заголовок с кнопкой создания отзыва */}
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Отзывы о компании
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-900">Отзывы о компании</h3>
               <button
                 onClick={() => setIsReviewFormOpen(true)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium flex items-center gap-2"
@@ -388,44 +382,50 @@ export const CompanyProfilePage: React.FC = () => {
               </button>
             </div>
 
-            {reviews.map((review) => (
-              <div
-                key={review.id}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-                      {(review.reviewer_contractor_name || review.reviewer_name || 'К')[0].toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-900">
-                        {review.reviewer_contractor_name || review.reviewer_name || 'Клиент'}
+            {reviews.length > 0 ? (
+              reviews.map((review) => (
+                <div
+                  key={review.id}
+                  className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                        {(review.reviewer_contractor_name || review.reviewer_name || 'К')[0].toUpperCase()}
                       </div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(review.created_at).toLocaleDateString('ru-RU', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                        })}
+                      <div>
+                        <div className="font-medium text-gray-900">
+                          {review.reviewer_contractor_name || review.reviewer_name || 'Клиент'}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {new Date(review.created_at).toLocaleDateString('ru-RU', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                          })}
+                        </div>
                       </div>
                     </div>
+                    {renderStars(review.rating)}
                   </div>
-                  {renderStars(review.rating)}
+                  <p className="text-gray-700">{review.comment}</p>
                 </div>
-                <p className="text-gray-700">{review.comment}</p>
-              </div>
-            ))}
-            {reviews.length === 0 && (
-              <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-                <div className="text-5xl mb-3">⭐</div>
-                <p className="text-gray-500 text-lg mb-2">Пока нет отзывов</p>
-                <p className="text-sm text-gray-400 mb-4">Будьте первым, кто оставит отзыв о компании</p>
+              ))
+            ) : (
+              /* ✅ ИСПРАВЛЕНО: Убран несуществующий компонент EmptyState и лишние закрывающие теги */
+              <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+                <div className="text-5xl mb-4">⭐</div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Пока нет отзывов
+                </h3>
+                <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                  Будьте первым, кто оставит отзыв об этой компании. Ваш опыт поможет другим клиентам сделать правильный выбор.
+                </p>
                 <button
                   onClick={() => setIsReviewFormOpen(true)}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
+                  className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 text-sm font-medium inline-flex items-center gap-2"
                 >
-                  ⭐ Оставить первый отзыв
+                  <span>⭐</span> Оставить первый отзыв
                 </button>
               </div>
             )}
