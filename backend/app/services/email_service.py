@@ -475,6 +475,57 @@ class EmailService:
             },
         )
 
+    def send_payout_approved(
+        self, payout, owner_email: str, owner_name: str
+    ) -> bool:
+        """Уведомление собственнику об одобренной выплате с PDF-вложением."""
+        from app.services.pdf_service import generate_payout_pdf
+        from app.models.catalog import Vehicle
+        from app.models.contractor import Contractor
+        from app.core.db import SessionLocal
+
+        subject = f"✅ Выплата {payout.document_number} одобрена — {payout.net_amount} ₽"
+
+        # Генерируем PDF
+        pdf_path = None
+        try:
+            db_tmp = SessionLocal()
+            owner = db_tmp.get(Contractor, payout.owner_id)
+            owner_name_full = owner.name if owner else owner_name
+            vehicle = db_tmp.get(Vehicle, payout.vehicle_id)
+            vehicle_name = vehicle.name if vehicle else ""
+            db_tmp.close()
+
+            pdf_path_str = generate_payout_pdf(
+                payout, owner_name=owner_name_full, vehicle_name=vehicle_name
+            )
+            pdf_path = Path(pdf_path_str)
+        except Exception as e:
+            logger.warning(f"⚠️ Could not generate payout PDF for email: {e}")
+
+        attachments = [pdf_path] if pdf_path and pdf_path.exists() else None
+
+        result = self.send_email(
+            to_email=owner_email,
+            subject=subject,
+            template_name="email/payout_created.html",
+            context={
+                "payout": payout,
+                "owner_name": owner_name,
+                "subject": subject,
+            },
+            attachments=attachments,
+        )
+
+        # Удаляем временный PDF
+        if pdf_path and pdf_path.exists():
+            try:
+                pdf_path.unlink()
+            except Exception:
+                pass
+
+        return result
+
     def send_dispute_opened(
         self, dispute, dispatcher_email: str, dispatcher_name: str
     ) -> bool:

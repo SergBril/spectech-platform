@@ -239,6 +239,39 @@ def get_payout(
         raise HTTPException(status_code=404, detail="Payout not found")
     return payout
 
+@router.post("/{payout_id}/send-email")
+def send_payout_email(
+    payout_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """📧 Ручная отправка уведомления о выплате собственнику."""
+    from app.services.email_service import email_service
+    from app.models.contractor import Contractor
+
+    payout = db.get(Payout, payout_id)
+    if not payout or payout.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Payout not found")
+
+    owner = db.get(Contractor, payout.owner_id)
+    if not owner or not owner.contact_email:
+        raise HTTPException(
+            status_code=400,
+            detail="У собственника нет email для отправки уведомления",
+        )
+
+    try:
+        email_service.send_payout_approved(
+            payout=payout,
+            owner_email=owner.contact_email,
+            owner_name=owner.name,
+        )
+        return {"status": "success", "message": f"Уведомление отправлено на {owner.contact_email}"}
+    except Exception as e:
+        logger.error(f"Failed to send payout email: {e}")
+        raise HTTPException(status_code=500, detail=f"Ошибка отправки: {str(e)}")
+
 
 @router.patch("/{payout_id}", response_model=PayoutRead)
 def update_payout(
@@ -288,6 +321,23 @@ def approve_payout(
     payout.status = DocumentStatus.sent
     db.commit()
     db.refresh(payout)
+
+    # 📧 Отправляем уведомление собственнику
+    try:
+        from app.services.email_service import email_service
+        from app.models.contractor import Contractor
+
+        owner = db.get(Contractor, payout.owner_id)
+        if owner and owner.contact_email:
+            email_service.send_payout_approved(
+                payout=payout,
+                owner_email=owner.contact_email,
+                owner_name=owner.name,
+            )
+            logger.info(f"📧 Payout notification sent to {owner.contact_email}")
+    except Exception as email_err:
+        logger.warning(f"⚠️ Failed to send payout email: {email_err}")
+        # Не блокируем одобрение если email не ушёл
 
     return PayoutWorkflowResponse(
         status="success",

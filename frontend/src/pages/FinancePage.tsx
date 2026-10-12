@@ -850,6 +850,30 @@ export const FinancePage: React.FC = () => {
                                   ✓
                                 </button>
                               )}
+            {/* 📧 Email */}
+            <button
+              onClick={async () => {
+                if (!confirm(`Отправить уведомление о выплате ${p.document_number} собственнику?`)) return;
+                try {
+                  const token = localStorage.getItem('access_token');
+                  const res = await fetch(`/api/v1/finance/payouts/${p.id}/send-email`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                  if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Ошибка отправки');
+                  }
+                  showToast.success('📧 Уведомление отправлено собственнику');
+                } catch (err: any) {
+                  showToast.error('Ошибка: ' + err.message);
+                }
+              }}
+              className="text-indigo-600 hover:text-indigo-900"
+              title="Отправить уведомление собственнику"
+            >
+              📧
+            </button>
                               {/* 💸 Выплатить */}
                               {p.status === 'sent' && canEdit && (
                                 <button
