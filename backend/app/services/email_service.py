@@ -46,18 +46,29 @@ class EmailService:
 
     def _attach_file(self, msg: MIMEMultipart, filename: str, content: bytes) -> None:
         """Прикрепляет файл к сообщению с правильным MIME-типом."""
+        if not content or len(content) == 0:
+            logger.warning(f"⚠️ Skipping empty attachment: {filename}")
+            return
+
         if filename.lower().endswith(".pdf"):
             part = MIMEBase("application", "pdf")
         else:
             part = MIMEBase("application", "octet-stream")
+
         part.set_payload(content)
         encoders.encode_base64(part)
-        # Используем RFC 2231 encoding для поддержки кириллицы в именах файлов
+
+        # RFC 2231 encoding для имён файлов
+        from email.header import Header
+        encoded_filename = str(Header(filename, "utf-8"))
         part.add_header(
             "Content-Disposition",
             "attachment",
-            filename=("utf-8", "", filename),
+            filename=encoded_filename,
         )
+        # Добавляем Content-Transfer-Encoding явно
+        part["Content-Transfer-Encoding"] = "base64"
+
         msg.attach(part)
 
     def send_email(
@@ -158,11 +169,25 @@ class EmailService:
                     else:
                         logger.warning(f"⚠️ Skipping invalid attachment: {type(att)}")
 
-            # Создаём MIME-сообщение
+            # Создаём MIME-сообщение с правильными заголовками для Mail.ru
+            from email.utils import formataddr
+            from email.header import Header
+
             msg = MIMEMultipart("mixed")
-            msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
+
+            # From с RFC 2047 encoding для кириллицы
+            from_name = str(settings.SMTP_FROM_NAME or "SpectechPlatform")
+            from_email = str(settings.SMTP_FROM_EMAIL)
+            msg["From"] = formataddr((str(Header(from_name, "utf-8")), from_email))
+
             msg["To"] = to_email
-            msg["Subject"] = subject
+
+            # Subject с RFC 2047 encoding
+            msg["Subject"] = Header(subject, "utf-8")
+
+            # Обязательные заголовки для Mail.ru
+            msg["MIME-Version"] = "1.0"
+            msg["Date"] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
 
             # Текстовое тело
             if body:
@@ -459,7 +484,7 @@ class EmailService:
         from app.models.contractor import Contractor
         from app.core.db import SessionLocal
 
-        subject = f"✅ Выплата {payout.document_number} одобрена — {payout.net_amount} ₽"
+        subject = f"Vyplata {payout.document_number} odobrena - {payout.net_amount} RUB"
 
         pdf_attachment = None
         temp_path_to_cleanup = None
