@@ -28,6 +28,8 @@ class SalaryService:
     ) -> SalaryRecord:
         """Рассчитывает зарплату сотрудника за период."""
         if not employee.salary_type:
+            raise ValueError(f"У сотрудника {employee.contractor_id} не задан тип зарплаты (salary_type)")
+
         # Проверяем существующую запись за этот период
         existing = db.query(SalaryRecord).filter(
             SalaryRecord.employee_contractor_id == employee.contractor_id,
@@ -38,7 +40,6 @@ class SalaryService:
 
         if existing:
             logger.info(f"Salary record already exists for employee #{employee.contractor_id}, updating...")
-            # Пересчитываем существующую запись
             shifts_data = SalaryService._get_shifts_data(
                 db, employee.contractor_id, period_start, period_end, company_id
             )
@@ -52,7 +53,6 @@ class SalaryService:
             db.commit()
             db.refresh(existing)
             return existing
-            raise ValueError(f"У сотрудника {employee.contractor_id} не задан тип зарплаты (salary_type)")
 
         # Собираем данные за период из смен
         shifts_data = SalaryService._get_shifts_data(
@@ -73,7 +73,7 @@ class SalaryService:
             salary_type=employee.salary_type,
             gross_amount=gross,
             deductions=Decimal("0"),
-            net_amount=gross,  # Пока без удержаний
+            net_amount=gross,
             calculation_details=details,
             status=SalaryStatus.draft.value,
             created_by=created_by,
