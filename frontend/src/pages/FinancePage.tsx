@@ -73,8 +73,10 @@ export const FinancePage: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
   const [deleteActTarget, setDeleteActTarget] = useState<Act | null>(null);
   // Период для расширенной аналитики
-  const [periodPreset, setPeriodPreset] = useState<'month' | 'prev_month' | 'quarter' | 'year'>('month');
+  const [periodPreset, setPeriodPreset] = useState<'month' | 'prev_month' | 'quarter' | 'year' | 'custom'>('month');
   const [dashboardV2, setDashboardV2] = useState<FinanceDashboardV2 | null>(null);
+  const [customDateFrom, setCustomDateFrom] = useState('');
+  const [customDateTo, setCustomDateTo] = useState('');
 
   // Вычисляем даты периода
   const getPeriodDates = () => {
@@ -90,12 +92,23 @@ export const FinancePage: React.FC = () => {
         from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         to = new Date(now.getFullYear(), now.getMonth(), 0);
         break;
-      case 'quarter':
-        const quarterStart = Math.floor(now.getMonth() / 3) * 3;
-        from = new Date(now.getFullYear(), quarterStart, 1);
+      case 'quarter': {
+        // Q1=Jan-Mar, Q2=Apr-Jun, Q3=Jul-Sep, Q4=Oct-Dec
+        const currentQuarter = Math.floor(now.getMonth() / 3);
+        from = new Date(now.getFullYear(), currentQuarter * 3, 1);
+        // Последний день текущего квартала
+        to = new Date(now.getFullYear(), currentQuarter * 3 + 3, 0);
         break;
+      }
       case 'year':
         from = new Date(now.getFullYear(), 0, 1);
+        break;
+      case 'custom':
+        if (customDateFrom && customDateTo) {
+          return { from: customDateFrom, to: customDateTo };
+        }
+        // Fallback на текущий месяц если даты не выбраны
+        from = new Date(now.getFullYear(), now.getMonth(), 1);
         break;
     }
 
@@ -121,7 +134,7 @@ export const FinancePage: React.FC = () => {
   useEffect(() => {
     if (!canView) return;
     loadDashboardV2();
-  }, [canView, periodPreset]);
+  }, [canView, periodPreset, customDateFrom, customDateTo]);
 
   const loadDashboardV2 = async () => {
     try {
@@ -463,35 +476,55 @@ export const FinancePage: React.FC = () => {
 
         {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">{error}</div>}
 
-        {/* Period Selector */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-700">Период:</span>
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-              {[
-                { key: 'month', label: 'Этот месяц' },
-                { key: 'prev_month', label: 'Прошлый месяц' },
-                { key: 'quarter', label: 'Квартал' },
-                { key: 'year', label: 'Год' },
-              ].map((p) => (
-                <button
-                  key={p.key}
-                  onClick={() => setPeriodPreset(p.key as any)}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                    periodPreset === p.key
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="text-sm text-gray-500">
-            {new Date(periodDates.from).toLocaleDateString('ru-RU')} — {new Date(periodDates.to).toLocaleDateString('ru-RU')}
-          </div>
-        </div>
+       {/* Period Selector */}
+       <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
+         <div className="flex flex-wrap items-center gap-2">
+           <span className="text-sm font-medium text-gray-700">Период:</span>
+           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+             {[
+               { key: 'month', label: 'Этот месяц' },
+               { key: 'prev_month', label: 'Прошлый месяц' },
+               { key: 'quarter', label: 'Квартал' },
+               { key: 'year', label: 'Год' },
+               { key: 'custom', label: '📅 Свой период' },
+             ].map((p) => (
+               <button
+                 key={p.key}
+                 onClick={() => setPeriodPreset(p.key as any)}
+                 className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                   periodPreset === p.key
+                     ? 'bg-blue-600 text-white'
+                     : 'text-gray-600 hover:bg-gray-200'
+                 }`}
+               >
+                 {p.label}
+               </button>
+             ))}
+           </div>
+
+           {/* Календарь для произвольного периода */}
+           {periodPreset === 'custom' && (
+             <div className="flex items-center gap-2 ml-2">
+               <input
+                 type="date"
+                 value={customDateFrom}
+                 onChange={(e) => setCustomDateFrom(e.target.value)}
+                 className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+               />
+               <span className="text-gray-400">—</span>
+               <input
+                 type="date"
+                 value={customDateTo}
+                 onChange={(e) => setCustomDateTo(e.target.value)}
+                 className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+               />
+             </div>
+           )}
+         </div>
+         <div className="text-sm text-gray-500">
+           {new Date(periodDates.from).toLocaleDateString('ru-RU')} — {new Date(periodDates.to).toLocaleDateString('ru-RU')}
+         </div>
+       </div>
 
         {/* Metrics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
