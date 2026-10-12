@@ -1,35 +1,41 @@
-﻿import React from 'react';
+﻿import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { Toaster } from 'react-hot-toast';
-import { CompanySettingsPage } from './pages/CompanySettingsPage';
-import { ContractorsPage } from './pages/ContractorsPage';
-import { ContractorDetailPage } from './pages/ContractorDetailPage';
+import PageLoader from './components/PageLoader';
 
+// Lazy-loaded pages
+import {
+  DashboardPage,
+  FinancePage,
+  CompanyProfilePage,
+  MarketplacePage,
+  VehiclesPage,
+  RequestsPage,
+  ContractorsPage,
+  ContractorDetailPage,
+  MaintenancePage,
+  MaintenanceDetailPage,
+  MaintenanceCreatePage,
+  MaintenanceAnalyticsPage,
+  FuelAnalyticsPage,
+  ReconciliationPage,
+  InvoicesPage,
+  EmailTemplatesPage,
+  EmailLogsPage,
+  CompanySettingsPage,
+  MyListingsPage,
+  RequestDetailPage,
+  ActCreatePage,
+  VehicleDetailPage,
+} from './pages';
+
+// Лёгкие страницы — загружаются сразу
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import RequestsPage from './pages/RequestsPage';
-import DashboardPage from './pages/DashboardPage';
-import VehiclesPage from './pages/VehiclesPage';
-import MarketplacePage from './pages/MarketplacePage';  // в†ђ Р”РћР‘РђР’РРўР¬
-import FinancePage from './pages/FinancePage';
-import InvoicesPage from './pages/InvoicesPage';
-import RequestDetailPage from './pages/RequestDetailPage';
-import ActCreatePage from './pages/ActCreatePage';
-import MaintenancePage from './pages/MaintenancePage';
-import MaintenanceDetailPage from './pages/MaintenanceDetailPage';
-import MaintenanceCreatePage from './pages/MaintenanceCreatePage';
-import MaintenanceAnalyticsPage from './pages/MaintenanceAnalyticsPage';
-import FuelAnalyticsPage from './pages/FuelAnalyticsPage';
-import EmailTemplatesPage from './pages/EmailTemplatesPage';
-import { EmailLogsPage } from './pages/EmailLogsPage';
-import ReconciliationPage from './pages/ReconciliationPage';
-import VehicleDetailPage from './pages/VehicleDetailPage';
-import MyListingsPage from './pages/MyListingsPage';
-import CompanyProfilePage from './pages/CompanyProfilePage';
 
 import './index.css';
 
@@ -45,33 +51,35 @@ const GuestRoute = ({ children }: { children: JSX.Element }) => {
 
 const AppRoutes = () => {
   return (
-    <Routes>
-      <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
-      <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
-      <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-      <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
-      <Route path="/maintenance" element={<ProtectedRoute><MaintenancePage /></ProtectedRoute>} />
-      <Route path="/maintenance/new" element={<ProtectedRoute><MaintenanceCreatePage /></ProtectedRoute>} />
-      <Route path="/maintenance/:id" element={<ProtectedRoute><MaintenanceDetailPage /></ProtectedRoute>} />
-      <Route path="/maintenance/analytics" element={<ProtectedRoute><MaintenanceAnalyticsPage /></ProtectedRoute>} />
-      <Route path="/fuel/analytics" element={<ProtectedRoute><FuelAnalyticsPage /></ProtectedRoute>} />
-      <Route path="/marketplace" element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />
-      <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
-      <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
-      <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
-      <Route path="/email-templates" element={<ProtectedRoute><EmailTemplatesPage /></ProtectedRoute>} />
-      <Route path="/email-logs" element={<ProtectedRoute><EmailLogsPage /></ProtectedRoute>} />
-      <Route path="/requests/:id" element={<ProtectedRoute><RequestDetailPage /></ProtectedRoute>} />
-      <Route path="/acts/new" element={<ProtectedRoute><ActCreatePage /></ProtectedRoute>} />
-      <Route path="/settings/company" element={<ProtectedRoute><CompanySettingsPage /></ProtectedRoute>} />
-      <Route path="/contractors" element={<ProtectedRoute><ContractorsPage /></ProtectedRoute>} />
-      <Route path="/contractors/:id" element={<ProtectedRoute><ContractorDetailPage /></ProtectedRoute>} />
-      <Route path="/reconciliation" element={<ProtectedRoute><ReconciliationPage /></ProtectedRoute>} />
-      <Route path="/marketplace/:id" element={<ProtectedRoute><VehicleDetailPage /></ProtectedRoute>} />
-      <Route path="/companies/:id" element={<ProtectedRoute><CompanyProfilePage /></ProtectedRoute>} />
-      <Route path="/my-listings" element={<ProtectedRoute><MyListingsPage /></ProtectedRoute>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
+        <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
+        <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
+        <Route path="/maintenance" element={<ProtectedRoute><MaintenancePage /></ProtectedRoute>} />
+        <Route path="/maintenance/new" element={<ProtectedRoute><MaintenanceCreatePage /></ProtectedRoute>} />
+        <Route path="/maintenance/:id" element={<ProtectedRoute><MaintenanceDetailPage /></ProtectedRoute>} />
+        <Route path="/maintenance/analytics" element={<ProtectedRoute><MaintenanceAnalyticsPage /></ProtectedRoute>} />
+        <Route path="/fuel/analytics" element={<ProtectedRoute><FuelAnalyticsPage /></ProtectedRoute>} />
+        <Route path="/marketplace" element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />
+        <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
+        <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
+        <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
+        <Route path="/email-templates" element={<ProtectedRoute><EmailTemplatesPage /></ProtectedRoute>} />
+        <Route path="/email-logs" element={<ProtectedRoute><EmailLogsPage /></ProtectedRoute>} />
+        <Route path="/requests/:id" element={<ProtectedRoute><RequestDetailPage /></ProtectedRoute>} />
+        <Route path="/acts/new" element={<ProtectedRoute><ActCreatePage /></ProtectedRoute>} />
+        <Route path="/settings/company" element={<ProtectedRoute><CompanySettingsPage /></ProtectedRoute>} />
+        <Route path="/contractors" element={<ProtectedRoute><ContractorsPage /></ProtectedRoute>} />
+        <Route path="/contractors/:id" element={<ProtectedRoute><ContractorDetailPage /></ProtectedRoute>} />
+        <Route path="/reconciliation" element={<ProtectedRoute><ReconciliationPage /></ProtectedRoute>} />
+        <Route path="/marketplace/:id" element={<ProtectedRoute><VehicleDetailPage /></ProtectedRoute>} />
+        <Route path="/companies/:id" element={<ProtectedRoute><CompanyProfilePage /></ProtectedRoute>} />
+        <Route path="/my-listings" element={<ProtectedRoute><MyListingsPage /></ProtectedRoute>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 };
 
@@ -89,17 +97,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           },
           success: {
             duration: 3000,
-            iconTheme: {
-              primary: '#10B981',
-              secondary: '#fff',
-            },
+            iconTheme: { primary: '#10B981', secondary: '#fff' },
           },
           error: {
             duration: 5000,
-            iconTheme: {
-              primary: '#EF4444',
-              secondary: '#fff',
-            },
+            iconTheme: { primary: '#EF4444', secondary: '#fff' },
           },
         }}
       />
