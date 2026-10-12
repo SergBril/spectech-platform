@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Navbar } from '../components/Navbar';
+import Layout from '../components/Layout'; // <-- ДОБАВЛЕНО
 import {
   listMaintenanceOrders,
   checkScheduledMaintenance,
@@ -132,10 +132,20 @@ export const MaintenancePage: React.FC = () => {
     });
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+  // ИСПРАВЛЕНО: Обертка загрузки в Layout
+  if (loading && orders.length === 0) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </Layout>
+    );
+  }
 
+  // ИСПРАВЛЕНО: Убран Navbar, всё обернуто в Layout
+  return (
+    <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Заголовок */}
         <div className="mb-8 flex justify-between items-center">
@@ -242,11 +252,7 @@ export const MaintenancePage: React.FC = () => {
         </div>
 
         {/* Список наряд-заказов */}
-        {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          </div>
-        ) : orders.length === 0 ? (
+        {orders.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <div className="text-6xl mb-4">📋</div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
@@ -347,7 +353,7 @@ export const MaintenancePage: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </Layout>
   );
 };
 

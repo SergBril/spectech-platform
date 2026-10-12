@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Navbar } from '../components/Navbar';
+import Layout from '../components/Layout'; // Layout уже здесь
 import { getVehicleTCO, VehicleTCO } from '../api/maintenance';
 import toast from 'react-hot-toast';
 
@@ -63,10 +63,9 @@ export const MaintenanceAnalyticsPage: React.FC = () => {
       maximumFractionDigits: 0,
     }).format(amount);
 
+  // ИСПРАВЛЕНО: Убран Navbar, всё содержимое обернуто в Layout
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
+    <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <button
@@ -169,7 +168,7 @@ export const MaintenanceAnalyticsPage: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </Layout>
   );
 };
 

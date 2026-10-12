@@ -57,26 +57,50 @@ export const ContractorDetailPage: React.FC = () => {
   const loadContractorData = async () => {
     try {
       setLoading(true);
-    
-      // Загружаем основную информацию
+  
+      // 1. Загружаем основную информацию
       const contractorData = await contractorsApi.getById(Number(id));
       setContractor(contractorData);
 
-      // Попытка загрузить финансовые данные (может не существовать)
+      // 2. Загружаем финансовую сводку
       try {
         const financeData = await financeApi.getContractorSummary(Number(id));
         setFinance(financeData);
       } catch (financeErr) {
-        console.warn('Finance data not available:', financeErr);
-        setFinance(null); // Не критично
+        console.warn('Finance summary not available:', financeErr);
+        setFinance(null);
       }
 
-      // Попытка загрузить историю
+      // 3. Загружаем счета контрагента
+      try {
+        const invoicesData = await financeApi.getInvoices({ 
+          contractor_id: Number(id),
+          limit: 100 
+        });
+        setInvoices(Array.isArray(invoicesData) ? invoicesData : []);
+      } catch (invoicesErr) {
+        console.warn('Invoices not available:', invoicesErr);
+        setInvoices([]);
+      }
+
+      // 4. Загружаем акты контрагента
+      try {
+        const actsData = await financeApi.getActs({ 
+          contractor_id: Number(id),
+          limit: 100 
+        });
+        setActs(Array.isArray(actsData) ? actsData : []);
+      } catch (actsErr) {
+        console.warn('Acts not available:', actsErr);
+        setActs([]);
+      }
+
+      // 5. Загружаем историю
       try {
         const historyData = await contractorsApi.getHistory(Number(id));
-        setHistory(historyData);
+        setHistory(Array.isArray(historyData) ? historyData : []);
       } catch (historyErr) {
-        console.warn('History data not available:', historyErr);
+        console.warn('History not available:', historyErr);
         setHistory([]);
       }
     } catch (err: any) {

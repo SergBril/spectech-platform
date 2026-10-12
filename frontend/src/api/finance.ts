@@ -389,16 +389,11 @@ export const financeApi = {
     return response.data;
   },
 
-  // === PAYOUT BATCH (Sprint 4 Task 3) ===
   calculatePayoutsBatch: async (data: PayoutBatchRequest): Promise<PayoutBatchResult> => {
-    const params = new URLSearchParams({
-      date_from: data.date_from,
-      date_to: data.date_to,
+    // 🆕 ИСПРАВЛЕНО: используем payouts router
+    const response = await apiClient.post('/finance/payouts/calculate', null, { 
+      params: data 
     });
-    if (data.commission_rate !== undefined) {
-      params.append('commission_rate', data.commission_rate.toString());
-    }
-    const response = await apiClient.post(`/finance/payouts/calculate?${params}`);
     return response.data;
   },
 

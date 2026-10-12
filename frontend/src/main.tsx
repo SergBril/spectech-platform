@@ -27,6 +27,9 @@ import FuelAnalyticsPage from './pages/FuelAnalyticsPage';
 import EmailTemplatesPage from './pages/EmailTemplatesPage';
 import { EmailLogsPage } from './pages/EmailLogsPage';
 import ReconciliationPage from './pages/ReconciliationPage';
+import VehicleDetailPage from './pages/VehicleDetailPage';
+import MyListingsPage from './pages/MyListingsPage';
+import CompanyProfilePage from './pages/CompanyProfilePage';
 
 import './index.css';
 
@@ -64,6 +67,9 @@ const AppRoutes = () => {
       <Route path="/contractors" element={<ProtectedRoute><ContractorsPage /></ProtectedRoute>} />
       <Route path="/contractors/:id" element={<ProtectedRoute><ContractorDetailPage /></ProtectedRoute>} />
       <Route path="/reconciliation" element={<ProtectedRoute><ReconciliationPage /></ProtectedRoute>} />
+      <Route path="/marketplace/:id" element={<ProtectedRoute><VehicleDetailPage /></ProtectedRoute>} />
+      <Route path="/companies/:id" element={<ProtectedRoute><CompanyProfilePage /></ProtectedRoute>} />
+      <Route path="/my-listings" element={<ProtectedRoute><MyListingsPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

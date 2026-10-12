@@ -10,7 +10,7 @@ import NotificationBell from '../components/NotificationBell';
 import { FileUploadButton } from '../components/FileUploadButton';
 import { FileList } from '../components/FileList';
 import type { FileUploadResponse } from '../api/files';
-import Navbar from '../components/Navbar';
+import Layout from '../components/Layout';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   new: { label: 'Новая', color: 'bg-blue-100 text-blue-800', icon: '🆕' },
@@ -207,17 +207,15 @@ export const RequestDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-          <div className="px-4 py-6 sm:px-0 space-y-6">
-            <RequestHeaderSkeleton />
-            <div className="bg-white rounded-lg shadow p-6 animate-pulse"><TableSkeleton rows={3} columns={7} /></div>
-            <div className="bg-white rounded-lg shadow p-6 animate-pulse"><TableSkeleton rows={2} columns={4} /></div>
-            <TimelineSkeleton />
-          </div>
-        </main>
-      </div>
+      <Layout>
+      
+       <div className="px-4 py-6 sm:px-0 space-y-6">
+         <RequestHeaderSkeleton />
+         <div className="bg-white rounded-lg shadow p-6 animate-pulse"><TableSkeleton rows={3} columns={7} /></div>
+         <div className="bg-white rounded-lg shadow p-6 animate-pulse"><TableSkeleton rows={2} columns={4} /></div>
+         <TimelineSkeleton />
+       </div>
+     </Layout>
     );
   }
 
@@ -239,307 +237,304 @@ export const RequestDetailPage: React.FC = () => {
   const invoicesProgress = invoicesTotal > 0 ? (invoicesPaid / invoicesTotal) * 100 : 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <Layout>
+      
+     <div className="px-4 py-6 sm:px-0 space-y-6">
+       {/* === ШАПКА ЗАЯВКИ === */}
+       <div className="bg-white rounded-lg shadow p-6">
+         <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6">
+           <div>
+             <div className="flex items-center space-x-3 mb-2">
+               <span className="text-4xl">{statusConfig.icon}</span>
+               <div>
+                 <h2 className="text-2xl font-bold text-gray-900">{request.work_type}</h2>
+                 <div className="flex items-center space-x-2 mt-1">
+                   <span className={`px-3 py-1 text-sm font-semibold rounded-full ${statusConfig.color}`}>{statusConfig.label}</span>
+                   <span className="text-sm text-gray-500">#{request.id}</span>
+                 </div>
+               </div>
+             </div>
+           </div>
+           {canEdit && (
+             <div className="flex items-center space-x-2 flex-wrap gap-2">
+               <button onClick={handleExportReport} className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm" title="Скачать PDF-отчёт по заявке">📥 PDF-отчёт</button>
+               <label className="text-sm text-gray-600">Статус:</label>
+               <select value={request.status} onChange={(e) => handleStatusChange(e.target.value)} disabled={statusUpdating} className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50">
+                 {WORKFLOW.map((w) => (<option key={w.value} value={w.value}>{w.icon} {w.label}</option>))}
+               </select>
+             </div>
+           )}
+         </div>
+         <dl className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+           <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">📍 Адрес объекта</dt><dd className="text-gray-900 font-medium">{request.object_address}</dd></div>
+           <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">📅 Период выполнения</dt><dd className="text-gray-900">{formatDateTime(request.planned_start)}<br />{formatDateTime(request.planned_end)}</dd></div>
+           <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">⏱️ Тип / Смена</dt><dd className="text-gray-900">{(request as any).request_type || 'one_time'} / {request.shift_duration_hours || '—'} ч</dd></div>
+           <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💰 Ставка клиента</dt><dd className="text-gray-900 font-semibold">{formatMoney(request.client_rate)} ({request.rate_type})</dd></div>
+           <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💵 Ожидаемая сумма</dt><dd className="text-gray-900 font-semibold text-green-700">{formatMoney(request.estimated_amount)}</dd></div>
+           <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">🎯 Приоритет / Источник</dt><dd className="text-gray-900">{request.priority} / {request.source_channel}</dd></div>
+           {request.comment && (<div className="bg-gray-50 p-3 rounded md:col-span-2 lg:col-span-3"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💬 Комментарий</dt><dd className="text-gray-900">{request.comment}</dd></div>)}
+         </dl>
+       </div>
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0 space-y-6">
-          {/* === ШАПКА ЗАЯВКИ === */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6">
-              <div>
-                <div className="flex items-center space-x-3 mb-2">
-                  <span className="text-4xl">{statusConfig.icon}</span>
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{request.work_type}</h2>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <span className={`px-3 py-1 text-sm font-semibold rounded-full ${statusConfig.color}`}>{statusConfig.label}</span>
-                      <span className="text-sm text-gray-500">#{request.id}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {canEdit && (
-                <div className="flex items-center space-x-2 flex-wrap gap-2">
-                  <button onClick={handleExportReport} className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm" title="Скачать PDF-отчёт по заявке">📥 PDF-отчёт</button>
-                  <label className="text-sm text-gray-600">Статус:</label>
-                  <select value={request.status} onChange={(e) => handleStatusChange(e.target.value)} disabled={statusUpdating} className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50">
-                    {WORKFLOW.map((w) => (<option key={w.value} value={w.value}>{w.icon} {w.label}</option>))}
-                  </select>
-                </div>
-              )}
-            </div>
-            <dl className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-              <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">📍 Адрес объекта</dt><dd className="text-gray-900 font-medium">{request.object_address}</dd></div>
-              <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">📅 Период выполнения</dt><dd className="text-gray-900">{formatDateTime(request.planned_start)}<br />{formatDateTime(request.planned_end)}</dd></div>
-              <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">⏱️ Тип / Смена</dt><dd className="text-gray-900">{(request as any).request_type || 'one_time'} / {request.shift_duration_hours || '—'} ч</dd></div>
-              <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💰 Ставка клиента</dt><dd className="text-gray-900 font-semibold">{formatMoney(request.client_rate)} ({request.rate_type})</dd></div>
-              <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💵 Ожидаемая сумма</dt><dd className="text-gray-900 font-semibold text-green-700">{formatMoney(request.estimated_amount)}</dd></div>
-              <div className="bg-gray-50 p-3 rounded"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">🎯 Приоритет / Источник</dt><dd className="text-gray-900">{request.priority} / {request.source_channel}</dd></div>
-              {request.comment && (<div className="bg-gray-50 p-3 rounded md:col-span-2 lg:col-span-3"><dt className="text-gray-500 text-xs uppercase font-semibold mb-1">💬 Комментарий</dt><dd className="text-gray-900">{request.comment}</dd></div>)}
-            </dl>
-          </div>
+       {/* 🆕 === ПРИВЯЗАННАЯ ТЕХНИКА === */}
+       {(request as any).assigned_vehicle_name || request.vehicle_category_id ? (
+         <div className="bg-white rounded-lg shadow p-6">
+           <h3 className="text-lg font-semibold text-gray-900 mb-4">🚜 Техника</h3>
+           <dl className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+             <div className="bg-gray-50 p-3 rounded">
+               <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">📂 Категория</dt>
+               <dd className="text-gray-900 font-medium">
+                 {(request as any).vehicle_category_name || '—'}
+               </dd>
+             </div>
+             <div className="bg-gray-50 p-3 rounded">
+               <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">🚜 Назначена</dt>
+               <dd className="text-gray-900 font-medium">
+                 {(request as any).assigned_vehicle_name || '—'}
+               </dd>
+             </div>
+             <div className="bg-gray-50 p-3 rounded">
+               <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">👷 Оператор</dt>
+               <dd className="text-gray-900 font-medium">
+                 {(request as any).assigned_operator_name || '—'}
+               </dd>
+             </div>
+             <div className="bg-gray-50 p-3 rounded">
+               <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">👤 Клиент</dt>
+               <dd className="text-gray-900 font-medium">
+                 {(request as any).client_name || '—'}
+               </dd>
+             </div>
+           </dl>
+         </div>
+       ) : null}
 
-          {/* 🆕 === ПРИВЯЗАННАЯ ТЕХНИКА === */}
-          {(request as any).assigned_vehicle_name || request.vehicle_category_id ? (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">🚜 Техника</h3>
-              <dl className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-                <div className="bg-gray-50 p-3 rounded">
-                  <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">📂 Категория</dt>
-                  <dd className="text-gray-900 font-medium">
-                    {(request as any).vehicle_category_name || '—'}
-                  </dd>
-                </div>
-                <div className="bg-gray-50 p-3 rounded">
-                  <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">🚜 Назначена</dt>
-                  <dd className="text-gray-900 font-medium">
-                    {(request as any).assigned_vehicle_name || '—'}
-                  </dd>
-                </div>
-                <div className="bg-gray-50 p-3 rounded">
-                  <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">👷 Оператор</dt>
-                  <dd className="text-gray-900 font-medium">
-                    {(request as any).assigned_operator_name || '—'}
-                  </dd>
-                </div>
-                <div className="bg-gray-50 p-3 rounded">
-                  <dt className="text-gray-500 text-xs uppercase font-semibold mb-1">👤 Клиент</dt>
-                  <dd className="text-gray-900 font-medium">
-                    {(request as any).client_name || '—'}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          ) : null}
+       {/* === СЧЕТА === */}
+       <div className="bg-white rounded-lg shadow p-6">
+         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
+           <div>
+             <h3 className="text-lg font-semibold text-gray-900">💰 Счета ({invoices.length})</h3>
+             {invoices.length > 0 && (
+               <div className="mt-2">
+                 <div className="flex items-center space-x-3 text-sm">
+                   <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-xs">
+                     <div className={`h-2 rounded-full ${invoicesProgress === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${invoicesProgress}%` }}></div>
+                   </div>
+                   <span className="text-gray-600">Оплачено {formatMoney(invoicesPaid)} из {formatMoney(invoicesTotal)} ({invoicesProgress.toFixed(0)}%)</span>
+                 </div>
+               </div>
+             )}
+           </div>
+           <div className="flex items-center gap-2">
+             {canCreateInvoice && (<button onClick={handleCreateInvoice} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">+ Создать счёт</button>)}
+           </div>
+         </div>
+         {invoices.length === 0 ? (
+           <div className="text-center py-12 text-gray-500">
+             <div className="text-5xl mb-3">💰</div>
+             <p>К этой заявке ещё не привязаны счета</p>
+           </div>
+         ) : (
+           <div className="overflow-x-auto">
+             <table className="min-w-full divide-y divide-gray-200">
+               <thead className="bg-gray-50">
+                 <tr>
+                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">№</th>
+                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
+                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Оплачено</th>
+                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
+                 </tr>
+               </thead>
+               <tbody className="bg-white divide-y divide-gray-200">
+                 {invoices.map((inv) => {
+                   const paid = parseFloat(inv.paid_amount || '0');
+                   const total = parseFloat(inv.total || '0');
+                   const progress = total > 0 ? (paid / total) * 100 : 0;
+                   return (
+                     <>
+                       <tr key={inv.id} className="hover:bg-gray-50">
+                         <td className="px-4 py-3 text-sm font-mono text-gray-900">{inv.document_number}</td>
+                         <td className="px-4 py-3 text-sm text-gray-600">{inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString('ru-RU') : '—'}</td>
+                         <td className="px-4 py-3 text-sm font-semibold">{formatMoney(inv.total)}</td>
+                         <td className="px-4 py-3 text-sm">
+                           <div className="flex items-center space-x-2">
+                             <div className="w-20 bg-gray-200 rounded-full h-2"><div className={`h-2 rounded-full ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div></div>
+                             <span className="text-xs text-gray-600">{formatMoney(inv.paid_amount)}</span>
+                           </div>
+                         </td>
+                         <td className="px-4 py-3"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>{INVOICE_STATUS_LABELS[inv.status]?.label || inv.status}</span></td>
+                         <td className="px-4 py-3 text-right text-sm space-x-2">
+                           <button onClick={() => handleDownloadInvoicePdf(inv)} className="text-purple-600 hover:text-purple-900" title="Скачать PDF">📥 PDF</button>
+                           <FileUploadButton fileCategory="invoice_pdf" options={{ invoice_id: inv.id }} accept=".pdf,.jpg,.png" onUploadSuccess={handleFileUploaded} label="📎" className="text-xs px-2 py-1 inline-block" />
+                         </td>
+                       </tr>
+                       {/* 🆕 FileList для конкретного счёта */}
+                       <tr className="border-b border-gray-100">
+                         <td colSpan={6} className="px-4 py-2 bg-gray-50">
+                           <FileList
+                             fileCategory="invoice_pdf"
+                             invoiceId={inv.id}
+                             refreshTrigger={filesRefreshTrigger}
+                           />
+                         </td>
+                       </tr>
+                     </>
+                   );
+                 })}
+               </tbody>
+             </table>
+           </div>
+         )}
+       </div>
 
-          {/* === СЧЕТА === */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">💰 Счета ({invoices.length})</h3>
-                {invoices.length > 0 && (
-                  <div className="mt-2">
-                    <div className="flex items-center space-x-3 text-sm">
-                      <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-xs">
-                        <div className={`h-2 rounded-full ${invoicesProgress === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${invoicesProgress}%` }}></div>
-                      </div>
-                      <span className="text-gray-600">Оплачено {formatMoney(invoicesPaid)} из {formatMoney(invoicesTotal)} ({invoicesProgress.toFixed(0)}%)</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {canCreateInvoice && (<button onClick={handleCreateInvoice} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">+ Создать счёт</button>)}
-              </div>
-            </div>
-            {invoices.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <div className="text-5xl mb-3">💰</div>
-                <p>К этой заявке ещё не привязаны счета</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">№</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Оплачено</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {invoices.map((inv) => {
-                      const paid = parseFloat(inv.paid_amount || '0');
-                      const total = parseFloat(inv.total || '0');
-                      const progress = total > 0 ? (paid / total) * 100 : 0;
-                      return (
-                        <>
-                          <tr key={inv.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm font-mono text-gray-900">{inv.document_number}</td>
-                            <td className="px-4 py-3 text-sm text-gray-600">{inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString('ru-RU') : '—'}</td>
-                            <td className="px-4 py-3 text-sm font-semibold">{formatMoney(inv.total)}</td>
-                            <td className="px-4 py-3 text-sm">
-                              <div className="flex items-center space-x-2">
-                                <div className="w-20 bg-gray-200 rounded-full h-2"><div className={`h-2 rounded-full ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div></div>
-                                <span className="text-xs text-gray-600">{formatMoney(inv.paid_amount)}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>{INVOICE_STATUS_LABELS[inv.status]?.label || inv.status}</span></td>
-                            <td className="px-4 py-3 text-right text-sm space-x-2">
-                              <button onClick={() => handleDownloadInvoicePdf(inv)} className="text-purple-600 hover:text-purple-900" title="Скачать PDF">📥 PDF</button>
-                              <FileUploadButton fileCategory="invoice_pdf" options={{ invoice_id: inv.id }} accept=".pdf,.jpg,.png" onUploadSuccess={handleFileUploaded} label="📎" className="text-xs px-2 py-1 inline-block" />
-                            </td>
-                          </tr>
-                          {/* 🆕 FileList для конкретного счёта */}
-                          <tr className="border-b border-gray-100">
-                            <td colSpan={6} className="px-4 py-2 bg-gray-50">
-                              <FileList
-                                fileCategory="invoice_pdf"
-                                invoiceId={inv.id}
-                                refreshTrigger={filesRefreshTrigger}
-                              />
-                            </td>
-                          </tr>
-                        </>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+       {/* === АКТЫ === */}
+       <div className="bg-white rounded-lg shadow p-6">
+         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
+           <h3 className="text-lg font-semibold text-gray-900">📄 Акты ({acts.length})</h3>
+           <div className="flex items-center gap-2">
+             {canCreateInvoice && (
+               <button
+                 onClick={() => navigate(`/acts/new?request_id=${request?.id}`)}
+                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+               >
+                 + Создать акт
+               </button>
+             )}
+           </div>
+         </div>
+         {acts.length === 0 ? (
+           <div className="text-center py-8 text-gray-500">
+             <div className="text-4xl mb-2">📄</div>
+             <p>К этой заявке ещё не привязаны акты</p>
+           </div>
+         ) : (
+           <div className="overflow-x-auto">
+             <table className="min-w-full divide-y divide-gray-200">
+               <thead className="bg-gray-50">
+                 <tr>
+                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">№</th>
+                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
+                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
+                 </tr>
+               </thead>
+               <tbody className="bg-white divide-y divide-gray-200">
+                 {acts.map((act) => (
+                   <>
+                     <tr key={act.id} className="hover:bg-gray-50">
+                       <td className="px-4 py-3 text-sm font-mono text-gray-900">{act.document_number}</td>
+                       <td className="px-4 py-3 text-sm text-gray-600">
+                         {act.act_date ? new Date(act.act_date).toLocaleDateString('ru-RU') : '—'}
+                       </td>
+                       <td className="px-4 py-3 text-sm font-semibold">{formatMoney(act.total_amount)}</td>
+                       <td className="px-4 py-3">
+                         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[act.status]?.color || 'bg-gray-100'}`}>
+                           {INVOICE_STATUS_LABELS[act.status]?.label || act.status}
+                         </span>
+                       </td>
+                       <td className="px-4 py-3 text-right text-sm space-x-2">
+                         <button
+                           onClick={() => handleDownloadActPdf(act)}
+                           className="text-purple-600 hover:text-purple-900"
+                           title="Акт PDF"
+                         >
+                           📄 Акт
+                         </button>
+                         <button
+                           onClick={() => handleDownloadUpd(act)}
+                           className="text-green-600 hover:text-green-900 font-semibold"
+                           title="УПД (Универсальный передаточный документ)"
+                         >
+                           📋 УПД
+                         </button>
+                         {/* 🆕 Кнопка ТОРГ-12 */}
+                         <button
+                           onClick={() => handleDownloadTorg12(act)}
+                           className="text-purple-600 hover:text-purple-900"
+                           title="ТОРГ-12 (Расходная накладная)"
+                         >
+                           📦 Т-12
+                         </button>
+                         {act.tax_system === 'osno' && parseFloat(act.vat_rate || '0') > 0 && (
+                           <button
+                             onClick={() => handleDownloadInvoiceFacture(act)}
+                             className="text-orange-600 hover:text-orange-900"
+                             title="Счёт-фактура (ОСНО, legacy)"
+                           >
+                             🧾 СФ
+                           </button>
+                         )}
+                         <FileUploadButton
+                           fileCategory="act_pdf"
+                           options={{ act_id: act.id }}
+                           accept=".pdf,.jpg,.png"
+                           onUploadSuccess={handleFileUploaded}
+                           label="📎"
+                           className="text-xs px-2 py-1 inline-block"
+                         />
+                       </td>
+                     </tr>
+                     {/* 🆕 FileList для конкретного акта */}
+                     <tr className="border-b border-gray-100">
+                       <td colSpan={5} className="px-4 py-2 bg-gray-50">
+                         <FileList
+                           fileCategory="act_pdf"
+                           actId={act.id}
+                           refreshTrigger={filesRefreshTrigger}
+                         />
+                       </td>
+                     </tr>
+                   </>
+                 ))}
+               </tbody>
+             </table>
+           </div>
+         )}
+       </div>
 
-          {/* === АКТЫ === */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">📄 Акты ({acts.length})</h3>
-              <div className="flex items-center gap-2">
-                {canCreateInvoice && (
-                  <button
-                    onClick={() => navigate(`/acts/new?request_id=${request?.id}`)}
-                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
-                  >
-                    + Создать акт
-                  </button>
-                )}
-              </div>
-            </div>
-            {acts.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <div className="text-4xl mb-2">📄</div>
-                <p>К этой заявке ещё не привязаны акты</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">№</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {acts.map((act) => (
-                      <>
-                        <tr key={act.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm font-mono text-gray-900">{act.document_number}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">
-                            {act.act_date ? new Date(act.act_date).toLocaleDateString('ru-RU') : '—'}
-                          </td>
-                          <td className="px-4 py-3 text-sm font-semibold">{formatMoney(act.total_amount)}</td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${INVOICE_STATUS_LABELS[act.status]?.color || 'bg-gray-100'}`}>
-                              {INVOICE_STATUS_LABELS[act.status]?.label || act.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm space-x-2">
-                            <button
-                              onClick={() => handleDownloadActPdf(act)}
-                              className="text-purple-600 hover:text-purple-900"
-                              title="Акт PDF"
-                            >
-                              📄 Акт
-                            </button>
-                            <button
-                              onClick={() => handleDownloadUpd(act)}
-                              className="text-green-600 hover:text-green-900 font-semibold"
-                              title="УПД (Универсальный передаточный документ)"
-                            >
-                              📋 УПД
-                            </button>
-                            {/* 🆕 Кнопка ТОРГ-12 */}
-                            <button
-                              onClick={() => handleDownloadTorg12(act)}
-                              className="text-purple-600 hover:text-purple-900"
-                              title="ТОРГ-12 (Расходная накладная)"
-                            >
-                              📦 Т-12
-                            </button>
-                            {act.tax_system === 'osno' && parseFloat(act.vat_rate || '0') > 0 && (
-                              <button
-                                onClick={() => handleDownloadInvoiceFacture(act)}
-                                className="text-orange-600 hover:text-orange-900"
-                                title="Счёт-фактура (ОСНО, legacy)"
-                              >
-                                🧾 СФ
-                              </button>
-                            )}
-                            <FileUploadButton
-                              fileCategory="act_pdf"
-                              options={{ act_id: act.id }}
-                              accept=".pdf,.jpg,.png"
-                              onUploadSuccess={handleFileUploaded}
-                              label="📎"
-                              className="text-xs px-2 py-1 inline-block"
-                            />
-                          </td>
-                        </tr>
-                        {/* 🆕 FileList для конкретного акта */}
-                        <tr className="border-b border-gray-100">
-                          <td colSpan={5} className="px-4 py-2 bg-gray-50">
-                            <FileList
-                              fileCategory="act_pdf"
-                              actId={act.id}
-                              refreshTrigger={filesRefreshTrigger}
-                            />
-                          </td>
-                        </tr>
-                      </>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* === ИСТОРИЯ СТАТУСОВ === */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">📜 История изменений ({history.length})</h3>
-            {history.length === 0 ? (
-              <div className="text-center py-8 text-gray-500"><div className="text-4xl mb-2">📜</div><p>История изменений пуста</p></div>
-            ) : (
-              <div className="relative">
-                <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gray-200"></div>
-                <div className="space-y-4">
-                  {history.map((entry, idx) => {
-                    const toConfig = STATUS_CONFIG[entry.to_status] || { label: entry.to_status, color: 'bg-gray-100', icon: '📋' };
-                    const fromConfig = entry.from_status ? (STATUS_CONFIG[entry.from_status] || { label: entry.from_status, color: 'bg-gray-100', icon: '📋' }) : null;
-                    const isLast = idx === history.length - 1;
-                    return (
-                      <div key={entry.id} className="relative flex items-start gap-4 pl-14">
-                        <div className={`absolute left-4 top-2 w-5 h-5 rounded-full border-4 border-white flex items-center justify-center text-xs ${isLast ? 'bg-blue-500' : 'bg-gray-400'}`}>
-                          <span className="text-white text-[10px]">{toConfig.icon}</span>
-                        </div>
-                        <div className={`flex-1 ${isLast ? 'bg-blue-50 border-2 border-blue-200' : 'bg-gray-50'} rounded-lg p-4`}>
-                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {fromConfig && (<><span className={`px-2 py-0.5 text-xs font-medium rounded-full ${fromConfig.color}`}>{fromConfig.icon} {fromConfig.label}</span><span className="text-gray-400">→</span></>)}
-                              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${toConfig.color}`}>{toConfig.icon} {toConfig.label}</span>
-                            </div>
-                            <span className="text-xs text-gray-500">{entry.changed_at ? new Date(entry.changed_at).toLocaleString('ru-RU') : '—'}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-700">👤 <span className="font-medium">{entry.changed_by_email}</span></span>
-                            {entry.comment && (<span className="text-gray-500 italic text-xs ml-2">"{entry.comment}"</span>)}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
-    </div>
+       {/* === ИСТОРИЯ СТАТУСОВ === */}
+       <div className="bg-white rounded-lg shadow p-6">
+         <h3 className="text-lg font-semibold text-gray-900 mb-4">📜 История изменений ({history.length})</h3>
+         {history.length === 0 ? (
+           <div className="text-center py-8 text-gray-500"><div className="text-4xl mb-2">📜</div><p>История изменений пуста</p></div>
+         ) : (
+           <div className="relative">
+             <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+             <div className="space-y-4">
+               {history.map((entry, idx) => {
+                 const toConfig = STATUS_CONFIG[entry.to_status] || { label: entry.to_status, color: 'bg-gray-100', icon: '📋' };
+                 const fromConfig = entry.from_status ? (STATUS_CONFIG[entry.from_status] || { label: entry.from_status, color: 'bg-gray-100', icon: '📋' }) : null;
+                 const isLast = idx === history.length - 1;
+                 return (
+                   <div key={entry.id} className="relative flex items-start gap-4 pl-14">
+                     <div className={`absolute left-4 top-2 w-5 h-5 rounded-full border-4 border-white flex items-center justify-center text-xs ${isLast ? 'bg-blue-500' : 'bg-gray-400'}`}>
+                       <span className="text-white text-[10px]">{toConfig.icon}</span>
+                     </div>
+                     <div className={`flex-1 ${isLast ? 'bg-blue-50 border-2 border-blue-200' : 'bg-gray-50'} rounded-lg p-4`}>
+                       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                         <div className="flex items-center gap-2 flex-wrap">
+                           {fromConfig && (<><span className={`px-2 py-0.5 text-xs font-medium rounded-full ${fromConfig.color}`}>{fromConfig.icon} {fromConfig.label}</span><span className="text-gray-400">→</span></>)}
+                           <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${toConfig.color}`}>{toConfig.icon} {toConfig.label}</span>
+                         </div>
+                         <span className="text-xs text-gray-500">{entry.changed_at ? new Date(entry.changed_at).toLocaleString('ru-RU') : '—'}</span>
+                       </div>
+                       <div className="flex items-center justify-between text-sm">
+                         <span className="text-gray-700">👤 <span className="font-medium">{entry.changed_by_email}</span></span>
+                         {entry.comment && (<span className="text-gray-500 italic text-xs ml-2">"{entry.comment}"</span>)}
+                       </div>
+                     </div>
+                   </div>
+                 );
+               })}
+             </div>
+           </div>
+         )}
+       </div>
+     </div>
+   </Layout>
   );
 };
 

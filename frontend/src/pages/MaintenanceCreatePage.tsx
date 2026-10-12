@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Navbar } from '../components/Navbar';
+import Layout from '../components/Layout'; // Layout уже здесь
 import {
   createMaintenanceOrder,
   MaintenanceOrderType,
@@ -217,10 +217,9 @@ export const MaintenanceCreatePage: React.FC = () => {
     }
   };
 
+  // ИСПРАВЛЕНО: Убран Navbar, всё содержимое обернуто в Layout
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
+    <Layout>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-6">
@@ -583,7 +582,7 @@ export const MaintenanceCreatePage: React.FC = () => {
           </div>
         </form>
       </div>
-    </div>
+    </Layout>
   );
 };
 

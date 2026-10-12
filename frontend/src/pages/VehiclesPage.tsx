@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { VehicleFormModal } from '../components/VehicleFormModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import NotificationBell from '../components/NotificationBell';
-import Navbar from '../components/Navbar';
+import Layout from '../components/Layout';
 
 export const VehiclesPage: React.FC = () => {
   const { user, logout, hasPermission } = useAuth();
@@ -101,105 +101,109 @@ export const VehiclesPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">
-              Список техники ({total})
-            </h2>
-            {canCreate && (
-              <button
-                onClick={handleCreate}
-                className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 flex items-center"
-              >
-                <span className="mr-2">+</span> Создать технику
-              </button>
-            )}
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
-              {error}
-            </div>
-          )}
-
-          {isLoading ? (
-            <div className="text-center py-12 text-gray-500">Загрузка...</div>
-          ) : vehicles.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              Техника не найдена. {canCreate && 'Создайте первую запись!'}
-            </div>
-          ) : (
-            <div className="bg-white shadow rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Название</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Номер</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Категория</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Подкатегория</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Марка/Модель</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Год</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {vehicles.map((vehicle) => (
-                    <tr key={vehicle.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vehicle.id}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{vehicle.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vehicle.id_value}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {(vehicle as any).category_name || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {(vehicle as any).subcategory_name || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {[
-                          (vehicle as any).make,
-                          (vehicle as any).model,
-                        ].filter(Boolean).join(' ') || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vehicle.year || '-'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(vehicle.status)}`}>
-                          {getStatusLabel(vehicle.status)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end space-x-2">
-                          {canEditVehicle && (
-                            <button
-                              onClick={() => handleEdit(vehicle)}
-                              className="text-blue-600 hover:text-blue-900"
-                            >
-                              Редактировать
-                            </button>
-                          )}
-                          {canDeleteVehicle && (
-                            <button
-                              onClick={() => handleDelete(vehicle)}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              Удалить
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+    <Layout>
+      <div className="px-4 py-6 sm:px-0">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">
+            Список техники ({total})
+          </h2>
+          {canCreate && (
+            <button
+              onClick={handleCreate}
+              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 flex items-center"
+            >
+              <span className="mr-2">+</span> Создать технику
+            </button>
           )}
         </div>
-      </main>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="text-center py-12 text-gray-500">Загрузка...</div>
+        ) : vehicles.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            Техника не найдена. {canCreate && 'Создайте первую запись!'}
+          </div>
+        ) : (
+          <div className="bg-white shadow rounded-lg overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Название</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Номер</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Категория</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Подкатегория</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Марка/Модель</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Год</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {vehicles.map((vehicle) => (
+                  <tr
+                    key={vehicle.id}
+                    // 🆕 ДОБАВЛЕНО: Клик по всей строке открывает редактирование (если есть права)
+                    onClick={() => canEditVehicle && handleEdit(vehicle)}
+                    // 🆕 ДОБАВЛЕНО: Визуальная подсказка, что строка кликабельна
+                    className={`transition-colors ${canEditVehicle ? 'hover:bg-blue-50 cursor-pointer' : 'hover:bg-gray-50'}`}
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vehicle.id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{vehicle.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vehicle.id_value}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {(vehicle as any).category_name || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {(vehicle as any).subcategory_name || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {[
+                        (vehicle as any).make,
+                        (vehicle as any).model,
+                      ].filter(Boolean).join(' ') || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vehicle.year || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(vehicle.status)}`}>
+                        {getStatusLabel(vehicle.status)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end space-x-2">
+                        {canEditVehicle && (
+                          <button
+                            // 🆕 ВАЖНО: Останавливаем всплытие события, чтобы клик по кнопке не считался кликом по строке
+                            onClick={(e) => { e.stopPropagation(); handleEdit(vehicle); }}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            Редактировать
+                          </button>
+                        )}
+                        {canDeleteVehicle && (
+                          <button
+                            // 🆕 ВАЖНО: Останавливаем всплытие события, чтобы при удалении не открывалось окно редактирования
+                            onClick={(e) => { e.stopPropagation(); handleDelete(vehicle); }}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Удалить
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {showFormModal && (
         <VehicleFormModal
@@ -210,7 +214,8 @@ export const VehiclesPage: React.FC = () => {
 
       {showDeleteDialog && deletingVehicle && (
         <DeleteConfirmDialog
-          vehicleName={deletingVehicle.name}
+          title="Удалить технику?"
+          message={`Техника "${deletingVehicle.name}" будет удалена безвозвратно.`}
           onConfirm={handleDeleteConfirm}
           onCancel={() => {
             setShowDeleteDialog(false);
@@ -218,7 +223,8 @@ export const VehiclesPage: React.FC = () => {
           }}
         />
       )}
-    </div>
+    </Layout>
   );
 };
+
 export default VehiclesPage;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Navbar } from '../components/Navbar';
+import Layout from '../components/Layout'; // Layout уже здесь, мы его используем
 import {
   getFuelAnalytics,
   getFuelConsumption,
@@ -62,14 +62,14 @@ export const FuelAnalyticsPage: React.FC = () => {
 
   const formatVolume = (value: number) => `${value} л`;
 
+  // ИСПРАВЛЕНО: Используем Layout вместо ручного добавления Navbar
   if (loading || !analytics) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
+      <Layout>
         <div className="flex justify-center items-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
@@ -79,10 +79,9 @@ export const FuelAnalyticsPage: React.FC = () => {
     refuels: count,
   }));
 
+  // ИСПРАВЛЕНО: Оборачиваем всё в Layout, убираем лишний <Navbar />
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
+    <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Заголовок */}
         <div className="mb-8">
@@ -282,7 +281,7 @@ export const FuelAnalyticsPage: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+    </Layout>
   );
 };
 

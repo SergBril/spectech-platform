@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Navbar } from '../components/Navbar';
+import Layout from '../components/Layout'; // Layout уже здесь
 import {
   EmailTemplate,
   EmailLog,
@@ -126,21 +126,20 @@ export const EmailTemplatesPage: React.FC = () => {
     }
   };
 
+  // ИСПРАВЛЕНО: Обертка состояния загрузки в Layout
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
+      <Layout>
         <div className="flex justify-center items-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
+  // ИСПРАВЛЕНО: Убран Navbar, всё содержимое обернуто в Layout
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
+    <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6 flex justify-between items-center">
           <div>
@@ -463,7 +462,7 @@ export const EmailTemplatesPage: React.FC = () => {
           }}
         />
       )}
-    </div>
+    </Layout>
   );
 };
 

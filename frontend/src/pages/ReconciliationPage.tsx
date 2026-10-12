@@ -8,7 +8,7 @@ import { showToast } from '../utils/toast';
 import { TableSkeleton, MetricCardSkeleton } from '../components/Skeleton';
 import ReconciliationDetailModal from '../components/ReconciliationDetailModal';
 import ReconciliationResolveModal from '../components/ReconciliationResolveModal';
-import Navbar from '../components/Navbar';
+import Layout from '../components/Layout';
 
 const STATUS_LABELS: Record<string, { label: string; color: string; icon: string }> = {
   pending: { label: 'Ожидает', color: 'bg-gray-100 text-gray-800', icon: '⏳' },
@@ -174,291 +174,266 @@ export const ReconciliationPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <Layout>
+      
+     <div className="px-4 py-6 sm:px-0">
+       {/* Заголовок */}
+       <div className="flex justify-between items-center mb-6">
+         <h2 className="text-2xl font-bold text-gray-900">📊 Сверки данных</h2>
+         <button
+           onClick={() => navigate('/finance')}
+           className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
+         >
+           ← К финансам
+         </button>
+       </div>
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {/* Заголовок */}
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">📊 Сверки данных</h2>
-            <button
-              onClick={() => navigate('/finance')}
-              className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
-            >
-              ← К финансам
-            </button>
-          </div>
+       {error && (
+         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+           {error}
+         </div>
+       )}
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
-              {error}
-            </div>
-          )}
+       {/* Карточки статистики */}
+       {loading ? (
+         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+           {[1, 2, 3, 4, 5].map((i) => (
+             <MetricCardSkeleton key={i} />
+           ))}
+         </div>
+       ) : (
+         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+           <div className="bg-white rounded-lg shadow p-6">
+             <div className="flex items-center justify-between mb-2">
+               <h3 className="text-sm font-medium text-gray-500">Всего</h3>
+               <span className="text-2xl">📋</span>
+             </div>
+             <div className="text-3xl font-bold text-gray-900">{stats.total}</div>
+           </div>
 
-          {/* Карточки статистики */}
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <MetricCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-500">Всего</h3>
-                  <span className="text-2xl">📋</span>
-                </div>
-                <div className="text-3xl font-bold text-gray-900">{stats.total}</div>
-              </div>
+           <div className="bg-white rounded-lg shadow p-6">
+             <div className="flex items-center justify-between mb-2">
+               <h3 className="text-sm font-medium text-gray-500">Ожидают</h3>
+               <span className="text-2xl">⏳</span>
+             </div>
+             <div className="text-3xl font-bold text-gray-600">{stats.pending}</div>
+           </div>
 
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-500">Ожидают</h3>
-                  <span className="text-2xl">⏳</span>
-                </div>
-                <div className="text-3xl font-bold text-gray-600">{stats.pending}</div>
-              </div>
+           <div className="bg-white rounded-lg shadow p-6">
+             <div className="flex items-center justify-between mb-2">
+               <h3 className="text-sm font-medium text-gray-500">Авто</h3>
+               <span className="text-2xl">✅</span>
+             </div>
+             <div className="text-3xl font-bold text-green-600">{stats.auto_approved}</div>
+           </div>
 
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-500">Авто</h3>
-                  <span className="text-2xl">✅</span>
-                </div>
-                <div className="text-3xl font-bold text-green-600">{stats.auto_approved}</div>
-              </div>
+           <div className="bg-white rounded-lg shadow p-6">
+             <div className="flex items-center justify-between mb-2">
+               <h3 className="text-sm font-medium text-gray-500">Ручная проверка</h3>
+               <span className="text-2xl">🔍</span>
+             </div>
+             <div className="text-3xl font-bold text-orange-600">{stats.manual_review}</div>
+           </div>
 
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-500">Ручная проверка</h3>
-                  <span className="text-2xl">🔍</span>
-                </div>
-                <div className="text-3xl font-bold text-orange-600">{stats.manual_review}</div>
-              </div>
+           <div className="bg-white rounded-lg shadow p-6">
+             <div className="flex items-center justify-between mb-2">
+               <h3 className="text-sm font-medium text-gray-500">Разрешено</h3>
+               <span className="text-2xl">✓</span>
+             </div>
+             <div className="text-3xl font-bold text-blue-600">{stats.resolved}</div>
+           </div>
+         </div>
+       )}
 
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-500">Разрешено</h3>
-                  <span className="text-2xl">✓</span>
-                </div>
-                <div className="text-3xl font-bold text-blue-600">{stats.resolved}</div>
-              </div>
-            </div>
-          )}
+       {/* Фильтры */}
+       <div className="bg-white rounded-lg shadow p-4 mb-6">
+         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+           <div>
+             <label className="block text-sm font-medium text-gray-700 mb-1">Статус</label>
+             <select
+               value={statusFilter}
+               onChange={(e) => setStatusFilter(e.target.value)}
+               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+             >
+               <option value="">Все статусы</option>
+               <option value="pending">Ожидает</option>
+               <option value="auto_approved">Авто-подтверждено</option>
+               <option value="discrepancy_detected">Расхождение</option>
+               <option value="manual_review">Ручная проверка</option>
+               <option value="resolved">Разрешено</option>
+             </select>
+           </div>
 
-          {/* Фильтры */}
-          <div className="bg-white rounded-lg shadow p-4 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Статус</label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Все статусы</option>
-                  <option value="pending">Ожидает</option>
-                  <option value="auto_approved">Авто-подтверждено</option>
-                  <option value="discrepancy_detected">Расхождение</option>
-                  <option value="manual_review">Ручная проверка</option>
-                  <option value="resolved">Разрешено</option>
-                </select>
-              </div>
+           <div>
+             <label className="block text-sm font-medium text-gray-700 mb-1">Дата от</label>
+             <input
+               type="date"
+               value={dateFrom}
+               onChange={(e) => setDateFrom(e.target.value)}
+               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+             />
+           </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Дата от</label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+           <div>
+             <label className="block text-sm font-medium text-gray-700 mb-1">Дата до</label>
+             <input
+               type="date"
+               value={dateTo}
+               onChange={(e) => setDateTo(e.target.value)}
+               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+             />
+           </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Дата до</label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+           <div className="flex items-end">
+             <button
+               onClick={() => {
+                 setStatusFilter('');
+                 setDateFrom('');
+                 setDateTo('');
+               }}
+               className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+             >
+               Сбросить фильтры
+             </button>
+           </div>
+         </div>
+       </div>
 
-              <div className="flex items-end">
-                <button
-                  onClick={() => {
-                    setStatusFilter('');
-                    setDateFrom('');
-                    setDateTo('');
-                  }}
-                  className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                >
-                  Сбросить фильтры
-                </button>
-              </div>
-            </div>
-          </div>
+       {/* Таблица сверок */}
+       <div className="bg-white rounded-lg shadow overflow-hidden">
+         {loading ? (
+           <div className="p-6">
+             <TableSkeleton rows={10} columns={8} />
+           </div>
+         ) : reconciliations.length === 0 ? (
+           <div className="text-center py-12 text-gray-500">
+             <div className="text-5xl mb-4">📋</div>
+             <p>Сверок пока нет</p>
+           </div>
+         ) : (
+           <div className="overflow-x-auto">
+             <table className="min-w-full divide-y divide-gray-200">
+               <thead className="bg-gray-50">
+                 <tr>
+                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Смена</th>
+                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Моточасы</th>
+                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Пробег</th>
+                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Топливо</th>
+                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Макс. расхождение</th>
+                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
+                 </tr>
+               </thead>
+               <tbody className="bg-white divide-y divide-gray-200">
+                 {reconciliations.map((rec) => {
+                   const maxDiff = getMaxDiffPercent(rec);
+                   const statusInfo = STATUS_LABELS[rec.reconciliation_status] || STATUS_LABELS.pending;
+                   const canResolve = rec.reconciliation_status === 'manual_review' && canEdit;
+                   const canGenerateInvoice = ['auto_approved', 'resolved'].includes(rec.reconciliation_status) && canEdit;
 
-          {/* Таблица сверок */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            {loading ? (
-              <div className="p-6">
-                <TableSkeleton rows={10} columns={8} />
-              </div>
-            ) : reconciliations.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <div className="text-5xl mb-4">📋</div>
-                <p>Сверок пока нет</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Смена</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Моточасы</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Пробег</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Топливо</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Макс. расхождение</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {reconciliations.map((rec) => {
-                      const maxDiff = getMaxDiffPercent(rec);
-                      const statusInfo = STATUS_LABELS[rec.reconciliation_status] || STATUS_LABELS.pending;
-                      const canResolve = rec.reconciliation_status === 'manual_review' && canEdit;
-                      const canGenerateInvoice = ['auto_approved', 'resolved'].includes(rec.reconciliation_status) && canEdit;
-
-                      return (
-                        <tr key={rec.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <button
-                              onClick={() => handleViewDetails(rec)}
-                              className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline"
-                            >
-                              #{rec.id}
-                            </button>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <button
-                              onClick={() => navigate(`/shifts/${rec.shift_task_id}`)}
-                              className="text-sm text-blue-600 hover:text-blue-900 hover:underline"
-                            >
-                              Смена #{rec.shift_task_id}
-                            </button>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm">
-                            <div className="flex flex-col">
-                              <span className="text-gray-600">
-                                {formatNumber(rec.operator_moto_hours)} / {formatNumber(rec.telematics_moto_hours)}
-                              </span>
-                              <span className={`text-xs ${getDiffColor(rec.moto_hours_diff_percent || 0)}`}>
-                                {formatPercent(rec.moto_hours_diff_percent)}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm">
-                            <div className="flex flex-col">
-                              <span className="text-gray-600">
-                                {formatNumber(rec.operator_odometer, 0)} / {formatNumber(rec.telematics_odometer, 0)}
-                              </span>
-                              <span className={`text-xs ${getDiffColor(rec.odometer_diff_percent || 0)}`}>
-                                {formatPercent(rec.odometer_diff_percent)}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm">
-                            <div className="flex flex-col">
-                              <span className="text-gray-600">
-                                {formatNumber(rec.operator_fuel_used)} / {formatNumber(rec.telematics_fuel_used)}
-                              </span>
-                              <span className={`text-xs ${getDiffColor(rec.fuel_diff_percent || 0)}`}>
-                                {formatPercent(rec.fuel_diff_percent)}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm">
-                            <span className={`font-semibold ${getDiffColor(maxDiff)}`}>
-                              {formatPercent(maxDiff)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusInfo.color}`}>
-                              {statusInfo.icon} {statusInfo.label}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-                            <button
-                              onClick={() => handleViewDetails(rec)}
-                              className="text-blue-600 hover:text-blue-900"
-                              title="Просмотр деталей"
-                            >
-                              👁️
-                            </button>
-                            <button
-                              onClick={() => handleDownloadPdf(rec)}
-                              className="text-purple-600 hover:text-purple-900"
-                              title="Скачать PDF"
-                            >
-                              📄
-                            </button>
-                            {canResolve && (
-                              <button
-                                onClick={() => handleResolve(rec)}
-                                className="text-orange-600 hover:text-orange-900 font-semibold"
-                                title="Разрешить конфликт"
-                              >
-                                ⚖️
-                              </button>
-                            )}
-                            {canGenerateInvoice && (
-                              <button
-                                onClick={() => handleGenerateInvoice(rec)}
-                                className="text-green-600 hover:text-green-900 font-semibold"
-                                title="Создать счёт"
-                              >
-                                💰
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
-
-      {/* Модальные окна */}
-      {isDetailModalOpen && selectedReconciliation && (
-        <ReconciliationDetailModal
-          reconciliation={selectedReconciliation}
-          onClose={() => {
-            setIsDetailModalOpen(false);
-            setSelectedReconciliation(null);
-          }}
-        />
-      )}
-
-      {isResolveModalOpen && resolveTarget && (
-        <ReconciliationResolveModal
-          reconciliation={resolveTarget}
-          onClose={() => {
-            setIsResolveModalOpen(false);
-            setResolveTarget(null);
-          }}
-          onSuccess={handleResolveSuccess}
-        />
-      )}
-    </div>
+                   return (
+                     <tr key={rec.id} className="hover:bg-gray-50">
+                       <td className="px-4 py-3 whitespace-nowrap">
+                         <button
+                           onClick={() => handleViewDetails(rec)}
+                           className="text-sm font-mono text-blue-600 hover:text-blue-900 hover:underline"
+                         >
+                           #{rec.id}
+                         </button>
+                       </td>
+                       <td className="px-4 py-3 whitespace-nowrap">
+                         <button
+                           onClick={() => navigate(`/shifts/${rec.shift_task_id}`)}
+                           className="text-sm text-blue-600 hover:text-blue-900 hover:underline"
+                         >
+                           Смена #{rec.shift_task_id}
+                         </button>
+                       </td>
+                       <td className="px-4 py-3 whitespace-nowrap text-sm">
+                         <div className="flex flex-col">
+                           <span className="text-gray-600">
+                             {formatNumber(rec.operator_moto_hours)} / {formatNumber(rec.telematics_moto_hours)}
+                           </span>
+                           <span className={`text-xs ${getDiffColor(rec.moto_hours_diff_percent || 0)}`}>
+                             {formatPercent(rec.moto_hours_diff_percent)}
+                           </span>
+                         </div>
+                       </td>
+                       <td className="px-4 py-3 whitespace-nowrap text-sm">
+                         <div className="flex flex-col">
+                           <span className="text-gray-600">
+                             {formatNumber(rec.operator_odometer, 0)} / {formatNumber(rec.telematics_odometer, 0)}
+                           </span>
+                           <span className={`text-xs ${getDiffColor(rec.odometer_diff_percent || 0)}`}>
+                             {formatPercent(rec.odometer_diff_percent)}
+                           </span>
+                         </div>
+                       </td>
+                       <td className="px-4 py-3 whitespace-nowrap text-sm">
+                         <div className="flex flex-col">
+                           <span className="text-gray-600">
+                             {formatNumber(rec.operator_fuel_used)} / {formatNumber(rec.telematics_fuel_used)}
+                           </span>
+                           <span className={`text-xs ${getDiffColor(rec.fuel_diff_percent || 0)}`}>
+                             {formatPercent(rec.fuel_diff_percent)}
+                           </span>
+                         </div>
+                       </td>
+                       <td className="px-4 py-3 whitespace-nowrap text-sm">
+                         <span className={`font-semibold ${getDiffColor(maxDiff)}`}>
+                           {formatPercent(maxDiff)}
+                         </span>
+                       </td>
+                       <td className="px-4 py-3 whitespace-nowrap">
+                         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusInfo.color}`}>
+                           {statusInfo.icon} {statusInfo.label}
+                         </span>
+                       </td>
+                       <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
+                         <button
+                           onClick={() => handleViewDetails(rec)}
+                           className="text-blue-600 hover:text-blue-900"
+                           title="Просмотр деталей"
+                         >
+                           👁️
+                         </button>
+                         <button
+                           onClick={() => handleDownloadPdf(rec)}
+                           className="text-purple-600 hover:text-purple-900"
+                           title="Скачать PDF"
+                         >
+                           📄
+                         </button>
+                         {canResolve && (
+                           <button
+                             onClick={() => handleResolve(rec)}
+                             className="text-orange-600 hover:text-orange-900 font-semibold"
+                             title="Разрешить конфликт"
+                           >
+                             ⚖️
+                           </button>
+                         )}
+                         {canGenerateInvoice && (
+                           <button
+                             onClick={() => handleGenerateInvoice(rec)}
+                             className="text-green-600 hover:text-green-900 font-semibold"
+                             title="Создать счёт"
+                           >
+                             💰
+                           </button>
+                         )}
+                       </td>
+                     </tr>
+                   );
+                 })}
+               </tbody>
+             </table>
+           </div>
+         )}
+       </div>
+     </div>
+   </Layout>
   );
 };
 
