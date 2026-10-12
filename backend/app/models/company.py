@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, Numeric, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.core.constants import TaxSystem
@@ -81,3 +81,4 @@ class Company(Base):
         JSON, nullable=True,
         comment='Распределение оценок: {"5": 10, "4": 3, "3": 1, "2": 0, "1": 0}',
     )
+
