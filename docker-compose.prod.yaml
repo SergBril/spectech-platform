@@ -52,11 +52,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: spectech-redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -85,55 +85,57 @@ services:
     networks:
       - database
 
+
   # ═══════════════════════════════════════════════════════════════
   # Backend (FastAPI)
   # ═══════════════════════════════════════════════════════════════
   backend:
-    image: spectech-backend:latest
+    build:                          # ← ИСПРАВЛЕНО: build вместо image
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: spectech-backend
+    env_file: .env.prod             # ← ИСПРАВЛЕНО: все переменные из файла
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-      CORS_ORIGINS: ${CORS_ORIGINS}
-      ENVIRONMENT: production
-      SENTRY_DSN: ${SENTRY_DSN}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      ENVIRONMENT: production
+      DEBUG: "false"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_started
     volumes:
       - backend_uploads:/app/uploads
       - backend_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: always
     networks:
       - backend
       - database
-      - monitoring
-    # NO direct port exposure - only through Nginx
 
   # ═══════════════════════════════════════════════════════════════
-  # Frontend (Next.js)
+  # Frontend (Vite + React SPA)
   # ═══════════════════════════════════════════════════════════════
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: spectech-frontend
-    environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
+    # Vite использует VITE_* переменные, не NEXT_PUBLIC_*
+    # API URL задаётся через Nginx proxy, не через env
     depends_on:
       - backend
     restart: always
     networks:
       - frontend
-      - backend
 
   # ═══════════════════════════════════════════════════════════════
   # Prometheus - Metrics Collection

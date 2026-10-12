@@ -8,6 +8,7 @@ import { RevenueChart, StatusPieChart, TopRequestsChart, Sparkline } from '../co
 import { MetricCardSkeleton, ChartSkeleton } from '../components/Skeleton';
 import Layout from '../components/Layout';
 import DashboardWidgets from '../components/DashboardWidgets';
+import EmptyState from '../components/EmptyState';
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
