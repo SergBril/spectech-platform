@@ -12,7 +12,6 @@ from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
-from app.models.contractor import Contractor
 from app.models.dispatch import Request
 from app.models.finance import Act, DocumentStatus, Invoice, Payout
 from app.models.shift import ShiftTask

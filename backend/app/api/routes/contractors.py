@@ -18,6 +18,50 @@ from app.services.dadata_service import dadata_service
 router = APIRouter()
 
 
+# 🆕 ВАЖНО: /me должен быть ПЕРЕД /{contractor_id}, иначе FastAPI воспримет "me" как ID
+@router.get("/me", response_model=ContractorRead, summary="Текущий contractor пользователя")
+def get_my_contractor(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Возвращает contractor текущего пользователя.
+    
+    Логика:
+    1. Ищем Employee связанного с user_id
+    2. Если нет — возвращаем первого client-контрагента компании (fallback)
+    """
+    # Вариант 1: через Employee
+    employee = db.scalar(
+        select(Employee).where(Employee.user_id == current_user.id)
+    )
+    
+    if employee:
+        contractor = db.get(Contractor, employee.contractor_id)
+        if contractor:
+            return contractor
+    
+    # Вариант 2 (fallback): первый client компании
+    contractor = db.scalar(
+        select(Contractor)
+        .where(
+            Contractor.company_id == company_id,
+            Contractor.type == "client",
+            Contractor.is_active == True,
+        )
+        .order_by(Contractor.id)
+    )
+    
+    if not contractor:
+        raise HTTPException(
+            status_code=404,
+            detail="Вы не привязаны ни к одному контрагенту. Создайте client-контрагента."
+        )
+    
+    return contractor
+
+
 @router.get("", response_model=list[ContractorRead])
 def list_contractors(
     type_filter: str | None = Query(default=None, alias="type"),
@@ -58,7 +102,7 @@ def create_contractor(
 
     contractor = Contractor(
         **payload.model_dump(),
-        company_id=company_id,  # 🆕 Используем company_id из зависимости
+        company_id=company_id,
     )
     db.add(contractor)
     db.commit()
@@ -143,20 +187,12 @@ async def suggest_contractor_by_inn(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """
-    Поиск контрагента по ИНН через DaData API.
-
-    Request body: {"inn": "7707083893"}
-    Response: данные компании или 404
-    """
-    from app.models.contractor import Contractor
-
+    """Поиск контрагента по ИНН через DaData API."""
     inn = payload.get("inn", "").strip()
 
     if not inn:
         raise HTTPException(status_code=400, detail="ИНН обязателен")
 
-    # Проверка на дубликат в своей компании
     existing = db.scalar(
         select(Contractor).where(
             Contractor.inn == inn,
@@ -173,7 +209,6 @@ async def suggest_contractor_by_inn(
             "message": f"Контрагент '{existing.name}' с ИНН {inn} уже существует в системе",
         }
 
-    # Запрос к DaData
     result = await dadata_service.suggest_party_by_inn(inn)
 
     if not result:

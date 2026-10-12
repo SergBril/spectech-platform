@@ -1,6 +1,7 @@
 """Telegram Bot для управления платформой СпецТехника."""
-
+    
 import logging
+import os
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 
@@ -371,30 +372,55 @@ class TelegramBotService:
         )
 
     def run_bot(self):
-        """Запускает бота."""
+        """Запускает бота с поддержкой прокси для РФ."""
         if not settings.TELEGRAM_BOT_TOKEN:
-            logger.warning("TELEGRAM_BOT_TOKEN not set, bot disabled")
+            logger.warning("⚠️ TELEGRAM_BOT_TOKEN not set. Bot will not start.")
             return
         
-        self.application = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
+        proxy_url = getattr(settings, "TELEGRAM_PROXY_URL", None) or os.getenv("TELEGRAM_PROXY_URL")
+        
+        builder = Application.builder().token(settings.TELEGRAM_BOT_TOKEN)
+        
+        if proxy_url:
+            logger.info(f"🌐 Using proxy: {proxy_url.split('@')[-1]}")
+            try:
+                from telegram.request import HTTPXRequest
+                
+                # 🆕 ПРАВИЛЬНО для python-telegram-bot v22
+                request = HTTPXRequest(
+                    proxy=proxy_url,  # ← proxy, а не proxy_url
+                    connect_timeout=10.0,
+                    read_timeout=10.0,
+                    write_timeout=10.0,
+                    pool_timeout=10.0,
+                )
+                builder = builder.request(request)
+            except Exception as e:
+                logger.error(f"❌ Failed to setup proxy: {e}")
+                return
+        
+        self.application = builder.build()
         
         # Conversation handler для /link_account
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler("link_account", self.link_account)],
             states={
-                AWAITING_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_link_code)],
+                AWAITING_CODE: [
+                    MessageHandler(
+                        filters.TEXT & ~filters.COMMAND,
+                        self.handle_link_code,
+                    )
+                ],
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
         )
         
-        # Регистрация обработчиков
         self.application.add_handler(CommandHandler("start", self.start))
         self.application.add_handler(conv_handler)
         self.application.add_handler(CallbackQueryHandler(self.handle_callback))
         
-        logger.info("Telegram bot started")
+        logger.info("🤖 Telegram bot started")
         self.application.run_polling(allowed_updates=Update.ALL_TYPES)
-
 
 # Singleton
 telegram_bot_service = TelegramBotService()
