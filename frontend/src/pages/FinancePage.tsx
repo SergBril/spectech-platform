@@ -839,7 +839,8 @@ export const FinancePage: React.FC = () => {
                                     try {
                                       await financeApi.approvePayout(p.id);
                                       showToast.success('Выплата одобрена');
-                                      loadData();
+                                      // Задержка чтобы избежать конфликта DOM с Suspense
+                                      setTimeout(() => loadData(), 300);
                                     } catch (err: any) {
                                       showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
                                     }
