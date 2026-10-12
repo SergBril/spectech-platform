@@ -2,6 +2,9 @@
 
 import csv
 import io
+import logging
+
+logger = logging.getLogger("spectech.payouts")
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
