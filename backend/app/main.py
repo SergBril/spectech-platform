@@ -40,6 +40,7 @@ from app.api.routes import (
     public,  # 🆕 Маркетплейс
     rbac,
     requests,
+    salaries,
     secure_test,
     shifts,
     signature,
@@ -226,6 +227,7 @@ app.include_router(email_bulk.router, prefix="/api/v1")
 app.include_router(catalog.router, prefix="/api/v1")
 app.include_router(signature.router, prefix="/api/v1/signature", tags=["signature"])
 app.include_router(finance.router, prefix="/api/v1/finance", tags=["Финансы"])
+app.include_router(salaries.router, prefix="/api/v1/salaries", tags=["💰 Salaries (Зарплаты)"])
 app.include_router(disputes.router, prefix="/api/v1/disputes", tags=["disputes"])
 app.include_router(downtime.router, prefix="/api/v1/downtime", tags=["downtime"])
 app.include_router(rentals.router, prefix="/api/v1", tags=["📋 Rentals (Аренда)"])
