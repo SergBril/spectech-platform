@@ -1,9 +1,11 @@
 """API routes for payouts (выплаты собственникам)."""
 
+import csv
+import io
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
@@ -25,7 +27,7 @@ router = APIRouter()
 
 
 # ============================================================
-# Схемы ответов для workflow (approve / pay)
+# Схемы ответов
 # ============================================================
 
 
@@ -123,17 +125,13 @@ def get_payouts_summary(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """
-    Сводка по выплатам за период.
-    Возвращает суммы gross, commission, net и количество pending выплат.
-    """
+    """Сводка по выплатам за период."""
     base_filter = [
         Payout.company_id == company_id,
         Payout.payout_date >= date_from,
         Payout.payout_date <= date_to,
     ]
 
-    # Агрегаты
     totals = (
         db.query(
             func.count(Payout.id).label("total"),
@@ -145,7 +143,6 @@ def get_payouts_summary(
         .first()
     )
 
-    # Pending (draft) выплаты
     pending_count = (
         db.query(func.count(Payout.id))
         .filter(*base_filter, Payout.status == DocumentStatus.draft)
@@ -162,6 +159,71 @@ def get_payouts_summary(
         total_net=float(totals.net or 0),
         pending_payouts=int(pending_count),
     )
+
+
+@router.get("/csv")
+def export_payouts_csv(
+    date_from: str | None = Query(default=None, description="Начало периода YYYY-MM-DD"),
+    date_to: str | None = Query(default=None, description="Конец периода YYYY-MM-DD"),
+    status: str | None = Query(default=None, description="Фильтр по статусу"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """📊 Экспорт выплат в CSV."""
+    from datetime import datetime as dt
+
+    stmt = select(Payout).where(Payout.company_id == company_id)
+
+    if date_from:
+        stmt = stmt.where(Payout.payout_date >= dt.fromisoformat(date_from))
+    if date_to:
+        stmt = stmt.where(Payout.payout_date <= dt.fromisoformat(date_to))
+    if status:
+        stmt = stmt.where(Payout.status == status)
+
+    stmt = stmt.order_by(Payout.created_at.desc())
+    payouts = db.scalars(stmt).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
+
+    writer.writerow([
+        'ID', 'Номер документа', 'Дата выплаты', 'Статус',
+        'Собственник (ID)', 'Техника (ID)',
+        'Gross (₽)', 'Комиссия (%)', 'Комиссия (₽)', 'Net (₽)',
+        'Дата создания',
+    ])
+
+    for p in payouts:
+        writer.writerow([
+            p.id,
+            p.document_number or '',
+            p.payout_date.isoformat() if p.payout_date else '',
+            p.status.value if hasattr(p.status, 'value') else str(p.status),
+            p.owner_id or '',
+            p.vehicle_id or '',
+            float(p.gross_amount or 0),
+            float(p.commission_rate or 0),
+            float(p.platform_commission or 0),
+            float(p.net_amount or 0),
+            p.created_at.isoformat() if p.created_at else '',
+        ])
+
+    output.seek(0)
+
+    filename = f"payouts_export_{dt.now().strftime('%Y%m%d_%H%M%S')}.csv"
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8-sig",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+# ============================================================
+# Single payout operations (MUST be after /csv, /summary)
+# ============================================================
 
 
 @router.get("/{payout_id}", response_model=PayoutRead)
@@ -211,10 +273,7 @@ def approve_payout(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """
-    Одобрить выплату (draft → sent).
-    Только выплаты своей компании и только в статусе draft.
-    """
+    """Одобрить выплату (draft → sent)."""
     payout = db.get(Payout, payout_id)
     if not payout or payout.company_id != company_id:
         raise HTTPException(status_code=404, detail="Payout not found")
@@ -246,10 +305,7 @@ def pay_payout(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """
-    Отметить выплату как выплаченную (sent → paid).
-    Только выплаты в статусе sent.
-    """
+    """Отметить выплату как выплаченную (sent → paid)."""
     payout = db.get(Payout, payout_id)
     if not payout or payout.company_id != company_id:
         raise HTTPException(status_code=404, detail="Payout not found")
@@ -282,7 +338,7 @@ def download_payout_pdf(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """Скачать ведомость выплаты в формате PDF (только своей компании)."""
+    """Скачать ведомость выплаты в формате PDF."""
     payout = db.get(Payout, payout_id)
     if not payout or payout.company_id != company_id:
         raise HTTPException(status_code=404, detail="Payout not found")
