@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, UTC
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy import select
@@ -18,7 +18,7 @@ from app.models.bank_statement import (
     TransactionType,
 )
 from app.models.finance import Invoice, Payment, DocumentStatus, PaymentMethod
-from app.services.bank_statement_parser import (
+from app.services.bank_parser import (
     ClientBankExchangeParser,
     extract_invoice_numbers_from_purpose,
 )
@@ -39,35 +39,30 @@ class PaymentsService:
         company_id: int,
         uploaded_by: int | None = None,
     ) -> BankStatement:
-        """
-        Загружает банковскую выписку, парсит и создаёт транзакции.
-        """
+        """Загружает банковскую выписку, парсит и создаёт транзакции."""
         logger.info(f"Uploading bank statement: {file_path.name}")
 
-        # СНАЧАЛА парсим выписку
         parsed = self.parser.parse_file(file_path)
 
-        # Проверяем на дубликаты
+        # Проверяем дубликаты
         existing = db.query(BankStatement).filter(
             BankStatement.company_id == company_id,
             BankStatement.account_number == parsed.account_number,
             BankStatement.date_start == parsed.date_start,
             BankStatement.date_end == parsed.date_end,
         ).first()
-        
+
         if existing:
             raise ValueError(
                 f"Выписка за период {parsed.date_start} - {parsed.date_end} "
-                f"уже загружена (ID={existing.id}). "
-                f"Удалите её перед повторной загрузкой."
+                f"уже загружена (ID={existing.id}). Удалите её перед повторной загрузкой."
             )
 
-        # Читаем файл
+        # Читаем и сохраняем файл
         file_size = file_path.stat().st_size
         with open(file_path, "rb") as f:
             file_content = f.read()
 
-        # Сохраняем в локальное хранилище
         storage_dir = Path(settings.local_storage_dir) / "bank_statements"
         storage_dir.mkdir(parents=True, exist_ok=True)
 
@@ -76,7 +71,6 @@ class PaymentsService:
         storage_path.write_bytes(file_content)
 
         try:
-            # Создаём запись с извлечёнными метаданными
             statement = BankStatement(
                 company_id=company_id,
                 file_name=file_path.name,
@@ -97,7 +91,6 @@ class PaymentsService:
             db.add(statement)
             db.flush()
 
-            # Создаём транзакции
             for tx_data in parsed.transactions:
                 is_excluded, exclusion_reason = tx_data.should_be_excluded()
 
@@ -126,13 +119,10 @@ class PaymentsService:
 
             db.flush()
 
-            # Авто-матчинг
             matched_count = self.auto_match_transactions(db, statement.id)
 
             statement.matched_transactions = matched_count
-            statement.unmatched_transactions = (
-                statement.total_transactions - matched_count
-            )
+            statement.unmatched_transactions = statement.total_transactions - matched_count
             statement.status = StatementStatus.parsed
 
             db.commit()
@@ -142,7 +132,6 @@ class PaymentsService:
                 f"✅ Statement uploaded: {statement.total_transactions} transactions, "
                 f"{matched_count} auto-matched"
             )
-
             return statement
 
         except Exception as e:
@@ -151,9 +140,7 @@ class PaymentsService:
             raise
 
     def auto_match_transactions(self, db: Session, statement_id: int) -> int:
-        """
-        Автоматически привязывает транзакции к Invoice по номеру счёта.
-        """
+        """Автоматически привязывает транзакции к Invoice по номеру счёта."""
         stmt = select(BankTransaction).where(
             BankTransaction.statement_id == statement_id,
             BankTransaction.direction == TransactionDirection.incoming,
@@ -175,16 +162,13 @@ class PaymentsService:
 
                 if invoice:
                     if invoice.status == DocumentStatus.paid:
-                        logger.warning(
-                            f"Invoice {invoice.document_number} already paid, skipping"
-                        )
+                        logger.warning(f"Invoice {invoice.document_number} already paid, skipping")
                         continue
 
                     tx.matched_invoice_id = invoice.id
                     tx.matched_amount = tx.amount
                     tx.match_status = MatchStatus.auto_matched
                     tx.match_confidence = Decimal("1.00")
-
                     matched_count += 1
                     logger.info(
                         f"Auto-matched transaction {tx.bank_transaction_id} "
@@ -217,13 +201,12 @@ class PaymentsService:
 
         payment_amount = amount or tx.amount
 
-        remaining = invoice.total - invoice.paid_amount
-        if payment_amount > remaining:
+        remaining = float(invoice.total) - float(invoice.paid_amount or 0)
+        if float(payment_amount) > remaining:
             logger.warning(
-                f"Payment amount {payment_amount} exceeds remaining {remaining}, "
-                f"adjusting to {remaining}"
+                f"Payment amount {payment_amount} exceeds remaining {remaining}, adjusting"
             )
-            payment_amount = remaining
+            payment_amount = Decimal(str(remaining))
 
         payment = Payment(
             invoice_id=invoice.id,
@@ -246,75 +229,10 @@ class PaymentsService:
         tx.matched_amount = payment_amount
         tx.match_status = MatchStatus.manual_matched
 
-        invoice.paid_amount += payment_amount
+        new_paid = float(invoice.paid_amount or 0) + float(payment_amount)
+        invoice.paid_amount = str(new_paid)
 
-        if invoice.paid_amount >= invoice.total:
-            invoice.status = DocumentStatus.paid
-        else:
-            invoice.status = DocumentStatus.partially_paid
-
-        db.commit()
-        db.refresh(payment)
-
-        logger.info(
-            f"✅ Payment applied: {payment_amount} to Invoice {invoice.document_number}, "
-            f"remaining: {invoice.total - invoice.paid_amount}"
-        )
-
-    def apply_payment(
-        self,
-        db: Session,
-        transaction_id: int,
-        invoice_id: int,
-        amount: Decimal | None = None,
-        applied_by: int | None = None,
-    ) -> Payment:
-        """Применяет банковскую транзакцию к Invoice."""
-        tx = db.get(BankTransaction, transaction_id)
-        if not tx:
-            raise ValueError(f"Transaction {transaction_id} not found")
-
-        invoice = db.get(Invoice, invoice_id)
-        if not invoice:
-            raise ValueError(f"Invoice {invoice_id} not found")
-
-        if invoice.company_id != tx.company_id:
-            raise ValueError("Transaction and invoice belong to different companies")
-
-        payment_amount = amount or tx.amount
-
-        remaining = invoice.total - invoice.paid_amount
-        if payment_amount > remaining:
-            logger.warning(
-                f"Payment amount {payment_amount} exceeds remaining {remaining}, "
-                f"adjusting to {remaining}"
-            )
-            payment_amount = remaining
-
-        payment = Payment(
-            invoice_id=invoice.id,
-            amount=payment_amount,
-            method=PaymentMethod.bank_transfer,
-            payment_date=tx.processed_date,
-            external_transaction_id=tx.bank_transaction_id,
-            bank_transaction_id=tx.bank_transaction_id,
-            payer_name=tx.counterparty_name,
-            payer_inn=tx.counterparty_inn,
-            payer_account=tx.counterparty_account,
-            purpose=tx.purpose,
-            comment=f"Оплата по банковской выписке от {tx.processed_date}",
-        )
-        db.add(payment)
-        db.flush()
-
-        tx.payment_id = payment.id
-        tx.matched_invoice_id = invoice.id
-        tx.matched_amount = payment_amount
-        tx.match_status = MatchStatus.manual_matched
-
-        invoice.paid_amount += payment_amount
-
-        if invoice.paid_amount >= invoice.total:
+        if new_paid >= float(invoice.total):
             invoice.status = DocumentStatus.paid
         else:
             invoice.status = DocumentStatus.partially_paid
@@ -325,38 +243,32 @@ class PaymentsService:
 
         logger.info(
             f"✅ Payment applied: {payment_amount} to Invoice {invoice.document_number}, "
-            f"remaining: {invoice.total - invoice.paid_amount}"
+            f"remaining: {float(invoice.total) - new_paid}"
         )
 
-        # 🆕 ОТПРАВКА УВЕДОМЛЕНИЙ
+        # Уведомления (не блокируем основную операцию)
         try:
             from app.services.payment_notifications import payment_notification_service
-            
-            # Пытаемся отправить уведомления асинхронно
             import asyncio
             try:
                 loop = asyncio.get_running_loop()
-                # Если есть event loop — создаём задачу
                 loop.create_task(
                     payment_notification_service.notify_invoice_paid(
                         db=db,
                         invoice=invoice,
-                        payment_amount=payment_amount,
+                        payment_amount=float(payment_amount),
                         payment_date=tx.processed_date,
                         payer_name=tx.counterparty_name,
                         payer_inn=tx.counterparty_inn,
-                        client_user_id=None,  # можно получить из Contractor -> User
+                        client_user_id=None,
                     )
                 )
-                logger.info("Notification task scheduled")
             except RuntimeError:
-                # Нет event loop (sync контекст) — пропускаем
-                logger.info("No event loop, skipping async notifications")
+                pass
+        except ImportError:
+            pass
         except Exception as e:
-            # Не ломаем основную операцию при ошибке уведомлений
-            logger.error(f"Failed to send payment notifications: {e}")
-
-        return payment
+            logger.warning(f"Failed to send payment notifications: {e}")
 
         return payment
 
@@ -377,7 +289,6 @@ class PaymentsService:
             .offset(offset)
             .limit(limit)
         )
-
         return list(db.scalars(stmt).all())
 
     def _find_invoice_by_number(
