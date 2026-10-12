@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import apiClient from '../api/client';
+import { showToast } from '../utils/toast';
+import ReviewFormModal from '../components/ReviewFormModal';
 
 interface Company {
   id: number;
@@ -50,6 +52,7 @@ export const CompanyProfilePage: React.FC = () => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'vehicles' | 'reviews'>('vehicles');
+  const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
 
   useEffect(() => {
     fetchCompanyData();
@@ -57,20 +60,17 @@ export const CompanyProfilePage: React.FC = () => {
 
   const fetchCompanyData = async () => {
     try {
-      // Параллельно загружаем все данные
       const [companyRes, ratingRes, vehiclesRes, reviewsRes] = await Promise.allSettled([
         apiClient.get(`/public/companies/${id}`),
         apiClient.get(`/public/companies/${id}/rating`),
         apiClient.get(`/public/companies/${id}/vehicles`),
-        apiClient.get(`/public/companies/${id}/reviews?limit=20`),
+        apiClient.get(`/public/companies/${id}/marketplace-reviews?limit=50`),
       ]);
 
-      // Основная информация о компании
       if (companyRes.status === 'fulfilled') {
         setCompany(companyRes.value.data);
       }
 
-      // Рейтинг (дополняет company)
       if (ratingRes.status === 'fulfilled') {
         const ratingData = ratingRes.value.data;
         setCompany((prev) =>
@@ -84,22 +84,33 @@ export const CompanyProfilePage: React.FC = () => {
         );
       }
 
-      // Техника компании
       if (vehiclesRes.status === 'fulfilled') {
         const data = vehiclesRes.value.data;
         setVehicles(Array.isArray(data) ? data : []);
       }
 
-      // Отзывы
+      // Отзывы могут возвращаться как массив или как объект с items
       if (reviewsRes.status === 'fulfilled') {
         const data = reviewsRes.value.data;
-        setReviews(Array.isArray(data) ? data : []);
+        if (Array.isArray(data)) {
+          setReviews(data);
+        } else if (data?.items) {
+          setReviews(data.items);
+        } else {
+          setReviews([]);
+        }
       }
     } catch (error) {
       console.error('Error fetching company data:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleReviewSuccess = () => {
+    setIsReviewFormOpen(false);
+    showToast.success('Спасибо за ваш отзыв!');
+    fetchCompanyData();
   };
 
   const getStatusBadge = (status: string) => {
@@ -178,7 +189,6 @@ export const CompanyProfilePage: React.FC = () => {
         {/* Шапка компании */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Левая часть: название и описание */}
             <div className="lg:col-span-2">
               <div className="flex items-start space-x-3 mb-4">
                 <span className="text-5xl">🏢</span>
@@ -216,7 +226,6 @@ export const CompanyProfilePage: React.FC = () => {
               )}
             </div>
 
-            {/* Правая часть: контакты */}
             <div className="border-t lg:border-t-0 lg:border-l lg:pl-6 pt-6 lg:pt-0">
               <h3 className="text-sm font-semibold text-gray-900 mb-3 uppercase">
                 Контакты
@@ -365,6 +374,20 @@ export const CompanyProfilePage: React.FC = () => {
 
         {activeTab === 'reviews' && (
           <div className="space-y-4">
+            {/* Заголовок с кнопкой создания отзыва */}
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Отзывы о компании
+              </h3>
+              <button
+                onClick={() => setIsReviewFormOpen(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium flex items-center gap-2"
+              >
+                <span>⭐</span>
+                <span>Оставить отзыв</span>
+              </button>
+            </div>
+
             {reviews.map((review) => (
               <div
                 key={review.id}
@@ -395,11 +418,28 @@ export const CompanyProfilePage: React.FC = () => {
             ))}
             {reviews.length === 0 && (
               <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-                <p className="text-gray-500 text-lg">Пока нет отзывов</p>
-                <p className="text-sm text-gray-400 mt-2">Будьте первым, кто оставит отзыв о компании</p>
+                <div className="text-5xl mb-3">⭐</div>
+                <p className="text-gray-500 text-lg mb-2">Пока нет отзывов</p>
+                <p className="text-sm text-gray-400 mb-4">Будьте первым, кто оставит отзыв о компании</p>
+                <button
+                  onClick={() => setIsReviewFormOpen(true)}
+                  className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
+                >
+                  ⭐ Оставить первый отзыв
+                </button>
               </div>
             )}
           </div>
+        )}
+
+        {/* Модальное окно создания отзыва */}
+        {isReviewFormOpen && (
+          <ReviewFormModal
+            companyId={company.id}
+            companyName={company.name}
+            onClose={() => setIsReviewFormOpen(false)}
+            onSuccess={handleReviewSuccess}
+          />
         )}
       </div>
     </Layout>
