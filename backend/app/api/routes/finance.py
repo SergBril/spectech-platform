@@ -1,5 +1,8 @@
 """Endpoints для работы с финансовыми документами."""
 
+import logging
+logger = logging.getLogger("spectech.finance")
+
 from datetime import date
 from decimal import Decimal
 from app.models.contractor import Contractor
@@ -862,9 +865,6 @@ def resolve_reconciliation(
         "message": "Reconciliation resolved successfully",
     }
 
-import logging
-logger = logging.getLogger("spectech.finance")
-
 
 # ============================================================
 # Dashboard V2 + Revenue Analytics
@@ -880,12 +880,12 @@ def get_finance_dashboard_v2(
     company_id: int = Depends(get_current_company_id),
 ):
     """📊 Расширенный дашборд с фильтрацией по периоду."""
-    from datetime import datetime as dt
+    from datetime import datetime as dt, timedelta
     from sqlalchemy import func
     from app.models.finance import Invoice, Payout
 
     d_from = dt.fromisoformat(date_from)
-    d_to = dt.fromisoformat(date_to) + __import__('datetime').timedelta(days=1)
+    d_to = dt.fromisoformat(date_to) + timedelta(days=1)
 
     # Выручка (инвойсы за период)
     revenue_q = db.query(
@@ -915,27 +915,18 @@ def get_finance_dashboard_v2(
     payouts_count = int(payouts_q.count or 0)
     total_payouts_net = float(payouts_q.net or 0)
 
-    # Прибыль = выручка - выплаты
     gross_profit = total_revenue - total_payouts_net
     margin = (gross_profit / total_revenue * 100) if total_revenue > 0 else 0
-
-    # Средний чек
     avg_invoice = (total_revenue / invoices_count) if invoices_count > 0 else 0
 
     return {
-        "revenue": {
-            "total": total_revenue,
-            "paid": total_paid,
-        },
-        "profit": {
-            "gross": gross_profit,
-            "margin_percent": round(margin, 1),
-        },
+        "revenue": {"total": total_revenue, "paid": total_paid},
+        "profit": {"gross": gross_profit, "margin_percent": round(margin, 1)},
         "metrics": {
             "invoices_count": invoices_count,
             "avg_invoice": round(avg_invoice, 2),
             "payouts_count": payouts_count,
-            "moto_hours_total": 0,  # TODO: из rentals
+            "moto_hours_total": 0,
         },
     }
 
@@ -950,13 +941,13 @@ def get_revenue_by_client(
     company_id: int = Depends(get_current_company_id),
 ):
     """🏆 Топ клиентов по выручке за период."""
-    from datetime import datetime as dt
+    from datetime import datetime as dt, timedelta
     from sqlalchemy import func
     from app.models.finance import Invoice
     from app.models.contractor import Contractor
 
     d_from = dt.fromisoformat(date_from)
-    d_to = dt.fromisoformat(date_to) + __import__('datetime').timedelta(days=1)
+    d_to = dt.fromisoformat(date_to) + timedelta(days=1)
 
     results = (
         db.query(
@@ -991,14 +982,13 @@ def get_revenue_by_vehicle(
     company_id: int = Depends(get_current_company_id),
 ):
     """🚜 Топ техники по моточасам за период."""
-    from datetime import datetime as dt
+    from datetime import datetime as dt, timedelta
     from sqlalchemy import func
     from app.models.catalog import Vehicle
 
     d_from = dt.fromisoformat(date_from)
-    d_to = dt.fromisoformat(date_to) + __import__('datetime').timedelta(days=1)
+    d_to = dt.fromisoformat(date_to) + timedelta(days=1)
 
-    # Моточасы из rentals если есть, иначе из payouts
     try:
         from app.models.rental import Rental
         results = (
@@ -1018,11 +1008,9 @@ def get_revenue_by_vehicle(
             .all()
         )
     except Exception:
-        # Fallback: нет таблицы rentals или колонки moto_hours
         results = []
 
     if not results:
-        # Fallback: возвращаем технику компании с нулевыми моточасами
         vehicles = (
             db.query(Vehicle.name)
             .filter(Vehicle.company_id == company_id)

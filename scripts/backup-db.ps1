@@ -51,3 +51,15 @@ Write-Host "Recent backups:" -ForegroundColor Yellow
 Get-ChildItem $backupDir -Filter "*.sql" | Sort-Object LastWriteTime -Descending | Select-Object -First 5 | ForEach-Object {
     Write-Host "  $($_.Name) - $([math]::Round($_.Length / 1KB, 2)) KB" -ForegroundColor Gray
 }
+
+# Auto-cleanup: keep only last 30 backups
+$keepCount = 30
+$allBackups = Get-ChildItem $backupDir -Filter "*.sql" | Sort-Object LastWriteTime -Descending
+if ($allBackups.Count -gt $keepCount) {
+    $toDelete = $allBackups | Select-Object -Skip $keepCount
+    foreach ($old in $toDelete) {
+        Remove-Item $old.FullName -Force
+        Write-Host "  Deleted old backup: $($old.Name)" -ForegroundColor DarkGray
+    }
+    Write-Host "Cleanup: removed $($toDelete.Count) old backups, kept $keepCount" -ForegroundColor Yellow
+}
