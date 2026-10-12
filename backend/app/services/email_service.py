@@ -37,9 +37,6 @@ class EmailService:
 
     def _render_template(self, template_name: str, context: dict) -> str:
         """Рендерит HTML шаблон и инлайнит CSS."""
-        from app.core.config import settings
-
-        # Добавляем frontend_url если его нет
         if "frontend_url" not in context:
             context["frontend_url"] = settings.FRONTEND_URL
 
@@ -47,39 +44,21 @@ class EmailService:
         html = template.render(**context)
         return premailer_transform(html)
 
-    def _create_message(
-        self,
-        to_email: str,
-        subject: str,
-        html_body: str,
-        attachments: list[Path] | None = None,
-    ) -> MIMEMultipart:
-        msg = MIMEMultipart("mixed")
-        msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
-        msg["To"] = to_email
-        msg["Subject"] = subject
-
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-        if attachments:
-            for file_path in attachments:
-                if not file_path.exists():
-                    continue
-                with open(file_path, "rb") as f:
-                    # 🆕 Определяем правильный MIME-тип
-                    if file_path.suffix.lower() == ".pdf":
-                        part = MIMEBase("application", "pdf")
-                    else:
-                        part = MIMEBase("application", "octet-stream")
-                    part.set_payload(f.read())
-                encoders.encode_base64(part)
-                part.add_header(
-                    "Content-Disposition",
-                    f'attachment; filename="{file_path.name}"',
-                )
-                msg.attach(part)
-
-        return msg
+    def _attach_file(self, msg: MIMEMultipart, filename: str, content: bytes) -> None:
+        """Прикрепляет файл к сообщению с правильным MIME-типом."""
+        if filename.lower().endswith(".pdf"):
+            part = MIMEBase("application", "pdf")
+        else:
+            part = MIMEBase("application", "octet-stream")
+        part.set_payload(content)
+        encoders.encode_base64(part)
+        # Используем RFC 2231 encoding для поддержки кириллицы в именах файлов
+        part.add_header(
+            "Content-Disposition",
+            "attachment",
+            filename=("utf-8", "", filename),
+        )
+        msg.attach(part)
 
     def send_email(
         self,
@@ -96,16 +75,19 @@ class EmailService:
 
         Поддерживает два режима:
         1. Прямой: body + html_body
-        2. Шаблонный: template_name + context (для обратной совместимости)
+        2. Шаблонный: template_name + context
+
+        Вложения поддерживаются в двух форматах:
+        - dict: {"filename": "name.pdf", "content": b"..."}
+        - Path: путь к файлу на диске
         """
-        # 🆕 Логирование в EmailLog (создаём запись со статусом pending)
+        # Логирование в EmailLog (создаём запись со статусом pending)
         log_id = None
         try:
             from app.core.db import SessionLocal
             from app.models.email import EmailLog, EmailStatus
 
             db_log = SessionLocal()
-            # Рендерим HTML заранее для логирования
             rendered_html = None
             if template_name and context:
                 rendered_html = self._render_template(template_name, context)
@@ -113,7 +95,7 @@ class EmailService:
                 rendered_html = html_body
 
             email_log = EmailLog(
-                company_id=1,  # TODO: получать из контекста
+                company_id=1,
                 to_email=to_email,
                 subject=subject,
                 html_body=rendered_html,
@@ -140,28 +122,41 @@ class EmailService:
         except Exception as log_err:
             logger.warning(f"⚠️ Failed to create email log entry: {log_err}")
 
-        try:  # === Режим 2: Шаблонный ===
+        try:
+            # === Режим 2: Шаблонный ===
             if template_name and context:
-                html_body = rendered_html  # Используем уже отрендеренный
-                # Преобразуем Path-вложения в dict-формат
-                if attachments:
-                    converted_attachments = []
-                    for file_path in attachments:
-                        if isinstance(file_path, Path) and file_path.exists():
-                            with open(file_path, "rb") as f:
-                                converted_attachments.append(
-                                    {
-                                        "filename": file_path.name,
-                                        "content": f.read(),
-                                    }
-                                )
-                    attachments = converted_attachments
+                html_body = rendered_html
 
-            # === Режим 1: Прямой (новая архитектура) ===
+            # === Режим 1: Прямой ===
             elif not body and not html_body:
                 raise ValueError(
                     "Either (body/html_body) or (template_name/context) must be provided"
                 )
+
+            # Нормализуем вложения в единый формат: list[dict]
+            normalized_attachments = []
+            if attachments:
+                for att in attachments:
+                    if isinstance(att, dict) and "filename" in att and "content" in att:
+                        # Уже dict — используем как есть
+                        normalized_attachments.append(att)
+                    elif isinstance(att, Path) and att.exists():
+                        # Path объект — читаем в dict
+                        with open(att, "rb") as f:
+                            normalized_attachments.append({
+                                "filename": att.name,
+                                "content": f.read(),
+                            })
+                    elif isinstance(att, str) and Path(att).exists():
+                        # Строковый путь — читаем в dict
+                        p = Path(att)
+                        with open(p, "rb") as f:
+                            normalized_attachments.append({
+                                "filename": p.name,
+                                "content": f.read(),
+                            })
+                    else:
+                        logger.warning(f"⚠️ Skipping invalid attachment: {type(att)}")
 
             # Создаём MIME-сообщение
             msg = MIMEMultipart("mixed")
@@ -177,24 +172,15 @@ class EmailService:
             if html_body:
                 msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-            # Вложения (всегда в dict-формате)
-            if attachments:
-                for attachment in attachments:
-                    if isinstance(attachment, dict):
-                        part = MIMEBase("application", "octet-stream")
-                        part.set_payload(attachment["content"])
-                        encoders.encode_base64(part)
-                        part.add_header(
-                            "Content-Disposition",
-                            f'attachment; filename="{attachment["filename"]}"',
-                        )
-                        msg.attach(part)
+            # Вложения
+            for att in normalized_attachments:
+                self._attach_file(msg, att["filename"], att["content"])
+                logger.debug(f"📎 Attached: {att['filename']} ({len(att['content'])} bytes)")
 
-            # === КЛЮЧЕВОЕ: правильный выбор SMTP-соединения ===
+            # === Выбор SMTP-соединения ===
             port = settings.SMTP_PORT
 
             if port == 465:
-                # Mail.ru, Яндекс: SSL с самого начала (НЕ starttls!)
                 server = smtplib.SMTP_SSL(
                     settings.SMTP_HOST,
                     port,
@@ -202,7 +188,6 @@ class EmailService:
                     context=ssl.create_default_context(),
                 )
             else:
-                # Gmail (587): обычный SMTP + STARTTLS
                 server = smtplib.SMTP(settings.SMTP_HOST, port, timeout=30)
                 server.ehlo()
                 if port == 587:
@@ -219,7 +204,7 @@ class EmailService:
 
             logger.info(f"✅ Email sent to {to_email}: {subject}")
 
-            # 🆕 Обновляем статус в EmailLog на sent
+            # Обновляем статус в EmailLog на sent
             if log_id:
                 try:
                     db_log = SessionLocal()
@@ -237,7 +222,6 @@ class EmailService:
         except Exception as e:
             logger.error(f"❌ Failed to send email to {to_email}: {e}", exc_info=True)
 
-            # 🆕 Обновляем статус в EmailLog на failed
             if log_id:
                 try:
                     db_log = SessionLocal()
@@ -260,10 +244,8 @@ class EmailService:
 
         subject = f"Новый счёт {invoice.document_number} от СпецТехника Про"
 
-        # Загружаем PDF из MinIO
         pdf_path = None
         try:
-            # Ищем последний загруженный PDF для этого счёта
             from app.core.db import SessionLocal
 
             db = SessionLocal()
@@ -279,19 +261,14 @@ class EmailService:
             db.close()
 
             if uploaded_file:
-                # Скачиваем из MinIO во временный файл
                 from app.services import storage_service
 
-                pdf_bytes = storage_service.get_file(
-                    uploaded_file.storage_path
-                )  # ← get_file!
+                pdf_bytes = storage_service.get_file(uploaded_file.storage_path)
                 if pdf_bytes:
                     import tempfile
 
                     temp_file = tempfile.NamedTemporaryFile(
-                        delete=False,
-                        suffix=".pdf",
-                        prefix=f"{invoice.document_number}_",
+                        delete=False, suffix=".pdf", prefix=f"{invoice.document_number}_"
                     )
                     temp_file.write(pdf_bytes)
                     temp_file.close()
@@ -313,7 +290,6 @@ class EmailService:
             attachments=attachments,
         )
 
-        # Удаляем временный файл
         if pdf_path and pdf_path.exists():
             try:
                 pdf_path.unlink()
@@ -328,7 +304,6 @@ class EmailService:
 
         subject = f"Акт {act.document_number} подписан"
 
-        # Загружаем PDF из MinIO
         pdf_path = None
         try:
             from app.core.db import SessionLocal
@@ -486,8 +461,9 @@ class EmailService:
 
         subject = f"✅ Выплата {payout.document_number} одобрена — {payout.net_amount} ₽"
 
-        # Генерируем PDF
-        pdf_path = None
+        pdf_attachment = None
+        temp_path_to_cleanup = None
+
         try:
             db_tmp = SessionLocal()
             owner = db_tmp.get(Contractor, payout.owner_id)
@@ -496,16 +472,43 @@ class EmailService:
             vehicle_name = vehicle.name if vehicle else ""
             db_tmp.close()
 
-            pdf_path_str = generate_payout_pdf(
+            pdf_result = generate_payout_pdf(
                 payout, owner_name=owner_name_full, vehicle_name=vehicle_name
             )
-            pdf_path = Path(pdf_path_str)
+
+            if isinstance(pdf_result, bytes):
+                pdf_attachment = {
+                    "filename": f"{payout.document_number}.pdf",
+                    "content": pdf_result,
+                }
+                logger.info(f"📎 PDF attached from memory ({len(pdf_result)} bytes)")
+
+            elif isinstance(pdf_result, (str, Path)):
+                pdf_path = Path(pdf_result)
+                if pdf_path.exists():
+                    with open(pdf_path, "rb") as f:
+                        pdf_content = f.read()
+                    pdf_attachment = {
+                        "filename": f"{payout.document_number}.pdf",
+                        "content": pdf_content,
+                    }
+                    temp_path_to_cleanup = pdf_path
+                    logger.info(f"📎 PDF attached from file: {pdf_path.name} ({len(pdf_content)} bytes)")
+            else:
+                logger.warning(f"⚠️ Unexpected PDF result type: {type(pdf_result)}")
+
         except Exception as e:
-            logger.warning(f"⚠️ Could not generate payout PDF for email: {e}")
+            logger.warning(f"⚠️ Could not generate payout PDF for email: {e}", exc_info=True)
 
-        attachments = [pdf_path] if pdf_path and pdf_path.exists() else None
+        if temp_path_to_cleanup and temp_path_to_cleanup.exists():
+            try:
+                temp_path_to_cleanup.unlink()
+            except Exception:
+                pass
 
-        result = self.send_email(
+        attachments = [pdf_attachment] if pdf_attachment else None
+
+        return self.send_email(
             to_email=owner_email,
             subject=subject,
             template_name="email/payout_created.html",
@@ -516,15 +519,6 @@ class EmailService:
             },
             attachments=attachments,
         )
-
-        # Удаляем временный PDF
-        if pdf_path and pdf_path.exists():
-            try:
-                pdf_path.unlink()
-            except Exception:
-                pass
-
-        return result
 
     def send_dispute_opened(
         self, dispute, dispatcher_email: str, dispatcher_name: str
@@ -572,23 +566,12 @@ class EmailService:
         client_email: str,
         client_name: str,
     ) -> bool:
-        """
-        Уведомление клиенту о получении оплаты по счёту.
-        
-        Args:
-            invoice: Объект Invoice
-            payment_amount: Сумма полученного платежа
-            payment_date: Дата платежа
-            payer_name: Наименование плательщика
-            payer_inn: ИНН плательщика
-            client_email: Email клиента
-            client_name: Имя клиента
-        """
+        """Уведомление клиенту о получении оплаты по счёту."""
         if invoice.status.value == "paid":
             subject = f"✅ Счёт {invoice.document_number} полностью оплачен"
         else:
             subject = f"💰 Получена оплата по счёту {invoice.document_number}"
-        
+
         return self.send_email(
             to_email=client_email,
             subject=subject,
