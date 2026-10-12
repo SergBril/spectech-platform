@@ -25,6 +25,7 @@ const menuItems: MenuItem[] = [
   { label: 'Финансы', icon: '💰', path: '/finance', group: 'Финансы' },
   { label: 'Счета', icon: '📄', path: '/invoices', group: 'Финансы' },
   { label: 'Банковские выписки', icon: '🏦', path: '/bank-statements', group: 'Финансы' },
+  { label: 'Зарплаты', icon: '💰', path: '/salaries', group: 'Финансы' },
 
   { label: 'Email шаблоны', icon: '📧', path: '/email-templates', group: 'Система' },
   { label: 'Email логи', icon: '📨', path: '/email-logs', group: 'Система' },

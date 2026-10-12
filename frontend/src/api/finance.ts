@@ -474,4 +474,36 @@ export const financeApi = {
     });
     return res.data;
   },
+
+  // === SALARIES ===
+  calculateSalaries: async (dateFrom: string, dateTo: string, employeeId?: number) => {
+    const params: any = { date_from: dateFrom, date_to: dateTo };
+    if (employeeId) params.employee_id = employeeId;
+    const res = await apiClient.post('/salaries/calculate', null, { params });
+    return res.data;
+  },
+
+  getSalaryRecords: async (params?: {
+    date_from?: string;
+    date_to?: string;
+    status?: string;
+    employee_id?: number;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const res = await apiClient.get('/salaries', { params });
+    return res.data;
+  },
+
+  getSalarySummary: async (dateFrom: string, dateTo: string) => {
+    const res = await apiClient.get('/salaries/summary', {
+      params: { date_from: dateFrom, date_to: dateTo },
+    });
+    return res.data;
+  },
+
+  approveSalaryRecord: async (recordId: number) => {
+    const res = await apiClient.post(`/salaries/${recordId}/approve`);
+    return res.data;
+  },
 };
