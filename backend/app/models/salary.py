@@ -29,8 +29,8 @@ class SalaryRecord(Base):
     company_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("companies.id"), nullable=False, index=True
     )
-    employee_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("employees.id"), nullable=False, index=True
+    employee_contractor_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("employees.contractor_id"), nullable=False, index=True
     )
 
     # Период
@@ -77,5 +77,5 @@ class SalaryRecord(Base):
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
-    employee = relationship("Employee", foreign_keys=[employee_id])
+    employee = relationship("Employee", foreign_keys=[employee_contractor_id])
     payout = relationship("Payout", foreign_keys=[payout_id])
