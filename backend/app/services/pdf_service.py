@@ -1,6 +1,9 @@
 """Сервис генерации PDF документов на русском языке."""
 
 from datetime import datetime
+import logging
+
+logger = logging.getLogger("spectech.pdf")
 
 # === СЛОВАРЬ ПЕРЕВОДА ЕДИНИЦ ИЗМЕРЕНИЯ ===
 UNIT_TRANSLATIONS = {
@@ -422,27 +425,26 @@ def generate_payout_pdf(payout, owner_name: str = "", vehicle_name: str = "", lo
         font_added = False
         font_paths = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "C:/Windows/Fonts/arial.ttf",
             "C:/Windows/Fonts/Arial.ttf",
+            "C:/Windows/Fonts/calibri.ttf",
         ]
 
         for fp in font_paths:
             try:
-                from pathlib import Path
-                if Path(fp).exists():
+                from pathlib import Path as _Path
+                if _Path(fp).exists():
                     pdf.add_font("UniFont", "", fp, uni=True)
                     pdf.add_font("UniFont", "B", fp, uni=True)
                     font_added = True
+                    logger.debug(f"✅ Loaded font: {fp}")
                     break
-            except Exception:
+            except Exception as font_err:
+                logger.debug(f"⚠️ Font {fp} failed: {font_err}")
                 continue
 
-        if not font_added:
-            # Fallback на стандартный шрифт (без кириллицы)
-            pass
-
         def _font(style="", size=10):
+            """Безопасная установка шрифта. style: '' или 'B' (italic не поддерживается для custom fonts)."""
             if font_added:
                 pdf.set_font("UniFont", style, size)
             else:
@@ -450,9 +452,9 @@ def generate_payout_pdf(payout, owner_name: str = "", vehicle_name: str = "", lo
 
         # Заголовок
         _font("B", 18)
-        pdf.cell(0, 12, f"VEDOMOST VYPLATY", 0, 1, "C")
+        pdf.cell(0, 12, "VEDOMOST VYPLATY", 0, 1, "C")
         _font("", 10)
-        pdf.cell(0, 6, f"{payout.document_number or ''}", 0, 1, "C")
+        pdf.cell(0, 6, str(payout.document_number or ""), 0, 1, "C")
         pdf.ln(5)
 
         # Информация о выплате
@@ -507,21 +509,23 @@ def generate_payout_pdf(payout, owner_name: str = "", vehicle_name: str = "", lo
         # Подписи
         pdf.ln(20)
         _font("", 9)
-        pdf.cell(95, 7, "Podpis' menedzhera", 0, 0, "C")
-        pdf.cell(95, 7, "Podpis' sobstvennika", 0, 1, "C")
+        pdf.cell(95, 7, "Podpis menedzhera", 0, 0, "C")
+        pdf.cell(95, 7, "Podpis sobstvennika", 0, 1, "C")
         pdf.ln(15)
         pdf.cell(95, 5, "M.P. / ________________", 0, 0, "C")
         pdf.cell(95, 5, "M.P. / ________________", 0, 1, "C")
 
-        # Футер
+        # Футер (без italic!)
         pdf.ln(10)
-        _font("I", 8)
+        _font("", 8)
         pdf.cell(0, 5, f'Dokument sgenerirovan: {datetime.now().strftime("%d.%m.%Y %H:%M")}', 0, 1, "C")
         pdf.cell(0, 5, 'Sistema "SpecTekhnika Pro"', 0, 1, "C")
 
         result = bytes(pdf.output())
         if len(result) < 100:
             logger.warning(f"⚠️ Generated payout PDF too small: {len(result)} bytes")
+        else:
+            logger.info(f"✅ Payout PDF generated: {len(result)} bytes")
         return result
 
     except Exception as e:
