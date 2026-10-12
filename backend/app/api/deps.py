@@ -7,7 +7,9 @@ from app.models.auth import User, UserStatus
 from app.services.auth_service import decode_access_token
 from app.services.rbac_service import check_permission
 
+# HTTPBearer для авторизации
 bearer_scheme = HTTPBearer(auto_error=False)
+security = HTTPBearer(auto_error=False)  # Alias для опциональной аутентификации
 
 
 def get_current_user(
@@ -103,3 +105,27 @@ def get_current_company_id(
             detail="User is not assigned to any company",
         )
     return user.company_id
+
+
+def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """
+    Опциональная аутентификация.
+    Возвращает User если токен валиден, иначе None.
+    
+    Используется для публичных endpoints которые могут работать
+    как с авторизацией (для привязки отзыва к пользователю),
+    так и без неё (анонимные отзывы).
+    """
+    if not credentials:
+        return None
+    
+    try:
+        payload = decode_access_token(credentials.credentials)
+        user_id = int(payload.get("sub"))
+        user = db.get(User, user_id)
+        return user if user and user.status == UserStatus.active else None
+    except Exception:
+        return None

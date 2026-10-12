@@ -234,11 +234,7 @@ app.include_router(
     prefix="/api/v1/banking",
     tags=["💳 Banking (Банковские выписки)"],
 )
-app.include_router(
-    reviews.router,
-    prefix="/api/v1",
-    tags=["⭐ Reviews (Отзывы и рейтинги)"],
-)
+# app.include_router(reviews.router, prefix="/api/v1", tags=["⭐ Reviews (Отзывы и рейтинги)"])
 
 uploads_dir = Path("uploads")
 uploads_dir.mkdir(exist_ok=True)
