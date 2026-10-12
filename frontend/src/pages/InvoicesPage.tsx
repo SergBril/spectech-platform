@@ -5,7 +5,7 @@ import { financeApi, type Invoice, type InvoiceStatus } from '../api/finance';
 import InvoiceFormModal from '../components/InvoiceFormModal';
 import PaymentModal from '../components/PaymentModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
-import Navbar from '../components/Navbar';
+import Layout from '../components/Layout';
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
@@ -102,7 +102,6 @@ export const InvoicesPage: React.FC = () => {
     }
   };
 
-  // 🆕 НОВАЯ ФУНКЦИЯ: Отправить email повторно
   const handleResendEmail = async (inv: Invoice) => {
     if (!confirm(`Отправить счёт ${inv.document_number} клиенту повторно с PDF вложением?`)) return;
     try {
@@ -152,140 +151,138 @@ export const InvoicesPage: React.FC = () => {
     return Math.min(100, (paid / total) * 100);
   };
 
+  // ИСПРАВЛЕНО: Обертка загрузки в Layout
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
+      <Layout>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </Layout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Счета ({invoices.length})</h2>
-            {canCreate && (
-              <button onClick={handleCreate} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-                + Новый счёт
-              </button>
-            )}
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">{error}</div>
+    <Layout>
+      <div className="px-4 py-6 sm:px-0">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">Счета ({invoices.length})</h2>
+          {canCreate && (
+            <button onClick={handleCreate} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+              + Новый счёт
+            </button>
           )}
-
-          <div className="bg-white shadow rounded-lg overflow-hidden">
-            {invoices.length === 0 ? (
-              <div className="p-12 text-center text-gray-500">
-                <div className="text-5xl mb-4">💰</div>
-                <p>Счетов пока нет</p>
-              </div>
-            ) : (
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Срок</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Оплачено</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Прогресс</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {invoices.map((inv) => {
-                    const progress = getProgress(inv);
-                    const paid = parseFloat(inv.paid_amount || '0');
-                    const total = parseFloat(inv.total || '0');
-                    const canAcceptPayment = inv.status !== 'paid' && inv.status !== 'cancelled' && paid < total;
-
-                    return (
-                      <tr key={inv.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-mono text-gray-900">{inv.document_number}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{formatDate(inv.invoice_date)}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{formatDate(inv.due_date)}</td>
-                        <td className="px-4 py-3 text-sm font-semibold text-gray-900">{formatMoney(inv.total)}</td>
-                        <td className="px-4 py-3 text-sm text-green-600">{formatMoney(inv.paid_amount)}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <div className="w-24 bg-gray-200 rounded-full h-2">
-                            <div
-                              className={`h-2 rounded-full ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
-                              style={{ width: `${progress}%` }}
-                            ></div>
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">{progress.toFixed(0)}%</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>
-                            {STATUS_LABELS[inv.status]?.label || inv.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm space-x-1">
-                          {/* Кнопка "Отправить" только для draft */}
-                          {inv.status === 'draft' && canEdit && (
-                            <>
-                              <button onClick={() => handleSend(inv)} className="text-blue-600 hover:text-blue-900">Отправить</button>
-                              <span className="text-gray-300">|</span>
-                              <button onClick={() => handleEdit(inv)} className="text-gray-600 hover:text-gray-900">Изменить</button>
-                            </>
-                          )}
-
-                          {/* 🆕 Кнопка "📧 Email" для всех статусов кроме cancelled и draft */}
-                          {inv.status !== 'cancelled' && inv.status !== 'draft' && canEdit && (
-                            <>
-                              <button
-                                onClick={() => handleResendEmail(inv)}
-                                className="text-indigo-600 hover:text-indigo-900 font-medium"
-                                title="Отправить PDF клиенту повторно"
-                              >
-                                📧 Email
-                              </button>
-                              <span className="text-gray-300">|</span>
-                            </>
-                          )}
-
-                          {/* Принять оплату */}
-                          {canAcceptPayment && canEdit && (
-                            <>
-                              <button onClick={() => setPaymentTarget(inv)} className="text-green-600 hover:text-green-900 font-medium">
-                                💳 Принять оплату
-                              </button>
-                              <span className="text-gray-300">|</span>
-                            </>
-                          )}
-
-                          {/* Скачать PDF */}
-                          <button onClick={() => handleDownloadPdf(inv)} className="text-purple-600 hover:text-purple-900">PDF</button>
-
-                          {/* Удалить */}
-                          {canDelete && inv.status === 'draft' && (
-                            <>
-                              <span className="text-gray-300">|</span>
-                              <button onClick={() => setDeleteTarget(inv)} className="text-red-600 hover:text-red-900">Удалить</button>
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
         </div>
-      </main>
 
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">{error}</div>
+        )}
+
+        <div className="bg-white shadow rounded-lg overflow-hidden">
+          {invoices.length === 0 ? (
+            <div className="p-12 text-center text-gray-500">
+              <div className="text-5xl mb-4">💰</div>
+              <p>Счетов пока нет</p>
+            </div>
+          ) : (
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Срок</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Оплачено</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Прогресс</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {invoices.map((inv) => {
+                  const progress = getProgress(inv);
+                  const paid = parseFloat(inv.paid_amount || '0');
+                  const total = parseFloat(inv.total || '0');
+                  const canAcceptPayment = inv.status !== 'paid' && inv.status !== 'cancelled' && paid < total;
+
+                  return (
+                    <tr key={inv.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm font-mono text-gray-900">{inv.document_number}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{formatDate(inv.invoice_date)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{formatDate(inv.due_date)}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-gray-900">{formatMoney(inv.total)}</td>
+                      <td className="px-4 py-3 text-sm text-green-600">{formatMoney(inv.paid_amount)}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="w-24 bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
+                            style={{ width: `${progress}%` }}
+                          ></div>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">{progress.toFixed(0)}%</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${STATUS_LABELS[inv.status]?.color || 'bg-gray-100'}`}>
+                          {STATUS_LABELS[inv.status]?.label || inv.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm space-x-1">
+                        {inv.status === 'draft' && canEdit && (
+                          <>
+                            <button onClick={() => handleSend(inv)} className="text-blue-600 hover:text-blue-900">Отправить</button>
+                            <span className="text-gray-300">|</span>
+                            <button onClick={() => handleEdit(inv)} className="text-gray-600 hover:text-gray-900">Изменить</button>
+                          </>
+                        )}
+
+                        {inv.status !== 'cancelled' && inv.status !== 'draft' && canEdit && (
+                          <>
+                            <button
+                              onClick={() => handleResendEmail(inv)}
+                              className="text-indigo-600 hover:text-indigo-900 font-medium"
+                              title="Отправить PDF клиенту повторно"
+                            >
+                              📧 Email
+                            </button>
+                            <span className="text-gray-300">|</span>
+                          </>
+                        )}
+
+                        {canAcceptPayment && canEdit && (
+                          <>
+                            <button onClick={() => setPaymentTarget(inv)} className="text-green-600 hover:text-green-900 font-medium">
+                              💳 Принять оплату
+                            </button>
+                            <span className="text-gray-300">|</span>
+                          </>
+                        )}
+
+                        <button onClick={() => handleDownloadPdf(inv)} className="text-purple-600 hover:text-purple-900">PDF</button>
+
+                        {canDelete && inv.status === 'draft' && (
+                          <>
+                            <span className="text-gray-300">|</span>
+                            <button onClick={() => setDeleteTarget(inv)} className="text-red-600 hover:text-red-900">Удалить</button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* 🆕 ИСПРАВЛЕНО: Рендеринг модалок */}
       {isFormOpen && (
         <InvoiceFormModal
           invoice={editingInvoice}
-          onClose={() => { setIsFormOpen(false); setEditingInvoice(null); }}
+          onClose={() => {
+            setIsFormOpen(false);
+            setEditingInvoice(null);
+          }}
           onSave={handleSave}
         />
       )}
@@ -300,12 +297,13 @@ export const InvoicesPage: React.FC = () => {
 
       {deleteTarget && (
         <DeleteConfirmDialog
-          vehicleName={`счёт ${deleteTarget.document_number}`}
+          title="Удалить счёт?"
+          message={`Счёт ${deleteTarget.document_number} будет удалён безвозвратно.`}
           onConfirm={confirmDelete}
           onCancel={() => setDeleteTarget(null)}
         />
       )}
-    </div>
+    </Layout>
   );
 };
 

@@ -8,7 +8,7 @@ import { contractorsApi, type Contractor } from '../api/contractors';
 import { showToast } from '../utils/toast';
 import NotificationBell from '../components/NotificationBell';
 import { TaxSystemSelector } from '../components/TaxSystemSelector';
-import Navbar from '../components/Navbar';
+import Layout from '../components/Layout';
 
 export const ActCreatePage: React.FC = () => {
   const navigate = useNavigate();
@@ -172,183 +172,180 @@ export const ActCreatePage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <Layout>
+      
+     <div className="bg-white rounded-lg shadow p-6">
+       <h1 className="text-2xl font-bold text-gray-900 mb-6">📄 Создание акта</h1>
 
-      <main className="max-w-3xl mx-auto py-8 px-4">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">📄 Создание акта</h1>
+       {request && (
+         <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-6">
+           <h3 className="font-semibold text-blue-900 mb-2">Заявка #{request.id}</h3>
+           <p className="text-sm text-blue-800">🔧 {request.work_type}</p>
+           <p className="text-sm text-blue-700">📍 {request.object_address}</p>
+           <p className="text-sm text-blue-700">
+             💵 Ожидаемая сумма: {(request as any).estimated_amount || '—'} ₽
+           </p>
+         </div>
+       )}
 
-          {request && (
-            <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-6">
-              <h3 className="font-semibold text-blue-900 mb-2">Заявка #{request.id}</h3>
-              <p className="text-sm text-blue-800">🔧 {request.work_type}</p>
-              <p className="text-sm text-blue-700">📍 {request.object_address}</p>
-              <p className="text-sm text-blue-700">
-                💵 Ожидаемая сумма: {(request as any).estimated_amount || '—'} ₽
-              </p>
-            </div>
-          )}
+       <form onSubmit={handleSubmit} className="space-y-4">
+         <div>
+           <label className="block text-sm font-medium text-gray-700 mb-1">📅 Дата акта</label>
+           <input
+             type="date"
+             value={formData.act_date}
+             onChange={(e) => setFormData({ ...formData, act_date: e.target.value })}
+             className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+             required
+           />
+         </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">📅 Дата акта</label>
-              <input
-                type="date"
-                value={formData.act_date}
-                onChange={(e) => setFormData({ ...formData, act_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                required
-              />
-            </div>
+         <div>
+           <label className="block text-sm font-medium text-gray-700 mb-1">💰 Сумма (₽)</label>
+           <input
+             type="number"
+             step="0.01"
+             min="0"
+             value={formData.total_amount}
+             onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
+             className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+             required
+           />
+         </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">💰 Сумма (₽)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.total_amount}
-                onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                required
-              />
-            </div>
+         {/* 🆕 Блок выбора заказчика */}
+         <div>
+           <label className="block text-sm font-medium text-gray-700 mb-1">👤 Заказчик *</label>
+           <input
+             type="text"
+             placeholder="Поиск по названию или ИНН..."
+             value={searchContractor}
+             onChange={(e) => setSearchContractor(e.target.value)}
+             className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none mb-2"
+           />
+           <select
+             value={formData.client_id || ''}
+             onChange={(e) => handleContractorChange(e.target.value)}
+             className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+             required
+           >
+             <option value="">— Выберите заказчика —</option>
+             {contractors
+               .filter(
+                 (c) =>
+                   !searchContractor ||
+                   c.name.toLowerCase().includes(searchContractor.toLowerCase()) ||
+                   c.inn?.toLowerCase().includes(searchContractor.toLowerCase()),
+               )
+               .map((c) => (
+                 <option key={c.id} value={c.id}>
+                   {c.name} {c.inn ? `(ИНН: ${c.inn})` : ''}
+                 </option>
+               ))}
+           </select>
 
-            {/* 🆕 Блок выбора заказчика */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">👤 Заказчик *</label>
-              <input
-                type="text"
-                placeholder="Поиск по названию или ИНН..."
-                value={searchContractor}
-                onChange={(e) => setSearchContractor(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none mb-2"
-              />
-              <select
-                value={formData.client_id || ''}
-                onChange={(e) => handleContractorChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                required
-              >
-                <option value="">— Выберите заказчика —</option>
-                {contractors
-                  .filter(
-                    (c) =>
-                      !searchContractor ||
-                      c.name.toLowerCase().includes(searchContractor.toLowerCase()) ||
-                      c.inn?.toLowerCase().includes(searchContractor.toLowerCase()),
-                  )
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} {c.inn ? `(ИНН: ${c.inn})` : ''}
-                    </option>
-                  ))}
-              </select>
+           {/* Превью реквизитов выбранного заказчика */}
+           {selectedContractor && (
+             <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900">
+               <div className="font-semibold mb-1">{selectedContractor.name}</div>
+               {selectedContractor.inn && (
+                 <div>
+                   ИНН: {selectedContractor.inn}
+                   {selectedContractor.kpp ? ` / КПП: ${selectedContractor.kpp}` : ''}
+                 </div>
+               )}
+               {selectedContractor.legal_address && (
+                 <div className="truncate">Адрес: {selectedContractor.legal_address}</div>
+               )}
+               {selectedContractor.tax_system && (
+                 <div>
+                   Система налогов:{' '}
+                   <span className="font-medium">
+                     {selectedContractor.tax_system === 'osno' && 'ОСНО'}
+                     {selectedContractor.tax_system === 'usn_6' && 'УСН "Доходы"'}
+                     {selectedContractor.tax_system === 'usn_15' && 'УСН "Доходы-Расходы"'}
+                     {selectedContractor.tax_system === 'patent' && 'Патент'}
+                     {selectedContractor.tax_system === 'npd' && 'НПД'}
+                   </span>
+                 </div>
+               )}
+             </div>
+           )}
 
-              {/* Превью реквизитов выбранного заказчика */}
-              {selectedContractor && (
-                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900">
-                  <div className="font-semibold mb-1">{selectedContractor.name}</div>
-                  {selectedContractor.inn && (
-                    <div>
-                      ИНН: {selectedContractor.inn}
-                      {selectedContractor.kpp ? ` / КПП: ${selectedContractor.kpp}` : ''}
-                    </div>
-                  )}
-                  {selectedContractor.legal_address && (
-                    <div className="truncate">Адрес: {selectedContractor.legal_address}</div>
-                  )}
-                  {selectedContractor.tax_system && (
-                    <div>
-                      Система налогов:{' '}
-                      <span className="font-medium">
-                        {selectedContractor.tax_system === 'osno' && 'ОСНО'}
-                        {selectedContractor.tax_system === 'usn_6' && 'УСН "Доходы"'}
-                        {selectedContractor.tax_system === 'usn_15' && 'УСН "Доходы-Расходы"'}
-                        {selectedContractor.tax_system === 'patent' && 'Патент'}
-                        {selectedContractor.tax_system === 'npd' && 'НПД'}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
+           <button
+             type="button"
+             onClick={() => window.open('/contractors', '_blank')}
+             className="mt-2 text-xs text-blue-600 hover:text-blue-800"
+           >
+             + Добавить нового клиента
+           </button>
+         </div>
 
-              <button
-                type="button"
-                onClick={() => window.open('/contractors', '_blank')}
-                className="mt-2 text-xs text-blue-600 hover:text-blue-800"
-              >
-                + Добавить нового клиента
-              </button>
-            </div>
+         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+           <TaxSystemSelector
+             value={formData.tax_system}
+             onChange={handleTaxSystemChange}
+             onVatRateChange={(rate) => {
+               setIsManualTaxOverride(true);
+               setFormData({ ...formData, vat_rate: rate });
+             }}
+           />
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <TaxSystemSelector
-                value={formData.tax_system}
-                onChange={handleTaxSystemChange}
-                onVatRateChange={(rate) => {
-                  setIsManualTaxOverride(true);
-                  setFormData({ ...formData, vat_rate: rate });
-                }}
-              />
+           {formData.tax_system === 'osno' && (
+             <div className="mt-3 flex items-center">
+               <input
+                 id="actVatIncluded"
+                 type="checkbox"
+                 checked={formData.is_vat_included}
+                 onChange={(e) => {
+                   setIsManualTaxOverride(true);
+                   setFormData({ ...formData, is_vat_included: e.target.checked });
+                 }}
+                 className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+               />
+               <label htmlFor="actVatIncluded" className="ml-2 text-sm text-gray-700">
+                 НДС включён в сумму (иначе — начисляется сверху)
+               </label>
+             </div>
+           )}
+         </div>
 
-              {formData.tax_system === 'osno' && (
-                <div className="mt-3 flex items-center">
-                  <input
-                    id="actVatIncluded"
-                    type="checkbox"
-                    checked={formData.is_vat_included}
-                    onChange={(e) => {
-                      setIsManualTaxOverride(true);
-                      setFormData({ ...formData, is_vat_included: e.target.checked });
-                    }}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <label htmlFor="actVatIncluded" className="ml-2 text-sm text-gray-700">
-                    НДС включён в сумму (иначе — начисляется сверху)
-                  </label>
-                </div>
-              )}
-            </div>
+         <div>
+           <label className="block text-sm font-medium text-gray-700 mb-1">💬 Комментарий</label>
+           <textarea
+             value={formData.comment}
+             onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
+             rows={3}
+             className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+             placeholder="Необязательное поле"
+           />
+         </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">💬 Комментарий</label>
-              <textarea
-                value={formData.comment}
-                onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                placeholder="Необязательное поле"
-              />
-            </div>
+         <div className="flex gap-3 pt-4">
+           <button
+             type="submit"
+             disabled={loading || !canCreate}
+             className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700 disabled:opacity-50 font-semibold"
+           >
+             {loading ? '⏳ Создание...' : '✅ Создать акт'}
+           </button>
+           <button
+             type="button"
+             onClick={() => navigate(`/requests/${requestId}`)}
+             className="flex-1 bg-gray-200 text-gray-800 py-3 rounded hover:bg-gray-300 font-semibold"
+           >
+             Отмена
+           </button>
+         </div>
 
-            <div className="flex gap-3 pt-4">
-              <button
-                type="submit"
-                disabled={loading || !canCreate}
-                className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700 disabled:opacity-50 font-semibold"
-              >
-                {loading ? '⏳ Создание...' : '✅ Создать акт'}
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(`/requests/${requestId}`)}
-                className="flex-1 bg-gray-200 text-gray-800 py-3 rounded hover:bg-gray-300 font-semibold"
-              >
-                Отмена
-              </button>
-            </div>
-
-            {!canCreate && (
-              <p className="text-red-600 text-sm text-center">
-                ⚠️ У вас нет прав на создание актов
-              </p>
-            )}
-          </form>
-        </div>
-      </main>
-    </div>
+         {!canCreate && (
+           <p className="text-red-600 text-sm text-center">
+             ⚠️ У вас нет прав на создание актов
+           </p>
+         )}
+       </form>
+     </div>
+   </Layout>
   );
 };
 
