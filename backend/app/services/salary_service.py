@@ -28,6 +28,30 @@ class SalaryService:
     ) -> SalaryRecord:
         """Рассчитывает зарплату сотрудника за период."""
         if not employee.salary_type:
+        # Проверяем существующую запись за этот период
+        existing = db.query(SalaryRecord).filter(
+            SalaryRecord.employee_contractor_id == employee.contractor_id,
+            SalaryRecord.period_start == period_start,
+            SalaryRecord.period_end == period_end,
+            SalaryRecord.company_id == company_id,
+        ).first()
+
+        if existing:
+            logger.info(f"Salary record already exists for employee #{employee.contractor_id}, updating...")
+            # Пересчитываем существующую запись
+            shifts_data = SalaryService._get_shifts_data(
+                db, employee.contractor_id, period_start, period_end, company_id
+            )
+            gross, details = SalaryService._calculate_gross(employee, shifts_data)
+            existing.shifts_count = shifts_data["shifts_count"]
+            existing.total_hours = Decimal(str(shifts_data["total_hours"]))
+            existing.total_km = Decimal(str(shifts_data["total_km"]))
+            existing.gross_amount = gross
+            existing.net_amount = gross
+            existing.calculation_details = details
+            db.commit()
+            db.refresh(existing)
+            return existing
             raise ValueError(f"У сотрудника {employee.contractor_id} не задан тип зарплаты (salary_type)")
 
         # Собираем данные за период из смен
@@ -69,8 +93,8 @@ class SalaryService:
         db: Session, contractor_id: int, period_start: date, period_end: date, company_id: int
     ) -> dict:
         """Собирает данные о сменах сотрудника за период."""
-        from app.models.shift import ShiftReport
-        
+        from app.models.shift import ShiftReport, ShiftTask
+
         reports = (
             db.query(ShiftReport)
             .join(ShiftTask, ShiftReport.shift_task_id == ShiftTask.id)
@@ -91,6 +115,11 @@ class SalaryService:
             total_hours += hours
             if report.operator_odometer:
                 total_km += Decimal(str(report.operator_odometer))
+
+        logger.info(
+            f"📊 Shifts data for employee #{contractor_id}: "
+            f"{len(reports)} shifts, {total_hours} hours, {total_km} km"
+        )
 
         return {
             "shifts_count": len(reports),
