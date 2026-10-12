@@ -69,10 +69,11 @@ class SalaryService:
         db: Session, contractor_id: int, period_start: date, period_end: date, company_id: int
     ) -> dict:
         """Собирает данные о сменах сотрудника за период."""
-        # Смены где сотрудник был оператором
-        shifts = (
-            db.query(ShiftTask)
-            .join(ShiftReport, ShiftReport.shift_task_id == ShiftTask.id)
+        from app.models.shift import ShiftReport
+        
+        reports = (
+            db.query(ShiftReport)
+            .join(ShiftTask, ShiftReport.shift_task_id == ShiftTask.id)
             .filter(
                 ShiftTask.company_id == company_id,
                 ShiftReport.operator_id == contractor_id,
@@ -84,23 +85,18 @@ class SalaryService:
 
         total_hours = Decimal("0")
         total_km = Decimal("0")
-        total_shift_cost = Decimal("0")
 
-        for shift in shifts:
-            report = shift.report if hasattr(shift, 'report') else None
-            if report:
-                hours = Decimal(str(report.actual_moto_hours or 0))
-                total_hours += hours
-                # Пробег из одометра если есть
-                if report.odometer_end and report.odometer_start:
-                    km = Decimal(str(report.odometer_end)) - Decimal(str(report.odometer_start))
-                    total_km += max(km, Decimal("0"))
+        for report in reports:
+            hours = Decimal(str(report.operator_moto_hours or 0))
+            total_hours += hours
+            if report.operator_odometer:
+                total_km += Decimal(str(report.operator_odometer))
 
         return {
-            "shifts_count": len(shifts),
+            "shifts_count": len(reports),
             "total_hours": float(total_hours),
             "total_km": float(total_km),
-            "total_shift_cost": float(total_shift_cost),
+            "total_shift_cost": 0,
         }
 
     @staticmethod
