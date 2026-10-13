@@ -52,6 +52,8 @@ const GuestRoute = ({ children }: { children: JSX.Element }) => {
 const BankStatementsPage = lazy(() => import('./pages/BankStatementsPage'));
 const SalariesPage = lazy(() => import('./pages/SalariesPage'));
 const MapPage = lazy(() => import('./pages/MapPage'));
+const DriverLoginPage = lazy(() => import('./pages/driver/DriverLoginPage'));
+const DriverDashboardPage = lazy(() => import('./pages/driver/DriverDashboardPage'));
 
 const AppRoutes = () => {
   return (
@@ -84,6 +86,11 @@ const AppRoutes = () => {
         <Route path="/salaries" element={<ProtectedRoute><SalariesPage /></ProtectedRoute>} />
         <Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
         <Route path="/bank-statements" element={<ProtectedRoute><BankStatementsPage /></ProtectedRoute>} />
+        {/* Driver PWA routes (без ProtectedRoute — своя авторизация) */}
+        <Route path="/driver/login" element={<DriverLoginPage />} />
+        <Route path="/driver/dashboard" element={<DriverDashboardPage />} />
+        <Route path="/driver" element={<Navigate to="/driver/dashboard" replace />} />
+        {/* Catch-all — должен быть последним */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
