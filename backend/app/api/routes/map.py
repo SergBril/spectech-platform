@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
-from app.models.telematics import GpsPoint
+from app.models.telematics import GpsPoint, Geofence
 from app.models.catalog import Vehicle
 from app.services.gps_providers.factory import get_available_providers, create_gps_adapter
 
@@ -132,6 +132,75 @@ def get_geofences(
             for g in geofences
         ]
     }
+
+
+@router.post("/geofences")
+def create_geofence(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """🔲 Создать геозону."""
+    geofence = Geofence(
+        name=payload["name"],
+        type=payload.get("type", "polygon"),
+        description=payload.get("description"),
+        center_latitude=payload.get("center_latitude"),
+        center_longitude=payload.get("center_longitude"),
+        radius_meters=payload.get("radius_meters"),
+        polygon=payload.get("polygon"),
+        company_id=company_id,
+    )
+    db.add(geofence)
+    db.commit()
+    db.refresh(geofence)
+    return {"id": geofence.id, "message": "Геозона создана"}
+
+
+@router.put("/geofences/{geofence_id}")
+def update_geofence(
+    geofence_id: int,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """✏️ Обновить геозону."""
+    geofence = db.query(Geofence).filter(
+        Geofence.id == geofence_id,
+        Geofence.company_id == company_id,
+    ).first()
+    if not geofence:
+        raise HTTPException(status_code=404, detail="Geofence not found")
+
+    for field in ["name", "type", "description", "center_latitude", "center_longitude", "radius_meters", "polygon"]:
+        if field in payload:
+            setattr(geofence, field, payload[field])
+
+    db.commit()
+    db.refresh(geofence)
+    return {"id": geofence.id, "message": "Геозона обновлена"}
+
+
+@router.delete("/geofences/{geofence_id}")
+def delete_geofence(
+    geofence_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """🗑️ Удалить геозону."""
+    geofence = db.query(Geofence).filter(
+        Geofence.id == geofence_id,
+        Geofence.company_id == company_id,
+    ).first()
+    if not geofence:
+        raise HTTPException(status_code=404, detail="Geofence not found")
+
+    db.delete(geofence)
+    db.commit()
+    return {"message": "Геозона удалена"}
 
 
 

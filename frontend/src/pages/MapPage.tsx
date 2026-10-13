@@ -4,6 +4,8 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
+import 'leaflet-draw/dist/leaflet.draw.css';
+import 'leaflet-draw';
 import Layout from '../components/Layout';
 import { showToast } from '../utils/toast';
 import { mapApi, VehiclePosition, TrackPoint } from '../api/map';
@@ -40,6 +42,15 @@ export const MapPage: React.FC = () => {
   const [trackDateFrom, setTrackDateFrom] = useState(yesterday.toISOString().split('T')[0]);
   const [trackDateTo, setTrackDateTo] = useState(now.toISOString().split('T')[0]);
 
+  // Геозоны
+  const [geofences, setGeofences] = useState<any[]>([]);
+  const [drawMode, setDrawMode] = useState(false);
+  const [editingGeofence, setEditingGeofence] = useState<any>(null);
+  const [geofenceName, setGeofenceName] = useState('');
+  const [geofenceType, setGeofenceType] = useState<'circle' | 'polygon'>('circle');
+  const drawnItemsRef = useRef<L.FeatureGroup | null>(null);
+  const geofenceLayersRef = useRef<Map<number, L.Layer>>(new Map());
+
   // Инициализация карты
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return;
@@ -58,6 +69,56 @@ export const MapPage: React.FC = () => {
     });
     map.addLayer(cluster);
 
+    // Draw control для геозон
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+    drawnItemsRef.current = drawnItems;
+
+    const drawControl = new L.Control.Draw({
+      position: 'topright',
+      draw: {
+        polyline: false,
+        rectangle: false,
+        marker: false,
+        circlemarker: false,
+        circle: { shapeOptions: { color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.15 } },
+        polygon: { shapeOptions: { color: '#8b5cf6', fillColor: '#8b5cf6', fillOpacity: 0.15 } },
+      },
+      edit: { featureGroup: drawnItems, remove: false },
+    });
+    map.addControl(drawControl);
+
+    // Событие создания геозоны
+    map.on(L.Draw.Event.CREATED, async (e: any) => {
+      const { layerType, layer } = e;
+      drawnItems.clearLayers();
+
+      let geoData: Record<string, any> = {};
+      if (layerType === 'circle') {
+        const center = layer.getLatLng();
+        geoData = {
+          type: 'circle',
+          center_latitude: center.lat,
+          center_longitude: center.lng,
+          radius_meters: layer.getRadius(),
+        };
+      } else if (layerType === 'polygon') {
+        const latlngs = layer.getLatLngs()[0].map((ll: L.LatLng) => [ll.lat, ll.lng]);
+        geoData = { type: 'polygon', polygon: latlngs };
+      }
+
+      const name = prompt('Название геозоны:', 'Новая геозона');
+      if (!name) return;
+
+      try {
+        await mapApi.createGeofence({ name, ...geoData });
+        showToast.success('✅ Геозона создана');
+        loadGeofences();
+      } catch (err: any) {
+        showToast.error('Ошибка: ' + (err?.response?.data?.detail || err.message));
+      }
+    });
+
     mapInstance.current = map;
     clusterRef.current = cluster;
 
@@ -72,6 +133,52 @@ export const MapPage: React.FC = () => {
   useEffect(() => {
     loadPositions();
   }, []);
+
+  // Загрузка геозон
+  useEffect(() => {
+    loadGeofences();
+  }, []);
+
+  // Рендеринг геозон на карте
+  useEffect(() => {
+    if (!mapInstance.current) return;
+
+    // Удаляем старые слои геозон
+    geofenceLayersRef.current.forEach((layer) => layer.remove());
+    geofenceLayersRef.current.clear();
+
+    geofences.forEach((gf) => {
+      let layer: L.Layer | null = null;
+
+      if (gf.type === 'circle' && gf.center_latitude && gf.center_longitude && gf.radius_meters) {
+        layer = L.circle([gf.center_latitude, gf.center_longitude], {
+          radius: gf.radius_meters,
+          color: '#f59e0b',
+          fillColor: '#f59e0b',
+          fillOpacity: 0.15,
+          weight: 2,
+        }).bindTooltip(gf.name, { permanent: false });
+      } else if (gf.type === 'polygon' && gf.polygon && gf.polygon.length > 2) {
+        const latlngs = gf.polygon.map((p: any) => [p[0], p[1]] as [number, number]);
+        layer = L.polygon(latlngs, {
+          color: '#8b5cf6',
+          fillColor: '#8b5cf6',
+          fillOpacity: 0.15,
+          weight: 2,
+        }).bindTooltip(gf.name, { permanent: false });
+      }
+
+      if (layer) {
+        layer.addTo(mapInstance.current!);
+        layer.on('click', () => {
+          setEditingGeofence(gf);
+          setGeofenceName(gf.name);
+          setGeofenceType(gf.type || 'circle');
+        });
+        geofenceLayersRef.current.set(gf.id, layer);
+      }
+    });
+  }, [geofences]);
 
   // Обновление маркеров при изменении позиций или фильтров
   useEffect(() => {
@@ -154,6 +261,15 @@ export const MapPage: React.FC = () => {
     }
   };
 
+  const loadGeofences = async () => {
+    try {
+      const data = await mapApi.getGeofences();
+      setGeofences(data.geofences);
+    } catch (err) {
+      console.error('Failed to load geofences', err);
+    }
+  };
+
   const loadTrack = async (vehicleId: number) => {
     try {
       setTrackLoading(true);
@@ -203,10 +319,8 @@ export const MapPage: React.FC = () => {
   };
 
   const filteredPositions = positions.filter((pos) => {
-    // Фильтр по двигателю: учитываем null как "неизвестно"
     if (filterEngine === 'on' && pos.engine_on !== true) return false;
     if (filterEngine === 'off' && pos.engine_on === true) return false;
-    // Фильтр по поиску
     if (filterSearch) {
       const search = filterSearch.toLowerCase();
       const name = (pos.vehicle_name || '').toLowerCase();
@@ -298,6 +412,101 @@ export const MapPage: React.FC = () => {
                 </button>
               </div>
             )}
+
+            {/* Геозоны */}
+            <div className="pt-3 border-t space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-gray-700">🔲 Геозоны ({geofences.length})</p>
+                <button
+                  onClick={() => setDrawMode(!drawMode)}
+                  className={`text-xs px-2 py-1 rounded transition-colors ${
+                    drawMode ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {drawMode ? '✋ Стоп' : '✏️ Рисовать'}
+                </button>
+              </div>
+
+              {drawMode && (
+                <div className="bg-amber-50 rounded p-2 text-xs text-amber-800 border border-amber-200">
+                  Используйте инструменты рисования в правом верхнем углу карты
+                </div>
+              )}
+
+              {editingGeofence && (
+                <div className="bg-indigo-50 rounded-lg p-3 space-y-2 border border-indigo-200">
+                  <p className="text-xs font-medium text-indigo-900">✏️ Редактирование: {editingGeofence.name}</p>
+                  <input
+                    type="text"
+                    value={geofenceName}
+                    onChange={(e) => setGeofenceName(e.target.value)}
+                    className="w-full border border-indigo-300 rounded px-2 py-1 text-xs bg-white"
+                    placeholder="Название"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        try {
+                          await mapApi.updateGeofence(editingGeofence.id, { name: geofenceName });
+                          showToast.success('✅ Геозона обновлена');
+                          setEditingGeofence(null);
+                          loadGeofences();
+                        } catch (err: any) {
+                          showToast.error('Ошибка обновления');
+                        }
+                      }}
+                      className="flex-1 bg-indigo-600 text-white px-2 py-1 rounded text-xs hover:bg-indigo-700"
+                    >
+                      💾 Сохранить
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Удалить геозону "${editingGeofence.name}"?`)) return;
+                        try {
+                          await mapApi.deleteGeofence(editingGeofence.id);
+                          showToast.success('🗑️ Геозона удалена');
+                          setEditingGeofence(null);
+                          loadGeofences();
+                        } catch (err: any) {
+                          showToast.error('Ошибка удаления');
+                        }
+                      }}
+                      className="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600"
+                    >
+                      🗑️
+                    </button>
+                    <button
+                      onClick={() => setEditingGeofence(null)}
+                      className="bg-white text-gray-600 px-2 py-1 rounded text-xs border border-gray-300 hover:bg-gray-100"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="max-h-32 overflow-y-auto divide-y">
+                {geofences.map((gf) => (
+                  <div
+                    key={gf.id}
+                    onClick={() => {
+                      setEditingGeofence(gf);
+                      setGeofenceName(gf.name);
+                      setGeofenceType(gf.type || 'circle');
+                    }}
+                    className={`py-1.5 px-2 cursor-pointer hover:bg-gray-50 text-xs rounded ${
+                      editingGeofence?.id === gf.id ? 'bg-indigo-50 text-indigo-900' : 'text-gray-700'
+                    }`}
+                  >
+                    <span className="mr-1">{gf.type === 'circle' ? '⭕' : '🔷'}</span>
+                    {gf.name}
+                  </div>
+                ))}
+                {geofences.length === 0 && (
+                  <div className="text-xs text-gray-400 text-center py-2">Нет геозон</div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Список техники */}
