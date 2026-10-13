@@ -47,7 +47,31 @@ const STATUS_STYLES: Record<string, string> = {
 const formatMoney = (v: number) =>
   `${v.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`;
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+const downloadFile = async (url: string, filename: string) => {
+  try {
+    const token = localStorage.getItem('access_token');
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (err: any) {
+    showToast.error('Ошибка скачивания: ' + err.message);
+  }
+};
 
 export const SalariesPage: React.FC = () => {
   const now = new Date();
@@ -106,9 +130,6 @@ export const SalariesPage: React.FC = () => {
     }
   };
 
-  const pdfUrl = `${API_BASE}/api/v1/salaries/export/pdf?date_from=${dateFrom}&date_to=${dateTo}`;
-  const excelUrl = `${API_BASE}/api/v1/salaries/export/excel?date_from=${dateFrom}&date_to=${dateTo}`;
-
   return (
     <Layout>
       <div className="px-4 py-6 sm:px-0">
@@ -147,22 +168,24 @@ export const SalariesPage: React.FC = () => {
             >
               🔄
             </button>
-            <a
-              href={pdfUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={() => downloadFile(
+                `${API_BASE}/api/v1/salaries/export/pdf?date_from=${dateFrom}&date_to=${dateTo}`,
+                `salary_register_${dateFrom}_${dateTo}.pdf`
+              )}
               className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
             >
               📄 PDF
-            </a>
-            <a
-              href={excelUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+            </button>
+            <button
+              onClick={() => downloadFile(
+                `${API_BASE}/api/v1/salaries/export/excel?date_from=${dateFrom}&date_to=${dateTo}`,
+                `salaries_${dateFrom}_${dateTo}.xlsx`
+              )}
               className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
             >
               📊 Excel
-            </a>
+            </button>
           </div>
         </div>
 
@@ -271,15 +294,16 @@ export const SalariesPage: React.FC = () => {
                             ℹ️
                           </button>
                         )}
-                        <a
-                          href={`${API_BASE}/api/v1/salaries/export/pdf?date_from=${r.period_start}&date_to=${r.period_end}&record_id=${r.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          onClick={() => downloadFile(
+                            `${API_BASE}/api/v1/salaries/export/pdf?date_from=${r.period_start}&date_to=${r.period_end}&record_id=${r.id}`,
+                            `payslip_${r.employee_contractor_id}_${r.period_start}.pdf`
+                          )}
                           className="text-purple-600 hover:text-purple-900 ml-2"
                           title="Скачать расчётный листок"
                         >
                           📄
-                        </a>
+                        </button>
                       </td>
                     </tr>
                   ))}
