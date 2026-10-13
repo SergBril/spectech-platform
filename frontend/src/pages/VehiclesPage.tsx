@@ -59,6 +59,7 @@ export const VehiclesPage: React.FC = () => {
     setShowDeleteDialog(true);
   };
 
+
   const handleFormClose = () => {
     setShowFormModal(false);
     setEditingVehicle(null);
