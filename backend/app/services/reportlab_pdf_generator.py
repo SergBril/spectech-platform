@@ -40,7 +40,7 @@ if _REGULAR_FONT.exists() and _BOLD_FONT.exists():
     except Exception as e:
         logger.warning("⚠️ DejaVu font registration failed: %s", e)
 else:
-    # Fallback: пробуем системные пути (Linux/Docker)
+    # Fallback: системные пути (Linux/Docker)
     _SYSTEM_PATHS = [
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
         Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
