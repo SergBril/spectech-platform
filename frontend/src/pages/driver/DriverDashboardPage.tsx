@@ -24,6 +24,7 @@ interface SalaryRecord {
 }
 
 const STATUS_LABELS: Record<string, string> = {
+  draft: 'Черновик',
   pending: 'Ожидает',
   in_progress: 'В работе',
   completed: 'Завершена',
@@ -31,8 +32,9 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  in_progress: 'bg-blue-100 text-blue-800',
+  draft: 'bg-yellow-100 text-yellow-800',
+  pending: 'bg-blue-100 text-blue-800',
+  in_progress: 'bg-indigo-100 text-indigo-800',
   completed: 'bg-green-100 text-green-800',
   cancelled: 'bg-red-100 text-red-800',
 };
@@ -158,6 +160,14 @@ export const DriverDashboardPage: React.FC = () => {
                   {shift.description && (
                     <p className="text-sm text-gray-600 mb-3">{shift.description}</p>
                   )}
+                  {shift.status === 'draft' && (
+                    <button
+                      onClick={() => handleStartShift(shift.id)}
+                      className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                    >
+                      ▶️ Начать смену
+                    </button>
+                  )}
                   {shift.status === 'pending' && (
                     <button
                       onClick={() => handleStartShift(shift.id)}
@@ -166,12 +176,12 @@ export const DriverDashboardPage: React.FC = () => {
                       ▶️ Начать смену
                     </button>
                   )}
-                  {shift.status === 'in_progress' && (
+                  {(shift.status === 'in_progress' || shift.status === 'draft') && shift.status !== 'completed' && (
                     <button
                       onClick={() => navigate(`/driver/shift-report/${shift.id}`)}
-                      className="w-full bg-orange-500 text-white py-2.5 rounded-lg font-medium hover:bg-orange-600 transition-colors"
+                      className="w-full mt-2 bg-orange-500 text-white py-2.5 rounded-lg font-medium hover:bg-orange-600 transition-colors"
                     >
-                      📝 Завершить и отправить отчёт
+                      📝 Отправить отчёт
                     </button>
                   )}
                 </div>
