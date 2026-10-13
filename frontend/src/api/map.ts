@@ -47,4 +47,37 @@ export const mapApi = {
     const res = await apiClient.get('/map/geofences');
     return res.data;
   },
+
+  getGpsProviders: async (): Promise<{ providers: GpsProviderOption[] }> => {
+    const res = await apiClient.get('/map/providers');
+    return res.data;
+  },
+
+  testGpsProvider: async (
+    provider: string,
+    config: Record<string, any>
+  ): Promise<{ success: boolean; provider: string; error?: string }> => {
+    const res = await apiClient.post(`/map/providers/test?provider=${provider}`, config);
+    return res.data;
+  },
+
+  createGeofence: async (data: Record<string, any>): Promise<{ id: number; message: string }> => {
+    const res = await apiClient.post('/map/geofences', data);
+    return res.data;
+  },
+
+  updateGeofence: async (id: number, data: Record<string, any>): Promise<{ id: number; message: string }> => {
+    const res = await apiClient.put(`/map/geofences/${id}`, data);
+    return res.data;
+  },
+
+  deleteGeofence: async (id: number): Promise<{ message: string }> => {
+    const res = await apiClient.delete(`/map/geofences/${id}`);
+    return res.data;
+  },
 };
+
+export interface GpsProviderOption {
+  value: string;
+  label: string;
+}
