@@ -214,6 +214,18 @@ class Vehicle(Base):
         String(255), nullable=True, comment="Пользовательское название"
     )
 
+    # === 📡 GPS-ПРОВАЙДЕР: интеграция с телематическими платформами ===
+    gps_provider: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="GPS provider: wialon, gdemoi, gps_trace, mapix, manual",
+    )
+    gps_provider_config: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Provider-specific config: {api_key, unit_id, device_id, login, password, api_url}",
+    )
+
     # === 🆕 НОВОЕ: Значения динамических атрибутов ===
     attribute_values: Mapped[list["EquipmentAttributeValue"]] = relationship(
         "EquipmentAttributeValue",
