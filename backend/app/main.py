@@ -53,6 +53,7 @@ from app.api.routes import (
     bank_statements,
     salaries,
     reviews,
+    map as map_routes,
 )
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -237,6 +238,7 @@ app.include_router(
     tags=["💳 Banking (Банковские выписки)"],
 )
 app.include_router(salaries.router, prefix="/api/v1/salaries", tags=["💰 Salaries (Зарплаты)"])
+app.include_router(map_routes.router, prefix="/api/v1/map", tags=["🗺️ Map (Карта техники)"])
 # app.include_router(reviews.router, prefix="/api/v1", tags=["⭐ Reviews (Отзывы и рейтинги)"])
 
 uploads_dir = Path("uploads")
