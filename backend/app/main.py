@@ -129,8 +129,8 @@ app = FastAPI(
         "url": "https://opensource.org/licenses/MIT",
     },
     openapi_url="/api/v1/openapi.json",
-    docs_url=None,  # Отключаем стандартный /docs
-    redoc_url=None,  # Отключаем стандартный /redoc
+    docs_url="/docs",
+    redoc_url="/redoc",
     lifespan=lifespan,
 )
 
@@ -271,7 +271,7 @@ def custom_openapi():
     return app.openapi_schema
 
 
-# app.openapi = custom_openapi  # Временно отключено для диагностики
+app.openapi = custom_openapi
 
 
 # 7. Документация: главная страница
@@ -333,28 +333,6 @@ async def root_landing():
     </body>
     </html>
     """
-
-
-# 8. Документация: Swagger UI
-@app.get("/docs", include_in_schema=False, response_class=HTMLResponse)
-async def custom_swagger_ui_html():
-    """Swagger UI документация."""
-    return get_swagger_ui_html(
-        openapi_url="/api/v1/openapi.json",
-        title="СпецТехника Про API - Swagger UI",
-        swagger_favicon_url="https://fastapi.tiangolo.com/img/favicon.png",
-    )
-
-
-# 9. Документация: ReDoc
-@app.get("/redoc", include_in_schema=False, response_class=HTMLResponse)
-async def redoc_html():
-    """ReDoc документация."""
-    return get_redoc_html(
-        title="СпецТехника Про API",
-        openapi_url="/api/v1/openapi.json",
-        redoc_favicon_url="https://redocly.github.io/redoc/favicon.png",
-    )
 
 
 # 10. Health check endpoints
