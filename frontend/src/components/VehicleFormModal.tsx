@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { vehiclesApi } from '../api/vehicles';
 import type { Vehicle, VehicleCreate } from '../api/vehicles';
 import { EquipmentSelector } from './EquipmentSelector';
+import GpsProviderSelector from './GpsProviderSelector';
 
 interface VehicleFormModalProps {
   vehicle: Vehicle | null;
@@ -36,6 +37,19 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({ vehicle, onC
 
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [gpsProvider, setGpsProvider] = useState<{ provider: string; config: Record<string, any> } | null>(null);
+
+  // Загрузка GPS-провайдера при редактировании
+  useEffect(() => {
+    if (vehicle && (vehicle as any).gps_provider) {
+      setGpsProvider({
+        provider: (vehicle as any).gps_provider,
+        config: (vehicle as any).gps_provider_config || {},
+      });
+    } else {
+      setGpsProvider(null);
+    }
+  }, [vehicle]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,6 +64,9 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({ vehicle, onC
         make: formData.make || null,
         model: formData.model || null,
         vin: formData.vin || null,
+        // GPS-провайдер
+        gps_provider: gpsProvider?.provider || null,
+        gps_provider_config: gpsProvider?.config || null,
       };
 
       if (isEdit && vehicle) {
@@ -182,6 +199,15 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({ vehicle, onC
                 />
               </div>
             </div>
+          </div>
+
+          {/* === 📡 GPS-ПРОВАЙДЕР === */}
+          <div className="border-b pb-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">📡 GPS-мониторинг</h3>
+            <GpsProviderSelector
+              value={gpsProvider}
+              onChange={setGpsProvider}
+            />
           </div>
 
           {/* === СТАТУС И ГОД === */}

@@ -1,7 +1,7 @@
 """API для карты техники."""
 
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy import select, desc
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from app.core.db import get_db
 from app.models.auth import User
 from app.models.telematics import GpsPoint
 from app.models.catalog import Vehicle
+from app.services.gps_providers.factory import get_available_providers, create_gps_adapter
 
 router = APIRouter()
 
@@ -131,3 +132,61 @@ def get_geofences(
             for g in geofences
         ]
     }
+
+
+
+@router.get("/providers")
+def list_gps_providers(
+    current_user: User = Depends(get_current_user),
+):
+    """📡 Список доступных GPS-провайдеров."""
+    return {"providers": get_available_providers()}
+
+
+@router.post("/providers/test")
+async def test_gps_provider(
+    provider: str = Query(...),
+    config: dict = Body(...),
+    current_user: User = Depends(get_current_user),
+):
+    """🔌 Проверить соединение с GPS-провайдером."""
+    try:
+        adapter = create_gps_adapter(provider, config)
+        ok = await adapter.test_connection()
+        return {"success": ok, "provider": provider}
+    except Exception as e:
+        return {"success": False, "provider": provider, "error": str(e)}
+
+@router.post("/providers/request")
+def request_new_provider(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """📨 Запрос на добавление нового GPS-провайдера."""
+    from app.models.notifications import Notification
+
+    provider_name = payload.get("provider_name", "").strip()
+    if not provider_name:
+        raise HTTPException(status_code=400, detail="Укажите название провайдера")
+
+    # Создаём уведомление для админов
+    notification = Notification(
+        company_id=company_id,
+        user_id=current_user.id,
+        type="gps_provider_request",
+        title=f"Запрос нового GPS-провайдера: {provider_name}",
+        message=(
+            f"Пользователь {current_user.email} запросил добавление GPS-провайдера.\n"
+            f"Название: {provider_name}\n"
+            f"URL: {payload.get('provider_url', '—')}\n"
+            f"Комментарий: {payload.get('comment', '—')}"
+        ),
+        is_read=False,
+    )
+    db.add(notification)
+    db.commit()
+
+    logger.info(f"📨 New GPS provider request: {provider_name} from user #{current_user.id}")
+    return {"message": "Заявка отправлена"}
