@@ -52,8 +52,8 @@ from app.api.routes import (
     rentals,
     bank_statements,
     salaries,
-    reviews,
     map as map_routes,
+    reviews,
 )
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
