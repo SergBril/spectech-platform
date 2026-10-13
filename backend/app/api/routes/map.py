@@ -165,13 +165,12 @@ def request_new_provider(
     company_id: int = Depends(get_current_company_id),
 ):
     """📨 Запрос на добавление нового GPS-провайдера."""
-    from app.models.notifications import Notification
+    from app.models.telematics import Notification
 
     provider_name = payload.get("provider_name", "").strip()
     if not provider_name:
         raise HTTPException(status_code=400, detail="Укажите название провайдера")
 
-    # Создаём уведомление для админов
     notification = Notification(
         company_id=company_id,
         user_id=current_user.id,
