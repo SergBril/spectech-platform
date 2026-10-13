@@ -10,8 +10,20 @@ from app.core.db import get_db
 from app.models.auth import User
 from app.models.shift import ShiftTask, ShiftReport, ShiftTaskStatus, ShiftReportStatus
 from app.models.salary import SalaryRecord
+from app.models.contractor import Employee
 
 router = APIRouter()
+
+
+def _get_employee_contractor_id(db: Session, user_id: int) -> int:
+    """Находит contractor_id сотрудника по user_id."""
+    employee = db.query(Employee).filter(Employee.user_id == user_id).first()
+    if not employee:
+        raise HTTPException(
+            status_code=400,
+            detail="Пользователь не привязан к сотруднику. Обратитесь к администратору."
+        )
+    return employee.contractor_id
 
 
 @router.get("/my-shifts")
@@ -60,7 +72,8 @@ def start_shift(
     if not task or task.company_id != company_id:
         raise HTTPException(status_code=404, detail="Shift task not found")
 
-    task.status = ShiftTaskStatus.in_progress
+    # signed_by_operator = водитель принял смену
+    task.status = ShiftTaskStatus.signed_by_operator
     db.commit()
     db.refresh(task)
     return {"message": "Смена начата", "task_id": task_id}
@@ -83,6 +96,9 @@ async def submit_shift_report(
     if not task or task.company_id != company_id:
         raise HTTPException(status_code=404, detail="Shift task not found")
 
+    # Находим contractor_id текущего пользователя
+    contractor_id = _get_employee_contractor_id(db, current_user.id)
+
     # Сохраняем фото если есть
     photo_path = None
     if photo and photo.filename:
@@ -97,7 +113,7 @@ async def submit_shift_report(
 
     report = ShiftReport(
         shift_task_id=task_id,
-        operator_id=current_user.id,
+        operator_id=contractor_id,
         operator_moto_hours=moto_hours,
         operator_odometer=odometer,
         operator_fuel_used=fuel_used,
@@ -125,9 +141,12 @@ def get_my_salary(
     company_id: int = Depends(get_current_company_id),
 ):
     """💰 Моя зарплата."""
+    # Находим contractor_id текущего пользователя
+    contractor_id = _get_employee_contractor_id(db, current_user.id)
+
     stmt = select(SalaryRecord).where(
         SalaryRecord.company_id == company_id,
-        SalaryRecord.employee_contractor_id == current_user.id,
+        SalaryRecord.employee_contractor_id == contractor_id,
     ).order_by(desc(SalaryRecord.period_start)).limit(10)
 
     if date_from:
