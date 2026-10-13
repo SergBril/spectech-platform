@@ -1,7 +1,16 @@
-"""Адаптер для Mapix — российская платформа ГЛОНАСС/GPS мониторинга."""
+"""Адаптер для Mapix — российская платформа ГЛОНАСС/GPS мониторинга.
+
+API документация:
+- POST /api/io — последние позиции всех объектов (по IMEI)
+- POST /api/io/t?ts=600 — трек за интервал (60-1200 сек)
+- Авторизация: cookie-based сессия (login/password)
+- Сессия живёт 3 дня
+- Anti-cache: добавлять ?time={unix_ts} к URL
+"""
 
 import logging
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -14,76 +23,142 @@ logger = logging.getLogger("spectech.gps.mapix")
 class MapixAdapter(GpsProviderAdapter):
     provider_name = "mapix"
 
-    DEFAULT_API_URL = "https://api.mapix.su"
+    DEFAULT_API_URL = "https://gps.mapix.su"
 
     def __init__(self, config: dict[str, Any]):
         super().__init__(config)
-        self.api_url = config.get("api_url", self.DEFAULT_API_URL)
-        self.api_key = config.get("api_key", "")
+        self.api_url = config.get("api_url", self.DEFAULT_API_URL).rstrip("/")
+        self.login = config.get("login", "")
+        self.password = config.get("password", "")
+        self.cookies: dict[str, str] = {}
+        self._session_valid = False
 
-    def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+    async def _ensure_session(self, client: httpx.AsyncClient) -> None:
+        """Авторизуется в Mapix если сессия невалидна."""
+        if self._session_valid and self.cookies:
+            return
+
+        if not self.login or not self.password:
+            raise ValueError("Mapix login/password not configured")
+
+        # Авторизация через форму входа
+        resp = await client.post(
+            f"{self.api_url}/index/login/",
+            data={"login": self.login, "pass": self.password},
+            follow_redirects=True,
+        )
+
+        if resp.status_code >= 400:
+            raise ValueError(f"Mapix auth failed: HTTP {resp.status_code}")
+
+        # Сохраняем cookies сессии
+        self.cookies = dict(resp.cookies)
+        self._session_valid = True
+        logger.info("✅ Mapix session established for user %s", self.login)
+
+    def _anti_cache_url(self, base_url: str) -> str:
+        """Добавляет anti-cache параметр к URL."""
+        separator = "&" if "?" in base_url else "?"
+        return f"{base_url}{separator}time={int(time.time())}"
 
     async def get_last_position(self) -> GpsPointData | None:
-        device_id = self.config["device_id"]
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{self.api_url}/v1/devices/{device_id}/position",
-                headers=self._headers(),
-            )
+        """Получает последнюю позицию первого доступного объекта."""
+        positions = await self._fetch_positions()
+        if not positions:
+            return None
+        return positions[0]
+
+    async def get_all_positions(self) -> list[GpsPointData]:
+        """Получает последние позиции ВСЕХ объектов."""
+        return await self._fetch_positions()
+
+    async def _fetch_positions(self) -> list[GpsPointData]:
+        """Внутренний метод: запрашивает /api/io и парсит ответ."""
+        async with httpx.AsyncClient(timeout=30) as client:
+            await self._ensure_session(client)
+
+            url = self._anti_cache_url(f"{self.api_url}/api/io")
+            resp = await client.post(url, cookies=self.cookies)
+
+            if resp.status_code == 401 or resp.status_code == 302:
+                # Сессия истекла, повторяем авторизацию
+                self._session_valid = False
+                await self._ensure_session(client)
+                resp = await client.post(url, cookies=self.cookies)
+
             if resp.status_code != 200:
-                logger.error(f"Mapix API error: {resp.status_code}")
-                return None
+                logger.error("Mapix /api/io error: HTTP %s", resp.status_code)
+                return []
+
             data = resp.json()
-            return GpsPointData(
-                latitude=data.get("latitude", 0.0),
-                longitude=data.get("longitude", 0.0),
-                altitude=data.get("altitude"),
-                speed=data.get("speed"),
-                heading=data.get("course"),
-                engine_on=data.get("ignition"),
-                fuel_level=data.get("fuel"),
-                recorded_at=datetime.fromisoformat(data["timestamp"]) if data.get("timestamp") else None,
-                raw_data=data,
-            )
+            results: list[GpsPointData] = []
+
+            for imei, points in data.items():
+                if not points or not isinstance(points, list):
+                    continue
+                p = points[0]
+                try:
+                    results.append(GpsPointData(
+                        latitude=float(p.get("la", 0)),
+                        longitude=float(p.get("ln", 0)),
+                        speed=int(p.get("s", 0)) if p.get("s") else None,
+                        heading=int(p.get("a", 0)) if p.get("a") else None,
+                        engine_on=bool(int(p.get("ebs", 0))) if p.get("ebs") is not None else None,
+                        recorded_at=datetime.fromtimestamp(int(p["t"]), tz=timezone.utc) if p.get("t") else None,
+                        raw_data={"imei": imei, **p},
+                    ))
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.warning("Mapix parse error for IMEI %s: %s", imei, e)
+
+            return results
 
     async def get_track(
         self, date_from: datetime, date_to: datetime, limit: int = 1000
     ) -> list[GpsPointData]:
-        device_id = self.config["device_id"]
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{self.api_url}/v1/devices/{device_id}/track",
-                headers=self._headers(),
-                params={
-                    "date_from": date_from.isoformat(),
-                    "date_to": date_to.isoformat(),
-                    "limit": limit,
-                },
-            )
+        """Получает трек за период (максимум 1200 секунд за запрос)."""
+        delta_seconds = int((date_to - date_from).total_seconds())
+        ts = min(max(delta_seconds, 60), 1200)
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            await self._ensure_session(client)
+
+            url = self._anti_cache_url(f"{self.api_url}/api/io/t")
+            resp = await client.post(url, cookies=self.cookies, data={"ts": str(ts)})
+
             if resp.status_code != 200:
+                logger.error("Mapix /api/io/t error: HTTP %s", resp.status_code)
                 return []
-            points = resp.json().get("points", [])
-            return [
-                GpsPointData(
-                    latitude=p.get("latitude", 0.0),
-                    longitude=p.get("longitude", 0.0),
-                    altitude=p.get("altitude"),
-                    speed=p.get("speed"),
-                    heading=p.get("course"),
-                    engine_on=p.get("ignition"),
-                    fuel_level=p.get("fuel"),
-                    recorded_at=datetime.fromisoformat(p["timestamp"]) if p.get("timestamp") else None,
-                    raw_data=p,
-                )
-                for p in points
-            ]
+
+            data = resp.json()
+            results: list[GpsPointData] = []
+
+            for imei, points in data.items():
+                if not points or not isinstance(points, list):
+                    continue
+                for p in points:
+                    try:
+                        results.append(GpsPointData(
+                            latitude=float(p.get("la", 0)),
+                            longitude=float(p.get("ln", 0)),
+                            speed=int(p.get("s", 0)) if p.get("s") else None,
+                            heading=int(p.get("a", 0)) if p.get("a") else None,
+                            engine_on=bool(int(p.get("i", 0))) if p.get("i") is not None else None,
+                            recorded_at=datetime.fromtimestamp(int(p["t"]), tz=timezone.utc) if p.get("t") else None,
+                            raw_data={"imei": imei, **p},
+                        ))
+                    except (ValueError, KeyError, TypeError) as e:
+                        logger.warning("Mapix track parse error for IMEI %s: %s", imei, e)
+
+            return results[:limit]
 
     async def test_connection(self) -> bool:
+        """Проверяет соединение с Mapix API."""
         try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(f"{self.api_url}/v1/devices", headers=self._headers())
+            async with httpx.AsyncClient(timeout=15) as client:
+                await self._ensure_session(client)
+                url = self._anti_cache_url(f"{self.api_url}/api/io")
+                resp = await client.post(url, cookies=self.cookies)
                 return resp.status_code == 200
         except Exception as e:
-            logger.error(f"Mapix connection test failed: {e}")
+            logger.error("Mapix connection test failed: %s", e)
             return False
