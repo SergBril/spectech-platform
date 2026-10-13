@@ -51,6 +51,7 @@ const GuestRoute = ({ children }: { children: JSX.Element }) => {
 
 const BankStatementsPage = lazy(() => import('./pages/BankStatementsPage'));
 const SalariesPage = lazy(() => import('./pages/SalariesPage'));
+const MapPage = lazy(() => import('./pages/MapPage'));
 
 const AppRoutes = () => {
   return (
@@ -81,6 +82,7 @@ const AppRoutes = () => {
         <Route path="/companies/:id" element={<ProtectedRoute><CompanyProfilePage /></ProtectedRoute>} />
         <Route path="/my-listings" element={<ProtectedRoute><MyListingsPage /></ProtectedRoute>} />
         <Route path="/salaries" element={<ProtectedRoute><SalariesPage /></ProtectedRoute>} />
+        <Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
         <Route path="/bank-statements" element={<ProtectedRoute><BankStatementsPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

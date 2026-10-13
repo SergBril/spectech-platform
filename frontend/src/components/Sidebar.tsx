@@ -13,6 +13,7 @@ const menuItems: MenuItem[] = [
   { label: 'Дашборд', icon: '🏠', path: '/', group: 'Основное' },
   { label: 'Заявки', icon: '📋', path: '/requests', group: 'Основное' },
   { label: 'Техника', icon: '🚜', path: '/vehicles', group: 'Основное' },
+  { label: 'Карта', icon: '🗺️', path: '/map', group: 'Телематика' },
 
   { label: 'Маркетплейс', icon: '🎯', path: '/marketplace', group: 'Бизнес' },
   { label: 'Мои публикации', icon: '🏪', path: '/my-listings', group: 'Бизнес' },
