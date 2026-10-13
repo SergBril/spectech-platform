@@ -47,7 +47,7 @@ const STATUS_STYLES: Record<string, string> = {
 const formatMoney = (v: number) =>
   `${v.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`;
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 const downloadFile = async (url: string, filename: string) => {
   try {
