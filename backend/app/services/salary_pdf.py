@@ -200,13 +200,30 @@ def generate_salary_register_pdf(records: list, company_name: str = "") -> bytes
         'Title', parent=styles['Heading1'],
         fontName=_get_font(bold=True), fontSize=14, spaceAfter=10,
     )
+    # Стили для кириллицы в ведомости
+    subtitle_style = ParagraphStyle(
+        'RegisterSubtitle', parent=styles['Normal'],
+        fontName=_get_font(), fontSize=10, textColor=colors.grey, spaceAfter=5,
+    )
+    header_style = ParagraphStyle(
+        'RegisterHeader', parent=styles['Normal'],
+        fontName=_get_font(bold=True), fontSize=8, textColor=colors.white,
+    )
+    cell_style = ParagraphStyle(
+        'RegisterCell', parent=styles['Normal'],
+        fontName=_get_font(), fontSize=8,
+    )
+    cell_bold_style = ParagraphStyle(
+        'RegisterCellBold', parent=styles['Normal'],
+        fontName=_get_font(bold=True), fontSize=8,
+    )
 
     elements = []
     elements.append(Paragraph(f"ВЕДОМОСТЬ НАЧИСЛЕНИЯ ЗАРПЛАТЫ — {company_name}", title_style))
 
     if records:
         period = f"{records[0].period_start.strftime('%d.%m.%Y')} — {records[0].period_end.strftime('%d.%m.%Y')}"
-        elements.append(Paragraph(f"Период: {period}", styles['Normal']))
+        elements.append(Paragraph(f"Период: {period}", subtitle_style))
         elements.append(Spacer(1, 5 * mm))
 
     header = ["№", "Сотрудник", "Тип", "Смены", "Часы", "Начислено", "Удержания", "К выплате", "Статус"]
