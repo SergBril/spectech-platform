@@ -1,0 +1,17 @@
+{
+  "name": "СпецТехника — Водитель",
+  "short_name": "Водитель",
+  "description": "Мобильное приложение для водителей спецтехники",
+  "start_url": "/driver",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e40af",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
