@@ -30,6 +30,7 @@ _BOLD_FONT = _FONTS_DIR / "DejaVuSans-Bold.ttf"
 FONT_REGULAR = "Helvetica"
 FONT_BOLD = "Helvetica-Bold"
 
+# Приоритет 1: локальные шрифты (Windows/macOS/Docker with volume)
 if _REGULAR_FONT.exists() and _BOLD_FONT.exists():
     try:
         pdfmetrics.registerFont(TTFont("DejaVu", str(_REGULAR_FONT)))
@@ -39,8 +40,9 @@ if _REGULAR_FONT.exists() and _BOLD_FONT.exists():
         logger.info("✅ DejaVu fonts loaded from %s", _FONTS_DIR)
     except Exception as e:
         logger.warning("⚠️ DejaVu font registration failed: %s", e)
-else:
-    # Fallback: системные пути (Linux/Docker)
+
+# Приоритет 2: системные пути (Linux/Docker)
+if FONT_REGULAR == "Helvetica":
     _SYSTEM_PATHS = [
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
         Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
