@@ -34,24 +34,32 @@ class MapixAdapter(GpsProviderAdapter):
         self._session_valid = False
 
     async def _ensure_session(self, client: httpx.AsyncClient) -> None:
-        """Авторизуется в Mapix если сессия невалидна."""
+        """Авторизуется в Mapix через /auth если сессия невалидна."""
         if self._session_valid and self.cookies:
             return
 
         if not self.login or not self.password:
             raise ValueError("Mapix login/password not configured")
 
-        # Авторизация через форму входа
         resp = await client.post(
-            f"{self.api_url}/index/login/",
-            data={"login": self.login, "pass": self.password},
+            f"{self.api_url}/auth",
+            data={
+                "username": self.login,
+                "password": self.password,
+                "tzoffset": "3",
+                "lang": "ru",
+                "soglasie": "on",
+            },
             follow_redirects=True,
         )
 
         if resp.status_code >= 400:
             raise ValueError(f"Mapix auth failed: HTTP {resp.status_code}")
 
-        # Сохраняем cookies сессии
+        # Проверяем что получили PHPSESSID
+        if "PHPSESSID" not in resp.cookies and "PHPSESSID" not in client.cookies:
+            raise ValueError("Mapix auth failed: no PHPSESSID cookie received")
+
         self.cookies = dict(resp.cookies)
         self._session_valid = True
         logger.info("✅ Mapix session established for user %s", self.login)
