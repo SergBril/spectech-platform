@@ -2,8 +2,14 @@
 
 from datetime import datetime
 import logging
+from pathlib import Path
 
 logger = logging.getLogger("spectech.pdf")
+
+# === Путь к локальным шрифтам ===
+_FONTS_DIR = Path(__file__).parent / "fonts"
+_REGULAR_FONT = _FONTS_DIR / "DejaVuSans.ttf"
+_BOLD_FONT = _FONTS_DIR / "DejaVuSans-Bold.ttf"
 
 # === СЛОВАРЬ ПЕРЕВОДА ЕДИНИЦ ИЗМЕРЕНИЯ ===
 UNIT_TRANSLATIONS = {
@@ -74,6 +80,53 @@ def _get_tax_system_label(tax_system: str) -> str:
         "npd": "НПД",
     }
     return labels.get(tax_system, tax_system or "ОСНО")
+
+
+def _register_dejavu_fonts(pdf) -> bool:
+    """
+    Регистрирует DejaVu шрифты в FPDF.
+    Сначала ищет в app/services/fonts/, затем в системных путях.
+    Возвращает True если шрифт зарегистрирован успешно.
+    """
+    # Приоритет 1: локальные шрифты
+    font_candidates = [
+        (_REGULAR_FONT, _BOLD_FONT),
+    ]
+
+    # Приоритет 2: системные пути (Linux/Docker/Windows)
+    system_paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/app/fonts/DejaVuSans.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/Arial.ttf",
+        "C:/Windows/Fonts/calibri.ttf",
+    ]
+
+    for fp in system_paths:
+        p = Path(fp)
+        if p.exists():
+            bold_p = p.parent / "DejaVuSans-Bold.ttf"
+            if not bold_p.exists():
+                bold_p = p  # fallback: используем тот же файл для bold
+            font_candidates.append((p, bold_p))
+
+    for regular, bold in font_candidates:
+        if not Path(regular).exists():
+            continue
+        try:
+            pdf.add_font("DejaVu", "", str(regular), uni=True)
+            bold_path = str(bold) if Path(bold).exists() else str(regular)
+            pdf.add_font("DejaVu", "B", bold_path, uni=True)
+            logger.info("✅ FPDF font loaded: %s", regular)
+            return True
+        except Exception as e:
+            logger.debug("⚠️ Font %s failed: %s", regular, e)
+            continue
+
+    logger.warning("⚠️ No Cyrillic font found for FPDF, PDF will show squares")
+    return False
 
 
 def generate_invoice_pdf(invoice, contractor=None, local_path: str = None) -> bytes:
@@ -184,12 +237,7 @@ def _generate_invoice_pdf_fpdf(invoice, contractor=None) -> bytes:
 
     pdf = FPDF()
     pdf.add_page()
-    pdf.add_font(
-        "DejaVu", "", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", uni=True
-    )
-    pdf.add_font(
-        "DejaVu", "B", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", uni=True
-    )
+    _register_dejavu_fonts(pdf)
 
     # Заголовок
     pdf.set_font("DejaVu", "B", 16)
@@ -305,12 +353,7 @@ def _generate_act_pdf_fpdf(act, contractor=None) -> bytes:
 
     pdf = FPDF()
     pdf.add_page()
-    pdf.add_font(
-        "DejaVu", "", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", uni=True
-    )
-    pdf.add_font(
-        "DejaVu", "B", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", uni=True
-    )
+    _register_dejavu_fonts(pdf)
 
     # Заголовок
     pdf.set_font("DejaVu", "B", 16)
@@ -420,54 +463,33 @@ def generate_payout_pdf(payout, owner_name: str = "", vehicle_name: str = "", lo
 
         pdf = FPDF()
         pdf.add_page()
-
-        # Пытаемся добавить шрифт с поддержкой кириллицы
-        font_added = False
-        font_paths = [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "C:/Windows/Fonts/arial.ttf",
-            "C:/Windows/Fonts/Arial.ttf",
-            "C:/Windows/Fonts/calibri.ttf",
-        ]
-
-        for fp in font_paths:
-            try:
-                from pathlib import Path as _Path
-                if _Path(fp).exists():
-                    pdf.add_font("UniFont", "", fp, uni=True)
-                    pdf.add_font("UniFont", "B", fp, uni=True)
-                    font_added = True
-                    logger.debug(f"✅ Loaded font: {fp}")
-                    break
-            except Exception as font_err:
-                logger.debug(f"⚠️ Font {fp} failed: {font_err}")
-                continue
+        font_ok = _register_dejavu_fonts(pdf)
 
         def _font(style="", size=10):
-            """Безопасная установка шрифта. style: '' или 'B' (italic не поддерживается для custom fonts)."""
-            if font_added:
-                pdf.set_font("UniFont", style, size)
+            """Безопасная установка шрифта."""
+            if font_ok:
+                pdf.set_font("DejaVu", style, size)
             else:
                 pdf.set_font("Helvetica", style, size)
 
         # Заголовок
         _font("B", 18)
-        pdf.cell(0, 12, "VEDOMOST VYPLATY", 0, 1, "C")
+        pdf.cell(0, 12, "ВЕДОМОСТЬ ВЫПЛАТЫ", 0, 1, "C")
         _font("", 10)
         pdf.cell(0, 6, str(payout.document_number or ""), 0, 1, "C")
         pdf.ln(5)
 
         # Информация о выплате
         _font("B", 12)
-        pdf.cell(0, 8, "DETALI VYPLATY", 0, 1)
+        pdf.cell(0, 8, "ДЕТАЛИ ВЫПЛАТЫ", 0, 1)
         pdf.ln(2)
 
         details = [
-            ("Nomera dokumenta", payout.document_number or "N/A"),
-            ("Data vyplaty", str(payout.payout_date or "N/A")),
-            ("Status", str(getattr(payout.status, 'value', payout.status) if payout.status else "N/A")),
-            ("Sobstvennik", owner_name or "N/A"),
-            ("Tekhnika", vehicle_name or "N/A"),
+            ("Номер документа", payout.document_number or "N/A"),
+            ("Дата выплаты", str(payout.payout_date or "N/A")),
+            ("Статус", str(getattr(payout.status, 'value', payout.status) if payout.status else "N/A")),
+            ("Собственник", owner_name or "N/A"),
+            ("Техника", vehicle_name or "N/A"),
         ]
 
         _font("", 10)
@@ -479,7 +501,7 @@ def generate_payout_pdf(payout, owner_name: str = "", vehicle_name: str = "", lo
 
         # Финансовые детали
         _font("B", 12)
-        pdf.cell(0, 8, "FINANSOVYE DETALI", 0, 1)
+        pdf.cell(0, 8, "ФИНАНСОВЫЕ ДЕТАЛИ", 0, 1)
         pdf.ln(2)
 
         gross = float(payout.gross_amount or 0)
@@ -488,9 +510,9 @@ def generate_payout_pdf(payout, owner_name: str = "", vehicle_name: str = "", lo
         rate = float(payout.commission_rate or 0)
 
         finance_rows = [
-            ("Gross suma", f"{gross:,.2f} RUB".replace(",", " ")),
-            (f"Komissiya platformy ({rate}%)", f"- {commission:,.2f} RUB".replace(",", " ")),
-            ("K vyplate (Net)", f"{net:,.2f} RUB".replace(",", " ")),
+            ("Сумма (gross)", f"{gross:,.2f} ₽".replace(",", " ")),
+            (f"Комиссия платформы ({rate}%)", f"- {commission:,.2f} ₽".replace(",", " ")),
+            ("К выплате (net)", f"{net:,.2f} ₽".replace(",", " ")),
         ]
 
         for label, value in finance_rows:
@@ -503,23 +525,23 @@ def generate_payout_pdf(payout, owner_name: str = "", vehicle_name: str = "", lo
 
         # Выделяем итоговую сумму
         _font("B", 14)
-        pdf.cell(100, 10, "ITOGO K VYPLATE:", 0, 0)
-        pdf.cell(0, 10, f"{net:,.2f} RUB".replace(",", " "), 0, 1)
+        pdf.cell(100, 10, "ИТОГО К ВЫПЛАТЕ:", 0, 0)
+        pdf.cell(0, 10, f"{net:,.2f} ₽".replace(",", " "), 0, 1)
 
         # Подписи
         pdf.ln(20)
         _font("", 9)
-        pdf.cell(95, 7, "Podpis menedzhera", 0, 0, "C")
-        pdf.cell(95, 7, "Podpis sobstvennika", 0, 1, "C")
+        pdf.cell(95, 7, "Подпись менеджера", 0, 0, "C")
+        pdf.cell(95, 7, "Подпись собственника", 0, 1, "C")
         pdf.ln(15)
-        pdf.cell(95, 5, "M.P. / ________________", 0, 0, "C")
-        pdf.cell(95, 5, "M.P. / ________________", 0, 1, "C")
+        pdf.cell(95, 5, "М.П. / ________________", 0, 0, "C")
+        pdf.cell(95, 5, "М.П. / ________________", 0, 1, "C")
 
-        # Футер (без italic!)
+        # Футер
         pdf.ln(10)
         _font("", 8)
-        pdf.cell(0, 5, f'Dokument sgenerirovan: {datetime.now().strftime("%d.%m.%Y %H:%M")}', 0, 1, "C")
-        pdf.cell(0, 5, 'Sistema "SpecTekhnika Pro"', 0, 1, "C")
+        pdf.cell(0, 5, f'Документ сгенерирован: {datetime.now().strftime("%d.%m.%Y %H:%M")}', 0, 1, "C")
+        pdf.cell(0, 5, 'Система "СпецТехника Про"', 0, 1, "C")
 
         result = bytes(pdf.output())
         if len(result) < 100:
@@ -562,7 +584,6 @@ def generate_maintenance_order_pdf(order_data: dict, local_path: str = None) -> 
 
     except Exception as e:
         print(f"❌ Ошибка генерации PDF наряд-заказа: {e}")
-        # Fallback: возвращаем простой HTML
         fallback_html = f"""
         <!DOCTYPE html>
         <html>
