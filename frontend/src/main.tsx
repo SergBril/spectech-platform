@@ -54,6 +54,7 @@ const SalariesPage = lazy(() => import('./pages/SalariesPage'));
 const MapPage = lazy(() => import('./pages/MapPage'));
 const DriverLoginPage = lazy(() => import('./pages/driver/DriverLoginPage'));
 const DriverDashboardPage = lazy(() => import('./pages/driver/DriverDashboardPage'));
+const ShiftReportPage = lazy(() => import('./pages/driver/ShiftReportPage'));
 
 const AppRoutes = () => {
   return (
@@ -90,6 +91,7 @@ const AppRoutes = () => {
         <Route path="/driver/login" element={<DriverLoginPage />} />
         <Route path="/driver/dashboard" element={<DriverDashboardPage />} />
         <Route path="/driver" element={<Navigate to="/driver/dashboard" replace />} />
+        <Route path="/driver/shift-report/:taskId" element={<ShiftReportPage />} />
         {/* Catch-all — должен быть последним */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
