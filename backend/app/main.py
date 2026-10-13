@@ -55,6 +55,7 @@ from app.api.routes import (
     map as map_routes,
     reviews,
     driver,
+    admin,
 )
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -241,6 +242,7 @@ app.include_router(
 app.include_router(salaries.router, prefix="/api/v1/salaries", tags=["💰 Salaries (Зарплаты)"])
 app.include_router(map_routes.router, prefix="/api/v1/map", tags=["🗺️ Map (Карта техники)"])
 app.include_router(driver.router, prefix="/api/v1/driver", tags=["📱 Driver (Мобильное приложение)"])
+app.include_router(admin.router, prefix="/api/v1/admin", tags=["🔧 Admin (Админ-панель)"])
 # app.include_router(reviews.router, prefix="/api/v1", tags=["⭐ Reviews (Отзывы и рейтинги)"])
 
 uploads_dir = Path("uploads")
