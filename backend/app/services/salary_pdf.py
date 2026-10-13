@@ -1,8 +1,8 @@
 """Генерация PDF расчётных листков по зарплатам."""
 
 import logging
+from pathlib import Path
 from io import BytesIO
-from datetime import datetime
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -14,25 +14,33 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 logger = logging.getLogger("spectech.salary_pdf")
 
-# Пытаемся зарегистрировать шрифт с кириллицей
+# === Регистрация кириллических шрифтов ===
+_FONTS_DIR = Path(__file__).parent / "fonts"
+_REGULAR_FONT = _FONTS_DIR / "DejaVuSans.ttf"
+_BOLD_FONT = _FONTS_DIR / "DejaVuSans-Bold.ttf"
+
 _FONT_REGISTERED = False
-try:
-    pdfmetrics.registerFont(TTFont('DejaVu', 'DejaVuSans.ttf'))
-    pdfmetrics.registerFont(TTFont('DejaVu-Bold', 'DejaVuSans-Bold.ttf'))
-    _FONT_REGISTERED = True
-except Exception:
+if _REGULAR_FONT.exists() and _BOLD_FONT.exists():
     try:
-        pdfmetrics.registerFont(TTFont('DejaVu', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
-        pdfmetrics.registerFont(TTFont('DejaVu-Bold', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'))
+        pdfmetrics.registerFont(TTFont("DejaVu", str(_REGULAR_FONT)))
+        pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(_BOLD_FONT)))
         _FONT_REGISTERED = True
-    except Exception:
-        logger.warning("⚠️ DejaVu font not found, PDF may show squares for Cyrillic")
+        logger.info(f"✅ DejaVu fonts loaded from {_FONTS_DIR}")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to register DejaVu fonts: {e}")
+else:
+    logger.warning(
+        f"⚠️ DejaVu fonts not found in {_FONTS_DIR}. "
+        f"PDF will show squares for Cyrillic. "
+        f"Download from https://github.com/dejavu-fonts/dejavu-fonts/tree/master/ttf"
+    )
 
 
 def _get_font(bold: bool = False) -> str:
+    """Возвращает имя зарегистрированного шрифта."""
     if _FONT_REGISTERED:
-        return 'DejaVu-Bold' if bold else 'DejaVu'
-    return 'Helvetica-Bold' if bold else 'Helvetica'
+        return "DejaVu-Bold" if bold else "DejaVu"
+    return "Helvetica-Bold" if bold else "Helvetica"
 
 
 SALARY_TYPE_LABELS = {
