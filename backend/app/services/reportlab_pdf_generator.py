@@ -22,45 +22,46 @@ from reportlab.platypus import (
 
 logger = logging.getLogger("spectech.reportlab_pdf")
 
-# ─────────────────────────────────────────────────────────────
-# Регистрация шрифтов с кириллицей (перебор системных путей)
-# ─────────────────────────────────────────────────────────────
-FONT_CANDIDATES = [
-    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-    Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
-    Path("/usr/share/fonts/TTF/DejaVuSans.ttf"),
-    Path("/app/fonts/DejaVuSans.ttf"),
-]
+# === Регистрация кириллических шрифтов ===
+_FONTS_DIR = Path(__file__).parent / "fonts"
+_REGULAR_FONT = _FONTS_DIR / "DejaVuSans.ttf"
+_BOLD_FONT = _FONTS_DIR / "DejaVuSans-Bold.ttf"
 
 FONT_REGULAR = "Helvetica"
 FONT_BOLD = "Helvetica-Bold"
 
-for _regular in FONT_CANDIDATES:
-    _bold = _regular.parent / (
-        _regular.stem.replace("DejaVuSans", "DejaVuSans-Bold") + ".ttf"
-    )
+if _REGULAR_FONT.exists() and _BOLD_FONT.exists():
     try:
-        if (
-            _regular.exists()
-            and _bold.exists()
-            and _regular.stat().st_size > 100_000
-            and _regular.read_bytes()[:4] == b"\x00\x01\x00\x00"
-        ):
-            pdfmetrics.registerFont(TTFont("DejaVu", str(_regular)))
-            pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(_bold)))
-            FONT_REGULAR = "DejaVu"
-            FONT_BOLD = "DejaVu-Bold"
-            logger.info("DejaVu fonts registered from %s", _regular)
-            break
-        if _regular.exists():
-            logger.warning(
-                "%s exists but invalid (size=%s)", _regular, _regular.stat().st_size
-            )
-    except Exception as e:  # noqa: BLE001
-        logger.warning("Font candidate %s failed: %s", _regular, e)
-
-if FONT_REGULAR == "Helvetica":
-    logger.warning("No valid Cyrillic font found - PDF will show squares")
+        pdfmetrics.registerFont(TTFont("DejaVu", str(_REGULAR_FONT)))
+        pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(_BOLD_FONT)))
+        FONT_REGULAR = "DejaVu"
+        FONT_BOLD = "DejaVu-Bold"
+        logger.info("✅ DejaVu fonts loaded from %s", _FONTS_DIR)
+    except Exception as e:
+        logger.warning("⚠️ DejaVu font registration failed: %s", e)
+else:
+    # Fallback: пробуем системные пути (Linux/Docker)
+    _SYSTEM_PATHS = [
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
+        Path("/usr/share/fonts/TTF/DejaVuSans.ttf"),
+        Path("/app/fonts/DejaVuSans.ttf"),
+    ]
+    for _p in _SYSTEM_PATHS:
+        if _p.exists():
+            try:
+                pdfmetrics.registerFont(TTFont("DejaVu", str(_p)))
+                bold_p = _p.parent / "DejaVuSans-Bold.ttf"
+                if bold_p.exists():
+                    pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(bold_p)))
+                FONT_REGULAR = "DejaVu"
+                FONT_BOLD = "DejaVu-Bold"
+                logger.info("✅ DejaVu fonts loaded from %s", _p)
+                break
+            except Exception:
+                continue
+    else:
+        logger.warning("No valid Cyrillic font found - PDF will show squares")
 
 
 def _money_to_words_ru(amount: float) -> str:
