@@ -80,9 +80,13 @@ export const MapPage: React.FC = () => {
     clusterRef.current.clearLayers();
 
     const filtered = positions.filter((pos) => {
-      if (filterEngine === 'on' && !pos.engine_on) return false;
-      if (filterEngine === 'off' && pos.engine_on) return false;
-      if (filterSearch && !pos.vehicle_name.toLowerCase().includes(filterSearch.toLowerCase())) return false;
+      if (filterEngine === 'on' && pos.engine_on !== true) return false;
+      if (filterEngine === 'off' && pos.engine_on === true) return false;
+      if (filterSearch) {
+        const search = filterSearch.toLowerCase();
+        const name = (pos.vehicle_name || '').toLowerCase();
+        if (!name.includes(search)) return false;
+      }
       return true;
     });
 
@@ -199,9 +203,15 @@ export const MapPage: React.FC = () => {
   };
 
   const filteredPositions = positions.filter((pos) => {
-    if (filterEngine === 'on' && !pos.engine_on) return false;
-    if (filterEngine === 'off' && pos.engine_on) return false;
-    if (filterSearch && !pos.vehicle_name.toLowerCase().includes(filterSearch.toLowerCase())) return false;
+    // Фильтр по двигателю: учитываем null как "неизвестно"
+    if (filterEngine === 'on' && pos.engine_on !== true) return false;
+    if (filterEngine === 'off' && pos.engine_on === true) return false;
+    // Фильтр по поиску
+    if (filterSearch) {
+      const search = filterSearch.toLowerCase();
+      const name = (pos.vehicle_name || '').toLowerCase();
+      if (!name.includes(search)) return false;
+    }
     return true;
   });
 
