@@ -47,6 +47,8 @@ const STATUS_STYLES: Record<string, string> = {
 const formatMoney = (v: number) =>
   `${v.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`;
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 export const SalariesPage: React.FC = () => {
   const now = new Date();
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
@@ -104,6 +106,9 @@ export const SalariesPage: React.FC = () => {
     }
   };
 
+  const pdfUrl = `${API_BASE}/api/v1/salaries/export/pdf?date_from=${dateFrom}&date_to=${dateTo}`;
+  const excelUrl = `${API_BASE}/api/v1/salaries/export/excel?date_from=${dateFrom}&date_to=${dateTo}`;
+
   return (
     <Layout>
       <div className="px-4 py-6 sm:px-0">
@@ -115,7 +120,7 @@ export const SalariesPage: React.FC = () => {
               Расчёт и управление зарплатами по сменам, часам, пробегу
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <input
               type="date"
               value={dateFrom}
@@ -142,6 +147,22 @@ export const SalariesPage: React.FC = () => {
             >
               🔄
             </button>
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+            >
+              📄 PDF
+            </a>
+            <a
+              href={excelUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
+            >
+              📊 Excel
+            </a>
           </div>
         </div>
 
@@ -250,6 +271,15 @@ export const SalariesPage: React.FC = () => {
                             ℹ️
                           </button>
                         )}
+                        <a
+                          href={`${API_BASE}/api/v1/salaries/export/pdf?date_from=${r.period_start}&date_to=${r.period_end}&record_id=${r.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-purple-600 hover:text-purple-900 ml-2"
+                          title="Скачать расчётный листок"
+                        >
+                          📄
+                        </a>
                       </td>
                     </tr>
                   ))}
