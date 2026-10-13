@@ -2,6 +2,7 @@
 
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -121,6 +122,93 @@ def get_salary_summary(
         "approved_count": approved,
         "paid_count": paid,
     }
+
+
+@router.get("/export/pdf")
+def export_salary_pdf(
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    record_id: int | None = Query(default=None, description="ID конкретной записи. Если не указан — общая ведомость"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """📄 Скачать PDF расчётный листок или ведомость."""
+    from app.services.salary_pdf import generate_salary_payslip, generate_salary_register_pdf
+    from app.models.contractor import Contractor
+
+    if record_id:
+        record = db.get(SalaryRecord, record_id)
+        if not record or record.company_id != company_id:
+            raise HTTPException(status_code=404, detail="Salary record not found")
+
+        contractor = db.get(Contractor, record.employee_contractor_id)
+        employee_name = contractor.name if contractor else ""
+
+        pdf_bytes = generate_salary_payslip(record, employee_name)
+        filename = f"payslip_{record.employee_contractor_id}_{record.period_start}.pdf"
+    else:
+        stmt = select(SalaryRecord).where(
+            SalaryRecord.company_id == company_id,
+            SalaryRecord.period_start >= date_from,
+            SalaryRecord.period_end <= date_to,
+        ).order_by(SalaryRecord.employee_contractor_id)
+        records = db.scalars(stmt).all()
+
+        if not records:
+            raise HTTPException(status_code=404, detail="No salary records found for this period")
+
+        # Получаем имена сотрудников
+        contractor_ids = list(set(r.employee_contractor_id for r in records))
+        contractors = db.query(Contractor).filter(Contractor.id.in_(contractor_ids)).all()
+        names_map = {c.id: c.name for c in contractors}
+
+        # Подставляем имена в записи для PDF
+        pdf_bytes = generate_salary_register_pdf(records, company_name=f"Company #{company_id}")
+        filename = f"salary_register_{date_from}_{date_to}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/export/excel")
+def export_salary_excel(
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """📊 Скачать Excel файл с зарплатами за период."""
+    from app.services.salary_export import export_salaries_to_excel
+    from app.models.contractor import Contractor
+
+    stmt = select(SalaryRecord).where(
+        SalaryRecord.company_id == company_id,
+        SalaryRecord.period_start >= date_from,
+        SalaryRecord.period_end <= date_to,
+    ).order_by(SalaryRecord.employee_contractor_id)
+    records = db.scalars(stmt).all()
+
+    if not records:
+        raise HTTPException(status_code=404, detail="No salary records found for this period")
+
+    # Получаем имена сотрудников
+    contractor_ids = list(set(r.employee_contractor_id for r in records))
+    contractors = db.query(Contractor).filter(Contractor.id.in_(contractor_ids)).all()
+    names_map = {c.id: c.name for c in contractors}
+
+    xlsx_bytes = export_salaries_to_excel(records, names_map)
+    filename = f"salaries_{date_from}_{date_to}.xlsx"
+
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/{record_id}/approve")
