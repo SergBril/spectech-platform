@@ -246,8 +246,9 @@ app.mount("/static", StaticFiles(directory="uploads"), name="static")
 # 6. Кастомизация OpenAPI
 def custom_openapi():
     """Custom OpenAPI schema."""
-    if app.openapi_schema:
-        return app.openapi_schema
+    # if app.openapi_schema:
+    #     return app.openapi_schema
+    app.openapi_schema = None  # Сбрасываем кэш
     openapi_schema = get_openapi(
         title="СпецТехника Про API",
         version="1.0.0",
@@ -270,7 +271,7 @@ def custom_openapi():
     return app.openapi_schema
 
 
-app.openapi = custom_openapi
+# app.openapi = custom_openapi
 
 
 # 7. Документация: главная страница
