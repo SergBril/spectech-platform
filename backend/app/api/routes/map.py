@@ -162,7 +162,6 @@ def request_new_provider(
     payload: dict = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
 ):
     """📨 Запрос на добавление нового GPS-провайдера."""
     from app.models.telematics import Notification
@@ -172,11 +171,10 @@ def request_new_provider(
         raise HTTPException(status_code=400, detail="Укажите название провайдера")
 
     notification = Notification(
-        company_id=company_id,
         user_id=current_user.id,
-        type="gps_provider_request",
+        channel="system",
         title=f"Запрос нового GPS-провайдера: {provider_name}",
-        message=(
+        body=(
             f"Пользователь {current_user.email} запросил добавление GPS-провайдера.\n"
             f"Название: {provider_name}\n"
             f"URL: {payload.get('provider_url', '—')}\n"
