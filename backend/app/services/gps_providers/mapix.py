@@ -114,21 +114,27 @@ class MapixAdapter(GpsProviderAdapter):
         cookie_str = "; ".join(f"{k}={v}" for k, v in session_cookies.items())
 
         try:
+            # На Windows curl может быть алиасом PowerShell, используем полный путь
+            import shutil
+            curl_path = shutil.which("curl") or r"C:\Windows\System32\curl.exe"
+
             result = subprocess.run(
                 [
-                    "curl", "-s", "-X", "POST", url,
+                    curl_path, "-s", "-X", "POST", url,
                     "-b", cookie_str,
                     "-H", "X-Requested-With: XMLHttpRequest",
                     "-H", f"Referer: {self.api_url}/",
                     "-H", "Accept: application/json, text/javascript, */*; q=0.01",
                     "-H", "Content-Type: application/x-www-form-urlencoded; charset=UTF-8",
-                    "--data-raw", "",  # Точно как в рабочем curl-запросе
+                    "--data-raw", "",
                 ],
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
             body = result.stdout.strip()
+            if not body and result.stderr:
+                logger.error("Mapix curl stderr: %s", result.stderr[:500])
         except Exception as e:
             logger.error("Mapix /api/io curl failed: %s", e)
             return []
