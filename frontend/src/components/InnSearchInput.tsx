@@ -100,9 +100,9 @@ export const InnSearchInput: React.FC<InnSearchInputProps> = ({
       ogrn: p.ogrn || '',
       address: p.address?.value || '',
       bank_name: p.finance?.bank_name || '',
-      bank_bik: p.finance?.bank_bik || '',
+      bank_bik: p.finance?.bik || '',
       bank_account: p.finance?.bank_account || '',
-      bank_correspondent_account: p.finance?.bank_correspondent_account || '',
+      bank_correspondent_account: p.finance?.correspondent_account || '',
       management_name: p.management?.name || '',
       management_post: p.management?.post || '',
     });
