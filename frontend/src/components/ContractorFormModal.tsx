@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Contractor, ContractorCreate, ContractorUpdate, BankDetails } from '../api/contractors';
 import { InnSearchInput } from './InnSearchInput';
 
@@ -21,6 +21,102 @@ const CONTRACTOR_TYPES = [
   { value: 'owner', label: 'Собственник техники' },
   { value: 'subcontractor', label: 'Субподрядчик' },
 ];
+
+// Компонент поля с DaData-подсказками (вынесен наружу для стабильности)
+function DadataField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required,
+  queryType,
+  onSuggestionSelect,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  required?: boolean;
+  queryType: 'party' | 'address' | 'bank';
+  onSuggestionSelect?: (s: any) => void;
+}) {
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleInput = (val: string) => {
+    onChange(val);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (val.length < 3) {
+      setShowSuggestions(false);
+      return;
+    }
+    timerRef.current = setTimeout(async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        const apiUrl = import.meta.env.VITE_API_URL;
+        const response = await fetch(`${apiUrl}/companies/dadata/suggest/${queryType}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ query: val, count: 5 }),
+        });
+        const data = await response.json();
+        if (data.suggestions?.length > 0) {
+          setSuggestions(data.suggestions);
+          setShowSuggestions(true);
+        } else {
+          setShowSuggestions(false);
+        }
+      } catch {
+        setShowSuggestions(false);
+      }
+    }, 300);
+  };
+
+  return (
+    <div className="relative">
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {label}{required && ' *'}
+      </label>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => handleInput(e.target.value)}
+        onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+        placeholder={placeholder}
+        required={required}
+        autoComplete="off"
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+      />
+      {showSuggestions && suggestions.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+          {suggestions.map((s, i) => (
+            <button
+              key={i}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onSuggestionSelect?.(s);
+                setShowSuggestions(false);
+                setSuggestions([]);
+              }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-0"
+            >
+              <div className="font-medium text-gray-900">{s.value}</div>
+              {s.data?.inn && <div className="text-xs text-gray-500">ИНН: {s.data.inn}</div>}
+              {s.data?.address?.value && s.data.address.value !== s.value && (
+                <div className="text-xs text-gray-500 truncate">{s.data.address.value}</div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSave }) => {
   const [activeTab, setActiveTab] = useState<'basic' | 'address' | 'bank' | 'contact' | 'tax'>('basic');
@@ -49,7 +145,8 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
       correspondent_account: '',
     }
   );
-  // 🆕 Обработчик автозаполнения из DaData
+
+  // Обработчик автозаполнения из DaData (кнопка Найти в ЕГРЮЛ)
   const handleInnFound = (data: any) => {
     setFormData({
       ...formData,
@@ -60,7 +157,6 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
       legal_address: data.address || formData.legal_address,
     });
 
-    // Заполняем банковские реквизиты, если они пришли
     if (data.bank_name || data.bank_bik || data.bank_account) {
       setBankDetails({
         account: data.bank_account || bankDetails.account,
@@ -71,7 +167,27 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
     }
   };
 
-  // 🆕 Обработчик найденного дубликата
+  // Автозаполнение всех полей при выборе подсказки по названию
+  const handleNameSuggestionSelect = (suggestion: any) => {
+    const p = suggestion.data;
+    setFormData((prev) => ({
+      ...prev,
+      name: p.name?.short_with_opf || suggestion.value,
+      inn: p.inn || prev.inn,
+      kpp: p.kpp || prev.kpp,
+      ogrn: p.ogrn || prev.ogrn,
+      legal_address: p.address?.value || prev.legal_address,
+    }));
+    if (p.finance?.bank_name || p.finance?.bank_bik) {
+      setBankDetails((prev) => ({
+        ...prev,
+        bank_name: p.finance.bank_name || prev.bank_name,
+        bik: p.finance.bank_bik || prev.bik,
+        correspondent_account: p.finance.bank_correspondent_account || prev.correspondent_account,
+      }));
+    }
+  };
+
   const handleDuplicateFound = (existingId: number, existingName: string) => {
     if (confirm(`Контрагент "${existingName}" уже существует. Закрыть форму?`)) {
       onClose();
@@ -166,21 +282,18 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Название *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder='ООО "Ромашка"'
-                    required
-                  />
-                </div>
+                {/* Название с DaData-подсказками */}
+                <DadataField
+                  label="Название"
+                  value={formData.name}
+                  onChange={(v) => setFormData({ ...formData, name: v })}
+                  placeholder='ООО "Ромашка"'
+                  required
+                  queryType="party"
+                  onSuggestionSelect={handleNameSuggestionSelect}
+                />
 
-                {/* 🆕 ИНН с поиском на отдельной строке */}
+                {/* ИНН с поиском по ЕГРЮЛ */}
                 <InnSearchInput
                   inn={formData.inn}
                   onInnChange={(inn) => setFormData({ ...formData, inn })}
@@ -213,24 +326,21 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
                       maxLength={15}
                     />
                   </div>
-                </div>              </div>
+                </div>
+              </div>
             )}
 
             {/* Tab: Адреса */}
             {activeTab === 'address' && (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Юридический адрес
-                  </label>
-                  <textarea
-                    value={formData.legal_address}
-                    onChange={(e) => setFormData({ ...formData, legal_address: e.target.value })}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="123456, г. Москва, ул. Ленина, д. 10, оф. 5"
-                  />
-                </div>
+                <DadataField
+                  label="Юридический адрес"
+                  value={formData.legal_address}
+                  onChange={(v) => setFormData({ ...formData, legal_address: v })}
+                  placeholder="123456, г. Москва, ул. Ленина, д. 10, оф. 5"
+                  queryType="address"
+                  onSuggestionSelect={(s) => setFormData((prev) => ({ ...prev, legal_address: s.value }))}
+                />
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -264,18 +374,22 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Название банка
-                  </label>
-                  <input
-                    type="text"
-                    value={bankDetails.bank_name || ''}
-                    onChange={(e) => setBankDetails({ ...bankDetails, bank_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder='ПАО "Сбербанк"'
-                  />
-                </div>
+                <DadataField
+                  label="Наименование банка"
+                  value={bankDetails.bank_name || ''}
+                  onChange={(v) => setBankDetails({ ...bankDetails, bank_name: v })}
+                  placeholder='ПАО "Сбербанк"'
+                  queryType="bank"
+                  onSuggestionSelect={(s) => {
+                    const b = s.data;
+                    setBankDetails((prev) => ({
+                      ...prev,
+                      bank_name: b.name?.payment || s.value,
+                      bik: b.bic || prev.bik,
+                      correspondent_account: b.accounts?.[0]?.ks || prev.correspondent_account,
+                    }));
+                  }}
+                />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
