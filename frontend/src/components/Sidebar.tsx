@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useCompany } from '../contexts/CompanyContext';
 
 interface MenuItem {
   label: string;
@@ -38,6 +39,8 @@ export const Sidebar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { companies, currentCompanyId, setCurrentCompanyId, isLoading: companiesLoading } = useCompany();
+  const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
@@ -154,6 +157,76 @@ export const Sidebar: React.FC = () => {
           </div>
         ))}
       </nav>
+
+      {/* Переключатель компаний */}
+      {companies.length > 1 && (
+        <div className="border-t border-gray-800/50 p-3">
+          <div className="relative">
+            <button
+              onClick={() => setCompanyDropdownOpen(!companyDropdownOpen)}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
+                collapsed ? 'justify-center' : ''
+              } bg-gray-800/60 hover:bg-gray-700/60 text-gray-300`}
+            >
+              <span className="text-base flex-shrink-0">🏢</span>
+              {!collapsed && (
+                <>
+                  <span className="flex-1 truncate text-left">
+                    {companiesLoading
+                      ? 'Загрузка...'
+                      : companies.find((c) => c.id === currentCompanyId)?.name || 'Выберите компанию'}
+                  </span>
+                  <svg
+                    className={`w-3 h-3 transition-transform duration-200 ${companyDropdownOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </>
+              )}
+            </button>
+
+            {/* Dropdown список */}
+            {companyDropdownOpen && !collapsed && (
+              <div className="absolute bottom-full left-0 right-0 mb-1 bg-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden z-50">
+                {companies.map((company) => (
+                  <button
+                    key={company.id}
+                    onClick={() => {
+                      setCurrentCompanyId(company.id);
+                      setCompanyDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                      company.id === currentCompanyId
+                        ? 'bg-blue-600/30 text-blue-300 font-medium'
+                        : 'text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="truncate">{company.name}</span>
+                      {company.id === currentCompanyId && <span className="text-blue-400 ml-2">✓</span>}
+                    </div>
+                    {company.inn && (
+                      <div className="text-[10px] text-gray-500 mt-0.5">ИНН: {company.inn}</div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Тултип при сворачивании */}
+            {collapsed && (
+              <div className="text-center">
+                <span className="text-[10px] text-gray-500">
+                  {companies.find((c) => c.id === currentCompanyId)?.name?.charAt(0) || '?'}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Профиль пользователя */}
       <div className="border-t border-gray-800/50 p-3">
