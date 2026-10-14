@@ -31,7 +31,20 @@ export const mapApi = {
     return res.data;
   },
 
-getGpsPositions
+  getGpsPositions: async (): Promise<VehiclePosition[]> => {
+    const res = await apiClient.get('/gps/positions/latest');
+    return res.data.map((p: any) => ({
+      vehicle_id: p.vehicle_id,
+      vehicle_name: p.vehicle_name || `Vehicle #${p.vehicle_id}`,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      speed: p.speed != null ? Number(p.speed) : undefined,
+      heading: p.heading != null ? Number(p.heading) : undefined,
+      engine_on: p.engine_on === true,
+      fuel_level: p.fuel_level != null ? Number(p.fuel_level) : undefined,
+      recorded_at: p.recorded_at,
+    }));
+  },
 
   getVehicleTrack: async (
     vehicleId: number,
