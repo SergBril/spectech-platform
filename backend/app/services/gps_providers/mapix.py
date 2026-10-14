@@ -117,20 +117,23 @@ class MapixAdapter(GpsProviderAdapter):
         try:
             curl_path = shutil.which("curl") or r"C:\Windows\System32\curl.exe"
 
-            # Единый curl: авторизация → прогрев → API-запрос
-            # -c cookie_file: сохранять cookies
-            # -b cookie_file: отправлять cookies
-            # Всё в одном вызове = одна TCP-сессия
+            # Используем --write-out для разделения ответов разных запросов
+            separator = "\n\n===MAPIX_SEPARATOR===\n\n"
             result = subprocess.run(
                 [
                     curl_path, "-s",
                     "-c", cookie_file,
                     "-b", cookie_file,
                     "-L",
+                    # Шаг 1: Авторизация
                     "-X", "POST", auth_url,
                     "-d", f"username={self.login}&password={self.password}&tzoffset=3&lang=ru&soglasie=on",
                     "-H", "Content-Type: application/x-www-form-urlencoded",
+                    "-w", separator,  # Разделитель после ответа
+                    # Шаг 2: Прогрев сессии
                     "-X", "GET", main_url,
+                    "-w", separator,  # Разделитель после ответа
+                    # Шаг 3: API-запрос
                     "-X", "POST", url,
                     "-H", "X-Requested-With: XMLHttpRequest",
                     "-H", f"Referer: {main_url}",
@@ -141,8 +144,12 @@ class MapixAdapter(GpsProviderAdapter):
                 capture_output=True,
                 timeout=30,
             )
-            # Декодируем stdout как UTF-8 (Mapix возвращает UTF-8, не cp1251)
-            body = result.stdout.decode("utf-8", errors="replace").strip() if result.stdout else ""
+            raw_output = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
+            
+            # Извлекаем только последний ответ (после последнего разделителя)
+            parts = raw_output.split(separator)
+            body = parts[-1].strip() if parts else ""
+            
             if not body and result.stderr:
                 stderr_text = result.stderr.decode("utf-8", errors="replace")
                 logger.error("Mapix curl stderr: %s", stderr_text[:500])
