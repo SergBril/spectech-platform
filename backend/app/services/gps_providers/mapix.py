@@ -99,86 +99,96 @@ class MapixAdapter(GpsProviderAdapter):
             return asyncio.run(self._fetch_positions())
 
     async def _fetch_positions(self) -> list[GpsPointData]:
-        """Внутренний метод: запрашивает /api/io через httpx с браузерными заголовками."""
+        """Внутренний метод: запрашивает /api/io через Playwright (headless browser)."""
         import json
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/javascript, */*; q=0.01",
-            "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "X-Requested-With": "XMLHttpRequest",
-            "Origin": self.api_url,
-            "Referer": f"{self.api_url}/",
-            "Connection": "keep-alive",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-origin",
-        }
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            logger.error("Playwright not installed. Run: pip install playwright && playwright install chromium")
+            return []
 
-        async with httpx.AsyncClient(
-            timeout=30,
-            follow_redirects=True,
-            headers=headers,
-        ) as client:
-            # Шаг 1: Авторизация
-            auth_resp = await client.post(
-                f"{self.api_url}/auth",
-                data={
-                    "username": self.login,
-                    "password": self.password,
-                    "tzoffset": "3",
-                    "lang": "ru",
-                    "soglasie": "on",
-                },
-            )
-            logger.info("Mapix auth: status=%s, cookies=%s", auth_resp.status_code, list(client.cookies.keys()))
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    locale="ru-RU",
+                    timezone_id="Europe/Moscow",
+                )
+                page = await context.new_page()
 
-            if auth_resp.status_code >= 400:
-                logger.error("Mapix auth failed: HTTP %s", auth_resp.status_code)
-                return []
+                # Шаг 1: Авторизация
+                auth_resp = await page.goto(f"{self.api_url}/auth")
+                if auth_resp and auth_resp.status >= 400:
+                    logger.error("Mapix auth page failed: HTTP %s", auth_resp.status)
+                    await browser.close()
+                    return []
 
-            # Шаг 2: Прогрев — GET главная страница
-            warmup_resp = await client.get(f"{self.api_url}/")
-            logger.debug("Mapix warmup: status=%s, len=%d", warmup_resp.status_code, len(warmup_resp.text))
+                # Заполняем форму логина
+                await page.fill('input[name="username"]', self.login)
+                await page.fill('input[name="password"]', self.password)
+                
+                # Ставим галочку согласия если есть
+                soglasie = page.locator('input[name="soglasie"]')
+                if await soglasie.count() > 0:
+                    await soglasie.check()
 
-            # Шаг 3: Инициализация API — POST /api/io БЕЗ anti-cache параметра
-            init_resp = await client.post(f"{self.api_url}/api/io", content=b"")
+                # Нажимаем кнопку входа
+                submit_btn = page.locator('button[type="submit"], input[type="submit"]')
+                if await submit_btn.count() > 0:
+                    await submit_btn.first.click()
+                else:
+                    # Fallback: submit form
+                    await page.evaluate('document.querySelector("form").submit()')
+
+                # Ждём редирект на главную страницу
+                await page.wait_for_url(f"{self.api_url}/**", timeout=15000)
+                logger.info("Mapix auth successful, current URL: %s", page.url)
+
+                # Шаг 2: Выполняем API-запрос через JS fetch внутри страницы
+                api_url = self._anti_cache_url(f"{self.api_url}/api/io")
+                result = await page.evaluate("""
+                    async (url) => {
+                        const resp = await fetch(url, {
+                            method: 'POST',
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                            },
+                            body: '',
+                        });
+                        const text = await resp.text();
+                        return { status: resp.status, body: text };
+                    }
+                """, api_url)
+
+                await browser.close()
+
             logger.info(
-                "Mapix /api/io init: status=%s, body_len=%d, preview=%s",
-                init_resp.status_code,
-                len(init_resp.text),
-                init_resp.text[:200] if init_resp.text else "(empty)",
+                "Mapix /api/io via Playwright: status=%s, body_len=%d, preview=%s",
+                result["status"],
+                len(result["body"]),
+                result["body"][:300] if result["body"] else "(empty)",
             )
 
-            # Шаг 4: Основной запрос С anti-cache
-            url = self._anti_cache_url(f"{self.api_url}/api/io")
-            api_resp = await client.post(url, content=b"")
-
-            logger.info(
-                "Mapix /api/io main: status=%s, content-type=%s, body_len=%d, preview=%s",
-                api_resp.status_code,
-                api_resp.headers.get("content-type", "N/A"),
-                len(api_resp.text),
-                api_resp.text[:300] if api_resp.text else "(empty)",
-            )
-
-            # Используем ответ из шага 3 или 4 ( whichever has data)
-            resp_text = api_resp.text if api_resp.text and api_resp.text.strip() else init_resp.text
-
-            if not resp_text or not resp_text.strip():
-                logger.error("Mapix returned empty body from both init and main requests")
+            if result["status"] != 200:
+                logger.error("Mapix /api/io error: HTTP %s", result["status"])
                 return []
 
-            try:
-                data = json.loads(resp_text)
-            except Exception as e:
-                logger.error("Mapix JSON parse error: %s, body: %s", e, resp_text[:300])
+            if not result["body"] or not result["body"].strip():
+                logger.error("Mapix returned empty body via Playwright")
                 return []
+
+            data = json.loads(result["body"])
 
             if not isinstance(data, dict):
                 logger.error("Mapix returned unexpected type: %s", type(data))
                 return []
+
+        except Exception as e:
+            logger.error("Mapix Playwright failed: %s", e, exc_info=True)
+            return []
 
         results: list[GpsPointData] = []
         for imei, points in data.items():
