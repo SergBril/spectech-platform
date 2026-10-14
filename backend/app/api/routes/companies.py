@@ -90,7 +90,7 @@ class CompanyRequisitesUpdate(BaseModel):
     phone: str | None = None
 
 
-@router.patch("/{company_id}/requisites")
+@router.patch("/companies/{company_id}/requisites")
 def update_company_requisites(
     company_id: int,
     payload: CompanyRequisitesUpdate,
@@ -126,7 +126,7 @@ def update_company_requisites(
 
     return {"detail": "Реквизиты обновлены", "company_id": company_id}
 
-@router.post("/dadata/suggest/{suggest_type}")
+@router.post("/companies/dadata/suggest/{suggest_type}")
 async def dadata_suggest(
     suggest_type: str,
     payload: dict,
@@ -152,7 +152,7 @@ async def dadata_suggest(
             headers={
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                "Authorization": f"Token {api_key}",
+                "Authorization": f"Token {api_key.strip()}",
             },
         )
 
