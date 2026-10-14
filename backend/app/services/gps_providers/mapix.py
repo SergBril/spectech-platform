@@ -83,187 +83,102 @@ class MapixAdapter(GpsProviderAdapter):
         return await self._fetch_positions()
 
     def get_all_positions_sync(self) -> list[GpsPointData]:
-        """Синхронная версия get_all_positions для использования в APScheduler."""
+        """Синхронная версия для APScheduler."""
         import asyncio
         try:
             return asyncio.run(self._fetch_positions())
         except RuntimeError:
-            # Если уже есть event loop, создаём новый в отдельном потоке
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, self._fetch_positions())
                 return future.result(timeout=60)
 
     async def _fetch_positions(self) -> list[GpsPointData]:
-        """Внутренний метод: запрашивает /api/io через Playwright (headless browser)."""
+        """Внутренний метод: запрашивает /api/io через httpx с браузерными заголовками."""
         import json
 
-        try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            logger.error("Playwright not installed. Run: pip install playwright && playwright install chromium")
-            return []
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+            "Origin": self.api_url,
+            "Referer": f"{self.api_url}/",
+            "Connection": "keep-alive",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+            "DNT": "1",
+        }
 
-        status = 0
-        body = ""
+        async with httpx.AsyncClient(
+            timeout=30,
+            follow_redirects=True,
+            headers=headers,
+        ) as client:
+            # Шаг 1: Авторизация
+            auth_resp = await client.post(
+                f"{self.api_url}/auth",
+                data={
+                    "username": self.login,
+                    "password": self.password,
+                    "tzoffset": "3",
+                    "lang": "ru",
+                    "soglasie": "on",
+                },
+            )
+            logger.info("Mapix auth: status=%s, cookies=%s", auth_resp.status_code, list(client.cookies.keys()))
 
-        try:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--no-sandbox",
-                        "--disable-dev-shm-usage",
-                    ],
-                )
-                context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    locale="ru-RU",
-                    timezone_id="Europe/Moscow",
-                )
-                page = await context.new_page()
+            if auth_resp.status_code >= 400:
+                logger.error("Mapix auth failed: HTTP %s", auth_resp.status_code)
+                return []
 
-                # Увеличенный таймаут навигации (Mapix медленный сервер)
-                page.set_default_timeout(30000)
+            # Шаг 2: Прогрев — GET главная страница
+            warmup_resp = await client.get(f"{self.api_url}/")
+            logger.debug("Mapix warmup: status=%s, len=%d", warmup_resp.status_code, len(warmup_resp.text))
 
-                # Шаг 1: Переходим на страницу авторизации
-                await page.goto(f"{self.api_url}/auth", wait_until="domcontentloaded", timeout=30000)
-                logger.info("Mapix auth page loaded: %s", page.url)
+            # Шаг 3: Инициализация API — POST /api/io БЕЗ anti-cache
+            init_resp = await client.post(f"{self.api_url}/api/io", content=b"")
+            logger.info(
+                "Mapix /api/io init: status=%s, body_len=%d",
+                init_resp.status_code,
+                len(init_resp.text),
+            )
 
-                # Заполняем форму
-                await page.fill('input[name="username"]', self.login)
-                await page.fill('input[name="password"]', self.password)
+            # Шаг 4: Основной запрос С anti-cache
+            url = self._anti_cache_url(f"{self.api_url}/api/io")
+            api_resp = await client.post(url, content=b"")
 
-                soglasie = page.locator('input[name="soglasie"]')
-                if await soglasie.count() > 0 and not await soglasie.is_checked():
-                    await soglasie.check()
+            logger.info(
+                "Mapix /api/io main: status=%s, content-type=%s, body_len=%d, preview=%s",
+                api_resp.status_code,
+                api_resp.headers.get("content-type", "N/A"),
+                len(api_resp.text),
+                api_resp.text[:300] if api_resp.text else "(empty)",
+            )
 
-                # Кликаем кнопку входа и ждём навигацию AWAY from /auth
-                async with page.expect_navigation(timeout=15000):
-                    submit_btn = page.locator('button[type="submit"], input[type="submit"], .login-btn, #login-btn')
-                    if await submit_btn.count() > 0:
-                        await submit_btn.first.click()
-                    else:
-                        await page.evaluate('document.querySelector("form").submit()')
+            # Используем ответ с данными
+            resp_text = ""
+            for r in [api_resp, init_resp]:
+                if r.text and r.text.strip() and not r.text.strip().startswith("<"):
+                    resp_text = r.text
+                    break
 
-                await page.wait_for_load_state("networkidle")
-                logger.info("Mapix after login URL: %s", page.url)
+            if not resp_text:
+                logger.warning("⚠️ Mapix returned no JSON data (empty or HTML). Skipping this sync cycle.")
+                return []
 
-                # Проверяем успешность авторизации
-                if "/auth" in page.url:
-                    logger.error("Mapix auth failed: still on /auth page after submit")
-                    await browser.close()
-                    return []
+            try:
+                data = json.loads(resp_text)
+            except json.JSONDecodeError as e:
+                logger.error("Mapix JSON parse error: %s, body: %s", e, resp_text[:300])
+                return []
 
-                # Шаг 2: Перехватываем реальный API-запрос, который делает страница Mapix
-                # Вместо ручного fetch(), ждём когда страница сама обратится к /api/io
-                api_response_body = None
-                api_response_status = 0
-
-                async def handle_response(response):
-                    nonlocal api_response_body, api_response_status
-                    if "/api/io" in response.url and "time=" in response.url:
-                        try:
-                            api_response_body = await response.text()
-                            api_response_status = response.status
-                            logger.info("Mapix intercepted /api/io response: status=%s, len=%d",
-                                          response.status, len(api_response_body))
-                        except Exception as e:
-                            logger.warning("Failed to read intercepted response: %s", e)
-
-                page.on("response", handle_response)
-
-                # Перезагружаем страницу чтобы спровоцировать автоматический запрос к /api/io
-                await page.reload(wait_until="networkidle", timeout=30000)
-
-                # Если страница не сделала запрос автоматически, пробуем вручную через evaluate
-                if api_response_body is None:
-                    logger.info("No auto /api/io request detected, trying manual fetch with CSRF")
-                    
-                    # Пытаемся найти CSRF-токен на странице
-                    csrf_token = await page.evaluate("""
-                        () => {
-                            // Ищем токен в meta, hidden input, или JS-переменных
-                            const meta = document.querySelector('meta[name="csrf-token"]');
-                            if (meta) return meta.content;
-                            const input = document.querySelector('input[name="_token"], input[name="csrf_token"]');
-                            if (input) return input.value;
-                            if (window.csrfToken) return window.csrfToken;
-                            if (window._token) return window._token;
-                            return null;
-                        }
-                    """)
-                    logger.info("Mapix CSRF token: %s", csrf_token)
-
-                    api_url = self._anti_cache_url(f"{self.api_url}/api/io")
-                    result = await page.evaluate("""
-                        async (args) => {
-                            const { url, csrf } = args;
-                            try {
-                                const headers = {
-                                    'X-Requested-With': 'XMLHttpRequest',
-                                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                                    'Accept': 'application/json, text/javascript, */*; q=0.01',
-                                };
-                                if (csrf) headers['X-CSRF-TOKEN'] = csrf;
-                                
-                                const resp = await fetch(url, {
-                                    method: 'POST',
-                                    headers: headers,
-                                    body: csrf ? '_token=' + encodeURIComponent(csrf) : '',
-                                    credentials: 'same-origin',
-                                });
-                                const text = await resp.text();
-                                return { status: resp.status, body: text };
-                            } catch (e) {
-                                return { status: 0, body: 'Error: ' + e.message };
-                            }
-                        }
-                    """, {"url": api_url, "csrf": csrf_token})
-
-                    api_response_status = result["status"]
-                    api_response_body = result["body"]
-
-                page.remove_listener("response", handle_response)
-                await browser.close()
-
-            status = api_response_status
-            body = api_response_body or ""
-
-        except Exception as e:
-            logger.error("Mapix Playwright failed: %s", e, exc_info=True)
-            return []
-
-        logger.info(
-            "Mapix /api/io via Playwright: status=%s, body_len=%d, preview=%s",
-            status,
-            len(body),
-            body[:300] if body else "(empty)",
-        )
-
-        if status != 200:
-            logger.error("Mapix /api/io error: HTTP %s", status)
-            return []
-
-        if not body or not body.strip():
-            logger.error("Mapix returned empty body via Playwright")
-            return []
-
-        # Проверяем что ответ JSON, а не HTML
-        if body.strip().startswith("<"):
-            logger.error("Mapix returned HTML instead of JSON: %s", body[:200])
-            return []
-
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError as e:
-            logger.error("Mapix JSON parse error: %s, body: %s", e, body[:300])
-            return []
-
-        if not isinstance(data, dict):
-            logger.error("Mapix returned unexpected type: %s", type(data))
-            return []
+            if not isinstance(data, dict):
+                logger.error("Mapix returned unexpected type: %s", type(data))
+                return []
 
         results: list[GpsPointData] = []
         for imei, points in data.items():
