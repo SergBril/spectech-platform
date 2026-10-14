@@ -14,7 +14,7 @@ const menuItems: MenuItem[] = [
   { label: 'Заявки', icon: '📋', path: '/requests', group: 'Основное' },
   { label: 'Техника', icon: '🚜', path: '/vehicles', group: 'Основное' },
   { label: 'Карта', icon: '🗺️', path: '/map', group: 'Телематика' },
-
+  { label: 'GPS', icon: '📡', path: '/admin/gps', group: 'Телематика' },
   { label: 'Маркетплейс', icon: '🎯', path: '/marketplace', group: 'Бизнес' },
   { label: 'Мои публикации', icon: '🏪', path: '/my-listings', group: 'Бизнес' },
   { label: 'Контрагенты', icon: '👥', path: '/contractors', group: 'Бизнес' },
