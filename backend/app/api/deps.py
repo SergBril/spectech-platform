@@ -1,5 +1,6 @@
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -129,3 +130,10 @@ def get_current_user_optional(
         return user if user and user.status == UserStatus.active else None
     except Exception:
         return None
+
+def get_user_company_ids(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[int]:
+    from app.models.user_company import UserCompany
+    if user.is_superuser:
+        from app.models.company import Company
+        return list(db.scalars(select(Company.id).where(Company.is_active == True)).all())
+    return list(db.scalars(select(UserCompany.company_id).where(UserCompany.user_id == user.id, UserCompany.is_active == True)).all())

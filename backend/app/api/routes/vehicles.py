@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_company_id, get_current_user, require_permission
+from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids, require_permission
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import (
@@ -161,9 +161,9 @@ def list_vehicles(
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
-    """Получить список техники (только своей компании)."""
+    """Получить список техники (все компании пользователя)."""
     query = (
         select(Vehicle)
         .options(
@@ -174,7 +174,7 @@ def list_vehicles(
         )
         .where(
             Vehicle.is_deleted == False,  # noqa: E712
-            Vehicle.company_id == company_id,
+            Vehicle.company_id.in_(company_ids),
         )
     )
 
@@ -186,7 +186,7 @@ def list_vehicles(
 
     count_query = select(Vehicle).where(
         Vehicle.is_deleted == False,  # noqa: E712
-        Vehicle.company_id == company_id,
+        Vehicle.company_id.in_(company_ids),
     )
     if status_filter:
         count_query = count_query.where(Vehicle.status == status_filter)
@@ -194,7 +194,7 @@ def list_vehicles(
         select(Vehicle.id)
         .where(
             Vehicle.is_deleted == False,  # noqa: E712
-            Vehicle.company_id == company_id,
+            Vehicle.company_id.in_(company_ids),
         )
         .where(
             Vehicle.status == status_filter if status_filter else True  # type: ignore
@@ -207,7 +207,7 @@ def list_vehicles(
         db.scalar(
             select(func.count(Vehicle.id)).where(
                 Vehicle.is_deleted == False,  # noqa: E712
-                Vehicle.company_id == company_id,
+                Vehicle.company_id.in_(company_ids),
                 Vehicle.status == status_filter if status_filter else True,  # type: ignore
             )
         )
