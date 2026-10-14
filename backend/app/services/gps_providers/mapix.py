@@ -60,9 +60,11 @@ class MapixAdapter(GpsProviderAdapter):
         if "PHPSESSID" not in resp.cookies and "PHPSESSID" not in client.cookies:
             raise ValueError("Mapix auth failed: no PHPSESSID cookie received")
 
-        self.cookies = dict(resp.cookies)
+        # Сохраняем ВСЕ cookies (PHPSESSID + t_uid + другие)
+        self.cookies = dict(client.cookies)
         self._session_valid = True
-        logger.info("✅ Mapix session established for user %s", self.login)
+        logger.info("✅ Mapix session established for user %s (cookies: %s)", 
+                     self.login, list(self.cookies.keys()))
 
     def _anti_cache_url(self, base_url: str) -> str:
         """Добавляет anti-cache параметр к URL."""
@@ -104,14 +106,16 @@ class MapixAdapter(GpsProviderAdapter):
 
             url = self._anti_cache_url(f"{self.api_url}/api/io")
 
-            # Передаём cookies как объект httpx.Cookies (не dict!)
-            # + заголовки которые ожидает Mapix
+            # Mapix ожидает POST с телом и специфичными заголовками
+            # Браузерный запрос отправляет form-urlencoded body
             resp = await client.post(
                 url,
+                data={"": ""},  # Пустое form-encoded тело как в браузере
                 headers={
                     "X-Requested-With": "XMLHttpRequest",
                     "Referer": f"{self.api_url}/",
                     "Accept": "application/json, text/javascript, */*; q=0.01",
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 },
             )
 
@@ -126,7 +130,7 @@ class MapixAdapter(GpsProviderAdapter):
 
             # Проверяем пустое тело
             if not resp.text or not resp.text.strip():
-                logger.error("Mapix returned empty body despite 200 OK")
+                logger.error("Mapix returned empty body despite 200 OK. Cookies: %s", list(client.cookies.keys()))
                 return []
 
             try:
