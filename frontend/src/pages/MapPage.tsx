@@ -246,7 +246,7 @@ export const MapPage: React.FC = () => {
             <strong>${pos.vehicle_name}</strong><br/>
             📍 ${pos.latitude.toFixed(5)}, ${pos.longitude.toFixed(5)}<br/>
             🏎️ ${formatSpeed(pos.speed)}<br/>
-            ⛽ Топливо: ${pos.fuel_level != null ? `${pos.fuel_level}%` : '—'}<br/>
+            ⛽ Топливо: ${pos.fuel_level != null ? `${Math.round(pos.fuel_level)}%` : '—'}<br/>
             🔧 Двигатель: ${pos.engine_on ? '✅ Вкл' : '❌ Выкл'}<br/>
             🕐 ${formatDate(pos.recorded_at)}
           </div>
@@ -634,7 +634,7 @@ export const MapPage: React.FC = () => {
                 </div>
                 <div className="text-xs text-gray-500 mt-1 flex gap-3">
                   <span>🏎️ {formatSpeed(pos.speed)}</span>
-                  <span>⛽ {pos.fuel_level != null ? `${pos.fuel_level}%` : '—'}</span>
+                  <span>⛽ {pos.fuel_level != null ? `${Math.round(pos.fuel_level)}%` : '—'}</span>
                 </div>
                 <div className="text-xs text-gray-400 mt-1">{formatDate(pos.recorded_at)}</div>
               </div>
