@@ -99,51 +99,44 @@ class MapixAdapter(GpsProviderAdapter):
             return asyncio.run(self._fetch_positions())
 
     async def _fetch_positions(self) -> list[GpsPointData]:
-        """Внутренний метод: запрашивает /api/io через curl с cookie-файлом."""
+        """Внутренний метод: запрашивает /api/io через единый curl-скрипт."""
         import json
         import os
         import shutil
         import subprocess
         import tempfile
 
-        # 1. Авторизуемся через httpx чтобы получить cookies
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            await self._ensure_session(client)
-            
-            # Прогрев сессии: загружаем главную страницу чтобы Mapix инициализировал сессию
-            try:
-                warmup = await client.get(
-                    f"{self.api_url}/",
-                    headers={"Referer": f"{self.api_url}/auth"},
-                )
-                logger.debug("Mapix session warmup: status=%s, len=%d", warmup.status_code, len(warmup.text))
-            except Exception as e:
-                logger.warning("Mapix session warmup failed: %s", e)
-            
-            session_cookies = dict(client.cookies)
-
-        if not session_cookies:
-            logger.error("Mapix: no cookies after auth")
-            return []
-
         url = self._anti_cache_url(f"{self.api_url}/api/io")
+        auth_url = f"{self.api_url}/auth"
+        main_url = f"{self.api_url}/"
 
-        # 2. Записываем cookies во временный файл (Netscape format для curl)
+        # Создаём временный cookie-файл
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-            for k, v in session_cookies.items():
-                # Netscape cookie format: domain\tflag\tpath\tsecure\texpiry\tname\tvalue
-                f.write(f".gps.mapix.su\tTRUE\t/\tTRUE\t0\t{k}\t{v}\n")
             cookie_file = f.name
 
         try:
             curl_path = shutil.which("curl") or r"C:\Windows\System32\curl.exe"
 
+            # Единый curl: авторизация → прогрев → API-запрос
+            # -c cookie_file: сохранять cookies
+            # -b cookie_file: отправлять cookies
+            # Всё в одном вызове = одна TCP-сессия
             result = subprocess.run(
                 [
-                    curl_path, "-s", "-X", "POST", url,
-                    "-b", cookie_file,
+                    curl_path, "-s",
+                    "-c", cookie_file,       # Сохранять cookies
+                    "-b", cookie_file,       # Отправлять cookies
+                    "-L",                    # Follow redirects
+                    # Шаг 1: Авторизация
+                    "-X", "POST", auth_url,
+                    "-d", f"username={self.login}&password={self.password}&tzoffset=3&lang=ru&soglasie=on",
+                    "-H", "Content-Type: application/x-www-form-urlencoded",
+                    # Шаг 2: Прогрев сессии (GET главная страница)
+                    "-X", "GET", main_url,
+                    # Шаг 3: API-запрос
+                    "-X", "POST", url,
                     "-H", "X-Requested-With: XMLHttpRequest",
-                    "-H", f"Referer: {self.api_url}/",
+                    "-H", f"Referer: {main_url}",
                     "-H", "Accept: application/json, text/javascript, */*; q=0.01",
                     "-H", "Content-Type: application/x-www-form-urlencoded; charset=UTF-8",
                     "--data-raw", "",
@@ -174,10 +167,19 @@ class MapixAdapter(GpsProviderAdapter):
             logger.error("Mapix returned empty body via curl")
             return []
 
+        # Ответ может содержать HTML от шагов 1-2 + JSON от шага 3
+        # Ищем JSON в ответе (начинается с {)
+        json_start = body.find("{")
+        if json_start == -1:
+            logger.error("Mapix response contains no JSON: %s", body[:300])
+            return []
+
+        json_body = body[json_start:]
+
         try:
-            data = json.loads(body)
+            data = json.loads(json_body)
         except json.JSONDecodeError as e:
-            logger.error("Mapix JSON parse error: %s, body: %s", e, body[:300])
+            logger.error("Mapix JSON parse error: %s, body: %s", e, json_body[:300])
             return []
 
         if not isinstance(data, dict):
