@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import List
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/gps", tags=["GPS"])
+router = APIRouter(tags=["📡 GPS"])
 
 
 class GpsPointImport(BaseModel):
