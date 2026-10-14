@@ -100,79 +100,83 @@ class MapixAdapter(GpsProviderAdapter):
 
     async def _fetch_positions(self) -> list[GpsPointData]:
         """Внутренний метод: запрашивает /api/io и парсит ответ."""
+        import requests as sync_requests
+
+        # Сначала авторизуемся через httpx чтобы получить cookies
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             await self._ensure_session(client)
+            session_cookies = dict(client.cookies)
 
-            url = self._anti_cache_url(f"{self.api_url}/api/io")
+        # Используем requests для API-запроса (точно как curl --data-raw "")
+        url = self._anti_cache_url(f"{self.api_url}/api/io")
 
-            # Создаём запрос вручную чтобы гарантировать тело + заголовки
-            # httpx.post() может оптимизировать пустое/маленькое тело
-            request = client.build_request(
-                "POST",
+        try:
+            resp = sync_requests.post(
                 url,
-                content=b"",
+                data="",  # Пустое form-encoded тело → Content-Length: 0
+                cookies=session_cookies,
                 headers={
                     "X-Requested-With": "XMLHttpRequest",
                     "Referer": f"{self.api_url}/",
                     "Accept": "application/json, text/javascript, */*; q=0.01",
                     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 },
+                timeout=30,
             )
-            # Явно устанавливаем Content-Length после build_request
-            request.headers["Content-Length"] = "0"
+        except Exception as e:
+            logger.error("Mapix /api/io request failed: %s", e)
+            return []
 
-            resp = await client.send(request)
+        logger.info(
+            "Mapix /api/io response: status=%s, content-type=%s, body_len=%d, body_preview=%s",
+            resp.status_code,
+            resp.headers.get("content-type", "N/A"),
+            len(resp.text),
+            resp.text[:500] if resp.text else "(empty)",
+        )
 
-            logger.info(
-                "Mapix /api/io response: status=%s, content-type=%s, body_len=%d, body_preview=%s",
-                resp.status_code,
-                resp.headers.get("content-type", "N/A"),
-                len(resp.text),
-                resp.text[:500] if resp.text else "(empty)",
-            )
+        if resp.status_code != 200:
+            logger.error("Mapix /api/io error: HTTP %s", resp.status_code)
+            return []
 
-            if resp.status_code != 200:
-                logger.error("Mapix /api/io error: HTTP %s", resp.status_code)
-                return []
+        if not resp.text or not resp.text.strip():
+            logger.error("Mapix returned empty body despite 200 OK")
+            return []
 
-            if not resp.text or not resp.text.strip():
-                logger.error("Mapix returned empty body despite 200 OK")
-                return []
+        content_type = resp.headers.get("content-type", "")
+        if "json" not in content_type:
+            logger.error("Mapix returned non-JSON: %s", content_type)
+            return []
 
-            content_type = resp.headers.get("content-type", "")
-            if "json" not in content_type:
-                logger.error("Mapix returned non-JSON: %s", content_type)
-                return []
+        try:
+            data = resp.json()
+        except Exception as e:
+            logger.error("Mapix JSON parse error: %s, body: %s", e, resp.text[:300])
+            return []
 
+        if not isinstance(data, dict):
+            logger.error("Mapix returned unexpected type: %s", type(data))
+            return []
+
+        results: list[GpsPointData] = []
+        for imei, points in data.items():
+            if not points or not isinstance(points, list):
+                continue
+            p = points[0]
             try:
-                data = resp.json()
-            except Exception as e:
-                logger.error("Mapix JSON parse error: %s, body: %s", e, resp.text[:300])
-                return []
+                results.append(GpsPointData(
+                    latitude=float(p.get("la", 0)),
+                    longitude=float(p.get("ln", 0)),
+                    speed=int(p.get("s", 0)) if p.get("s") else None,
+                    heading=int(p.get("a", 0)) if p.get("a") else None,
+                    engine_on=bool(int(p.get("ebs", 0))) if p.get("ebs") is not None else None,
+                    recorded_at=datetime.fromtimestamp(int(p["t"]), tz=timezone.utc) if p.get("t") else None,
+                    raw_data={"imei": imei, **p},
+                ))
+            except (ValueError, KeyError, TypeError) as e:
+                logger.warning("Mapix parse error for IMEI %s: %s", imei, e)
 
-            if not isinstance(data, dict):
-                logger.error("Mapix returned unexpected type: %s", type(data))
-                return []
-
-            results: list[GpsPointData] = []
-            for imei, points in data.items():
-                if not points or not isinstance(points, list):
-                    continue
-                p = points[0]
-                try:
-                    results.append(GpsPointData(
-                        latitude=float(p.get("la", 0)),
-                        longitude=float(p.get("ln", 0)),
-                        speed=int(p.get("s", 0)) if p.get("s") else None,
-                        heading=int(p.get("a", 0)) if p.get("a") else None,
-                        engine_on=bool(int(p.get("ebs", 0))) if p.get("ebs") is not None else None,
-                        recorded_at=datetime.fromtimestamp(int(p["t"]), tz=timezone.utc) if p.get("t") else None,
-                        raw_data={"imei": imei, **p},
-                    ))
-                except (ValueError, KeyError, TypeError) as e:
-                    logger.warning("Mapix parse error for IMEI %s: %s", imei, e)
-
-            return results
+        return results
 
     async def get_track(
         self, date_from: datetime, date_to: datetime, limit: int = 1000
