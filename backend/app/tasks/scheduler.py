@@ -81,14 +81,14 @@ def start_scheduler() -> None:
         coalesce=True,
     )
 
-    # === Задача 3: Синхронизация GPS из Mapix (каждые 60 секунд) ===
-    from app.tasks.mapix_sync_task import sync_mapix_positions
+    # === Задача 3: Синхронизация GPS из всех провайдеров (каждые 60 секунд) ===
+    from app.tasks.mapix_sync_task import sync_gps_positions
 
     scheduler.add_job(
-        sync_mapix_positions,
+        sync_gps_positions,
         trigger=IntervalTrigger(seconds=60),
-        id="mapix_gps_sync",
-        name="Sync GPS positions from Mapix",
+        id="gps_sync",
+        name="Sync GPS positions from all providers",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
