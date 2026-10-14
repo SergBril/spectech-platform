@@ -119,15 +119,38 @@ class MapixAdapter(GpsProviderAdapter):
         try:
             curl_path = shutil.which("curl") or r"C:\Windows\System32\curl.exe"
 
-            # Шаг 1: Авторизация + прогрев (сохраняем cookies в файл)
-            subprocess.run(
+            # Шаг 1: Авторизация (БЕЗ -L чтобы не сбрасывать cookies при редиректе)
+            auth_result = subprocess.run(
                 [
-                    curl_path, "-s", "-L",
+                    curl_path, "-s",
                     "-c", cookie_file,
                     "-X", "POST", auth_url,
                     "-d", f"username={self.login}&password={self.password}&tzoffset=3&lang=ru&soglasie=on",
                     "-H", "Content-Type: application/x-www-form-urlencoded",
                     "-o", os.devnull,
+                    "-w", "%{http_code}",  # Выводим только HTTP-код
+                ],
+                capture_output=True,
+                timeout=30,
+            )
+            auth_code = auth_result.stdout.decode("utf-8", errors="replace").strip()
+            logger.info("Mapix auth response code: %s", auth_code)
+
+            if auth_code not in ("200", "302"):
+                logger.error("Mapix auth failed with HTTP %s", auth_code)
+                return []
+
+            # Проверяем что cookie-файл создан и содержит PHPSESSID
+            if not os.path.exists(cookie_file) or os.path.getsize(cookie_file) == 0:
+                logger.error("Mapix auth failed: cookie file is empty")
+                return []
+
+            # Шаг 1.5: Прогрев сессии (GET главная страница с cookies)
+            subprocess.run(
+                [
+                    curl_path, "-s",
+                    "-b", cookie_file,
+                    "-c", cookie_file,  # Обновляем cookies если сервер добавил новые
                     "-X", "GET", main_url,
                     "-o", os.devnull,
                 ],
