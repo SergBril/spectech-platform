@@ -109,6 +109,17 @@ class MapixAdapter(GpsProviderAdapter):
         # 1. Авторизуемся через httpx чтобы получить cookies
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             await self._ensure_session(client)
+            
+            # Прогрев сессии: загружаем главную страницу чтобы Mapix инициализировал сессию
+            try:
+                warmup = await client.get(
+                    f"{self.api_url}/",
+                    headers={"Referer": f"{self.api_url}/auth"},
+                )
+                logger.debug("Mapix session warmup: status=%s, len=%d", warmup.status_code, len(warmup.text))
+            except Exception as e:
+                logger.warning("Mapix session warmup failed: %s", e)
+            
             session_cookies = dict(client.cookies)
 
         if not session_cookies:
