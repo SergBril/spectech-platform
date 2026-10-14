@@ -19,7 +19,7 @@ scheduler = AsyncIOScheduler(timezone="UTC")
 async def auto_escalate_disputes_task() -> None:
     """
     Фоновая задача: автоэскалация просроченных споров.
-    
+
     Запускается каждые N минут (настраивается через SCHEDULER_INTERVAL_MINUTES).
     Проверяет споры с истёкшим SLA и эскалирует их на следующий уровень.
     """
@@ -35,6 +35,7 @@ async def auto_escalate_disputes_task() -> None:
     finally:
         db.close()
 
+
 def start_scheduler() -> None:
     """Запускает планировщик фоновых задач."""
     if not settings.SCHEDULER_ENABLED:
@@ -56,9 +57,9 @@ def start_scheduler() -> None:
         coalesce=True,
     )
 
-    # 🆕 Задача 2: Еженедельный дайджест (пятница 18:00)
+    # Задача 2: Еженедельный дайджест (пятница 18:00)
     from apscheduler.triggers.cron import CronTrigger
-    
+
     async def weekly_digest_task() -> None:
         """Фоновая задача: отправка еженедельного дайджеста."""
         db = SessionLocal()
@@ -69,7 +70,7 @@ def start_scheduler() -> None:
             logger.error("Error in weekly_digest_task: %s", e, exc_info=True)
         finally:
             db.close()
-    
+
     scheduler.add_job(
         weekly_digest_task,
         trigger=CronTrigger(day_of_week="fri", hour=18, minute=0),
@@ -80,33 +81,17 @@ def start_scheduler() -> None:
         coalesce=True,
     )
 
-    scheduler.start()
-    logger.info(
-        "⏰ Scheduler started. Interval: %d min. Jobs: %d",
-        settings.SCHEDULER_INTERVAL_MINUTES,
-        len(scheduler.get_jobs()),
-    )
+    # === Задача 3: Синхронизация GPS из Mapix (каждые 60 секунд) ===
+    from app.tasks.mapix_sync_task import sync_mapix_positions
 
-
-def start_scheduler() -> None:
-    """Запускает планировщик фоновых задач."""
-    if not settings.SCHEDULER_ENABLED:
-        logger.info("🔇 Scheduler is disabled (SCHEDULER_ENABLED=false)")
-        return
-
-    if scheduler.running:
-        logger.warning("Scheduler is already running")
-        return
-
-    # Задача 1: Автоэскалация просроченных споров
     scheduler.add_job(
-        auto_escalate_disputes_task,
-        trigger=IntervalTrigger(minutes=settings.SCHEDULER_INTERVAL_MINUTES),
-        id="auto_escalate_disputes",
-        name="Auto-escalate overdue disputes",
+        sync_mapix_positions,
+        trigger=IntervalTrigger(seconds=60),
+        id="mapix_gps_sync",
+        name="Sync GPS positions from Mapix",
         replace_existing=True,
-        max_instances=1,  # Не запускать повторно, если предыдущая ещё выполняется
-        coalesce=True,     # Объединять пропущенные запуски
+        max_instances=1,
+        coalesce=True,
     )
 
     scheduler.start()
@@ -138,5 +123,7 @@ def get_scheduler_status() -> dict:
                 "next_run": str(job.next_run_time) if job.next_run_time else None,
             }
             for job in scheduler.get_jobs()
-        ] if scheduler.running else [],
+        ]
+        if scheduler.running
+        else [],
     }

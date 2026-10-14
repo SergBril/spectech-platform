@@ -80,6 +80,22 @@ class MapixAdapter(GpsProviderAdapter):
         """Получает последние позиции ВСЕХ объектов."""
         return await self._fetch_positions()
 
+    def get_all_positions_sync(self) -> list[GpsPointData]:
+        """Синхронная версия get_all_positions для использования в APScheduler."""
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Создаём новый event loop в отдельном потоке
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self._fetch_positions())
+                    return future.result(timeout=30)
+            else:
+                return loop.run_until_complete(self._fetch_positions())
+        except RuntimeError:
+            return asyncio.run(self._fetch_positions())
+
     async def _fetch_positions(self) -> list[GpsPointData]:
         """Внутренний метод: запрашивает /api/io и парсит ответ."""
         async with httpx.AsyncClient(timeout=30) as client:
