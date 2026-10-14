@@ -31,6 +31,33 @@ export const mapApi = {
     return res.data;
   },
 
+  getGpsPositions: async (): Promise<VehiclePosition[]> => {
+    // Получаем последние точки для каждой техники из /gps/points
+    const res = await apiClient.get('/gps/points', { params: { limit: 100 } });
+    const points: any[] = res.data;
+
+    // Группируем по vehicle_id, берём последнюю точку
+    const latestByVehicle = new Map<number, any>();
+    for (const p of points) {
+      const existing = latestByVehicle.get(p.vehicle_id);
+      if (!existing || new Date(p.recorded_at) > new Date(existing.recorded_at)) {
+        latestByVehicle.set(p.vehicle_id, p);
+      }
+    }
+
+    return Array.from(latestByVehicle.values()).map((p) => ({
+      vehicle_id: p.vehicle_id,
+      vehicle_name: `Vehicle #${p.vehicle_id}`,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      speed: p.speed,
+      heading: p.heading,
+      engine_on: p.engine_on,
+      fuel_level: p.fuel_level,
+      recorded_at: p.recorded_at,
+    }));
+  },
+
   getVehicleTrack: async (
     vehicleId: number,
     dateFrom: string,
