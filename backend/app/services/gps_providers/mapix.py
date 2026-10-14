@@ -147,21 +147,33 @@ class MapixAdapter(GpsProviderAdapter):
                     await browser.close()
                     return []
 
-                # Шаг 2: API-запрос через Playwright request API (автоматически передаёт cookies)
+                # Шаг 2: API-запрос через page.evaluate (внутри авторизованной страницы)
+                # context.request НЕ разделяет cookies с page, поэтому используем evaluate
                 api_url = self._anti_cache_url(f"{self.api_url}/api/io")
-                api_resp = await context.request.post(
-                    api_url,
-                    headers={
-                        "X-Requested-With": "XMLHttpRequest",
-                        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                        "Accept": "application/json, text/javascript, */*; q=0.01",
-                        "Referer": f"{self.api_url}/",
-                    },
-                    data="",
-                )
-
-                body = await api_resp.text()
-                status = api_resp.status
+                
+                # Убеждаемся что страница полностью загружена
+                await page.wait_for_load_state("networkidle")
+                
+                result = await page.evaluate("""
+                    async (url) => {
+                        try {
+                            const resp = await fetch(url, {
+                                method: 'POST',
+                                headers: {
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                                    'Accept': 'application/json, text/javascript, */*; q=0.01',
+                                },
+                                body: '',
+                                credentials: 'same-origin',
+                            });
+                            const text = await resp.text();
+                            return { status: resp.status, body: text };
+                        } catch (e) {
+                            return { status: 0, body: 'Error: ' + e.message };
+                        }
+                    }
+                """, api_url)
 
                 await browser.close()
 
