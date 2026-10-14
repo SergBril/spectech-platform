@@ -86,17 +86,13 @@ class MapixAdapter(GpsProviderAdapter):
         """Синхронная версия get_all_positions для использования в APScheduler."""
         import asyncio
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Создаём новый event loop в отдельном потоке
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, self._fetch_positions())
-                    return future.result(timeout=30)
-            else:
-                return loop.run_until_complete(self._fetch_positions())
-        except RuntimeError:
             return asyncio.run(self._fetch_positions())
+        except RuntimeError:
+            # Если уже есть event loop, создаём новый в отдельном потоке
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self._fetch_positions())
+                return future.result(timeout=60)
 
     async def _fetch_positions(self) -> list[GpsPointData]:
         """Внутренний метод: запрашивает /api/io через Playwright (headless browser)."""
@@ -107,6 +103,9 @@ class MapixAdapter(GpsProviderAdapter):
         except ImportError:
             logger.error("Playwright not installed. Run: pip install playwright && playwright install chromium")
             return []
+
+        status = 0
+        body = ""
 
         try:
             async with async_playwright() as p:
@@ -131,7 +130,7 @@ class MapixAdapter(GpsProviderAdapter):
                     await soglasie.check()
 
                 # Кликаем кнопку входа и ждём навигацию AWAY from /auth
-                async with page.expect_navigation(url=f"**/{self.api_url.split('/')[-1]}**", timeout=15000):
+                async with page.expect_navigation(timeout=15000):
                     submit_btn = page.locator('button[type="submit"], input[type="submit"], .login-btn, #login-btn')
                     if await submit_btn.count() > 0:
                         await submit_btn.first.click()
@@ -148,12 +147,11 @@ class MapixAdapter(GpsProviderAdapter):
                     return []
 
                 # Шаг 2: API-запрос через page.evaluate (внутри авторизованной страницы)
-                # context.request НЕ разделяет cookies с page, поэтому используем evaluate
                 api_url = self._anti_cache_url(f"{self.api_url}/api/io")
-                
+
                 # Убеждаемся что страница полностью загружена
                 await page.wait_for_load_state("networkidle")
-                
+
                 result = await page.evaluate("""
                     async (url) => {
                         try {
@@ -175,36 +173,43 @@ class MapixAdapter(GpsProviderAdapter):
                     }
                 """, api_url)
 
+                status = result["status"]
+                body = result["body"]
+
                 await browser.close()
-
-            logger.info(
-                "Mapix /api/io via Playwright: status=%s, body_len=%d, preview=%s",
-                status,
-                len(body),
-                body[:300] if body else "(empty)",
-            )
-
-            if status != 200:
-                logger.error("Mapix /api/io error: HTTP %s", status)
-                return []
-
-            if not body or not body.strip():
-                logger.error("Mapix returned empty body via Playwright")
-                return []
-
-            # Проверяем что ответ JSON, а не HTML
-            if body.strip().startswith("<"):
-                logger.error("Mapix returned HTML instead of JSON: %s", body[:200])
-                return []
-
-            data = json.loads(body)
-
-            if not isinstance(data, dict):
-                logger.error("Mapix returned unexpected type: %s", type(data))
-                return []
 
         except Exception as e:
             logger.error("Mapix Playwright failed: %s", e, exc_info=True)
+            return []
+
+        logger.info(
+            "Mapix /api/io via Playwright: status=%s, body_len=%d, preview=%s",
+            status,
+            len(body),
+            body[:300] if body else "(empty)",
+        )
+
+        if status != 200:
+            logger.error("Mapix /api/io error: HTTP %s", status)
+            return []
+
+        if not body or not body.strip():
+            logger.error("Mapix returned empty body via Playwright")
+            return []
+
+        # Проверяем что ответ JSON, а не HTML
+        if body.strip().startswith("<"):
+            logger.error("Mapix returned HTML instead of JSON: %s", body[:200])
+            return []
+
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError as e:
+            logger.error("Mapix JSON parse error: %s, body: %s", e, body[:300])
+            return []
+
+        if not isinstance(data, dict):
+            logger.error("Mapix returned unexpected type: %s", type(data))
             return []
 
         results: list[GpsPointData] = []
