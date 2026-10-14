@@ -176,19 +176,21 @@ def list_vehicles_with_gps(db: Session = Depends(get_db)):
 @router.patch("/providers/vehicles/{vehicle_id}")
 def update_vehicle_gps_config(
     vehicle_id: int,
-    gps_provider: Optional[str] = None,
-    gps_provider_config: Optional[dict] = None,
+    payload: dict,
     db: Session = Depends(get_db),
 ):
     """Обновление GPS-конфигурации техники."""
+    from pydantic import BaseModel
+
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
-    if gps_provider is not None:
-        vehicle.gps_provider = gps_provider
-    if gps_provider_config is not None:
-        vehicle.gps_provider_config = gps_provider_config
+    # Ожидаем плоский JSON: {"gps_provider": "wialon", "gps_provider_config": {...}}
+    if "gps_provider" in payload:
+        vehicle.gps_provider = payload["gps_provider"]
+    if "gps_provider_config" in payload:
+        vehicle.gps_provider_config = payload["gps_provider_config"]
 
     db.commit()
     db.refresh(vehicle)
