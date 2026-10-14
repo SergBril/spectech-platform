@@ -22,6 +22,7 @@ from app.models.chat import (
 
 # Company
 from app.models.company import Company
+from app.models.user_company import UserCompany  # noqa: F401
 
 from app.models.salary import SalaryRecord, SalaryStatus  # noqa: F401
 from app.models.bank_statement import BankStatement, BankTransaction  # noqa: F401

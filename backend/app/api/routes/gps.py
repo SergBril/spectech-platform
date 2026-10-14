@@ -193,7 +193,6 @@ def get_latest_positions(db: Session = Depends(get_db)):
             .first()
         )
 
-        # Получаем имя техники
         vehicle = db.query(Vehicle).filter(Vehicle.id == p.vehicle_id).first()
 
         result.append({
