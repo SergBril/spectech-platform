@@ -99,146 +99,79 @@ class MapixAdapter(GpsProviderAdapter):
             return asyncio.run(self._fetch_positions())
 
     async def _fetch_positions(self) -> list[GpsPointData]:
-        """Внутренний метод: запрашивает /api/io через два последовательных curl."""
+        """Внутренний метод: запрашивает /api/io через httpx с браузерными заголовками."""
         import json
-        import os
-        import shutil
-        import subprocess
-        import tempfile
 
-        url = self._anti_cache_url(f"{self.api_url}/api/io")
-        auth_url = f"{self.api_url}/auth"
-        main_url = f"{self.api_url}/"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+            "Origin": self.api_url,
+            "Referer": f"{self.api_url}/",
+            "Connection": "keep-alive",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+        }
 
-        # Создаём временные файлы
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-            cookie_file = f.name
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            api_output_file = f.name
-
-        try:
-            curl_path = shutil.which("curl") or r"C:\Windows\System32\curl.exe"
-
-            # Определяем null-устройство для текущей ОС
-            null_device = "NUL" if os.name == "nt" else "/dev/null"
-
-            # Шаг 1: Авторизация (с -L и сохранением POST при редиректе)
-            auth_result = subprocess.run(
-                [
-                    curl_path, "-s", "-L",
-                    "--post301", "--post302", "--post303",
-                    "-c", cookie_file,
-                    "-X", "POST", auth_url,
-                    "-d", f"username={self.login}&password={self.password}&tzoffset=3&lang=ru&soglasie=on",
-                    "-H", "Content-Type: application/x-www-form-urlencoded",
-                    "-o", null_device,
-                    "-w", "%{http_code}",
-                ],
-                capture_output=True,
-                timeout=30,
+        async with httpx.AsyncClient(
+            timeout=30,
+            follow_redirects=True,
+            headers=headers,
+        ) as client:
+            # Шаг 1: Авторизация
+            auth_resp = await client.post(
+                f"{self.api_url}/auth",
+                data={
+                    "username": self.login,
+                    "password": self.password,
+                    "tzoffset": "3",
+                    "lang": "ru",
+                    "soglasie": "on",
+                },
             )
-            auth_code = auth_result.stdout.decode("utf-8", errors="replace").strip()
-            logger.info("Mapix auth response code: %s", auth_code)
+            logger.info("Mapix auth: status=%s, cookies=%s", auth_resp.status_code, list(client.cookies.keys()))
 
-            if auth_code not in ("200", "302"):
-                logger.error("Mapix auth failed with HTTP %s", auth_code)
+            if auth_resp.status_code >= 400:
+                logger.error("Mapix auth failed: HTTP %s", auth_resp.status_code)
                 return []
 
-            # Проверяем что cookie-файл создан и содержит PHPSESSID
-            if not os.path.exists(cookie_file) or os.path.getsize(cookie_file) == 0:
-                logger.error("Mapix auth failed: cookie file is empty")
-                return []
+            # Шаг 2: Прогрев сессии
+            warmup_resp = await client.get(f"{self.api_url}/")
+            logger.debug("Mapix warmup: status=%s, len=%d", warmup_resp.status_code, len(warmup_resp.text))
 
-            # Шаг 1.5: Прогрев сессии (GET главная страница с cookies)
-            subprocess.run(
-                [
-                    curl_path, "-s", "-L",
-                    "-b", cookie_file,
-                    "-c", cookie_file,
-                    "-X", "GET", main_url,
-                    "-o", null_device,
-                ],
-                capture_output=True,
-                timeout=30,
+            # Шаг 3: API-запрос
+            url = self._anti_cache_url(f"{self.api_url}/api/io")
+            api_resp = await client.post(url, content=b"")
+
+            logger.info(
+                "Mapix /api/io: status=%s, content-type=%s, body_len=%d, preview=%s",
+                api_resp.status_code,
+                api_resp.headers.get("content-type", "N/A"),
+                len(api_resp.text),
+                api_resp.text[:300] if api_resp.text else "(empty)",
             )
 
-            # DEBUG: логируем содержимое cookie-файла
+            if api_resp.status_code != 200:
+                logger.error("Mapix /api/io error: HTTP %s", api_resp.status_code)
+                return []
+
+            if not api_resp.text or not api_resp.text.strip():
+                logger.error("Mapix returned empty body despite HTTP 200")
+                return []
+
             try:
-                with open(cookie_file, "r") as cf:
-                    logger.info("Mapix cookie file content:\n%s", cf.read())
+                data = api_resp.json()
             except Exception as e:
-                logger.error("Failed to read cookie file: %s", e)
+                logger.error("Mapix JSON parse error: %s, body: %s", e, api_resp.text[:300])
+                return []
 
-            # Шаг 2: API-запрос с теми же cookies (ответ в отдельный файл)
-            result = subprocess.run(
-                [
-                    curl_path, "-s", "-w", "\n%{http_code}",
-                    "-b", cookie_file,
-                    "-X", "POST", url,
-                    "-H", "X-Requested-With: XMLHttpRequest",
-                    "-H", f"Referer: {main_url}",
-                    "-H", f"Origin: {self.api_url}",
-                    "-H", "Accept: application/json, text/javascript, */*; q=0.01",
-                    "-H", "Content-Type: application/x-www-form-urlencoded; charset=UTF-8",
-                    "-H", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "--data-raw", "",
-                    "-o", api_output_file,
-                ],
-                capture_output=True,
-                timeout=30,
-            )
-
-            # Проверяем существование и размер файла ответа
-            if not os.path.exists(api_output_file):
-                logger.error("Mapix API output file was not created")
-                body = ""
-            else:
-                file_size = os.path.getsize(api_output_file)
-                logger.info("Mapix API output file size: %d bytes", file_size)
-                try:
-                    with open(api_output_file, "rb") as f:
-                        body = f.read().decode("utf-8", errors="replace").strip()
-                except Exception as e:
-                    logger.error("Failed to read API output file: %s", e)
-                    body = ""
-
-            # HTTP-код из stdout curl (-w "%{http_code}")
-            api_code = result.stdout.decode("utf-8", errors="replace").strip() if result.stdout else "?"
-            logger.info("Mapix /api/io HTTP code: %s", api_code)
-
-            if not body and result.stderr:
-                stderr_text = result.stderr.decode("utf-8", errors="replace")
-                logger.error("Mapix curl stderr: %s", stderr_text[:500])
-
-        except Exception as e:
-            logger.error("Mapix /api/io curl failed: %s", e)
-            return []
-        finally:
-            for f in [cookie_file, api_output_file]:
-                try:
-                    os.unlink(f)
-                except OSError:
-                    pass
-
-        logger.info(
-            "Mapix /api/io response: body_len=%d, body_preview=%s",
-            len(body),
-            body[:500] if body else "(empty)",
-        )
-
-        if not body:
-            logger.error("Mapix returned empty body via curl")
-            return []
-
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError as e:
-            logger.error("Mapix JSON parse error: %s, body: %s", e, body[:300])
-            return []
-
-        if not isinstance(data, dict):
-            logger.error("Mapix returned unexpected type: %s", type(data))
-            return []
+            if not isinstance(data, dict):
+                logger.error("Mapix returned unexpected type: %s", type(data))
+                return []
 
         results: list[GpsPointData] = []
         for imei, points in data.items():
