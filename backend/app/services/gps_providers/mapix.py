@@ -118,35 +118,43 @@ class MapixAdapter(GpsProviderAdapter):
                 )
                 page = await context.new_page()
 
-                # Шаг 1: Авторизация
-                auth_resp = await page.goto(f"{self.api_url}/auth")
-                if auth_resp and auth_resp.status >= 400:
-                    logger.error("Mapix auth page failed: HTTP %s", auth_resp.status)
-                    await browser.close()
-                    return []
+                # Шаг 1: Переходим на страницу логина
+                await page.goto(f"{self.api_url}/", wait_until="networkidle")
+                logger.info("Mapix loaded page: %s", page.url)
 
-                # Заполняем форму логина
-                await page.fill('input[name="username"]', self.login)
-                await page.fill('input[name="password"]', self.password)
-                
-                # Ставим галочку согласия если есть
-                soglasie = page.locator('input[name="soglasie"]')
-                if await soglasie.count() > 0:
-                    await soglasie.check()
+                # Если уже авторизованы (URL не /auth), пропускаем логин
+                if "/auth" in page.url:
+                    # Заполняем форму логина
+                    await page.fill('input[name="username"]', self.login)
+                    await page.fill('input[name="password"]', self.password)
 
-                # Нажимаем кнопку входа
-                submit_btn = page.locator('button[type="submit"], input[type="submit"]')
-                if await submit_btn.count() > 0:
-                    await submit_btn.first.click()
+                    # Ставим галочку согласия если есть
+                    soglasie = page.locator('input[name="soglasie"]')
+                    if await soglasie.count() > 0 and not await soglasie.is_checked():
+                        await soglasie.check()
+
+                    # Нажимаем кнопку входа и ждём навигацию
+                    async with page.expect_navigation(wait_until="networkidle", timeout=15000):
+                        submit_btn = page.locator('button[type="submit"], input[type="submit"], .login-btn, #login-btn')
+                        if await submit_btn.count() > 0:
+                            await submit_btn.first.click()
+                        else:
+                            await page.evaluate('document.querySelector("form").submit()')
+
+                    logger.info("Mapix auth successful, current URL: %s", page.url)
+
+                    # Проверяем что ушли со страницы /auth
+                    if "/auth" in page.url:
+                        logger.error("Mapix auth failed: still on /auth page")
+                        await browser.close()
+                        return []
                 else:
-                    # Fallback: submit form
-                    await page.evaluate('document.querySelector("form").submit()')
+                    logger.info("Mapix already authenticated: %s", page.url)
 
-                # Ждём редирект на главную страницу
-                await page.wait_for_url(f"{self.api_url}/**", timeout=15000)
-                logger.info("Mapix auth successful, current URL: %s", page.url)
+                # Шаг 2: Ждём стабилизации страницы
+                await page.wait_for_load_state("networkidle")
 
-                # Шаг 2: Выполняем API-запрос через JS fetch внутри страницы
+                # Шаг 3: Выполняем API-запрос через JS fetch внутри страницы
                 api_url = self._anti_cache_url(f"{self.api_url}/api/io")
                 result = await page.evaluate("""
                     async (url) => {
