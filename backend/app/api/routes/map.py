@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy import select, desc
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_company_id, get_current_user
+from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.telematics import GpsPoint, Geofence
@@ -19,11 +19,11 @@ router = APIRouter()
 def get_vehicle_positions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """📍 Последние позиции всей техники компании."""
     # Получаем все vehicles компании
-    vehicles = db.query(Vehicle).filter(Vehicle.company_id == company_id).all()
+    vehicles = db.query(Vehicle).filter(Vehicle.company_id.in_(company_ids)).all()
     
     positions = []
     for v in vehicles:
@@ -62,7 +62,7 @@ def get_vehicle_track(
     limit: int = Query(default=1000, ge=1, le=10000),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """🛤️ Маршрут техники за выбранный период."""
     dt_from = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
@@ -71,7 +71,7 @@ def get_vehicle_track(
     # Проверяем что vehicle принадлежит компании
     vehicle = db.query(Vehicle).filter(
         Vehicle.id == vehicle_id,
-        Vehicle.company_id == company_id,
+        Vehicle.company_id.in_(company_ids),
     ).first()
     
     if not vehicle:
@@ -111,13 +111,13 @@ def get_vehicle_track(
 def get_geofences(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """🔲 Список геозон компании."""
     from app.models.telematics import Geofence
     
     geofences = db.query(Geofence).filter(
-        Geofence.company_id == company_id
+        Geofence.company_id.in_(company_ids)
     ).all()
     
     return {
@@ -139,7 +139,7 @@ def create_geofence(
     payload: dict = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """🔲 Создать геозону."""
     geofence = Geofence(
@@ -150,7 +150,7 @@ def create_geofence(
         center_longitude=payload.get("center_longitude"),
         radius_meters=payload.get("radius_meters"),
         polygon=payload.get("polygon"),
-        company_id=company_id,
+        company_id=company_ids[0],
     )
     db.add(geofence)
     db.commit()
@@ -164,12 +164,12 @@ def update_geofence(
     payload: dict = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """✏️ Обновить геозону."""
     geofence = db.query(Geofence).filter(
         Geofence.id == geofence_id,
-        Geofence.company_id == company_id,
+        Geofence.company_id.in_(company_ids),
     ).first()
     if not geofence:
         raise HTTPException(status_code=404, detail="Geofence not found")
@@ -188,12 +188,12 @@ def delete_geofence(
     geofence_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """🗑️ Удалить геозону."""
     geofence = db.query(Geofence).filter(
         Geofence.id == geofence_id,
-        Geofence.company_id == company_id,
+        Geofence.company_id.in_(company_ids),
     ).first()
     if not geofence:
         raise HTTPException(status_code=404, detail="Geofence not found")
