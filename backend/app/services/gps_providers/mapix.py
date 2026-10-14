@@ -119,16 +119,20 @@ class MapixAdapter(GpsProviderAdapter):
         try:
             curl_path = shutil.which("curl") or r"C:\Windows\System32\curl.exe"
 
-            # Шаг 1: Авторизация (БЕЗ -L чтобы не сбрасывать cookies при редиректе)
+            # Определяем null-устройство для текущей ОС
+            null_device = "NUL" if os.name == "nt" else "/dev/null"
+
+            # Шаг 1: Авторизация (с -L и сохранением POST при редиректе)
             auth_result = subprocess.run(
                 [
-                    curl_path, "-s",
+                    curl_path, "-s", "-L",
+                    "--post301", "--post302", "--post303",
                     "-c", cookie_file,
                     "-X", "POST", auth_url,
                     "-d", f"username={self.login}&password={self.password}&tzoffset=3&lang=ru&soglasie=on",
                     "-H", "Content-Type: application/x-www-form-urlencoded",
-                    "-o", os.devnull,
-                    "-w", "%{http_code}",  # Выводим только HTTP-код
+                    "-o", null_device,
+                    "-w", "%{http_code}",
                 ],
                 capture_output=True,
                 timeout=30,
@@ -148,20 +152,15 @@ class MapixAdapter(GpsProviderAdapter):
             # Шаг 1.5: Прогрев сессии (GET главная страница с cookies)
             subprocess.run(
                 [
-                    curl_path, "-s",
+                    curl_path, "-s", "-L",
                     "-b", cookie_file,
-                    "-c", cookie_file,  # Обновляем cookies если сервер добавил новые
+                    "-c", cookie_file,
                     "-X", "GET", main_url,
-                    "-o", os.devnull,
+                    "-o", null_device,
                 ],
                 capture_output=True,
                 timeout=30,
             )
-
-            # Проверяем что cookie-файл создан и не пустой
-            if not os.path.exists(cookie_file) or os.path.getsize(cookie_file) == 0:
-                logger.error("Mapix auth failed: cookie file is empty")
-                return []
 
             # Шаг 2: API-запрос с теми же cookies (ответ в отдельный файл)
             result = subprocess.run(
