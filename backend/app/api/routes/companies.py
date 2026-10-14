@@ -12,6 +12,7 @@ from app.models.company import Company
 
 router = APIRouter()
 import logging
+import httpx
 
 logger = logging.getLogger("spectech.companies")
 
@@ -124,3 +125,35 @@ def update_company_requisites(
     logger.info("Updated requisites for company #%s (%s)", company_id, company.name)
 
     return {"detail": "Реквизиты обновлены", "company_id": company_id}
+
+@router.post("/dadata/suggest/{suggest_type}")
+async def dadata_suggest(
+    suggest_type: str,
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+):
+    """Прокси для DaData Suggestions API (обходит CORS)."""
+    import os
+
+    api_key = os.environ.get("DADATA_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="DADATA_API_KEY not configured on server")
+
+    allowed_types = ["party", "address", "bank", "fio", "email"]
+    if suggest_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Invalid suggest type. Allowed: {allowed_types}")
+
+    url = f"https://suggestions.dadata.ru/suggestion/api/4_1/rs/suggest/{suggest_type}"
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(
+            url,
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": f"Token {api_key}",
+            },
+        )
+
+    return response.json()

@@ -181,12 +181,13 @@ export const CompanySettingsPage: React.FC = () => {
         if (field === 'bank_name' || field === 'bik') queryType = 'bank';
         if (field === 'inn' || field === 'ogrn' || field === 'name' || field === 'legal_name') queryType = 'party';
 
-        const response = await fetch(`https://suggestions.dadata.ru/suggestion/api/4_1/rs/suggest/${queryType}`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/companies/dadata/suggest/${queryType}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Accept: 'application/json',
-            Authorization: `Token ${DADATA_API_KEY}`,
+            ...(localStorage.getItem('access_token')
+              ? { Authorization: `Bearer ${localStorage.getItem('access_token')}` }
+              : {}),
           },
           body: JSON.stringify({ query: value, count: 5 }),
         });
