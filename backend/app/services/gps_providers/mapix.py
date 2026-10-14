@@ -105,15 +105,16 @@ class MapixAdapter(GpsProviderAdapter):
 
             url = self._anti_cache_url(f"{self.api_url}/api/io")
 
-            # Mapix требует POST с телом (даже пустым) и Content-Type
-            # data=b"" → form-encoded body с Content-Length: 0 + Content-Type header
+            # Mapix требует POST с непустым телом
+            # content=" " (пробел) гарантирует Content-Length > 0
             resp = await client.post(
                 url,
-                data=b"",  # Пустое байтовое тело → гарантирует Content-Length + Content-Type
+                content=" ",  # Непустое тело → Content-Length: 1
                 headers={
                     "X-Requested-With": "XMLHttpRequest",
                     "Referer": f"{self.api_url}/",
                     "Accept": "application/json, text/javascript, */*; q=0.01",
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 },
             )
 
