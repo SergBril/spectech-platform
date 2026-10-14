@@ -99,29 +99,24 @@ class MapixAdapter(GpsProviderAdapter):
             return asyncio.run(self._fetch_positions())
 
     async def _fetch_positions(self) -> list[GpsPointData]:
-        """Внутренний метод: запрашивает /api/io через curl (единственный надёжный способ)."""
-        import subprocess
-        import json
+        # Записываем cookies во временный файл (Netscape format для curl)
+        import tempfile
+        import os
 
-        # Сначала авторизуемся через httpx чтобы получить cookies
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            await self._ensure_session(client)
-            session_cookies = dict(client.cookies)
-
-        url = self._anti_cache_url(f"{self.api_url}/api/io")
-
-        # Формируем cookie строку для curl
-        cookie_str = "; ".join(f"{k}={v}" for k, v in session_cookies.items())
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            for k, v in session_cookies.items():
+                # Netscape cookie format: domain\tflag\tpath\tsecure\texpiry\tname\tvalue
+                f.write(f".gps.mapix.su\tTRUE\t/\tTRUE\t0\t{k}\t{v}\n")
+            cookie_file = f.name
 
         try:
-            # На Windows curl может быть алиасом PowerShell, используем полный путь
             import shutil
             curl_path = shutil.which("curl") or r"C:\Windows\System32\curl.exe"
 
             result = subprocess.run(
                 [
                     curl_path, "-s", "-X", "POST", url,
-                    "-b", cookie_str,
+                    "-b", cookie_file,  # Cookie файл вместо строки
                     "-H", "X-Requested-With: XMLHttpRequest",
                     "-H", f"Referer: {self.api_url}/",
                     "-H", "Accept: application/json, text/javascript, */*; q=0.01",
@@ -138,6 +133,12 @@ class MapixAdapter(GpsProviderAdapter):
         except Exception as e:
             logger.error("Mapix /api/io curl failed: %s", e)
             return []
+        finally:
+            # Удаляем временный cookie-файл
+            try:
+                os.unlink(cookie_file)
+            except OSError:
+                pass
 
         logger.info(
             "Mapix /api/io response: body_len=%d, body_preview=%s",
