@@ -99,10 +99,25 @@ class MapixAdapter(GpsProviderAdapter):
             return asyncio.run(self._fetch_positions())
 
     async def _fetch_positions(self) -> list[GpsPointData]:
-        # Записываем cookies во временный файл (Netscape format для curl)
-        import tempfile
+        """Внутренний метод: запрашивает /api/io через curl с cookie-файлом."""
+        import json
         import os
+        import shutil
+        import subprocess
+        import tempfile
 
+        # 1. Авторизуемся через httpx чтобы получить cookies
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            await self._ensure_session(client)
+            session_cookies = dict(client.cookies)
+
+        if not session_cookies:
+            logger.error("Mapix: no cookies after auth")
+            return []
+
+        url = self._anti_cache_url(f"{self.api_url}/api/io")
+
+        # 2. Записываем cookies во временный файл (Netscape format для curl)
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             for k, v in session_cookies.items():
                 # Netscape cookie format: domain\tflag\tpath\tsecure\texpiry\tname\tvalue
@@ -110,13 +125,12 @@ class MapixAdapter(GpsProviderAdapter):
             cookie_file = f.name
 
         try:
-            import shutil
             curl_path = shutil.which("curl") or r"C:\Windows\System32\curl.exe"
 
             result = subprocess.run(
                 [
                     curl_path, "-s", "-X", "POST", url,
-                    "-b", cookie_file,  # Cookie файл вместо строки
+                    "-b", cookie_file,
                     "-H", "X-Requested-With: XMLHttpRequest",
                     "-H", f"Referer: {self.api_url}/",
                     "-H", "Accept: application/json, text/javascript, */*; q=0.01",
@@ -134,7 +148,6 @@ class MapixAdapter(GpsProviderAdapter):
             logger.error("Mapix /api/io curl failed: %s", e)
             return []
         finally:
-            # Удаляем временный cookie-файл
             try:
                 os.unlink(cookie_file)
             except OSError:
