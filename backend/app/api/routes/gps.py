@@ -34,6 +34,7 @@ class GpsPointImport(BaseModel):
 class GpsPointResponse(BaseModel):
     id: int
     vehicle_id: int
+    vehicle_name: str | None = None
     latitude: float
     longitude: float
     speed: int | None = None
@@ -103,6 +104,8 @@ def list_gps_points(
     db: Session = Depends(get_db),
 ):
     """Список GPS-точек с фильтрацией по технике и периоду."""
+    from sqlalchemy import func
+
     q = db.query(GpsPoint)
 
     if vehicle_id is not None:
@@ -114,7 +117,39 @@ def list_gps_points(
 
     q = q.order_by(GpsPoint.recorded_at.desc())
     points = q.offset(offset).limit(limit).all()
-    return points
+
+    # Собираем уникальные vehicle_id и подтягиваем имена одним запросом
+    vehicle_ids = list({p.vehicle_id for p in points})
+    vehicles_map = {}
+    if vehicle_ids:
+        vehicles = (
+            db.query(Vehicle.id, Vehicle.name)
+            .filter(Vehicle.id.in_(vehicle_ids))
+            .all()
+        )
+        vehicles_map = {v.id: v.name for v in vehicles}
+
+    # Обогащаем точки именем техники
+    result = []
+    for p in points:
+        resp = GpsPointResponse(
+            id=p.id,
+            vehicle_id=p.vehicle_id,
+            latitude=p.latitude,
+            longitude=p.longitude,
+            speed=p.speed,
+            heading=p.heading,
+            engine_on=p.engine_on,
+            fuel_level=p.fuel_level,
+            recorded_at=p.recorded_at,
+            device_id=p.device_id,
+        )
+        # Добавляем vehicle_name как доп. поле (не в модели, но в JSON)
+        resp_dict = resp.model_dump()
+        resp_dict["vehicle_name"] = vehicles_map.get(p.vehicle_id, f"Vehicle #{p.vehicle_id}")
+        result.append(resp_dict)
+
+    return result
 
 
 @router.get("/points/stats")
