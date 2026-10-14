@@ -6,6 +6,7 @@ import { CompanyProvider } from './contexts/CompanyContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { Toaster } from 'react-hot-toast';
 import PageLoader from './components/PageLoader';
+import CompanySettingsPage from './pages/CompanySettingsPage';
 
 // Lazy-loaded pages
 import {
@@ -85,6 +86,7 @@ const AppRoutes = () => {
         <Route path="/reconciliation" element={<ProtectedRoute><ReconciliationPage /></ProtectedRoute>} />
         <Route path="/marketplace/:id" element={<ProtectedRoute><VehicleDetailPage /></ProtectedRoute>} />
         <Route path="/companies/:id" element={<ProtectedRoute><CompanyProfilePage /></ProtectedRoute>} />
+        <Route path="/settings/company" element={<ProtectedRoute><CompanySettingsPage /></ProtectedRoute>} />
         <Route path="/my-listings" element={<ProtectedRoute><MyListingsPage /></ProtectedRoute>} />
         <Route path="/salaries" element={<ProtectedRoute><SalariesPage /></ProtectedRoute>} />
         <Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />

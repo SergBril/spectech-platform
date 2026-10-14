@@ -82,3 +82,19 @@ class Company(Base):
         comment='Распределение оценок: {"5": 10, "4": 3, "3": 1, "2": 0, "1": 0}',
     )
 
+    # === 📄 РЕКВИЗИТЫ ДЛЯ ФОРМИРОВАНИЯ ДОКУМЕНТОВ ===
+    actual_address = Column(String(500), nullable=True, comment="Фактический адрес")
+    email = Column(String(255), nullable=True, comment="Email для документов")
+    bank_name = Column(String(300), nullable=True, comment="Наименование банка")
+    bik = Column(String(20), nullable=True, comment="БИК банка")
+    checking_account = Column(String(50), nullable=True, comment="Расчётный счёт")
+    correspondent_account = Column(String(50), nullable=True, comment="Корреспондентский счёт")
+    ogrn = Column(String(50), nullable=True, comment="ОГРН / ОГРНИП")
+    okpo = Column(String(20), nullable=True, comment="ОКПО")
+    director_name = Column(String(300), nullable=True, comment="ФИО руководителя")
+    director_position = Column(
+        String(100), nullable=True, default="Генеральный директор",
+        comment="Должность руководителя",
+    )
+    stamp_image_url = Column(String(500), nullable=True, comment="URL изображения печати")
+    signature_image_url = Column(String(500), nullable=True, comment="URL изображения подписи")
