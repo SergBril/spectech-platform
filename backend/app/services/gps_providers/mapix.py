@@ -111,19 +111,26 @@ class MapixAdapter(GpsProviderAdapter):
         url = self._anti_cache_url(f"{self.api_url}/api/io")
 
         try:
-            resp = sync_requests.post(
+            # Создаём запрос вручную чтобы гарантировать Content-Length: 0
+            # requests.post(data="") не устанавливает Content-Length вообще
+            session = sync_requests.Session()
+            req = sync_requests.Request(
+                "POST",
                 url,
-                data="",  # Пустое тело как curl --data-raw ""
+                data="",
                 cookies=session_cookies,
                 headers={
                     "X-Requested-With": "XMLHttpRequest",
                     "Referer": f"{self.api_url}/",
                     "Accept": "application/json, text/javascript, */*; q=0.01",
-                    # НЕ устанавливаем Content-Type — curl --data-raw "" тоже не ставит
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    "Content-Length": "0",  # Явно как в curl --data-raw ""
                 },
-                timeout=30,
             )
-
+            prepared = session.prepare_request(req)
+            # Убеждаемся что Content-Length сохранён после prepare
+            prepared.headers["Content-Length"] = "0"
+            resp = session.send(prepared, timeout=30)
         except Exception as e:
             logger.error("Mapix /api/io request failed: %s", e)
             return []
