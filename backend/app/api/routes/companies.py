@@ -135,7 +135,7 @@ async def dadata_suggest(
     """Прокси для DaData Suggestions API (обходит CORS)."""
     import os
 
-    api_key = os.environ.get("DADATA_API_KEY", "")
+    api_key = os.environ.get("DADATA_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(status_code=500, detail="DADATA_API_KEY not configured on server")
 
@@ -143,7 +143,7 @@ async def dadata_suggest(
     if suggest_type not in allowed_types:
         raise HTTPException(status_code=400, detail=f"Invalid suggest type. Allowed: {allowed_types}")
 
-    url = f"https://suggestions.dadata.ru/suggestion/api/4_1/rs/suggest/{suggest_type}"
+    url = f"https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/{suggest_type}"
 
     async with httpx.AsyncClient(timeout=10) as client:
         response = await client.post(
@@ -156,4 +156,6 @@ async def dadata_suggest(
             },
         )
 
+    if response.status_code != 200 or not response.content:
+        return {"suggestions": []}
     return response.json()
