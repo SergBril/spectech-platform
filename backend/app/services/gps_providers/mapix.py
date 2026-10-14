@@ -124,16 +124,13 @@ class MapixAdapter(GpsProviderAdapter):
             result = subprocess.run(
                 [
                     curl_path, "-s",
-                    "-c", cookie_file,       # Сохранять cookies
-                    "-b", cookie_file,       # Отправлять cookies
-                    "-L",                    # Follow redirects
-                    # Шаг 1: Авторизация
+                    "-c", cookie_file,
+                    "-b", cookie_file,
+                    "-L",
                     "-X", "POST", auth_url,
                     "-d", f"username={self.login}&password={self.password}&tzoffset=3&lang=ru&soglasie=on",
                     "-H", "Content-Type: application/x-www-form-urlencoded",
-                    # Шаг 2: Прогрев сессии (GET главная страница)
                     "-X", "GET", main_url,
-                    # Шаг 3: API-запрос
                     "-X", "POST", url,
                     "-H", "X-Requested-With: XMLHttpRequest",
                     "-H", f"Referer: {main_url}",
@@ -142,12 +139,13 @@ class MapixAdapter(GpsProviderAdapter):
                     "--data-raw", "",
                 ],
                 capture_output=True,
-                text=True,
                 timeout=30,
             )
-            body = result.stdout.strip()
+            # Декодируем stdout как UTF-8 (Mapix возвращает UTF-8, не cp1251)
+            body = result.stdout.decode("utf-8", errors="replace").strip() if result.stdout else ""
             if not body and result.stderr:
-                logger.error("Mapix curl stderr: %s", result.stderr[:500])
+                stderr_text = result.stderr.decode("utf-8", errors="replace")
+                logger.error("Mapix curl stderr: %s", stderr_text[:500])
         except Exception as e:
             logger.error("Mapix /api/io curl failed: %s", e)
             return []
