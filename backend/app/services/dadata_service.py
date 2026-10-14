@@ -18,8 +18,8 @@ class DaDataService:
     """Сервис для работы с API DaData."""
 
     def __init__(self):
-        self.api_key = os.environ.get("DADATA_API_KEY", "")
-        self.token = os.environ.get("DADATA_TOKEN", "")
+        self.api_key = os.environ.get("DADATA_API_KEY", "").strip()
+        self.token = os.environ.get("DADATA_TOKEN", "").strip()
 
         if not self.api_key:
             logger.warning("⚠️ DADATA_API_KEY not set in environment")
