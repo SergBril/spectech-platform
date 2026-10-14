@@ -118,77 +118,74 @@ class MapixAdapter(GpsProviderAdapter):
                 )
                 page = await context.new_page()
 
-                # Шаг 1: Переходим на страницу логина
-                await page.goto(f"{self.api_url}/", wait_until="networkidle")
-                logger.info("Mapix loaded page: %s", page.url)
+                # Шаг 1: Переходим на страницу авторизации
+                await page.goto(f"{self.api_url}/auth", wait_until="networkidle")
+                logger.info("Mapix auth page loaded: %s", page.url)
 
-                # Если уже авторизованы (URL не /auth), пропускаем логин
-                if "/auth" in page.url:
-                    # Заполняем форму логина
-                    await page.fill('input[name="username"]', self.login)
-                    await page.fill('input[name="password"]', self.password)
+                # Заполняем форму
+                await page.fill('input[name="username"]', self.login)
+                await page.fill('input[name="password"]', self.password)
 
-                    # Ставим галочку согласия если есть
-                    soglasie = page.locator('input[name="soglasie"]')
-                    if await soglasie.count() > 0 and not await soglasie.is_checked():
-                        await soglasie.check()
+                soglasie = page.locator('input[name="soglasie"]')
+                if await soglasie.count() > 0 and not await soglasie.is_checked():
+                    await soglasie.check()
 
-                    # Нажимаем кнопку входа и ждём навигацию
-                    async with page.expect_navigation(wait_until="networkidle", timeout=15000):
-                        submit_btn = page.locator('button[type="submit"], input[type="submit"], .login-btn, #login-btn')
-                        if await submit_btn.count() > 0:
-                            await submit_btn.first.click()
-                        else:
-                            await page.evaluate('document.querySelector("form").submit()')
+                # Кликаем кнопку входа и ждём навигацию AWAY from /auth
+                async with page.expect_navigation(url=f"**/{self.api_url.split('/')[-1]}**", timeout=15000):
+                    submit_btn = page.locator('button[type="submit"], input[type="submit"], .login-btn, #login-btn')
+                    if await submit_btn.count() > 0:
+                        await submit_btn.first.click()
+                    else:
+                        await page.evaluate('document.querySelector("form").submit()')
 
-                    logger.info("Mapix auth successful, current URL: %s", page.url)
-
-                    # Проверяем что ушли со страницы /auth
-                    if "/auth" in page.url:
-                        logger.error("Mapix auth failed: still on /auth page")
-                        await browser.close()
-                        return []
-                else:
-                    logger.info("Mapix already authenticated: %s", page.url)
-
-                # Шаг 2: Ждём стабилизации страницы
                 await page.wait_for_load_state("networkidle")
+                logger.info("Mapix after login URL: %s", page.url)
 
-                # Шаг 3: Выполняем API-запрос через JS fetch внутри страницы
+                # Проверяем успешность авторизации
+                if "/auth" in page.url:
+                    logger.error("Mapix auth failed: still on /auth page after submit")
+                    await browser.close()
+                    return []
+
+                # Шаг 2: API-запрос через Playwright request API (автоматически передаёт cookies)
                 api_url = self._anti_cache_url(f"{self.api_url}/api/io")
-                result = await page.evaluate("""
-                    async (url) => {
-                        const resp = await fetch(url, {
-                            method: 'POST',
-                            headers: {
-                                'X-Requested-With': 'XMLHttpRequest',
-                                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                            },
-                            body: '',
-                        });
-                        const text = await resp.text();
-                        return { status: resp.status, body: text };
-                    }
-                """, api_url)
+                api_resp = await context.request.post(
+                    api_url,
+                    headers={
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                        "Accept": "application/json, text/javascript, */*; q=0.01",
+                        "Referer": f"{self.api_url}/",
+                    },
+                    data="",
+                )
+
+                body = await api_resp.text()
+                status = api_resp.status
 
                 await browser.close()
 
             logger.info(
                 "Mapix /api/io via Playwright: status=%s, body_len=%d, preview=%s",
-                result["status"],
-                len(result["body"]),
-                result["body"][:300] if result["body"] else "(empty)",
+                status,
+                len(body),
+                body[:300] if body else "(empty)",
             )
 
-            if result["status"] != 200:
-                logger.error("Mapix /api/io error: HTTP %s", result["status"])
+            if status != 200:
+                logger.error("Mapix /api/io error: HTTP %s", status)
                 return []
 
-            if not result["body"] or not result["body"].strip():
+            if not body or not body.strip():
                 logger.error("Mapix returned empty body via Playwright")
                 return []
 
-            data = json.loads(result["body"])
+            # Проверяем что ответ JSON, а не HTML
+            if body.strip().startswith("<"):
+                logger.error("Mapix returned HTML instead of JSON: %s", body[:200])
+                return []
+
+            data = json.loads(body)
 
             if not isinstance(data, dict):
                 logger.error("Mapix returned unexpected type: %s", type(data))
@@ -202,16 +199,16 @@ class MapixAdapter(GpsProviderAdapter):
         for imei, points in data.items():
             if not points or not isinstance(points, list):
                 continue
-            p = points[0]
+            pt = points[0]
             try:
                 results.append(GpsPointData(
-                    latitude=float(p.get("la", 0)),
-                    longitude=float(p.get("ln", 0)),
-                    speed=int(p.get("s", 0)) if p.get("s") else None,
-                    heading=int(p.get("a", 0)) if p.get("a") else None,
-                    engine_on=bool(int(p.get("ebs", 0))) if p.get("ebs") is not None else None,
-                    recorded_at=datetime.fromtimestamp(int(p["t"]), tz=timezone.utc) if p.get("t") else None,
-                    raw_data={"imei": imei, **p},
+                    latitude=float(pt.get("la", 0)),
+                    longitude=float(pt.get("ln", 0)),
+                    speed=int(pt.get("s", 0)) if pt.get("s") else None,
+                    heading=int(pt.get("a", 0)) if pt.get("a") else None,
+                    engine_on=bool(int(pt.get("ebs", 0))) if pt.get("ebs") is not None else None,
+                    recorded_at=datetime.fromtimestamp(int(pt["t"]), tz=timezone.utc) if pt.get("t") else None,
+                    raw_data={"imei": imei, **pt},
                 ))
             except (ValueError, KeyError, TypeError) as e:
                 logger.warning("Mapix parse error for IMEI %s: %s", imei, e)
