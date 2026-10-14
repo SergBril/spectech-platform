@@ -156,37 +156,80 @@ class MapixAdapter(GpsProviderAdapter):
                     await browser.close()
                     return []
 
-                # Шаг 2: API-запрос через page.evaluate (внутри авторизованной страницы)
-                api_url = self._anti_cache_url(f"{self.api_url}/api/io")
+                # Шаг 2: Перехватываем реальный API-запрос, который делает страница Mapix
+                # Вместо ручного fetch(), ждём когда страница сама обратится к /api/io
+                api_response_body = None
+                api_response_status = 0
 
-                # Убеждаемся что страница полностью загружена
-                await page.wait_for_load_state("networkidle")
+                async def handle_response(response):
+                    nonlocal api_response_body, api_response_status
+                    if "/api/io" in response.url and "time=" in response.url:
+                        try:
+                            api_response_body = await response.text()
+                            api_response_status = response.status
+                            logger.info("Mapix intercepted /api/io response: status=%s, len=%d",
+                                          response.status, len(api_response_body))
+                        except Exception as e:
+                            logger.warning("Failed to read intercepted response: %s", e)
 
-                result = await page.evaluate("""
-                    async (url) => {
-                        try {
-                            const resp = await fetch(url, {
-                                method: 'POST',
-                                headers: {
+                page.on("response", handle_response)
+
+                # Перезагружаем страницу чтобы спровоцировать автоматический запрос к /api/io
+                await page.reload(wait_until="networkidle", timeout=30000)
+
+                # Если страница не сделала запрос автоматически, пробуем вручную через evaluate
+                if api_response_body is None:
+                    logger.info("No auto /api/io request detected, trying manual fetch with CSRF")
+                    
+                    # Пытаемся найти CSRF-токен на странице
+                    csrf_token = await page.evaluate("""
+                        () => {
+                            // Ищем токен в meta, hidden input, или JS-переменных
+                            const meta = document.querySelector('meta[name="csrf-token"]');
+                            if (meta) return meta.content;
+                            const input = document.querySelector('input[name="_token"], input[name="csrf_token"]');
+                            if (input) return input.value;
+                            if (window.csrfToken) return window.csrfToken;
+                            if (window._token) return window._token;
+                            return null;
+                        }
+                    """)
+                    logger.info("Mapix CSRF token: %s", csrf_token)
+
+                    api_url = self._anti_cache_url(f"{self.api_url}/api/io")
+                    result = await page.evaluate("""
+                        async (args) => {
+                            const { url, csrf } = args;
+                            try {
+                                const headers = {
                                     'X-Requested-With': 'XMLHttpRequest',
                                     'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
                                     'Accept': 'application/json, text/javascript, */*; q=0.01',
-                                },
-                                body: '',
-                                credentials: 'same-origin',
-                            });
-                            const text = await resp.text();
-                            return { status: resp.status, body: text };
-                        } catch (e) {
-                            return { status: 0, body: 'Error: ' + e.message };
+                                };
+                                if (csrf) headers['X-CSRF-TOKEN'] = csrf;
+                                
+                                const resp = await fetch(url, {
+                                    method: 'POST',
+                                    headers: headers,
+                                    body: csrf ? '_token=' + encodeURIComponent(csrf) : '',
+                                    credentials: 'same-origin',
+                                });
+                                const text = await resp.text();
+                                return { status: resp.status, body: text };
+                            } catch (e) {
+                                return { status: 0, body: 'Error: ' + e.message };
+                            }
                         }
-                    }
-                """, api_url)
+                    """, {"url": api_url, "csrf": csrf_token})
 
-                status = result["status"]
-                body = result["body"]
+                    api_response_status = result["status"]
+                    api_response_body = result["body"]
 
+                page.remove_listener("response", handle_response)
                 await browser.close()
+
+            status = api_response_status
+            body = api_response_body or ""
 
         except Exception as e:
             logger.error("Mapix Playwright failed: %s", e, exc_info=True)
