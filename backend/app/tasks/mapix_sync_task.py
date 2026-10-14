@@ -12,12 +12,17 @@ from app.services.gps_providers.mapix import MapixAdapter
 
 logger = logging.getLogger("spectech.tasks.mapix_sync")
 
+# Счётчик пропусков для уменьшения спама в логах
+_skip_count = 0
+
 
 def sync_mapix_positions() -> None:
     """
     Опрашивает Mapix API и записывает новые позиции в gps_points.
     Запускается каждые 60 секунд через APScheduler.
     """
+    global _skip_count
+
     db: Session = SessionLocal()
     try:
         # Находим все vehicles с провайдером mapix
@@ -35,6 +40,8 @@ def sync_mapix_positions() -> None:
             return
 
         logger.info("🔄 Mapix sync: found %d vehicle(s) with mapix provider", len(vehicles))
+
+        total_new_points = 0
 
         for vehicle in vehicles:
             config = vehicle.gps_provider_config or {}
@@ -87,7 +94,7 @@ def sync_mapix_positions() -> None:
                     new_points += 1
 
                 if new_points > 0:
-                    db.commit()
+                    total_new_points += new_points
                     logger.info("✅ Vehicle #%s (%s): %d new GPS points from Mapix",
                                 vehicle.id, vehicle.name, new_points)
                 else:
@@ -97,6 +104,18 @@ def sync_mapix_positions() -> None:
                 logger.error("❌ Mapix sync failed for vehicle #%s (%s): %s",
                              vehicle.id, vehicle.name, e)
                 db.rollback()
+
+        if total_new_points > 0:
+            _skip_count = 0  # Сброс счётчика при успехе
+            db.commit()
+        else:
+            _skip_count += 1
+            if _skip_count % 10 == 1:  # Логируем каждый 10-й пропуск (~каждые 10 минут)
+                logger.warning(
+                    "⚠️ Mapix sync skipped %d consecutive cycles (no data). "
+                    "Waiting for official API access from Mapix support.",
+                    _skip_count,
+                )
 
     except Exception as e:
         logger.error("❌ Mapix sync task error: %s", e)
