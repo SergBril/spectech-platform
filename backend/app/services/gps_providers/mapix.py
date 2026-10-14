@@ -106,7 +106,6 @@ class MapixAdapter(GpsProviderAdapter):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "application/json, text/javascript, */*; q=0.01",
             "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Accept-Encoding": "gzip, deflate, br",
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             "X-Requested-With": "XMLHttpRequest",
             "Origin": self.api_url,
@@ -139,34 +138,42 @@ class MapixAdapter(GpsProviderAdapter):
                 logger.error("Mapix auth failed: HTTP %s", auth_resp.status_code)
                 return []
 
-            # Шаг 2: Прогрев сессии
+            # Шаг 2: Прогрев — GET главная страница
             warmup_resp = await client.get(f"{self.api_url}/")
             logger.debug("Mapix warmup: status=%s, len=%d", warmup_resp.status_code, len(warmup_resp.text))
 
-            # Шаг 3: API-запрос
+            # Шаг 3: Инициализация API — POST /api/io БЕЗ anti-cache параметра
+            init_resp = await client.post(f"{self.api_url}/api/io", content=b"")
+            logger.info(
+                "Mapix /api/io init: status=%s, body_len=%d, preview=%s",
+                init_resp.status_code,
+                len(init_resp.text),
+                init_resp.text[:200] if init_resp.text else "(empty)",
+            )
+
+            # Шаг 4: Основной запрос С anti-cache
             url = self._anti_cache_url(f"{self.api_url}/api/io")
             api_resp = await client.post(url, content=b"")
 
             logger.info(
-                "Mapix /api/io: status=%s, content-type=%s, body_len=%d, preview=%s",
+                "Mapix /api/io main: status=%s, content-type=%s, body_len=%d, preview=%s",
                 api_resp.status_code,
                 api_resp.headers.get("content-type", "N/A"),
                 len(api_resp.text),
                 api_resp.text[:300] if api_resp.text else "(empty)",
             )
 
-            if api_resp.status_code != 200:
-                logger.error("Mapix /api/io error: HTTP %s", api_resp.status_code)
-                return []
+            # Используем ответ из шага 3 или 4 ( whichever has data)
+            resp_text = api_resp.text if api_resp.text and api_resp.text.strip() else init_resp.text
 
-            if not api_resp.text or not api_resp.text.strip():
-                logger.error("Mapix returned empty body despite HTTP 200")
+            if not resp_text or not resp_text.strip():
+                logger.error("Mapix returned empty body from both init and main requests")
                 return []
 
             try:
-                data = api_resp.json()
+                data = json.loads(resp_text)
             except Exception as e:
-                logger.error("Mapix JSON parse error: %s, body: %s", e, api_resp.text[:300])
+                logger.error("Mapix JSON parse error: %s, body: %s", e, resp_text[:300])
                 return []
 
             if not isinstance(data, dict):
