@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+import Layout from '../../components/Layout';
 
 interface VehicleGps {
   id: number;
@@ -96,127 +97,135 @@ export default function GpsAdminPage() {
     return new Date(d).toLocaleString('ru-RU');
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Загрузка...</div>;
+  if (loading) {
+    return (
+      <Layout>
+        <div className="p-8 text-center text-gray-500">Загрузка...</div>
+      </Layout>
+    );
+  }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">📡 Управление GPS</h1>
+    <Layout>
+      <div className="p-6 max-w-7xl mx-auto space-y-6">
+        <h1 className="text-2xl font-bold text-gray-900">📡 Управление GPS</h1>
 
-      {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="text-sm text-gray-500">Всего точек</div>
-            <div className="text-2xl font-bold">{stats.total_points}</div>
+        {/* Stats Cards */}
+        {stats && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="text-sm text-gray-500">Всего точек</div>
+              <div className="text-2xl font-bold">{stats.total_points}</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="text-sm text-gray-500">Техника с данными</div>
+              <div className="text-2xl font-bold">{stats.vehicles_with_data}</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="text-sm text-gray-500">Последняя точка</div>
+              <div className="text-sm font-medium">{formatDate(stats.latest_recorded_at)}</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="text-sm text-gray-500">Первая точка</div>
+              <div className="text-sm font-medium">{formatDate(stats.oldest_recorded_at)}</div>
+            </div>
           </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="text-sm text-gray-500">Техника с данными</div>
-            <div className="text-2xl font-bold">{stats.vehicles_with_data}</div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="text-sm text-gray-500">Последняя точка</div>
-            <div className="text-sm font-medium">{formatDate(stats.latest_recorded_at)}</div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="text-sm text-gray-500">Первая точка</div>
-            <div className="text-sm font-medium">{formatDate(stats.oldest_recorded_at)}</div>
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* Vehicles Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold">Техника и GPS-провайдеры</h2>
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left font-medium text-gray-500">Название</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-500">Провайдер</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-500">Точек</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-500">Последняя точка</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-500">Действия</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {vehicles.map((v) => (
-              <tr key={v.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 font-medium">{v.name}</td>
-                <td className="px-6 py-4">
-                  {editingId === v.id ? (
-                    <select
-                      value={editProvider}
-                      onChange={(e) => setEditProvider(e.target.value)}
-                      className="border rounded px-2 py-1 text-sm"
-                    >
-                      <option value="">Не выбрано</option>
-                      <option value="mapix">Mapix</option>
-                      <option value="wialon">Wialon</option>
-                    </select>
-                  ) : (
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      v.gps_provider
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {v.gps_provider || 'Нет'}
-                    </span>
-                  )}
-                </td>
-                <td className="px-6 py-4">{v.total_points}</td>
-                <td className="px-6 py-4 text-gray-500">{formatDate(v.last_point_at)}</td>
-                <td className="px-6 py-4">
-                  {editingId === v.id ? (
-                    <div className="space-y-2">
-                      <input
-                        placeholder="Login"
-                        value={editLogin}
-                        onChange={(e) => setEditLogin(e.target.value)}
-                        className="border rounded px-2 py-1 text-sm w-32"
-                      />
-                      <input
-                        placeholder="Password"
-                        type="password"
-                        value={editPassword}
-                        onChange={(e) => setEditPassword(e.target.value)}
-                        className="border rounded px-2 py-1 text-sm w-32"
-                      />
-                      <input
-                        placeholder="API URL"
-                        value={editApiUrl}
-                        onChange={(e) => setEditApiUrl(e.target.value)}
-                        className="border rounded px-2 py-1 text-sm w-48"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => saveConfig(v.id)}
-                          className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700"
-                        >
-                          Сохранить
-                        </button>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs hover:bg-gray-300"
-                        >
-                          Отмена
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => startEdit(v)}
-                      className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                    >
-                      Настроить
-                    </button>
-                  )}
-                </td>
+        {/* Vehicles Table */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-6 py-4 border-b">
+            <h2 className="text-lg font-semibold">Техника и GPS-провайдеры</h2>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left font-medium text-gray-500">Название</th>
+                <th className="px-6 py-3 text-left font-medium text-gray-500">Провайдер</th>
+                <th className="px-6 py-3 text-left font-medium text-gray-500">Точек</th>
+                <th className="px-6 py-3 text-left font-medium text-gray-500">Последняя точка</th>
+                <th className="px-6 py-3 text-left font-medium text-gray-500">Действия</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y">
+              {vehicles.map((v) => (
+                <tr key={v.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 font-medium">{v.name}</td>
+                  <td className="px-6 py-4">
+                    {editingId === v.id ? (
+                      <select
+                        value={editProvider}
+                        onChange={(e) => setEditProvider(e.target.value)}
+                        className="border rounded px-2 py-1 text-sm"
+                      >
+                        <option value="">Не выбрано</option>
+                        <option value="mapix">Mapix</option>
+                        <option value="wialon">Wialon</option>
+                      </select>
+                    ) : (
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        v.gps_provider
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {v.gps_provider || 'Нет'}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">{v.total_points}</td>
+                  <td className="px-6 py-4 text-gray-500">{formatDate(v.last_point_at)}</td>
+                  <td className="px-6 py-4">
+                    {editingId === v.id ? (
+                      <div className="space-y-2">
+                        <input
+                          placeholder="Login"
+                          value={editLogin}
+                          onChange={(e) => setEditLogin(e.target.value)}
+                          className="border rounded px-2 py-1 text-sm w-32"
+                        />
+                        <input
+                          placeholder="Password"
+                          type="password"
+                          value={editPassword}
+                          onChange={(e) => setEditPassword(e.target.value)}
+                          className="border rounded px-2 py-1 text-sm w-32"
+                        />
+                        <input
+                          placeholder="API URL"
+                          value={editApiUrl}
+                          onChange={(e) => setEditApiUrl(e.target.value)}
+                          className="border rounded px-2 py-1 text-sm w-48"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => saveConfig(v.id)}
+                            className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700"
+                          >
+                            Сохранить
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs hover:bg-gray-300"
+                          >
+                            Отмена
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startEdit(v)}
+                        className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                      >
+                        Настроить
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </Layout>
   );
 }
