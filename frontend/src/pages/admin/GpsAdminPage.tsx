@@ -30,6 +30,12 @@ export default function GpsAdminPage() {
   const [editPassword, setEditPassword] = useState('');
   const [editApiUrl, setEditApiUrl] = useState('');
 
+  // Фильтры экспорта
+  const [exportVehicleId, setExportVehicleId] = useState<string>('');
+  const [exportDateFrom, setExportDateFrom] = useState('');
+  const [exportDateTo, setExportDateTo] = useState('');
+  const [exporting, setExporting] = useState(false);
+
   const fetchData = async () => {
     try {
       const token = localStorage.getItem('access_token');
@@ -94,8 +100,16 @@ export default function GpsAdminPage() {
 
   const handleExport = async (format: 'csv' | 'excel') => {
     try {
+      setExporting(true);
       const token = localStorage.getItem('access_token');
-      const url = `${API_BASE}/gps/points/export?format=${format}`;
+
+      const params = new URLSearchParams();
+      params.set('format', format);
+      if (exportVehicleId) params.set('vehicle_id', exportVehicleId);
+      if (exportDateFrom) params.set('date_from', new Date(exportDateFrom).toISOString());
+      if (exportDateTo) params.set('date_to', new Date(exportDateTo + 'T23:59:59').toISOString());
+
+      const url = `${API_BASE}/gps/points/export?${params.toString()}`;
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -108,14 +122,20 @@ export default function GpsAdminPage() {
 
       const blob = await res.blob();
       const ext = format === 'excel' ? 'xlsx' : 'csv';
+      const vehicleLabel = exportVehicleId
+        ? `_v${exportVehicleId}`
+        : '_all';
+      const dateLabel = exportDateFrom ? `_${exportDateFrom}` : '';
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `gps_points_${new Date().toISOString().slice(0, 10)}.${ext}`;
+      a.download = `gps_points${vehicleLabel}${dateLabel}.${ext}`;
       a.click();
       URL.revokeObjectURL(a.href);
       toast.success(`📥 ${format.toUpperCase()} экспортирован`);
     } catch {
       toast.error('Ошибка экспорта');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -137,20 +157,6 @@ export default function GpsAdminPage() {
       <div className="p-6 max-w-7xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">📡 Управление GPS</h1>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleExport('csv')}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 flex items-center gap-2"
-            >
-              📥 CSV
-            </button>
-            <button
-              onClick={() => handleExport('excel')}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 flex items-center gap-2"
-            >
-              📥 Excel
-            </button>
-          </div>
         </div>
 
         {/* Stats Cards */}
@@ -174,6 +180,58 @@ export default function GpsAdminPage() {
             </div>
           </div>
         )}
+
+        {/* Export Filters + Buttons */}
+        <div className="bg-white rounded-lg shadow p-4 space-y-3">
+          <h2 className="text-sm font-semibold text-gray-700">📥 Экспорт данных</h2>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[160px]">
+              <label className="block text-xs text-gray-500 mb-1">Техника</label>
+              <select
+                value={exportVehicleId}
+                onChange={(e) => setExportVehicleId(e.target.value)}
+                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="">Вся техника</option>
+                {vehicles.filter(v => v.total_points > 0).map(v => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1 min-w-[140px]">
+              <label className="block text-xs text-gray-500 mb-1">Дата от</label>
+              <input
+                type="date"
+                value={exportDateFrom}
+                onChange={(e) => setExportDateFrom(e.target.value)}
+                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div className="flex-1 min-w-[140px]">
+              <label className="block text-xs text-gray-500 mb-1">Дата до</label>
+              <input
+                type="date"
+                value={exportDateTo}
+                onChange={(e) => setExportDateTo(e.target.value)}
+                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <button
+              onClick={() => handleExport('csv')}
+              disabled={exporting}
+              className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {exporting ? '⏳' : '📥 CSV'}
+            </button>
+            <button
+              onClick={() => handleExport('excel')}
+              disabled={exporting}
+              className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {exporting ? '⏳' : '📥 Excel'}
+            </button>
+          </div>
+        </div>
 
         {/* Vehicles Table */}
         <div className="bg-white rounded-lg shadow overflow-hidden">
