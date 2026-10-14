@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Contractor, ContractorCreate, ContractorUpdate, BankDetails } from '../api/contractors';
-import { InnSearchInput } from './InnSearchInput';
 
 interface Props {
   contractor: Contractor | null;
@@ -148,22 +147,22 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
 
   // Обработчик автозаполнения из DaData (кнопка Найти в ЕГРЮЛ)
   const handleInnFound = (data: any) => {
-    setFormData({
-      ...formData,
-      name: data.name || formData.name,
-      inn: data.inn || formData.inn,
-      kpp: data.kpp || formData.kpp,
-      ogrn: data.ogrn || formData.ogrn,
-      legal_address: data.address || formData.legal_address,
-    });
-
+    setFormData((prev) => ({
+      ...prev,
+      name: data.name || suggestion?.value || prev.name,
+      inn: data.inn || prev.inn,
+      kpp: data.kpp || prev.kpp,
+      ogrn: data.ogrn || prev.ogrn,
+      legal_address: data.address || prev.legal_address,
+    }));
     if (data.bank_name || data.bank_bik || data.bank_account) {
-      setBankDetails({
-        account: data.bank_account || bankDetails.account,
-        bank_name: data.bank_name || bankDetails.bank_name,
-        bik: data.bank_bik || bankDetails.bik,
-        correspondent_account: data.bank_correspondent_account || bankDetails.correspondent_account,
-      });
+      setBankDetails((prev) => ({
+        ...prev,
+        account: data.bank_account || prev.account,
+        bank_name: data.bank_name || prev.bank_name,
+        bik: data.bank_bik || prev.bik,
+        correspondent_account: data.bank_correspondent_account || prev.correspondent_account,
+      }));
     }
   };
 
@@ -293,13 +292,14 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
                   onSuggestionSelect={handleNameSuggestionSelect}
                 />
 
-                {/* ИНН с поиском по ЕГРЮЛ */}
-                <InnSearchInput
-                  inn={formData.inn}
-                  onInnChange={(inn) => setFormData({ ...formData, inn })}
-                  onFound={handleInnFound}
-                  onDuplicateFound={handleDuplicateFound}
-                  disabled={!!contractor}
+                {/* ИНН с DaData-подсказками */}
+                <DadataField
+                  label="ИНН"
+                  value={formData.inn}
+                  onChange={(v) => setFormData((prev) => ({ ...prev, inn: v.replace(/\D/g, '').slice(0, 12) }))}
+                  placeholder="7707083893"
+                  queryType="party"
+                  onSuggestionSelect={handleNameSuggestionSelect}
                 />
 
                 {/* КПП и ОГРН в гриде */}
