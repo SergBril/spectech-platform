@@ -80,15 +80,83 @@ def list_my_companies(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Возвращает список компаний, доступных текущему пользователю.
-    """
+    """Возвращает список компаний, доступных текущему пользователю через user_companies."""
+    from app.models.user_company import UserCompany
+
     if current_user.is_superuser:
-        stmt = select(Company).where(Company.is_active == True).order_by(Company.name)
+        stmt = select(Company).where(Company.is_active == True).order_by(Company.name)  # noqa: E711
     else:
-        stmt = select(Company).where(
-            Company.id == current_user.company_id,
-            Company.is_active == True,
+        # Получаем company_id из user_companies
+        uc_stmt = select(UserCompany.company_id).where(
+            UserCompany.user_id == current_user.id,
+            UserCompany.is_active == True,  # noqa: E711
         )
+        company_ids = [row[0] for row in db.execute(uc_stmt).all()]
+
+        if not company_ids:
+            # Fallback на старое поле company_id если user_companies пуст
+            if current_user.company_id:
+                company_ids = [current_user.company_id]
+            else:
+                return []
+
+        stmt = select(Company).where(
+            Company.id.in_(company_ids),
+            Company.is_active == True,  # noqa: E711
+        ).order_by(Company.name)
+
+    return db.scalars(stmt).all()
+
+
+class ActiveCompanyRequest(BaseModel):
+    company_id: int
+
+
+class ActiveCompanyResponse(BaseModel):
+    company_id: int
+    company_name: str | None = None
+
+
+@router.post("/active-company", response_model=ActiveCompanyResponse)
+def set_active_company(
+    payload: ActiveCompanyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Переключить активную организацию пользователя."""
+    from app.models.user_company import UserCompany
+    import logging
+
+    logger = logging.getLogger("spectech.companies_switch")
+
+    # Проверяем принадлежность через user_companies
+    uc = db.query(UserCompany).filter(
+        UserCompany.user_id == current_user.id,
+        UserCompany.company_id == payload.company_id,
+        UserCompany.is_active == True,  # noqa: E711
+    ).first()
+
+    if not uc and not current_user.is_superuser:
+        # Fallback: проверяем старое поле company_id
+        if current_user.company_id != payload.company_id:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Access denied to this company")
+
+    company = db.get(Company, payload.company_id)
+    if not company:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    # Обновляем company_id в User для совместимости с существующими запросами
+    current_user.company_id = payload.company_id
+    db.commit()
+
+    logger.info("User #%s switched active company to #%s (%s)",
+                current_user.id, payload.company_id, company.name)
+
+    return ActiveCompanyResponse(
+        company_id=payload.company_id,
+        company_name=company.name,
+    )
 
     return db.scalars(stmt).all()
