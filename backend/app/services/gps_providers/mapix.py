@@ -98,25 +98,35 @@ class MapixAdapter(GpsProviderAdapter):
 
     async def _fetch_positions(self) -> list[GpsPointData]:
         """Внутренний метод: запрашивает /api/io и парсит ответ."""
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            # Авторизуемся в том же клиенте
             await self._ensure_session(client)
 
             url = self._anti_cache_url(f"{self.api_url}/api/io")
-            resp = await client.post(url, cookies=self.cookies)
 
-            if resp.status_code == 401 or resp.status_code == 302:
-                # Сессия истекла, повторяем авторизацию
-                self._session_valid = False
-                await self._ensure_session(client)
-                resp = await client.post(url, cookies=self.cookies)
+            # Передаём cookies из клиента + заголовок XHR
+            resp = await client.post(
+                url,
+                cookies=dict(client.cookies),
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
 
             if resp.status_code != 200:
                 logger.error("Mapix /api/io error: HTTP %s", resp.status_code)
                 return []
 
-            data = resp.json()
-            results: list[GpsPointData] = []
+            content_type = resp.headers.get("content-type", "")
+            if "json" not in content_type:
+                logger.error("Mapix returned non-JSON: %s", content_type)
+                return []
 
+            try:
+                data = resp.json()
+            except Exception as e:
+                logger.error("Mapix JSON parse error: %s, body: %s", e, resp.text[:300])
+                return []
+
+            results: list[GpsPointData] = []
             for imei, points in data.items():
                 if not points or not isinstance(points, list):
                     continue
