@@ -9,6 +9,7 @@ import 'leaflet-draw';
 import Layout from '../components/Layout';
 import { showToast } from '../utils/toast';
 import { mapApi, VehiclePosition, TrackPoint } from '../api/map';
+import apiClient from '../api/client';
 
 // Исправляем иконки Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -249,13 +250,33 @@ export const MapPage: React.FC = () => {
   const loadPositions = async () => {
     try {
       setLoading(true);
+      // Сначала пробуем основной эндпоинт
       const data = await mapApi.getVehiclePositions();
-      setPositions(data.positions);
-      if (data.positions.length === 0) {
-        showToast.info('Нет данных о позициях техники');
+      if (data.positions && data.positions.length > 0) {
+        setPositions(data.positions);
+      } else {
+        // Fallback: берём последние точки из /gps/points
+        const gpsPositions = await mapApi.getGpsPositions();
+        setPositions(gpsPositions);
+        if (gpsPositions.length === 0) {
+          showToast.info('Нет данных о позициях техники');
+        } else {
+          showToast.success(`📡 Загружено ${gpsPositions.length} позиций из GPS`);
+        }
       }
     } catch (err: any) {
-      showToast.error('Ошибка загрузки позиций: ' + (err?.response?.data?.detail || err.message));
+      // Если основной эндпоинт упал — пробуем GPS fallback
+      try {
+        const gpsPositions = await mapApi.getGpsPositions();
+        setPositions(gpsPositions);
+        if (gpsPositions.length > 0) {
+          showToast.success(`📡 Загружено ${gpsPositions.length} позиций из GPS (fallback)`);
+        } else {
+          showToast.error('Ошибка загрузки позиций: ' + (err?.response?.data?.detail || err.message));
+        }
+      } catch (gpsErr: any) {
+        showToast.error('Ошибка загрузки позиций: ' + (err?.response?.data?.detail || err.message));
+      }
     } finally {
       setLoading(false);
     }
@@ -274,19 +295,42 @@ export const MapPage: React.FC = () => {
     try {
       setTrackLoading(true);
 
-      const data = await mapApi.getVehicleTrack(
-        vehicleId,
-        new Date(trackDateFrom).toISOString(),
-        new Date(trackDateTo + 'T23:59:59').toISOString()
-      );
+      let points: TrackPoint[] = [];
+
+      try {
+        // Сначала пробуем основной эндпоинт
+        const data = await mapApi.getVehicleTrack(
+          vehicleId,
+          new Date(trackDateFrom).toISOString(),
+          new Date(trackDateTo + 'T23:59:59').toISOString()
+        );
+        points = data.points;
+      } catch {
+        // Fallback: берём точки из /gps/points
+        const res = await apiClient.get('/gps/points', {
+          params: {
+            vehicle_id: vehicleId,
+            date_from: new Date(trackDateFrom).toISOString(),
+            date_to: new Date(trackDateTo + 'T23:59:59').toISOString(),
+            limit: 1000,
+          },
+        });
+        points = res.data.map((p: any) => ({
+          latitude: p.latitude,
+          longitude: p.longitude,
+          speed: p.speed,
+          heading: p.heading,
+          recorded_at: p.recorded_at,
+        }));
+      }
 
       if (polylineRef.current) {
         polylineRef.current.remove();
         polylineRef.current = null;
       }
 
-      if (data.points.length > 0 && mapInstance.current) {
-        const latlngs = data.points.map((p: TrackPoint) => [p.latitude, p.longitude] as [number, number]);
+      if (points.length > 0 && mapInstance.current) {
+        const latlngs = points.map((p: TrackPoint) => [p.latitude, p.longitude] as [number, number]);
         const polyline = L.polyline(latlngs, {
           color: '#3b82f6',
           weight: 3,
@@ -295,7 +339,7 @@ export const MapPage: React.FC = () => {
 
         polylineRef.current = polyline;
         mapInstance.current.fitBounds(polyline.getBounds(), { padding: [50, 50] });
-        showToast.success(`🛤️ Маршрут: ${data.points.length} точек`);
+        showToast.success(`🛤️ Маршрут: ${points.length} точек`);
       } else {
         showToast.info('Нет данных маршрута за выбранный период');
       }
