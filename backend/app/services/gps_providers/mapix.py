@@ -105,13 +105,16 @@ class MapixAdapter(GpsProviderAdapter):
 
             url = self._anti_cache_url(f"{self.api_url}/api/io")
 
-            # Пробуем БЕЗ тела и БЕЗ Content-Type (как простой POST)
+            # Mapix требует POST с телом (даже пустым) и Content-Type
+            # curl --data-raw "" работает, httpx.post() без content — нет
             resp = await client.post(
                 url,
+                content="",  # Пустое тело как в curl --data-raw ""
                 headers={
                     "X-Requested-With": "XMLHttpRequest",
                     "Referer": f"{self.api_url}/",
                     "Accept": "application/json, text/javascript, */*; q=0.01",
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 },
             )
 
