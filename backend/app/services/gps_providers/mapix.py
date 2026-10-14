@@ -162,6 +162,13 @@ class MapixAdapter(GpsProviderAdapter):
                 timeout=30,
             )
 
+            # DEBUG: логируем содержимое cookie-файла
+            try:
+                with open(cookie_file, "r") as cf:
+                    logger.info("Mapix cookie file content:\n%s", cf.read())
+            except Exception as e:
+                logger.error("Failed to read cookie file: %s", e)
+
             # Шаг 2: API-запрос с теми же cookies (ответ в отдельный файл)
             result = subprocess.run(
                 [
