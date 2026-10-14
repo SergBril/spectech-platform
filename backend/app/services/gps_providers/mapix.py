@@ -165,7 +165,7 @@ class MapixAdapter(GpsProviderAdapter):
             # Шаг 2: API-запрос с теми же cookies (ответ в отдельный файл)
             result = subprocess.run(
                 [
-                    curl_path, "-s",
+                    curl_path, "-s", "-w", "\n%{http_code}",
                     "-b", cookie_file,
                     "-X", "POST", url,
                     "-H", "X-Requested-With: XMLHttpRequest",
@@ -179,13 +179,23 @@ class MapixAdapter(GpsProviderAdapter):
                 timeout=30,
             )
 
-            # Читаем ответ API из файла
-            try:
-                with open(api_output_file, "rb") as f:
-                    body = f.read().decode("utf-8", errors="replace").strip()
-            except Exception as e:
-                logger.error("Failed to read API output file: %s", e)
+            # Проверяем существование и размер файла ответа
+            if not os.path.exists(api_output_file):
+                logger.error("Mapix API output file was not created")
                 body = ""
+            else:
+                file_size = os.path.getsize(api_output_file)
+                logger.info("Mapix API output file size: %d bytes", file_size)
+                try:
+                    with open(api_output_file, "rb") as f:
+                        body = f.read().decode("utf-8", errors="replace").strip()
+                except Exception as e:
+                    logger.error("Failed to read API output file: %s", e)
+                    body = ""
+
+            # HTTP-код из stdout curl (-w "%{http_code}")
+            api_code = result.stdout.decode("utf-8", errors="replace").strip() if result.stdout else "?"
+            logger.info("Mapix /api/io HTTP code: %s", api_code)
 
             if not body and result.stderr:
                 stderr_text = result.stderr.decode("utf-8", errors="replace")
