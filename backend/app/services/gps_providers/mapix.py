@@ -99,16 +99,20 @@ class MapixAdapter(GpsProviderAdapter):
     async def _fetch_positions(self) -> list[GpsPointData]:
         """Внутренний метод: запрашивает /api/io и парсит ответ."""
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            # Авторизуемся в том же клиенте
+            # Авторизуемся в том же клиенте — cookies сохраняются в client.cookies
             await self._ensure_session(client)
 
             url = self._anti_cache_url(f"{self.api_url}/api/io")
 
-            # Передаём cookies из клиента + заголовок XHR
+            # Передаём cookies как объект httpx.Cookies (не dict!)
+            # + заголовки которые ожидает Mapix
             resp = await client.post(
                 url,
-                cookies=dict(client.cookies),
-                headers={"X-Requested-With": "XMLHttpRequest"},
+                headers={
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Referer": f"{self.api_url}/",
+                    "Accept": "application/json, text/javascript, */*; q=0.01",
+                },
             )
 
             if resp.status_code != 200:
@@ -117,13 +121,22 @@ class MapixAdapter(GpsProviderAdapter):
 
             content_type = resp.headers.get("content-type", "")
             if "json" not in content_type:
-                logger.error("Mapix returned non-JSON: %s", content_type)
+                logger.error("Mapix returned non-JSON: %s, body: %s", content_type, resp.text[:300])
+                return []
+
+            # Проверяем пустое тело
+            if not resp.text or not resp.text.strip():
+                logger.error("Mapix returned empty body despite 200 OK")
                 return []
 
             try:
                 data = resp.json()
             except Exception as e:
                 logger.error("Mapix JSON parse error: %s, body: %s", e, resp.text[:300])
+                return []
+
+            if not isinstance(data, dict):
+                logger.error("Mapix returned unexpected type: %s", type(data))
                 return []
 
             results: list[GpsPointData] = []
@@ -188,11 +201,17 @@ class MapixAdapter(GpsProviderAdapter):
     async def test_connection(self) -> bool:
         """Проверяет соединение с Mapix API."""
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
                 await self._ensure_session(client)
                 url = self._anti_cache_url(f"{self.api_url}/api/io")
-                resp = await client.post(url, cookies=self.cookies)
-                return resp.status_code == 200
+                resp = await client.post(
+                    url,
+                    headers={
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Referer": f"{self.api_url}/",
+                    },
+                )
+                return resp.status_code == 200 and bool(resp.text.strip())
         except Exception as e:
             logger.error("Mapix connection test failed: %s", e)
             return False
