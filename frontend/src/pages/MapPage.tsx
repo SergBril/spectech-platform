@@ -37,6 +37,12 @@ export const MapPage: React.FC = () => {
   const [filterEngine, setFilterEngine] = useState<'all' | 'on' | 'off'>('all');
   const [filterSearch, setFilterSearch] = useState('');
 
+  // Автообновление
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshInterval, setRefreshInterval] = useState(30);
+  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isAutoRefreshRef = useRef(false);
+
   // Период для маршрута
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -62,7 +68,6 @@ export const MapPage: React.FC = () => {
       maxZoom: 19,
     }).addTo(map);
 
-    // Кластеризация
     const cluster = L.markerClusterGroup({
       maxClusterRadius: 50,
       spiderfyOnMaxZoom: true,
@@ -70,7 +75,6 @@ export const MapPage: React.FC = () => {
     });
     map.addLayer(cluster);
 
-    // Draw control для геозон
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
     drawnItemsRef.current = drawnItems;
@@ -89,7 +93,6 @@ export const MapPage: React.FC = () => {
     });
     map.addControl(drawControl);
 
-    // Событие создания геозоны
     map.on(L.Draw.Event.CREATED, async (e: any) => {
       const { layerType, layer } = e;
       drawnItems.clearLayers();
@@ -135,6 +138,23 @@ export const MapPage: React.FC = () => {
     loadPositions();
   }, []);
 
+  // Автообновление позиций
+  useEffect(() => {
+    if (autoRefresh && refreshInterval > 0) {
+      refreshTimerRef.current = setInterval(() => {
+        isAutoRefreshRef.current = true;
+        loadPositions();
+      }, refreshInterval * 1000);
+    }
+
+    return () => {
+      if (refreshTimerRef.current) {
+        clearInterval(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, [autoRefresh, refreshInterval]);
+
   // Загрузка геозон
   useEffect(() => {
     loadGeofences();
@@ -144,7 +164,6 @@ export const MapPage: React.FC = () => {
   useEffect(() => {
     if (!mapInstance.current) return;
 
-    // Удаляем старые слои геозон
     geofenceLayersRef.current.forEach((layer) => layer.remove());
     geofenceLayersRef.current.clear();
 
@@ -242,35 +261,38 @@ export const MapPage: React.FC = () => {
       bounds.extend([pos.latitude, pos.longitude]);
     });
 
-    if (!selectedVehicle && filtered.length > 0 && bounds.isValid()) {
+    // Центрируем карту только при первой загрузке или ручном обновлении (не при автообновлении)
+    if (!selectedVehicle && filtered.length > 0 && bounds.isValid() && !isAutoRefreshRef.current) {
       mapInstance.current.fitBounds(bounds, { padding: [50, 50] });
     }
+
+    // Сбрасываем флаг автообновления после рендера
+    isAutoRefreshRef.current = false;
   }, [positions, selectedVehicle, filterEngine, filterSearch]);
 
   const loadPositions = async () => {
     try {
       setLoading(true);
-      // Сначала пробуем основной эндпоинт
       const data = await mapApi.getVehiclePositions();
       if (data.positions && data.positions.length > 0) {
         setPositions(data.positions);
       } else {
-        // Fallback: берём последние точки из /gps/points
         const gpsPositions = await mapApi.getGpsPositions();
         setPositions(gpsPositions);
         if (gpsPositions.length === 0) {
           showToast.info('Нет данных о позициях техники');
-        } else {
+        } else if (!isAutoRefreshRef.current) {
           showToast.success(`📡 Загружено ${gpsPositions.length} позиций из GPS`);
         }
       }
     } catch (err: any) {
-      // Если основной эндпоинт упал — пробуем GPS fallback
       try {
         const gpsPositions = await mapApi.getGpsPositions();
         setPositions(gpsPositions);
         if (gpsPositions.length > 0) {
-          showToast.success(`📡 Загружено ${gpsPositions.length} позиций из GPS (fallback)`);
+          if (!isAutoRefreshRef.current) {
+            showToast.success(`📡 Загружено ${gpsPositions.length} позиций из GPS (fallback)`);
+          }
         } else {
           showToast.error('Ошибка загрузки позиций: ' + (err?.response?.data?.detail || err.message));
         }
@@ -298,7 +320,6 @@ export const MapPage: React.FC = () => {
       let points: TrackPoint[] = [];
 
       try {
-        // Сначала пробуем основной эндпоинт
         const data = await mapApi.getVehicleTrack(
           vehicleId,
           new Date(trackDateFrom).toISOString(),
@@ -306,7 +327,6 @@ export const MapPage: React.FC = () => {
         );
         points = data.points;
       } catch {
-        // Fallback: берём точки из /gps/points
         const res = await apiClient.get('/gps/points', {
           params: {
             vehicle_id: vehicleId,
@@ -413,7 +433,10 @@ export const MapPage: React.FC = () => {
             {/* Кнопки */}
             <div className="flex gap-2">
               <button
-                onClick={loadPositions}
+                onClick={() => {
+                  isAutoRefreshRef.current = false;
+                  loadPositions();
+                }}
                 disabled={loading}
                 className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-50 flex-1"
               >
@@ -428,6 +451,40 @@ export const MapPage: React.FC = () => {
                 </button>
               )}
             </div>
+
+            {/* Автообновление */}
+            <div className="flex items-center justify-between pt-2 border-t">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoRefresh}
+                  onChange={(e) => setAutoRefresh(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-gray-700 font-medium">Автообновление</span>
+              </label>
+              {autoRefresh && (
+                <select
+                  value={refreshInterval}
+                  onChange={(e) => setRefreshInterval(Number(e.target.value))}
+                  className="border border-gray-300 rounded px-2 py-1 text-xs w-20 focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value={10}>10 сек</option>
+                  <option value={30}>30 сек</option>
+                  <option value={60}>1 мин</option>
+                  <option value={300}>5 мин</option>
+                </select>
+              )}
+            </div>
+            {autoRefresh && (
+              <div className="flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                <span className="text-[10px] text-green-600">Live • каждые {refreshInterval}с</span>
+              </div>
+            )}
 
             {/* Период маршрута */}
             {selectedVehicle && (
