@@ -53,8 +53,10 @@ export const mapApi = {
       // Ищем последнее ненулевое значение fuel_level
       let fuelLevel: number | undefined = undefined;
       for (const p of vehiclePoints) {
-        if (p.fuel_level != null && p.fuel_level !== '' && !isNaN(Number(p.fuel_level))) {
-          fuelLevel = Number(p.fuel_level);
+        const fl = p.fuel_level;
+        // Проверяем что значение существует, не null, не пустая строка, и является числом > 0
+        if (fl !== null && fl !== undefined && fl !== '' && !isNaN(Number(fl)) && Number(fl) > 0) {
+          fuelLevel = Number(fl);
           break;
         }
       }
