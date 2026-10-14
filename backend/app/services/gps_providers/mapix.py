@@ -113,13 +113,12 @@ class MapixAdapter(GpsProviderAdapter):
         try:
             resp = sync_requests.post(
                 url,
-                data="",  # Пустое form-encoded тело → Content-Length: 0
+                data={"_": "_"},  # Непустое form-encoded тело → "_=_" (4 bytes)
                 cookies=session_cookies,
                 headers={
                     "X-Requested-With": "XMLHttpRequest",
                     "Referer": f"{self.api_url}/",
                     "Accept": "application/json, text/javascript, */*; q=0.01",
-                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 },
                 timeout=30,
             )
