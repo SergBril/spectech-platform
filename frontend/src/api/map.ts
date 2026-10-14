@@ -32,29 +32,47 @@ export const mapApi = {
   },
 
   getGpsPositions: async (): Promise<VehiclePosition[]> => {
-    const res = await apiClient.get('/gps/points', { params: { limit: 100 } });
+    const res = await apiClient.get('/gps/points', { params: { limit: 500 } });
     const points: any[] = res.data;
 
-    // Группируем по vehicle_id, берём последнюю точку
-    const latestByVehicle = new Map<number, any>();
+    // Группируем по vehicle_id
+    const byVehicle = new Map<number, any[]>();
     for (const p of points) {
-      const existing = latestByVehicle.get(p.vehicle_id);
-      if (!existing || new Date(p.recorded_at) > new Date(existing.recorded_at)) {
-        latestByVehicle.set(p.vehicle_id, p);
-      }
+      if (!byVehicle.has(p.vehicle_id)) byVehicle.set(p.vehicle_id, []);
+      byVehicle.get(p.vehicle_id)!.push(p);
     }
 
-    return Array.from(latestByVehicle.values()).map((p) => ({
-      vehicle_id: p.vehicle_id,
-      vehicle_name: p.vehicle_name || `Vehicle #${p.vehicle_id}`,
-      latitude: p.latitude,
-      longitude: p.longitude,
-      speed: p.speed != null ? Number(p.speed) : undefined,
-      heading: p.heading != null ? Number(p.heading) : undefined,
-      engine_on: p.engine_on === true || p.engine_on === 'True' || p.engine_on === 'true',
-      fuel_level: p.fuel_level != null && p.fuel_level !== '' ? Number(p.fuel_level) : undefined,
-      recorded_at: p.recorded_at,
-    }));
+    const result: VehiclePosition[] = [];
+
+    for (const [vehicleId, vehiclePoints] of byVehicle) {
+      // Сортируем по дате убывание
+      vehiclePoints.sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime());
+
+      const latest = vehiclePoints[0];
+
+      // Ищем последнее ненулевое значение fuel_level
+      let fuelLevel: number | undefined = undefined;
+      for (const p of vehiclePoints) {
+        if (p.fuel_level != null && p.fuel_level !== '' && !isNaN(Number(p.fuel_level))) {
+          fuelLevel = Number(p.fuel_level);
+          break;
+        }
+      }
+
+      result.push({
+        vehicle_id: vehicleId,
+        vehicle_name: latest.vehicle_name || `Vehicle #${vehicleId}`,
+        latitude: latest.latitude,
+        longitude: latest.longitude,
+        speed: latest.speed != null ? Number(latest.speed) : undefined,
+        heading: latest.heading != null ? Number(latest.heading) : undefined,
+        engine_on: latest.engine_on === true || latest.engine_on === 'True' || latest.engine_on === 'true',
+        fuel_level: fuelLevel,
+        recorded_at: latest.recorded_at,
+      });
+    }
+
+    return result;
   },
 
   getVehicleTrack: async (
