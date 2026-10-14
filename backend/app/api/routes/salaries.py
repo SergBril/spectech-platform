@@ -1,6 +1,9 @@
 """API для управления зарплатами сотрудников."""
 
+import asyncio
+import logging
 from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import select
@@ -11,6 +14,8 @@ from app.core.db import get_db
 from app.models.auth import User
 from app.models.salary import SalaryRecord, SalaryStatus
 from app.services.salary_service import salary_service
+
+logger = logging.getLogger("spectech.salaries")
 
 router = APIRouter()
 
@@ -212,15 +217,26 @@ def export_salary_excel(
 
 
 @router.post("/{record_id}/approve")
-def approve_salary_record(
+async def approve_salary_record(
     record_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """✅ Утвердить начисление зарплаты."""
+    """✅ Утвердить начисление зарплаты и отправить уведомления."""
     try:
         record = salary_service.approve_record(db, record_id, current_user.id)
+
+        # === Multi-channel уведомление ===
+        try:
+            from app.services.salary_notification_dispatcher import salary_notification_dispatcher
+            approver_name = current_user.email if current_user else ""
+            await salary_notification_dispatcher.notify_employee(
+                db, record, approver_name
+            )
+        except Exception as notif_err:
+            logger.warning("⚠️ Salary notification failed for record #%s: %s", record_id, notif_err)
+
         return _serialize_record(record)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
