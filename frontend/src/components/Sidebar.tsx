@@ -32,7 +32,6 @@ const menuItems: MenuItem[] = [
   { label: 'Email шаблоны', icon: '📧', path: '/email-templates', group: 'Система' },
   { label: 'Email логи', icon: '📨', path: '/email-logs', group: 'Система' },
   { label: 'Настройки', icon: '⚙️', path: '/settings/company', group: 'Система' },
-  { label: '🏢 Реквизиты', path: '/settings/company', icon: '🏢' },
   { label: 'Админ-панель', icon: '📊', path: '/admin/dashboard', group: 'Система' },
 ];
 
