@@ -101,36 +101,39 @@ class MapixAdapter(GpsProviderAdapter):
     async def _fetch_positions(self) -> list[GpsPointData]:
         """Внутренний метод: запрашивает /api/io и парсит ответ."""
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            # Авторизуемся в том же клиенте — cookies сохраняются в client.cookies
             await self._ensure_session(client)
 
             url = self._anti_cache_url(f"{self.api_url}/api/io")
 
-            # Mapix ожидает POST с телом и специфичными заголовками
-            # Браузерный запрос отправляет form-urlencoded body
+            # Пробуем БЕЗ тела и БЕЗ Content-Type (как простой POST)
             resp = await client.post(
                 url,
-                data={"": ""},  # Пустое form-encoded тело как в браузере
                 headers={
                     "X-Requested-With": "XMLHttpRequest",
                     "Referer": f"{self.api_url}/",
                     "Accept": "application/json, text/javascript, */*; q=0.01",
-                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 },
+            )
+
+            logger.info(
+                "Mapix /api/io response: status=%s, content-type=%s, body_len=%d, body_preview=%s",
+                resp.status_code,
+                resp.headers.get("content-type", "N/A"),
+                len(resp.text),
+                resp.text[:500] if resp.text else "(empty)",
             )
 
             if resp.status_code != 200:
                 logger.error("Mapix /api/io error: HTTP %s", resp.status_code)
                 return []
 
-            content_type = resp.headers.get("content-type", "")
-            if "json" not in content_type:
-                logger.error("Mapix returned non-JSON: %s, body: %s", content_type, resp.text[:300])
+            if not resp.text or not resp.text.strip():
+                logger.error("Mapix returned empty body despite 200 OK")
                 return []
 
-            # Проверяем пустое тело
-            if not resp.text or not resp.text.strip():
-                logger.error("Mapix returned empty body despite 200 OK. Cookies: %s", list(client.cookies.keys()))
+            content_type = resp.headers.get("content-type", "")
+            if "json" not in content_type:
+                logger.error("Mapix returned non-JSON: %s", content_type)
                 return []
 
             try:
