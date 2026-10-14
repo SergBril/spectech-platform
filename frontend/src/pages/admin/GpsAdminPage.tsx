@@ -219,16 +219,16 @@ export default function GpsAdminPage() {
             <button
               onClick={() => handleExport('csv')}
               disabled={exporting}
-              className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+              className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2 min-w-[100px]"
             >
-              {exporting ? '⏳' : '📥 CSV'}
+              {exporting ? '⏳ CSV' : '📥 CSV'}
             </button>
             <button
               onClick={() => handleExport('excel')}
               disabled={exporting}
-              className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 min-w-[100px]"
             >
-              {exporting ? '⏳' : '📥 Excel'}
+              {exporting ? '⏳ Excel' : '📥 Excel'}
             </button>
           </div>
         </div>
