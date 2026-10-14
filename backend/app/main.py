@@ -57,7 +57,6 @@ from app.api.routes import (
     driver,
     admin,
     gps,
-    companies_switch,
 )
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -215,7 +214,6 @@ app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytic
 app.include_router(export.router, prefix="/api/v1/export", tags=["export"])
 app.include_router(tax.router, prefix="/api/v1", tags=["📊 Tax & VAT (НДС)"])
 app.include_router(companies.router, prefix="/api/v1", tags=["companies"])
-app.include_router(companies_switch.router, prefix="/api/v1", tags=["🏢 Companies Switch"])
 app.include_router(
     marketplace.router, prefix="/api/v1", tags=["🎯 Marketplace (Отклики на заявки)"]
 )
