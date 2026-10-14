@@ -110,46 +110,50 @@ class MapixAdapter(GpsProviderAdapter):
         auth_url = f"{self.api_url}/auth"
         main_url = f"{self.api_url}/"
 
-        # Создаём временный cookie-файл
+        # Создаём временные файлы
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             cookie_file = f.name
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            api_output_file = f.name
 
         try:
             curl_path = shutil.which("curl") or r"C:\Windows\System32\curl.exe"
 
-            # Используем --write-out для разделения ответов разных запросов
-            separator = "\n\n===MAPIX_SEPARATOR===\n\n"
             result = subprocess.run(
                 [
                     curl_path, "-s",
                     "-c", cookie_file,
                     "-b", cookie_file,
                     "-L",
-                    # Шаг 1: Авторизация
+                    # Шаг 1: Авторизация (вывод в /dev/null)
                     "-X", "POST", auth_url,
                     "-d", f"username={self.login}&password={self.password}&tzoffset=3&lang=ru&soglasie=on",
                     "-H", "Content-Type: application/x-www-form-urlencoded",
-                    "-w", separator,  # Разделитель после ответа
-                    # Шаг 2: Прогрев сессии
+                    "-o", "NUL" if os.name == "nt" else "/dev/null",
+                    # Шаг 2: Прогрев сессии (вывод в /dev/null)
                     "-X", "GET", main_url,
-                    "-w", separator,  # Разделитель после ответа
-                    # Шаг 3: API-запрос
+                    "-o", "NUL" if os.name == "nt" else "/dev/null",
+                    # Шаг 3: API-запрос (вывод в файл)
                     "-X", "POST", url,
                     "-H", "X-Requested-With: XMLHttpRequest",
                     "-H", f"Referer: {main_url}",
                     "-H", "Accept: application/json, text/javascript, */*; q=0.01",
                     "-H", "Content-Type: application/x-www-form-urlencoded; charset=UTF-8",
                     "--data-raw", "",
+                    "-o", api_output_file,  # Ответ API пишем в отдельный файл
                 ],
                 capture_output=True,
                 timeout=30,
             )
-            raw_output = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
-            
-            # Извлекаем только последний ответ (после последнего разделителя)
-            parts = raw_output.split(separator)
-            body = parts[-1].strip() if parts else ""
-            
+
+            # Читаем только ответ API из файла
+            try:
+                with open(api_output_file, "rb") as f:
+                    body = f.read().decode("utf-8", errors="replace").strip()
+            except Exception as e:
+                logger.error("Failed to read API output file: %s", e)
+                body = ""
+
             if not body and result.stderr:
                 stderr_text = result.stderr.decode("utf-8", errors="replace")
                 logger.error("Mapix curl stderr: %s", stderr_text[:500])
@@ -157,10 +161,11 @@ class MapixAdapter(GpsProviderAdapter):
             logger.error("Mapix /api/io curl failed: %s", e)
             return []
         finally:
-            try:
-                os.unlink(cookie_file)
-            except OSError:
-                pass
+            for f in [cookie_file, api_output_file]:
+                try:
+                    os.unlink(f)
+                except OSError:
+                    pass
 
         logger.info(
             "Mapix /api/io response: body_len=%d, body_preview=%s",
