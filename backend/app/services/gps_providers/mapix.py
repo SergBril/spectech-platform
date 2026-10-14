@@ -99,67 +99,54 @@ class MapixAdapter(GpsProviderAdapter):
             return asyncio.run(self._fetch_positions())
 
     async def _fetch_positions(self) -> list[GpsPointData]:
-        """Внутренний метод: запрашивает /api/io и парсит ответ."""
-        import requests as sync_requests
+        """Внутренний метод: запрашивает /api/io через curl (единственный надёжный способ)."""
+        import subprocess
+        import json
 
         # Сначала авторизуемся через httpx чтобы получить cookies
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             await self._ensure_session(client)
             session_cookies = dict(client.cookies)
 
-        # Используем requests для API-запроса (точно как curl --data-raw "")
         url = self._anti_cache_url(f"{self.api_url}/api/io")
 
+        # Формируем cookie строку для curl
+        cookie_str = "; ".join(f"{k}={v}" for k, v in session_cookies.items())
+
         try:
-            # Создаём запрос вручную чтобы гарантировать Content-Length: 0
-            # requests.post(data="") не устанавливает Content-Length вообще
-            session = sync_requests.Session()
-            req = sync_requests.Request(
-                "POST",
-                url,
-                data="",
-                cookies=session_cookies,
-                headers={
-                    "X-Requested-With": "XMLHttpRequest",
-                    "Referer": f"{self.api_url}/",
-                    "Accept": "application/json, text/javascript, */*; q=0.01",
-                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                    "Content-Length": "0",  # Явно как в curl --data-raw ""
-                },
+            result = subprocess.run(
+                [
+                    "curl", "-s", "-X", "POST", url,
+                    "-b", cookie_str,
+                    "-H", "X-Requested-With: XMLHttpRequest",
+                    "-H", f"Referer: {self.api_url}/",
+                    "-H", "Accept: application/json, text/javascript, */*; q=0.01",
+                    "-H", "Content-Type: application/x-www-form-urlencoded; charset=UTF-8",
+                    "--data-raw", "",  # Точно как в рабочем curl-запросе
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
-            prepared = session.prepare_request(req)
-            # Убеждаемся что Content-Length сохранён после prepare
-            prepared.headers["Content-Length"] = "0"
-            resp = session.send(prepared, timeout=30)
+            body = result.stdout.strip()
         except Exception as e:
-            logger.error("Mapix /api/io request failed: %s", e)
+            logger.error("Mapix /api/io curl failed: %s", e)
             return []
 
         logger.info(
-            "Mapix /api/io response: status=%s, content-type=%s, body_len=%d, body_preview=%s",
-            resp.status_code,
-            resp.headers.get("content-type", "N/A"),
-            len(resp.text),
-            resp.text[:500] if resp.text else "(empty)",
+            "Mapix /api/io response: body_len=%d, body_preview=%s",
+            len(body),
+            body[:500] if body else "(empty)",
         )
 
-        if resp.status_code != 200:
-            logger.error("Mapix /api/io error: HTTP %s", resp.status_code)
-            return []
-
-        if not resp.text or not resp.text.strip():
-            logger.error("Mapix returned empty body despite 200 OK")
-            return []
-
-        content_type = resp.headers.get("content-type", "")
-        if "json" not in content_type:
-            logger.error("Mapix returned non-JSON: %s", content_type)
+        if not body:
+            logger.error("Mapix returned empty body via curl")
             return []
 
         try:
-            data = resp.json()
-        except Exception as e:
-            logger.error("Mapix JSON parse error: %s, body: %s", e, resp.text[:300])
+            data = json.loads(body)
+        except json.JSONDecodeError as e:
+            logger.error("Mapix JSON parse error: %s, body: %s", e, body[:300])
             return []
 
         if not isinstance(data, dict):
