@@ -92,6 +92,33 @@ export default function GpsAdminPage() {
     }
   };
 
+  const handleExport = async (format: 'csv' | 'excel') => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const url = `${API_BASE}/gps/points/export?format=${format}`;
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Ошибка экспорта' }));
+        toast.error(err.detail || 'Ошибка экспорта');
+        return;
+      }
+
+      const blob = await res.blob();
+      const ext = format === 'excel' ? 'xlsx' : 'csv';
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `gps_points_${new Date().toISOString().slice(0, 10)}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast.success(`📥 ${format.toUpperCase()} экспортирован`);
+    } catch {
+      toast.error('Ошибка экспорта');
+    }
+  };
+
   const formatDate = (d: string | null) => {
     if (!d) return '—';
     return new Date(d).toLocaleString('ru-RU');
@@ -108,7 +135,23 @@ export default function GpsAdminPage() {
   return (
     <Layout>
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900">📡 Управление GPS</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">📡 Управление GPS</h1>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleExport('csv')}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 flex items-center gap-2"
+            >
+              📥 CSV
+            </button>
+            <button
+              onClick={() => handleExport('excel')}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 flex items-center gap-2"
+            >
+              📥 Excel
+            </button>
+          </div>
+        </div>
 
         {/* Stats Cards */}
         {stats && (

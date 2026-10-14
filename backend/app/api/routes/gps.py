@@ -11,6 +11,9 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.catalog import Vehicle
 from app.models.telematics import GpsPoint
+from fastapi.responses import StreamingResponse
+import csv
+import io
 
 logger = logging.getLogger("spectech.gps")
 
@@ -132,6 +135,84 @@ def gps_points_stats(db: Session = Depends(get_db)):
         "latest_recorded_at": latest,
         "oldest_recorded_at": oldest,
     }
+
+
+@router.get("/points/export")
+def export_gps_points(
+    vehicle_id: Optional[int] = Query(None),
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    format: str = Query("csv", regex="^(csv|excel)$"),
+    db: Session = Depends(get_db),
+):
+    """Экспорт GPS-точек в CSV или Excel."""
+    q = db.query(GpsPoint)
+
+    if vehicle_id is not None:
+        q = q.filter(GpsPoint.vehicle_id == vehicle_id)
+    if date_from is not None:
+        q = q.filter(GpsPoint.recorded_at >= date_from)
+    if date_to is not None:
+        q = q.filter(GpsPoint.recorded_at <= date_to)
+
+    points = q.order_by(GpsPoint.recorded_at.desc()).limit(50000).all()
+
+    if not points:
+        raise HTTPException(status_code=404, detail="No GPS points found for export")
+
+    headers = ["vehicle_id", "latitude", "longitude", "speed", "heading",
+               "engine_on", "fuel_level", "recorded_at", "device_id"]
+
+    if format == "excel":
+        try:
+            import openpyxl
+        except ImportError:
+            raise HTTPException(status_code=500, detail="openpyxl not installed. Run: pip install openpyxl")
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "GPS Points"
+        ws.append(headers)
+
+        for p in points:
+            ws.append([
+                p.vehicle_id, p.latitude, p.longitude,
+                p.speed, p.heading, p.engine_on, p.fuel_level,
+                p.recorded_at.isoformat() if p.recorded_at else "",
+                p.device_id or "",
+            ])
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f"gps_points_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    else:
+        # CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(headers)
+
+        for p in points:
+            writer.writerow([
+                p.vehicle_id, p.latitude, p.longitude,
+                p.speed, p.heading, p.engine_on, p.fuel_level,
+                p.recorded_at.isoformat() if p.recorded_at else "",
+                p.device_id or "",
+            ])
+
+        output.seek(0)
+        filename = f"gps_points_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
 
 # ─── Provider Management ────────────────────────────────────────────────────────
