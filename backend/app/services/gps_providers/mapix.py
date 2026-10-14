@@ -105,13 +105,12 @@ class MapixAdapter(GpsProviderAdapter):
 
             url = self._anti_cache_url(f"{self.api_url}/api/io")
 
-            # Mapix требует POST с Content-Length: 0 + XHR заголовок
-            # Mapix требует POST с телом (curl --data-raw "" = Content-Length: 0 + body present)
-            # httpx игнорирует Content-Length: 0 header и не отправляет тело
-            # content=b"\x00" гарантирует Content-Length: 1 + body present
-            resp = await client.post(
+            # Создаём запрос вручную чтобы гарантировать тело + заголовки
+            # httpx.post() может оптимизировать пустое/маленькое тело
+            request = client.build_request(
+                "POST",
                 url,
-                content=b"\x00",  # Один нулевой байт → гарантированное тело
+                content=b"",
                 headers={
                     "X-Requested-With": "XMLHttpRequest",
                     "Referer": f"{self.api_url}/",
@@ -119,6 +118,10 @@ class MapixAdapter(GpsProviderAdapter):
                     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 },
             )
+            # Явно устанавливаем Content-Length после build_request
+            request.headers["Content-Length"] = "0"
+
+            resp = await client.send(request)
 
             logger.info(
                 "Mapix /api/io response: status=%s, content-type=%s, body_len=%d, body_preview=%s",
