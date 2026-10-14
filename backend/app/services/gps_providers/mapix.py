@@ -99,7 +99,7 @@ class MapixAdapter(GpsProviderAdapter):
             return asyncio.run(self._fetch_positions())
 
     async def _fetch_positions(self) -> list[GpsPointData]:
-        """Внутренний метод: запрашивает /api/io через единый curl-скрипт."""
+        """Внутренний метод: запрашивает /api/io через два последовательных curl."""
         import json
         import os
         import shutil
@@ -119,34 +119,45 @@ class MapixAdapter(GpsProviderAdapter):
         try:
             curl_path = shutil.which("curl") or r"C:\Windows\System32\curl.exe"
 
-            result = subprocess.run(
+            # Шаг 1: Авторизация + прогрев (сохраняем cookies в файл)
+            subprocess.run(
                 [
-                    curl_path, "-s",
+                    curl_path, "-s", "-L",
                     "-c", cookie_file,
-                    "-b", cookie_file,
-                    "-L",
-                    # Шаг 1: Авторизация (вывод в /dev/null)
                     "-X", "POST", auth_url,
                     "-d", f"username={self.login}&password={self.password}&tzoffset=3&lang=ru&soglasie=on",
                     "-H", "Content-Type: application/x-www-form-urlencoded",
-                    "-o", "NUL" if os.name == "nt" else "/dev/null",
-                    # Шаг 2: Прогрев сессии (вывод в /dev/null)
+                    "-o", os.devnull,
                     "-X", "GET", main_url,
-                    "-o", "NUL" if os.name == "nt" else "/dev/null",
-                    # Шаг 3: API-запрос (вывод в файл)
+                    "-o", os.devnull,
+                ],
+                capture_output=True,
+                timeout=30,
+            )
+
+            # Проверяем что cookie-файл создан и не пустой
+            if not os.path.exists(cookie_file) or os.path.getsize(cookie_file) == 0:
+                logger.error("Mapix auth failed: cookie file is empty")
+                return []
+
+            # Шаг 2: API-запрос с теми же cookies (ответ в отдельный файл)
+            result = subprocess.run(
+                [
+                    curl_path, "-s",
+                    "-b", cookie_file,
                     "-X", "POST", url,
                     "-H", "X-Requested-With: XMLHttpRequest",
                     "-H", f"Referer: {main_url}",
                     "-H", "Accept: application/json, text/javascript, */*; q=0.01",
                     "-H", "Content-Type: application/x-www-form-urlencoded; charset=UTF-8",
                     "--data-raw", "",
-                    "-o", api_output_file,  # Ответ API пишем в отдельный файл
+                    "-o", api_output_file,
                 ],
                 capture_output=True,
                 timeout=30,
             )
 
-            # Читаем только ответ API из файла
+            # Читаем ответ API из файла
             try:
                 with open(api_output_file, "rb") as f:
                     body = f.read().decode("utf-8", errors="replace").strip()
@@ -157,6 +168,7 @@ class MapixAdapter(GpsProviderAdapter):
             if not body and result.stderr:
                 stderr_text = result.stderr.decode("utf-8", errors="replace")
                 logger.error("Mapix curl stderr: %s", stderr_text[:500])
+
         except Exception as e:
             logger.error("Mapix /api/io curl failed: %s", e)
             return []
@@ -177,19 +189,10 @@ class MapixAdapter(GpsProviderAdapter):
             logger.error("Mapix returned empty body via curl")
             return []
 
-        # Ответ может содержать HTML от шагов 1-2 + JSON от шага 3
-        # Ищем JSON в ответе (начинается с {)
-        json_start = body.find("{")
-        if json_start == -1:
-            logger.error("Mapix response contains no JSON: %s", body[:300])
-            return []
-
-        json_body = body[json_start:]
-
         try:
-            data = json.loads(json_body)
+            data = json.loads(body)
         except json.JSONDecodeError as e:
-            logger.error("Mapix JSON parse error: %s, body: %s", e, json_body[:300])
+            logger.error("Mapix JSON parse error: %s, body: %s", e, body[:300])
             return []
 
         if not isinstance(data, dict):
