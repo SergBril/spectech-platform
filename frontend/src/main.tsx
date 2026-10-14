@@ -56,6 +56,7 @@ const DriverLoginPage = lazy(() => import('./pages/driver/DriverLoginPage'));
 const DriverDashboardPage = lazy(() => import('./pages/driver/DriverDashboardPage'));
 const ShiftReportPage = lazy(() => import('./pages/driver/ShiftReportPage'));
 const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
+const GpsAdminPage = lazy(() => import('./pages/admin/GpsAdminPage'));
 
 const AppRoutes = () => {
   return (
@@ -94,6 +95,7 @@ const AppRoutes = () => {
         <Route path="/driver" element={<Navigate to="/driver/dashboard" replace />} />
         <Route path="/driver/shift-report/:taskId" element={<ShiftReportPage />} />
         <Route path="/admin/dashboard" element={<ProtectedRoute><AdminDashboardPage /></ProtectedRoute>} />
+        <Route path="/admin/gps" element={<ProtectedRoute><GpsAdminPage /></ProtectedRoute>} />
         {/* Catch-all — должен быть последним */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
