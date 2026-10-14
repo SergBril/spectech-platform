@@ -113,15 +113,17 @@ class MapixAdapter(GpsProviderAdapter):
         try:
             resp = sync_requests.post(
                 url,
-                data={"_": "_"},  # Непустое form-encoded тело → "_=_" (4 bytes)
+                data="",  # Пустое тело как curl --data-raw ""
                 cookies=session_cookies,
                 headers={
                     "X-Requested-With": "XMLHttpRequest",
                     "Referer": f"{self.api_url}/",
                     "Accept": "application/json, text/javascript, */*; q=0.01",
+                    # НЕ устанавливаем Content-Type — curl --data-raw "" тоже не ставит
                 },
                 timeout=30,
             )
+
         except Exception as e:
             logger.error("Mapix /api/io request failed: %s", e)
             return []
