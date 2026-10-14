@@ -273,30 +273,28 @@ export const MapPage: React.FC = () => {
   const loadPositions = async () => {
     try {
       setLoading(true);
+      // Основной источник: /gps/positions/latest (всегда содержит last known fuel_level)
+      try {
+        const gpsPositions = await mapApi.getGpsPositions();
+        if (gpsPositions.length > 0) {
+          setPositions(gpsPositions);
+          return;
+        }
+      } catch (gpsErr) {
+        console.warn('GPS positions endpoint failed, trying map endpoint', gpsErr);
+      }
+
+      // Fallback: старый эндпоинт /map/vehicles/positions
       const data = await mapApi.getVehiclePositions();
       if (data.positions && data.positions.length > 0) {
         setPositions(data.positions);
       } else {
-        const gpsPositions = await mapApi.getGpsPositions();
-        setPositions(gpsPositions);
-        if (gpsPositions.length === 0) {
+        if (!isAutoRefreshRef.current) {
           showToast.info('Нет данных о позициях техники');
-        } else if (!isAutoRefreshRef.current) {
-          showToast.success(`📡 Загружено ${gpsPositions.length} позиций из GPS`);
         }
       }
     } catch (err: any) {
-      try {
-        const gpsPositions = await mapApi.getGpsPositions();
-        setPositions(gpsPositions);
-        if (gpsPositions.length > 0) {
-          if (!isAutoRefreshRef.current) {
-            showToast.success(`📡 Загружено ${gpsPositions.length} позиций из GPS (fallback)`);
-          }
-        } else {
-          showToast.error('Ошибка загрузки позиций: ' + (err?.response?.data?.detail || err.message));
-        }
-      } catch (gpsErr: any) {
+      if (!isAutoRefreshRef.current) {
         showToast.error('Ошибка загрузки позиций: ' + (err?.response?.data?.detail || err.message));
       }
     } finally {
