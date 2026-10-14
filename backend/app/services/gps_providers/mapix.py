@@ -109,7 +109,14 @@ class MapixAdapter(GpsProviderAdapter):
 
         try:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                    ],
+                )
                 context = await browser.new_context(
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     locale="ru-RU",
@@ -117,8 +124,11 @@ class MapixAdapter(GpsProviderAdapter):
                 )
                 page = await context.new_page()
 
+                # Увеличенный таймаут навигации (Mapix медленный сервер)
+                page.set_default_timeout(30000)
+
                 # Шаг 1: Переходим на страницу авторизации
-                await page.goto(f"{self.api_url}/auth", wait_until="networkidle")
+                await page.goto(f"{self.api_url}/auth", wait_until="domcontentloaded", timeout=30000)
                 logger.info("Mapix auth page loaded: %s", page.url)
 
                 # Заполняем форму
