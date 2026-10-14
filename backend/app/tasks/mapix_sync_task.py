@@ -1,4 +1,4 @@
-"""Фоновая задача синхронизации GPS-данных из Mapix."""
+"""Фоновая задача синхронизации GPS-данных из всех провайдеров."""
 
 import logging
 from datetime import datetime, timezone
@@ -8,28 +8,25 @@ from sqlalchemy.orm import Session
 from app.core.db import SessionLocal
 from app.models.catalog import Vehicle
 from app.models.telematics import GpsPoint
-from app.services.gps_providers.mapix import MapixAdapter
+from app.services.gps_providers.factory import create_gps_adapter
 
-logger = logging.getLogger("spectech.tasks.mapix_sync")
+logger = logging.getLogger("spectech.tasks.gps_sync")
 
-# Счётчик пропусков для уменьшения спама в логах
-_skip_count = 0
+_skip_counts: dict[int, int] = {}
 
 
-def sync_mapix_positions() -> None:
+def sync_gps_positions() -> None:
     """
-    Опрашивает Mapix API и записывает новые позиции в gps_points.
+    Опрашивает GPS-провайдеры и записывает новые позиции в gps_points.
     Запускается каждые 60 секунд через APScheduler.
+    Поддерживает все зарегистрированные провайдеры.
     """
-    global _skip_count
-
     db: Session = SessionLocal()
     try:
-        # Находим все vehicles с провайдером mapix
         vehicles = (
             db.query(Vehicle)
             .filter(
-                Vehicle.gps_provider == "mapix",
+                Vehicle.gps_provider.isnot(None),
                 Vehicle.gps_provider_config.isnot(None),
                 Vehicle.is_deleted == False,  # noqa: E711
             )
@@ -39,30 +36,26 @@ def sync_mapix_positions() -> None:
         if not vehicles:
             return
 
-        logger.info("🔄 Mapix sync: found %d vehicle(s) with mapix provider", len(vehicles))
+        logger.info("🔄 GPS sync: found %d vehicle(s) with GPS provider", len(vehicles))
 
         total_new_points = 0
 
         for vehicle in vehicles:
             config = vehicle.gps_provider_config or {}
-            if not config.get("login") or not config.get("password"):
-                logger.warning("⚠️ Vehicle #%s (%s): incomplete mapix config", vehicle.id, vehicle.name)
-                continue
+            provider = vehicle.gps_provider
 
             try:
-                adapter = MapixAdapter(config)
+                adapter = create_gps_adapter(provider, config)
                 positions = adapter.get_all_positions_sync()
 
                 if not positions:
-                    logger.debug("No positions returned for vehicle #%s", vehicle.id)
                     continue
 
                 new_points = 0
                 for pos in positions:
                     if pos.latitude == 0 and pos.longitude == 0:
-                        continue  # Пропускаем невалидные координаты
+                        continue
 
-                    # Проверяем дубликаты по recorded_at + vehicle_id
                     existing = (
                         db.query(GpsPoint)
                         .filter(
@@ -78,13 +71,13 @@ def sync_mapix_positions() -> None:
                         vehicle_id=vehicle.id,
                         latitude=pos.latitude,
                         longitude=pos.longitude,
-                        altitude=pos.altitude,
+                        altitude=getattr(pos, 'altitude', None),
                         speed=pos.speed,
                         heading=pos.heading,
                         engine_on=pos.engine_on,
-                        fuel_level=pos.fuel_level,
-                        engine_hours=pos.engine_hours,
-                        signal_quality=pos.signal_quality,
+                        fuel_level=getattr(pos, 'fuel_level', None),
+                        engine_hours=getattr(pos, 'engine_hours', None),
+                        signal_quality=getattr(pos, 'signal_quality', None),
                         recorded_at=pos.recorded_at or datetime.now(timezone.utc),
                         received_at=datetime.now(timezone.utc),
                         device_id=pos.raw_data.get("imei") if pos.raw_data else None,
@@ -95,29 +88,27 @@ def sync_mapix_positions() -> None:
 
                 if new_points > 0:
                     total_new_points += new_points
-                    logger.info("✅ Vehicle #%s (%s): %d new GPS points from Mapix",
-                                vehicle.id, vehicle.name, new_points)
+                    _skip_counts[vehicle.id] = 0
+                    logger.info("✅ Vehicle #%s (%s) [%s]: %d new GPS points",
+                                vehicle.id, vehicle.name, provider, new_points)
                 else:
-                    logger.debug("Vehicle #%s: no new points", vehicle.id)
+                    _skip_counts[vehicle.id] = _skip_counts.get(vehicle.id, 0) + 1
+                    skip = _skip_counts[vehicle.id]
+                    if skip % 10 == 1:
+                        logger.warning(
+                            "⚠️ Vehicle #%s (%s) [%s]: skipped %d cycles (no new data)",
+                            vehicle.id, vehicle.name, provider, skip,
+                        )
 
             except Exception as e:
-                logger.error("❌ Mapix sync failed for vehicle #%s (%s): %s",
-                             vehicle.id, vehicle.name, e)
+                logger.error("❌ GPS sync failed for vehicle #%s (%s) [%s]: %s",
+                             vehicle.id, vehicle.name, provider, e)
                 db.rollback()
 
         if total_new_points > 0:
-            _skip_count = 0  # Сброс счётчика при успехе
             db.commit()
-        else:
-            _skip_count += 1
-            if _skip_count % 10 == 1:  # Логируем каждый 10-й пропуск (~каждые 10 минут)
-                logger.warning(
-                    "⚠️ Mapix sync skipped %d consecutive cycles (no data). "
-                    "Waiting for official API access from Mapix support.",
-                    _skip_count,
-                )
 
     except Exception as e:
-        logger.error("❌ Mapix sync task error: %s", e)
+        logger.error("❌ GPS sync task error: %s", e)
     finally:
         db.close()
