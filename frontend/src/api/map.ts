@@ -31,51 +31,7 @@ export const mapApi = {
     return res.data;
   },
 
-  getGpsPositions: async (): Promise<VehiclePosition[]> => {
-    const res = await apiClient.get('/gps/points', { params: { limit: 500 } });
-    const points: any[] = res.data;
-
-    // Группируем по vehicle_id
-    const byVehicle = new Map<number, any[]>();
-    for (const p of points) {
-      if (!byVehicle.has(p.vehicle_id)) byVehicle.set(p.vehicle_id, []);
-      byVehicle.get(p.vehicle_id)!.push(p);
-    }
-
-    const result: VehiclePosition[] = [];
-
-    for (const [vehicleId, vehiclePoints] of byVehicle) {
-      // Сортируем по дате убывание
-      vehiclePoints.sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime());
-
-      const latest = vehiclePoints[0];
-
-      // Ищем последнее ненулевое значение fuel_level
-      let fuelLevel: number | undefined = undefined;
-      for (const p of vehiclePoints) {
-        const fl = p.fuel_level;
-        // Проверяем что значение существует, не null, не пустая строка, и является числом > 0
-        if (fl !== null && fl !== undefined && fl !== '' && !isNaN(Number(fl)) && Number(fl) > 0) {
-          fuelLevel = Number(fl);
-          break;
-        }
-      }
-
-      result.push({
-        vehicle_id: vehicleId,
-        vehicle_name: latest.vehicle_name || `Vehicle #${vehicleId}`,
-        latitude: latest.latitude,
-        longitude: latest.longitude,
-        speed: latest.speed != null ? Number(latest.speed) : undefined,
-        heading: latest.heading != null ? Number(latest.heading) : undefined,
-        engine_on: latest.engine_on === true || latest.engine_on === 'True' || latest.engine_on === 'true',
-        fuel_level: fuelLevel,
-        recorded_at: latest.recorded_at,
-      });
-    }
-
-    return result;
-  },
+getGpsPositions
 
   getVehicleTrack: async (
     vehicleId: number,

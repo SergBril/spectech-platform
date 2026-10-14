@@ -151,6 +151,65 @@ def list_gps_points(
 
     return result
 
+@router.get("/positions/latest")
+def get_latest_positions(db: Session = Depends(get_db)):
+    """Возвращает последнюю позицию каждой техники + последнее известное топливо."""
+    from sqlalchemy import func, and_
+
+    # Подзапрос: максимальная recorded_at для каждого vehicle_id
+    latest_subq = (
+        db.query(
+            GpsPoint.vehicle_id,
+            func.max(GpsPoint.recorded_at).label("max_recorded_at"),
+        )
+        .group_by(GpsPoint.vehicle_id)
+        .subquery()
+    )
+
+    # Основная позиция (последняя по времени)
+    latest_points = (
+        db.query(GpsPoint)
+        .join(
+            latest_subq,
+            and_(
+                GpsPoint.vehicle_id == latest_subq.c.vehicle_id,
+                GpsPoint.recorded_at == latest_subq.c.max_recorded_at,
+            ),
+        )
+        .all()
+    )
+
+    # Для каждой техники ищем последнее ненулевое fuel_level
+    result = []
+    for p in latest_points:
+        last_fuel = (
+            db.query(GpsPoint.fuel_level)
+            .filter(
+                GpsPoint.vehicle_id == p.vehicle_id,
+                GpsPoint.fuel_level.isnot(None),
+                GpsPoint.fuel_level > 0,
+            )
+            .order_by(GpsPoint.recorded_at.desc())
+            .first()
+        )
+
+        # Получаем имя техники
+        vehicle = db.query(Vehicle).filter(Vehicle.id == p.vehicle_id).first()
+
+        result.append({
+            "vehicle_id": p.vehicle_id,
+            "vehicle_name": vehicle.name if vehicle else f"Vehicle #{p.vehicle_id}",
+            "latitude": p.latitude,
+            "longitude": p.longitude,
+            "speed": p.speed,
+            "heading": p.heading,
+            "engine_on": p.engine_on,
+            "fuel_level": float(last_fuel[0]) if last_fuel else None,
+            "recorded_at": p.recorded_at.isoformat() if p.recorded_at else None,
+        })
+
+    return result
+
 
 @router.get("/points/stats")
 def gps_points_stats(db: Session = Depends(get_db)):
