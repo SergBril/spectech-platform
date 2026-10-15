@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids, require_permission
 from app.core.db import get_db
+from app.models.contractor import Employee, Contractor
 from app.models.auth import User
 from app.models.catalog import (
     Category,
@@ -65,6 +66,18 @@ def _enrich_vehicle(vehicle: Vehicle) -> dict:
         except Exception:
             continue
     data["attribute_values"] = attr_values
+
+    # Assigned driver name
+    data["assigned_driver_name"] = None
+    if hasattr(vehicle, 'assigned_driver_id') and vehicle.assigned_driver_id:
+        try:
+            from sqlalchemy import select as sa_select
+            # Driver name comes from Contractor.name via Employee
+            emp = db.query(Employee).filter(Employee.contractor_id == vehicle.assigned_driver_id).first()
+            if emp and emp.contractor:
+                data["assigned_driver_name"] = emp.contractor.name
+        except Exception:
+            pass
 
     return data
 
@@ -147,6 +160,37 @@ def _load_vehicle_with_relations(db: Session, vehicle_id: int) -> Vehicle | None
 # ============================================================
 # GET /vehicles — список техники
 # ============================================================
+
+@router.get("/drivers", tags=["🚜 Vehicles (Спецтехника)"])
+def list_drivers(
+    limit: int = Query(500, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_ids: list[int] = Depends(get_user_company_ids),
+):
+    """Получить список водителей (сотрудников с user_id)."""
+    stmt = (
+        select(Employee, Contractor)
+        .join(Contractor, Employee.contractor_id == Contractor.id)
+        .where(
+            Contractor.company_id.in_(company_ids),
+            Contractor.is_active == True,  # noqa: E712
+            Employee.user_id.isnot(None),
+        )
+        .limit(limit)
+    )
+    rows = db.execute(stmt).all()
+    return [
+        {
+            "id": emp.contractor_id,
+            "full_name": ctr.name,
+            "position": emp.position,
+            "user_id": emp.user_id,
+        }
+        for emp, ctr in rows
+    ]
+
+
 @router.get(
     "",
     response_model=VehicleListResponse,
