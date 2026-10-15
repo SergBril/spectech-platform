@@ -101,7 +101,6 @@ export const RequestsPage: React.FC = () => {
     }
   };
 
-  // Load categories and vehicles for filter dropdowns
   useEffect(() => {
     apiClient.get('/catalog/categories').then(r => setCategories(r.data)).catch(() => {});
     apiClient.get('/vehicles?limit=500').then(r => {
@@ -281,62 +280,35 @@ export const RequestsPage: React.FC = () => {
               </select>
             </div>
             <div>
-              <select
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-              >
+              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
                 <option value="all">Все категории</option>
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
+                {categories.map(cat => (<option key={cat.id} value={cat.id}>{cat.name}</option>))}
               </select>
             </div>
             <div>
-              <select
-                value={filterVehicleId}
-                onChange={(e) => setFilterVehicleId(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-              >
+              <select value={filterVehicleId} onChange={(e) => setFilterVehicleId(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
                 <option value="all">Вся техника</option>
-                {vehicles.map(v => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
+                {vehicles.map(v => (<option key={v.id} value={v.id}>{v.name}</option>))}
               </select>
             </div>
             <div className="flex items-center gap-1">
-              <input
-                type="date"
-                value={filterDateFrom}
-                onChange={(e) => setFilterDateFrom(e.target.value)}
-                className="px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                title="Дата от"
-              />
+              <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
+                className="px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none" title="Дата от" />
               <span className="text-gray-400">—</span>
-              <input
-                type="date"
-                value={filterDateTo}
-                onChange={(e) => setFilterDateTo(e.target.value)}
-                className="px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                title="Дата до"
-              />
+              <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
+                className="px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none" title="Дата до" />
             </div>
             <div>
-              <select
-                value={sortBy + '_' + sortOrder}
-                onChange={(e) => {
-                  const [field, order] = e.target.value.split('_');
-                  setSortBy(field);
-                  setSortOrder(order as 'asc' | 'desc');
-                }}
-                className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-              >
+              <select value={sortBy + '_' + sortOrder}
+                onChange={(e) => { const [f, o] = e.target.value.split('_'); setSortBy(f); setSortOrder(o as 'asc'|'desc'); }}
+                className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
                 <option value="created_at_desc">Сначала новые</option>
                 <option value="created_at_asc">Сначала старые</option>
                 <option value="planned_start_asc">По дате начала ↑</option>
                 <option value="planned_start_desc">По дате начала ↓</option>
                 <option value="priority_desc">По приоритету ↓</option>
-                <option value="status_asc">По статусу</option>
               </select>
             </div>
             {(filterStatus !== 'all' || filterPriority !== 'all' || searchQuery || filterCategory !== 'all' || filterVehicleId !== 'all' || filterDateFrom || filterDateTo) && (
@@ -362,20 +334,21 @@ export const RequestsPage: React.FC = () => {
               )}
             </div>
           ) : (
-            <table className="min-w-full divide-y divide-gray-200">
+            <div className="overflow-x-auto">
+            <table className="min-w-[1400px] w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Тип работы</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Адрес</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Период</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Категория</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Клиент</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Приоритет</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"60px"}}>№</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"150px"}}>Тип работы</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"200px"}}>Адрес</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"180px"}}>Период</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"160px"}}>Категория</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"160px"}}>Клиент</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"120px"}}>Статус</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"100px"}}>Приоритет</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"100px"}}>Сумма</th>
                   {(canEdit || canDelete) && (
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase" style={{minWidth:"80px"}}>Действия</th>
                   )}
                 </tr>
               </thead>
@@ -443,6 +416,7 @@ export const RequestsPage: React.FC = () => {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>
