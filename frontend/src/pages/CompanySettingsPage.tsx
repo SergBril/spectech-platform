@@ -1,3 +1,5 @@
+import { PhoneInput } from '../components/PhoneInput';
+import { EmailInput } from '../components/EmailInput';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useCompany } from '../contexts/CompanyContext';
 import { companiesApi, type CompanyTaxSettings } from '../api/companies';
@@ -331,8 +333,8 @@ export const CompanySettingsPage: React.FC = () => {
             <div className="bg-white rounded-lg shadow p-6 space-y-4">
               <h2 className="text-lg font-semibold text-gray-800 border-b pb-2">📞 Контакты</h2>
               <div className="flex flex-wrap gap-4">
-                <RequisiteField label="Телефон" value={requisites.phone} onChange={(v) => handleRequisiteChange('phone', v)} placeholder="+7 (999) 123-45-67" half />
-                <RequisiteField label="Email для документов" value={requisites.email} onChange={(v) => handleRequisiteChange('email', v)} placeholder="billing@company.ru" half />
+                <div className="w-full md:w-[calc(50%-0.5rem)]"><PhoneInput label="Телефон" value={requisites.phone || ''} onChange={(v) => handleRequisiteChange('phone', v)} /></div>
+                <div className="w-full md:w-[calc(50%-0.5rem)]"><EmailInput label="Email для документов" value={requisites.email || ''} onChange={(v) => handleRequisiteChange('email', v)} placeholder="billing@company.com" /></div>
               </div>
             </div>
 

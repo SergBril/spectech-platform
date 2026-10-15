@@ -1,3 +1,6 @@
+import { PhoneInput } from '../components/PhoneInput';
+import { EmailInput, isValidEmail } from '../components/EmailInput';
+import apiClient from '../api/client';
 import React, { useEffect, useState, useRef } from 'react';
 import { driversApi, type DriverProfile } from '../api/drivers';
 import Layout from '../components/Layout';
@@ -23,6 +26,7 @@ export const DriversPage: React.FC = () => {
   const [editingDriver, setEditingDriver] = useState<DriverProfile | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Resizable + Visibility
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
@@ -72,7 +76,7 @@ export const DriversPage: React.FC = () => {
     } catch { /* ignore */ } finally { setLoading(false); }
   };
 
-  useEffect(() => { loadDrivers(); }, [search]);
+  useEffect(() => { loadDrivers(); }, [search, refreshKey]);
 
   const handleEdit = (driver: DriverProfile) => { setEditingDriver(driver); setShowForm(true); };
   const handleCloseForm = () => { setShowForm(false); setEditingDriver(null); loadDrivers(); };
@@ -172,7 +176,7 @@ export const DriversPage: React.FC = () => {
 
       {/* Create Driver Modal */}
       {showCreateForm && (
-        <CreateDriverModal onClose={() => { setShowCreateForm(false); loadDrivers(); }} />
+        <CreateDriverModal onClose={() => { setShowCreateForm(false); setRefreshKey(k => k + 1); }} />
       )}
     </Layout>
   );
@@ -198,8 +202,31 @@ const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> 
     notes: driver.notes || '',
   });
   const [saving, setSaving] = useState(false);
+  const [users, setUsers] = useState<{id: number; email: string; full_name: string}[]>([]);
+  const [showNewUser, setShowNewUser] = useState(false);
+  const [newUser, setNewUser] = useState({ email: '', password: '', full_name: '' });
+
+  useEffect(() => {
+    apiClient.get('/drivers/users').then(r => setUsers(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+  }, []);
 
   const handleChange = (field: string, value: string) => setForm(p => ({ ...p, [field]: value }));
+
+  const handleCreateAndBind = async () => {
+    if (!newUser.email || !newUser.password) { alert('Email и пароль обязательны'); return; }
+    try {
+      const res = await apiClient.post('/drivers/create-user', {
+        email: newUser.email, password: newUser.password,
+        full_name: newUser.full_name || driver.full_name,
+        contractor_id: driver.contractor_id,
+      });
+      alert('Пользователь создан! ID: ' + res.data.user_id);
+      setShowNewUser(false);
+      // Reload users
+      const r = await apiClient.get('/drivers/users');
+      setUsers(Array.isArray(r.data) ? r.data : []);
+    } catch (err: any) { alert(err.response?.data?.detail || 'Ошибка создания'); }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -264,6 +291,70 @@ const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> 
             </div>
           </div>
           <div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase border-b pb-1">📱 Доступ к мобильному приложению</h4>
+            {!showNewUser ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Текущий статус</label>
+                  <div className={`text-sm font-medium ${driver.user_id ? 'text-green-600' : 'text-orange-600'}`}>
+                    {driver.user_id ? `✅ Привязан (user_id: ${driver.user_id})` : '⚠️ Не привязан — водитель не может войти в приложение'}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Выбрать существующего пользователя</label>
+                  <select
+                    value=""
+                    onChange={async (e) => {
+                      if (!e.target.value) return;
+                      if (!confirm('Привязать этого пользователя к водителю?')) return;
+                      try {
+                        await driversApi.updateProfile(driver.contractor_id, { user_id: parseInt(e.target.value) } as any);
+                        alert('Пользователь привязан!');
+                        onClose();
+                      } catch (err: any) { alert(err.response?.data?.detail || 'Ошибка'); }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">— Выберите пользователя —</option>
+                    {users.filter(u => u.id !== driver.user_id).map(u => (
+                      <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>
+                    ))}
+                  </select>
+                </div>
+                <button onClick={() => setShowNewUser(true)}
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                  + Создать нового пользователя
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3 bg-blue-50 p-4 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">Новый пользователь</span>
+                  <button onClick={() => setShowNewUser(false)} className="text-xs text-gray-500 hover:text-gray-700">← Назад</button>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Email *</label>
+                  <input type="email" value={newUser.email} onChange={e => setNewUser(p => ({ ...p, email: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Пароль * (мин. 6 символов)</label>
+                  <input type="password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">ФИО (автозаполнение из профиля)</label>
+                  <input type="text" value={newUser.full_name || driver.full_name} onChange={e => setNewUser(p => ({ ...p, full_name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <button onClick={handleCreateAndBind}
+                  className="w-full px-4 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700">
+                  Создать и привязать
+                </button>
+              </div>
+            )}
+          </div>
+          <div>
             <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase border-b pb-1">🏥 Прочее</h4>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Медосмотр до" field="medical_cert_expiry" type="date" />
@@ -296,16 +387,23 @@ const CreateDriverModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     phone: '',
     email: '',
   });
+  // Position is always fixed for drivers
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     if (!form.full_name.trim()) { alert('ФИО обязательно'); return; }
+    if (form.email && !/^[a-z0-9._-]+@[a-z0-9.-]+\.(ru|com)$/.test(form.email)) {
+      alert('Некорректный email. Используйте латиницу: name@domain.xx'); return;
+    }
+    console.log('Creating driver with:', form);
     setSaving(true);
     try {
-      await driversApi.create(form);
+      const res = await driversApi.create(form);
+      console.log('Create response:', res);
       onClose();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Ошибка создания');
+      console.error('Create error:', err);
+      alert(err.response?.data?.detail || err.message || 'Ошибка создания');
     } finally { setSaving(false); }
   };
 
@@ -324,19 +422,11 @@ const CreateDriverModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Должность</label>
-            <input type="text" value={form.position} onChange={e => setForm(p => ({ ...p, position: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+            <input type="text" value="Водитель" disabled
+              className="w-full px-3 py-2 border border-gray-200 rounded text-sm bg-gray-50 text-gray-500" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Телефон</label>
-            <input type="text" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
-            <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-          </div>
+          <PhoneInput label="Телефон" value={form.phone} onChange={v => setForm(p => ({ ...p, phone: v }))} />
+          <EmailInput label="Email (латиница)" value={form.email} onChange={v => setForm(p => ({ ...p, email: v }))} placeholder="driver@example.com" />
           <div className="text-xs text-gray-500">
             После создания вы сможете заполнить документы (ВУ, паспорт, корочки) в редакторе профиля.
           </div>
