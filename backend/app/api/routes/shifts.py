@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_company_id, get_current_user
+from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.shift import ShiftReport, ShiftReportStatus, ShiftTask
@@ -36,10 +36,10 @@ def list_shift_tasks(
     limit: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Список сменных заданий (только своей компании)."""
-    stmt = select(ShiftTask).where(ShiftTask.company_id == company_id)
+    stmt = select(ShiftTask).where(ShiftTask.company_id.in_(company_ids))
     if request_id:
         stmt = stmt.where(ShiftTask.request_id == request_id)
     stmt = stmt.order_by(ShiftTask.created_at.desc()).limit(limit)
@@ -51,7 +51,7 @@ def create_shift_task(
     payload: ShiftTaskCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Создать сменное задание (для своей компании)."""
     task = ShiftTask(**payload.model_dump(), company_id=company_id)
@@ -84,7 +84,7 @@ def list_shift_reports(
     company_id: int = Depends(get_current_company_id),
 ):
     """Список сменных отчётов (только своей компании)."""
-    stmt = select(ShiftReport).where(ShiftReport.company_id == company_id)
+    stmt = select(ShiftReport).where(ShiftReport.company_id.in_(company_ids))
     if shift_task_id:
         stmt = stmt.where(ShiftReport.shift_task_id == shift_task_id)
     stmt = stmt.order_by(ShiftReport.created_at.desc()).limit(limit)
