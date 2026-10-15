@@ -164,31 +164,54 @@ def _load_vehicle_with_relations(db: Session, vehicle_id: int) -> Vehicle | None
 @router.get("/drivers", tags=["🚜 Vehicles (Спецтехника)"])
 def list_drivers(
     limit: int = Query(500, ge=1, le=1000),
+    vehicle_id: int | None = Query(None, description="ID техники — исключить её текущего водителя из фильтра занятости"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
-    """Получить список водителей (сотрудников с user_id)."""
+    """Получить список водителей. Свободные + текущий для указанной техники."""
+    # Находим contractor_id текущего водителя указанной техники
+    current_driver_id = None
+    if vehicle_id:
+        veh = db.get(Vehicle, vehicle_id)
+        if veh and veh.company_id in company_ids:
+            current_driver_id = veh.assigned_driver_id
+
+    # Все активные сотрудники-водители компании
     stmt = (
         select(Employee, Contractor)
         .join(Contractor, Employee.contractor_id == Contractor.id)
         .where(
             Contractor.company_id.in_(company_ids),
             Contractor.is_active == True,  # noqa: E712
-            Employee.user_id.isnot(None),
         )
-        .limit(limit)
     )
     rows = db.execute(stmt).all()
-    return [
-        {
-            "id": emp.contractor_id,
+
+    # Находим занятых водителей (назначенных на любую технику кроме текущей)
+    busy_stmt = select(Vehicle.assigned_driver_id).where(
+        Vehicle.assigned_driver_id.isnot(None),
+        Vehicle.company_id.in_(company_ids),
+    )
+    if vehicle_id:
+        busy_stmt = busy_stmt.where(Vehicle.id != vehicle_id)
+    busy_ids = set(db.scalars(busy_stmt).all())
+
+    result = []
+    for emp, ctr in rows:
+        cid = emp.contractor_id
+        is_busy = cid in busy_ids and cid != current_driver_id
+        result.append({
+            "id": cid,
             "full_name": ctr.name,
             "position": emp.position,
             "user_id": emp.user_id,
-        }
-        for emp, ctr in rows
-    ]
+            "is_assigned": is_busy,
+        })
+
+    # Сортируем: свободные сначала
+    result.sort(key=lambda x: (x["is_assigned"], x["full_name"]))
+    return result[:limit]
 
 
 @router.get(
