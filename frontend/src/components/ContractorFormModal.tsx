@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Contractor, ContractorCreate, ContractorUpdate, BankDetails } from '../api/contractors';
+import { PhoneInput } from './PhoneInput';
+import { EmailInput, isValidEmail } from './EmailInput';
 
 interface Props {
   contractor: Contractor | null;
@@ -440,22 +442,18 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Телефон</label>
-                    <input
-                      type="tel"
-                      value={formData.contact_phone}
-                      onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                      placeholder="+7 (999) 123-45-67"
+                    <PhoneInput
+                      label="Телефон"
+                      value={formData.contact_phone || ''}
+                      onChange={(v) => setFormData({ ...formData, contact_phone: v })}
+                      placeholder="+79991234567"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={formData.contact_email}
-                      onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                    <EmailInput
+                      label="Email"
+                      value={formData.contact_email || ''}
+                      onChange={(v) => setFormData({ ...formData, contact_email: v })}
                       placeholder="client@example.com"
                     />
                   </div>

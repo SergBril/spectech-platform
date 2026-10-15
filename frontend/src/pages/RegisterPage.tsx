@@ -1,3 +1,5 @@
+import { PhoneInput } from '../components/PhoneInput';
+import { EmailInput, isValidEmail } from '../components/EmailInput';
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -63,28 +65,19 @@ export const RegisterPage: React.FC = () => {
               />
             </div>
             <div>
-              <label htmlFor="email" className="sr-only">Email</label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Email"
+              <EmailInput
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={setEmail}
+                placeholder="Email"
+                className="appearance-none rounded-none relative block w-full placeholder-gray-500 text-gray-900 focus:z-10 sm:text-sm"
               />
             </div>
             <div>
-              <label htmlFor="phone" className="sr-only">Телефон</label>
-              <input
-                id="phone"
-                name="phone"
-                type="tel"
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Телефон (опционально)"
+              <PhoneInput
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={setPhone}
+                placeholder="+7 (опционально)"
+                className="appearance-none rounded-none relative block w-full placeholder-gray-500 text-gray-900 focus:z-10 sm:text-sm"
               />
             </div>
             <div>
