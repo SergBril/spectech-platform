@@ -1,4 +1,4 @@
-import { lazy } from 'react';
+﻿import { lazy } from 'react';
 
 // Ленивая загрузка тяжёлых страниц
 export const DashboardPage = lazy(() => import('./DashboardPage'));
@@ -26,3 +26,4 @@ export const VehicleDetailPage = lazy(() => import('./VehicleDetailPage'));
 
 // Лёгкие страницы — без lazy (загружаются сразу)
 // LoginPage, RegisterPage — маленькие, нужны быстро
+export const DriversPage = lazy(() => import('./DriversPage'));
