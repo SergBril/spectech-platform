@@ -50,6 +50,24 @@ const formatMoney = (v: number | string | null | undefined) => {
   return `${num.toLocaleString('ru-RU')} ₽`;
 };
 
+
+const downloadFile = async (fn: (p: any) => Promise<Blob>, filename: string, params: any) => {
+  try {
+    const blob = await fn(params);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('Export failed:', err);
+    alert('Ошибка при экспорте');
+  }
+};
+
 export const RequestsPage: React.FC = () => {
   const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
@@ -78,6 +96,21 @@ export const RequestsPage: React.FC = () => {
   const canCreate = hasPermission('requests', 'create');
   const canEdit = hasPermission('requests', 'update');
   const canDelete = hasPermission('requests', 'delete');
+  const getExportParams = () => {
+    const params: any = {};
+    if (filterStatus !== 'all') params.status = filterStatus;
+    if (filterPriority !== 'all') params.priority = filterPriority;
+    if (searchQuery) params.search = searchQuery;
+    if (filterCategory !== 'all') params.vehicle_category_id = parseInt(filterCategory);
+    if (filterVehicleId !== 'all') params.assigned_vehicle_id = parseInt(filterVehicleId);
+    if (filterDateFrom) params.date_from = filterDateFrom;
+    if (filterDateTo) params.date_to = filterDateTo;
+    params.sort_by = sortBy;
+    params.sort_order = sortOrder;
+    return params;
+  };
+
+
 
   const loadRequests = async () => {
     try {
@@ -102,7 +135,7 @@ export const RequestsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    apiClient.get('/catalog/categories').then(r => setCategories(r.data)).catch(() => {});
+    apiClient.get('/categories').then(r => setCategories(r.data)).catch(() => {});
     apiClient.get('/vehicles?limit=500').then(r => {
       const items = Array.isArray(r.data) ? r.data : r.data?.items || [];
       setVehicles(items.map((v: any) => ({ id: v.id, name: v.name || v.license_plate || `#${v.id}` })));
@@ -225,14 +258,30 @@ export const RequestsPage: React.FC = () => {
               )
             </h2>
           </div>
-          {canCreate && (
+          <div className="flex gap-2">
             <button
-              onClick={handleCreate}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center shadow-sm"
+              onClick={() => downloadFile(requestsApi.exportPdf, 'requests.pdf', getExportParams())}
+              className="bg-gray-100 text-gray-700 px-3 py-2 rounded hover:bg-gray-200 flex items-center shadow-sm text-sm"
+              title="Экспорт в PDF"
             >
-              <span className="mr-2">+</span> Новая заявка
+              📄 PDF
             </button>
-          )}
+            <button
+              onClick={() => downloadFile(requestsApi.exportExcel, 'requests.xlsx', getExportParams())}
+              className="bg-green-100 text-green-700 px-3 py-2 rounded hover:bg-green-200 flex items-center shadow-sm text-sm"
+              title="Экспорт в Excel"
+            >
+              📊 Excel
+            </button>
+            {canCreate && (
+              <button
+                onClick={handleCreate}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center shadow-sm"
+              >
+                <span className="mr-2">+</span> Новая заявка
+              </button>
+            )}
+          </div>
         </div>
 
         {error && (
