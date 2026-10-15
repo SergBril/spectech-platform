@@ -529,11 +529,16 @@ def export_requests_pdf(
             contractor = db.get(Contractor, req.client_id)
             if contractor:
                 client_name = contractor.name
+        vehicle_name = ""
+        if req.assigned_vehicle_id:
+            v = db.get(Vehicle, req.assigned_vehicle_id)
+            if v:
+                vehicle_name = v.name
         data = {"id": req.id, "work_type": req.work_type, "object_address": req.object_address,
                 "planned_start": req.planned_start, "planned_end": req.planned_end,
                 "status": req.status, "priority": req.priority,
                 "estimated_amount": req.estimated_amount, "final_amount": req.final_amount,
-                "vehicle_category_name": cat_name, "client_name": client_name}
+                "vehicle_category_name": cat_name, "assigned_vehicle_name": vehicle_name, "client_name": client_name}
         enriched.append(data)
 
     pdf_bytes = gen_pdf(enriched)
@@ -615,11 +620,16 @@ def export_requests_excel(
             contractor = db.get(Contractor, req.client_id)
             if contractor:
                 client_name = contractor.name
+        vehicle_name = ""
+        if req.assigned_vehicle_id:
+            v = db.get(Vehicle, req.assigned_vehicle_id)
+            if v:
+                vehicle_name = v.name
         data = {"id": req.id, "work_type": req.work_type, "object_address": req.object_address,
                 "planned_start": req.planned_start, "planned_end": req.planned_end,
                 "status": req.status, "priority": req.priority,
                 "estimated_amount": req.estimated_amount, "final_amount": req.final_amount,
-                "vehicle_category_name": cat_name, "client_name": client_name}
+                "vehicle_category_name": cat_name, "assigned_vehicle_name": vehicle_name, "client_name": client_name}
         enriched.append(data)
 
     excel_bytes = gen_excel(enriched)
