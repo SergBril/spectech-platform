@@ -159,4 +159,14 @@ export const requestsApi = {
     const response = await apiClient.get<StatusLogEntry[]>(`/requests/${id}/history`);
     return response.data;
   },
+  async exportPdf(params?: Record<string, any>): Promise<Blob> {
+    const response = await apiClient.get('/requests/export/pdf', { params, responseType: 'blob' });
+    return response.data;
+  },
+
+  async exportExcel(params?: Record<string, any>): Promise<Blob> {
+    const response = await apiClient.get('/requests/export/excel', { params, responseType: 'blob' });
+    return response.data;
+  },
+
 };

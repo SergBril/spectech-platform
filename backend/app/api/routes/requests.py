@@ -455,3 +455,176 @@ def get_request_history(
         }
         for log, email in results
     ]
+
+
+@router.get("/export/pdf")
+def export_requests_pdf(
+    status_filter: str | None = Query(default=None, alias="status"),
+    priority: str | None = None,
+    client_id: int | None = None,
+    vehicle_category_id: int | None = None,
+    assigned_vehicle_id: int | None = None,
+    work_type: str | None = None,
+    search: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_ids: list[int] = Depends(get_user_company_ids),
+):
+    """Экспорт заявок в PDF с теми же фильтрами что и список."""
+    from app.models.catalog import Category, Vehicle
+    from app.models.contractor import Contractor
+    from app.utils.export_utils import export_requests_pdf as gen_pdf
+    from fastapi.responses import StreamingResponse
+    import io
+
+    stmt = (
+        select(Request)
+        .outerjoin(Contractor, Request.client_id == Contractor.id)
+        .outerjoin(Category, Request.vehicle_category_id == Category.id)
+        .outerjoin(Vehicle, Request.assigned_vehicle_id == Vehicle.id)
+        .where(Request.company_id.in_(company_ids))
+    )
+    if status_filter:
+        stmt = stmt.where(Request.status == status_filter)
+    if priority:
+        stmt = stmt.where(Request.priority == priority)
+    if client_id:
+        stmt = stmt.where(Request.client_id == client_id)
+    if vehicle_category_id:
+        stmt = stmt.where(Request.vehicle_category_id == vehicle_category_id)
+    if assigned_vehicle_id:
+        stmt = stmt.where(Request.assigned_vehicle_id == assigned_vehicle_id)
+    if work_type:
+        stmt = stmt.where(Request.work_type.ilike(f"%{work_type}%"))
+    if search:
+        stmt = stmt.where(
+            (Request.work_type.ilike(f"%{search}%"))
+            | (Request.object_address.ilike(f"%{search}%"))
+        )
+    if date_from:
+        from datetime import datetime as dt
+        stmt = stmt.where(Request.planned_start >= dt.fromisoformat(date_from))
+    if date_to:
+        from datetime import datetime as dt
+        stmt = stmt.where(Request.planned_end <= dt.fromisoformat(date_to))
+    sort_col = getattr(Request, sort_by, Request.created_at)
+    stmt = stmt.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc()).limit(5000)
+
+    requests_list = db.scalars(stmt).all()
+
+    # Enrich with names
+    enriched = []
+    for req in requests_list:
+        cat_name = ""
+        if req.vehicle_category_id:
+            cat = db.get(Category, req.vehicle_category_id)
+            if cat:
+                cat_name = cat.name
+        client_name = ""
+        if req.client_id:
+            contractor = db.get(Contractor, req.client_id)
+            if contractor:
+                client_name = contractor.name
+        data = {"id": req.id, "work_type": req.work_type, "object_address": req.object_address,
+                "planned_start": req.planned_start, "planned_end": req.planned_end,
+                "status": req.status, "priority": req.priority,
+                "estimated_amount": req.estimated_amount, "final_amount": req.final_amount,
+                "vehicle_category_name": cat_name, "client_name": client_name}
+        enriched.append(data)
+
+    pdf_bytes = gen_pdf(enriched)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=requests.pdf"}
+    )
+
+
+@router.get("/export/excel")
+def export_requests_excel(
+    status_filter: str | None = Query(default=None, alias="status"),
+    priority: str | None = None,
+    client_id: int | None = None,
+    vehicle_category_id: int | None = None,
+    assigned_vehicle_id: int | None = None,
+    work_type: str | None = None,
+    search: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_ids: list[int] = Depends(get_user_company_ids),
+):
+    """Экспорт заявок в Excel с теми же фильтрами что и список."""
+    from app.models.catalog import Category, Vehicle
+    from app.models.contractor import Contractor
+    from app.utils.export_utils import export_requests_excel as gen_excel
+    from fastapi.responses import StreamingResponse
+    import io
+
+    stmt = (
+        select(Request)
+        .outerjoin(Contractor, Request.client_id == Contractor.id)
+        .outerjoin(Category, Request.vehicle_category_id == Category.id)
+        .outerjoin(Vehicle, Request.assigned_vehicle_id == Vehicle.id)
+        .where(Request.company_id.in_(company_ids))
+    )
+    if status_filter:
+        stmt = stmt.where(Request.status == status_filter)
+    if priority:
+        stmt = stmt.where(Request.priority == priority)
+    if client_id:
+        stmt = stmt.where(Request.client_id == client_id)
+    if vehicle_category_id:
+        stmt = stmt.where(Request.vehicle_category_id == vehicle_category_id)
+    if assigned_vehicle_id:
+        stmt = stmt.where(Request.assigned_vehicle_id == assigned_vehicle_id)
+    if work_type:
+        stmt = stmt.where(Request.work_type.ilike(f"%{work_type}%"))
+    if search:
+        stmt = stmt.where(
+            (Request.work_type.ilike(f"%{search}%"))
+            | (Request.object_address.ilike(f"%{search}%"))
+        )
+    if date_from:
+        from datetime import datetime as dt
+        stmt = stmt.where(Request.planned_start >= dt.fromisoformat(date_from))
+    if date_to:
+        from datetime import datetime as dt
+        stmt = stmt.where(Request.planned_end <= dt.fromisoformat(date_to))
+    sort_col = getattr(Request, sort_by, Request.created_at)
+    stmt = stmt.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc()).limit(5000)
+
+    requests_list = db.scalars(stmt).all()
+
+    enriched = []
+    for req in requests_list:
+        cat_name = ""
+        if req.vehicle_category_id:
+            cat = db.get(Category, req.vehicle_category_id)
+            if cat:
+                cat_name = cat.name
+        client_name = ""
+        if req.client_id:
+            contractor = db.get(Contractor, req.client_id)
+            if contractor:
+                client_name = contractor.name
+        data = {"id": req.id, "work_type": req.work_type, "object_address": req.object_address,
+                "planned_start": req.planned_start, "planned_end": req.planned_end,
+                "status": req.status, "priority": req.priority,
+                "estimated_amount": req.estimated_amount, "final_amount": req.final_amount,
+                "vehicle_category_name": cat_name, "client_name": client_name}
+        enriched.append(data)
+
+    excel_bytes = gen_excel(enriched)
+    return StreamingResponse(
+        io.BytesIO(excel_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=requests.xlsx"}
+    )
