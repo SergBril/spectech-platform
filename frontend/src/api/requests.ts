@@ -83,8 +83,17 @@ export interface RequestUpdate extends Partial<RequestCreate> {
 
 export const requestsApi = {
   async getAll(params?: {
-    status?: RequestStatus;
+    status?: string;
+    priority?: string;
     client_id?: number;
+    vehicle_category_id?: number;
+    assigned_vehicle_id?: number;
+    work_type?: string;
+    search?: string;
+    date_from?: string;
+    date_to?: string;
+    sort_by?: string;
+    sort_order?: 'asc' | 'desc';
     limit?: number;
     offset?: number;
   }): Promise<Request[]> {
@@ -99,9 +108,8 @@ export const requestsApi = {
 
   async create(data: RequestCreate): Promise<Request> {
     const payload: any = {
-      client_id: 1,
+      client_id: data.client_id,
       request_type: data.request_type,
-      vehicle_category_id: 6,
       work_type: data.work_type,
       object_address: data.object_address,
       planned_start: new Date(data.planned_start).toISOString(),
@@ -119,6 +127,9 @@ export const requestsApi = {
     }
     if (data.estimated_amount !== undefined && data.estimated_amount !== null) {
       payload.estimated_amount = parseFloat(String(data.estimated_amount));
+    }
+    if (data.vehicle_category_id !== undefined && data.vehicle_category_id !== null) {
+      payload.vehicle_category_id = data.vehicle_category_id;
     }
     if (data.comment) payload.comment = data.comment;
 

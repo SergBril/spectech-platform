@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { requestsApi, type Request, type RequestStatus } from '../api/requests';
+import apiClient from '../api/client';
 import { TableSkeleton } from '../components/Skeleton';
 import RequestFormModal from '../components/RequestFormModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
@@ -61,6 +62,14 @@ export const RequestsPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterVehicleId, setFilterVehicleId] = useState<string>('all');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [categories, setCategories] = useState<{id:number;name:string}[]>([]);
+  const [vehicles, setVehicles] = useState<{id:number;name:string}[]>([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<Request | null>(null);
@@ -73,7 +82,15 @@ export const RequestsPage: React.FC = () => {
   const loadRequests = async () => {
     try {
       setLoading(true);
-      const data = await requestsApi.getAll({ limit: 200 });
+      const params: any = { limit: 200, sort_by: sortBy, sort_order: sortOrder };
+      if (filterStatus !== 'all') params.status = filterStatus;
+      if (filterPriority !== 'all') params.priority = filterPriority;
+      if (searchQuery) params.search = searchQuery;
+      if (filterCategory !== 'all') params.vehicle_category_id = parseInt(filterCategory);
+      if (filterVehicleId !== 'all') params.assigned_vehicle_id = parseInt(filterVehicleId);
+      if (filterDateFrom) params.date_from = filterDateFrom;
+      if (filterDateTo) params.date_to = filterDateTo;
+      const data = await requestsApi.getAll(params);
       setRequests(data);
       setError('');
     } catch (err: any) {
@@ -84,9 +101,18 @@ export const RequestsPage: React.FC = () => {
     }
   };
 
+  // Load categories and vehicles for filter dropdowns
+  useEffect(() => {
+    apiClient.get('/catalog/categories').then(r => setCategories(r.data)).catch(() => {});
+    apiClient.get('/vehicles?limit=500').then(r => {
+      const items = Array.isArray(r.data) ? r.data : r.data?.items || [];
+      setVehicles(items.map((v: any) => ({ id: v.id, name: v.name || v.license_plate || `#${v.id}` })));
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     loadRequests();
-  }, []);
+  }, [filterStatus, filterPriority, searchQuery, filterCategory, filterVehicleId, filterDateFrom, filterDateTo, sortBy, sortOrder]);
 
   // 🆕 Фильтрация заявок
   const filteredRequests = useMemo(() => {
@@ -254,9 +280,68 @@ export const RequestsPage: React.FC = () => {
                 ))}
               </select>
             </div>
-            {(filterStatus !== 'all' || filterPriority !== 'all' || searchQuery) && (
+            <div>
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="all">Все категории</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <select
+                value={filterVehicleId}
+                onChange={(e) => setFilterVehicleId(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="all">Вся техника</option>
+                {vehicles.map(v => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+                className="px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                title="Дата от"
+              />
+              <span className="text-gray-400">—</span>
+              <input
+                type="date"
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+                className="px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                title="Дата до"
+              />
+            </div>
+            <div>
+              <select
+                value={sortBy + '_' + sortOrder}
+                onChange={(e) => {
+                  const [field, order] = e.target.value.split('_');
+                  setSortBy(field);
+                  setSortOrder(order as 'asc' | 'desc');
+                }}
+                className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="created_at_desc">Сначала новые</option>
+                <option value="created_at_asc">Сначала старые</option>
+                <option value="planned_start_asc">По дате начала ↑</option>
+                <option value="planned_start_desc">По дате начала ↓</option>
+                <option value="priority_desc">По приоритету ↓</option>
+                <option value="status_asc">По статусу</option>
+              </select>
+            </div>
+            {(filterStatus !== 'all' || filterPriority !== 'all' || searchQuery || filterCategory !== 'all' || filterVehicleId !== 'all' || filterDateFrom || filterDateTo) && (
               <button
-                onClick={() => { setFilterStatus('all'); setFilterPriority('all'); setSearchQuery(''); }}
+                onClick={() => { setFilterStatus('all'); setFilterPriority('all'); setSearchQuery(''); setFilterCategory('all'); setFilterVehicleId('all'); setFilterDateFrom(''); setFilterDateTo(''); setSortBy('created_at'); setSortOrder('desc'); }}
                 className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
               >
                 ✕ Сбросить
