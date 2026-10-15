@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { requestsApi, type Request, type RequestStatus } from '../api/requests';
@@ -88,6 +88,68 @@ export const RequestsPage: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [categories, setCategories] = useState<{id:number;name:string}[]>([]);
   const [vehicles, setVehicles] = useState<{id:number;name:string}[]>([]);
+  // === Resizable + Visibility ===
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
+  const resizingRef = useRef<{key: string; startX: number; startW: number} | null>(null);
+  const ALL_COLS = [
+    { key: 'id', label: 'No' }, { key: 'work_type', label: 'Тип работы' },
+    { key: 'address', label: 'Адрес' }, { key: 'period', label: 'Период' },
+    { key: 'category', label: 'Категория' }, { key: 'vehicle', label: 'Техника' },
+    { key: 'client', label: 'Клиент' }, { key: 'status', label: 'Статус' },
+    { key: 'priority', label: 'Приоритет' }, { key: 'amount', label: 'Сумма' },
+  ];
+  const [visibleCols, setVisibleCols] = useState<Record<string, boolean>>({});
+  const [showColMenu, setShowColMenu] = useState(false);
+  const colMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try { const s = localStorage.getItem('req_col_w'); if (s) setColWidths(JSON.parse(s)); } catch {}
+    try { const v = localStorage.getItem('req_vis_cols'); if (v) { setVisibleCols(JSON.parse(v)); return; } } catch {}
+    const d: Record<string, boolean> = {};
+    ALL_COLS.forEach(c => { d[c.key] = true; });
+    setVisibleCols(d);
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem('req_col_w', JSON.stringify(colWidths)); } catch {}
+  }, [colWidths]);
+
+  useEffect(() => {
+    if (Object.keys(visibleCols).length > 0)
+      try { localStorage.setItem('req_vis_cols', JSON.stringify(visibleCols)); } catch {}
+  }, [visibleCols]);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const diff = e.clientX - resizingRef.current.startX;
+      const nw = Math.max(60, resizingRef.current.startW + diff);
+      setColWidths(prev => ({ ...prev, [resizingRef.current!.key]: nw }));
+    };
+    const onUp = () => {
+      if (resizingRef.current) { resizingRef.current = null; document.body.style.cursor = ''; document.body.style.userSelect = ''; }
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setShowColMenu(false); };
+    if (showColMenu) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showColMenu]);
+
+  const colSt = (key: string, def: number) => { const w = colWidths[key]; return w ? { width: w+'px', minWidth: w+'px' } : { minWidth: def+'px' }; };
+  const isVis = (key: string) => visibleCols[key] !== false;
+  const toggleVis = (key: string) => setVisibleCols(p => ({ ...p, [key]: !isVis(key) }));
+  const onMouseDownResize = (e: React.MouseEvent, colKey: string, defaultW: number) => {
+    e.preventDefault(); e.stopPropagation();
+    resizingRef.current = { key: colKey, startX: e.clientX, startW: colWidths[colKey] || defaultW };
+    document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none';
+  };
+
+
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<Request | null>(null);
@@ -259,6 +321,27 @@ export const RequestsPage: React.FC = () => {
             </h2>
           </div>
           <div className="flex gap-2">
+            <div className="relative" ref={colMenuRef}>
+              <button onClick={() => setShowColMenu(!showColMenu)}
+                className="bg-gray-100 text-gray-700 px-3 py-2 rounded hover:bg-gray-200 flex items-center shadow-sm text-sm"
+                title="Настройка столбцов">⚙️ Столбцы</button>
+              {showColMenu && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50 py-2 min-w-[200px]">
+                  <div className="px-3 py-1 text-xs font-semibold text-gray-500 uppercase">Видимость столбцов</div>
+                  {ALL_COLS.map(col => (
+                    <label key={col.key} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm">
+                      <input type="checkbox" checked={isVis(col.key)} onChange={() => toggleVis(col.key)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      {col.label}
+                    </label>
+                  ))}
+                  <div className="border-t border-gray-100 mt-1 pt-1 px-3">
+                    <button onClick={() => { const a: Record<string,boolean>={}; ALL_COLS.forEach(c=>{a[c.key]=true;}); setVisibleCols(a); }}
+                      className="text-xs text-blue-600 hover:text-blue-800">Показать все</button>
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               onClick={() => downloadFile(requestsApi.exportPdf, 'requests.pdf', getExportParams())}
               className="bg-gray-100 text-gray-700 px-3 py-2 rounded hover:bg-gray-200 flex items-center shadow-sm text-sm"
@@ -384,18 +467,18 @@ export const RequestsPage: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-            <table className="min-w-[1400px] w-full divide-y divide-gray-200">
+            <table className="min-w-[1600px] w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"60px"}}>№</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"150px"}}>Тип работы</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"200px"}}>Адрес</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"180px"}}>Период</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"160px"}}>Категория</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"160px"}}>Клиент</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"120px"}}>Статус</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"100px"}}>Приоритет</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth:"100px"}}>Сумма</th>
+                  {isVis("id") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("id", 60)}>№<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "id", 60)} /></th>)}
+                  {isVis("work_type") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("work_type", 150)}>Тип работы<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "work_type", 150)} /></th>)}
+                  {isVis("address") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("address", 200)}>Адрес<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "address", 200)} /></th>)}
+                  {isVis("period") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("period", 220)}>Период<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "period", 220)} /></th>)}
+                  {isVis("category") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("category", 160)}>Категория<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "category", 160)} /></th>)}
+                  {isVis("client") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("client", 160)}>Клиент<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "client", 160)} /></th>)}
+                  {isVis("status") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("status", 120)}>Статус<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "status", 120)} /></th>)}
+                  {isVis("priority") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("priority", 100)}>Приоритет<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "priority", 100)} /></th>)}
+                  {isVis("amount") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("amount", 100)}>Сумма<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "amount", 100)} /></th>)}
                   {(canEdit || canDelete) && (
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase" style={{minWidth:"80px"}}>Действия</th>
                   )}
@@ -408,39 +491,56 @@ export const RequestsPage: React.FC = () => {
                     onClick={() => handleRowClick(req)}
                     className="hover:bg-blue-50 cursor-pointer transition-colors"
                   >
+                    {isVis("id") && (
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-mono text-blue-600 font-medium">
                       #{req.id}
                     </td>
+                    )}
+                    {isVis("work_type") && (
                     <td className="px-4 py-4 text-sm text-gray-900">
                       <div className="font-medium">{req.work_type || '—'}</div>
                       <div className="text-xs text-gray-500">{req.request_type}</div>
                     </td>
+                    )}
+                    {isVis("address") && (
                     <td className="px-4 py-4 text-sm text-gray-600 max-w-xs truncate">
                       {req.object_address || '—'}
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-600">
-                      <div>{formatDate(req.planned_start)}</div>
-                      <div className="text-gray-400">— {formatDate(req.planned_end)}</div>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                    )}
+                    {isVis("period") && (<td className="px-4 py-4 whitespace-nowrap text-xs text-gray-600">
+                      <div>{formatDate(req.planned_start)} <span className="text-blue-500 text-[10px]">{req.planned_start ? new Date(req.planned_start).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : ''}</span></div>
+                      <div className="text-gray-400">— {formatDate(req.planned_end)} <span className="text-blue-500 text-[10px]">{req.planned_end ? new Date(req.planned_end).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : ''}</span></div>
+                    </td>)}
+                    {isVis("category") && (<td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
                       {req.vehicle_category_name || <span className="text-gray-400">—</span>}
-                    </td>
+                    </td>)}
+                    {isVis("vehicle") && (<td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                      {(req as any).assigned_vehicle_name || <span className="text-gray-400">—</span>}
+                    </td>)}
+                    {isVis("client") && (
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
                       {req.client_name || <span className="text-gray-400">—</span>}
                     </td>
+                    )}
+                    {isVis("status") && (
                     <td className="px-4 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${STATUS_LABELS[req.status]?.color || 'bg-gray-100'}`}>
                         {STATUS_LABELS[req.status]?.label || req.status}
                       </span>
                     </td>
+                    )}
+                    {isVis("priority") && (
                     <td className="px-4 py-4 whitespace-nowrap text-sm">
                       <span className={PRIORITY_LABELS[req.priority]?.color || 'text-gray-600'}>
                         {PRIORITY_LABELS[req.priority]?.label || req.priority}
                       </span>
                     </td>
+                    )}
+                    {isVis("amount") && (
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
                       {formatMoney(req.estimated_amount)}
                     </td>
+                    )}
                     {(canEdit || canDelete) && (
                       <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2" onClick={(e) => e.stopPropagation()}>
                         {canEdit && (
