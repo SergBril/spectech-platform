@@ -14,6 +14,7 @@ import {
   CompanyProfilePage,
   MarketplacePage,
   VehiclesPage,
+  DriversPage,
   RequestsPage,
   ContractorsPage,
   ContractorDetailPage,
@@ -66,6 +67,7 @@ const AppRoutes = () => {
         <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
         <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
+        <Route path="/drivers" element={<ProtectedRoute><DriversPage /></ProtectedRoute>} />
         <Route path="/maintenance" element={<ProtectedRoute><MaintenancePage /></ProtectedRoute>} />
         <Route path="/maintenance/new" element={<ProtectedRoute><MaintenanceCreatePage /></ProtectedRoute>} />
         <Route path="/maintenance/:id" element={<ProtectedRoute><MaintenanceDetailPage /></ProtectedRoute>} />
