@@ -157,6 +157,7 @@ class VehicleUpdate(BaseModel):
     attributes: dict[str, Any] | None = None
     owner_id: int | None = None
     company_id: int | None = None
+    assigned_driver_id: int | None = Field(None, description='ID водителя (employees.contractor_id)')
     # 🆕 Поля для маркетплейса
     is_available_for_rent: bool | None = None
     hourly_rate: Decimal | None = Field(None, ge=0)
@@ -181,6 +182,8 @@ class VehicleRead(VehicleBase):
     """Схема для чтения техники."""
 
     id: int = Field(..., description="ID техники", examples=[1])
+    assigned_driver_id: int | None = None
+    assigned_driver_name: str | None = None
     is_custom_number: bool = Field(False, description="Пользовательский номер")
     created_at: datetime = Field(..., description="Дата создания")
     updated_at: datetime = Field(..., description="Дата обновления")

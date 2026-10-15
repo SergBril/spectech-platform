@@ -98,3 +98,58 @@ class EmployeeCertificate(Base):
     issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     file_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class DriverProfile(Base):
+    """Профиль водителя (расширение Employee)."""
+    __tablename__ = "driver_profiles"
+
+    employee_contractor_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.contractor_id"), primary_key=True
+    )
+
+    # Персональные данные
+    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
+    passport_series: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    passport_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    passport_issued_by: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    passport_issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    # Водительское удостоверение
+    license_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    license_category: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, comment="A,B,C,D,E или BE,CE,DE"
+    )
+    license_issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    license_expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    # Удостоверение машиниста / корочки
+    machinist_certificate: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, comment="Номер удостоверения машиниста"
+    )
+    machinist_certificate_type: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, comment="Тип: экскаваторщик, крановщик, бульдозерист"
+    )
+    machinist_certificate_expiry: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    # Дополнительно
+    medical_cert_expiry: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Медосмотр"
+    )
+    safety_training_expiry: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Охрана труда"
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Связь
+    employee: Mapped["Employee"] = relationship(
+        "Employee", foreign_keys=[employee_contractor_id],
+        backref="driver_profile", uselist=False
+    )

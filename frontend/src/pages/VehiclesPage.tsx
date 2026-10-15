@@ -144,8 +144,10 @@ export const VehiclesPage: React.FC = () => {
 
   const handleDriverChange = async (vehicleId: number, driverId: string) => {
     try {
-      await vehiclesApi.update(vehicleId, { assigned_driver_id: driverId ? parseInt(driverId) : null } as any);
-      setVehicles(prev => prev.map(v => v.id === vehicleId ? { ...v, assigned_driver_id: driverId ? parseInt(driverId) : null } as any : v));
+      const newDriverId = driverId ? parseInt(driverId) : null;
+      await vehiclesApi.update(vehicleId, { assigned_driver_id: newDriverId });
+      // Reload all vehicles to reflect unique driver assignment (driver removed from other vehicles)
+      await loadVehicles();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Ошибка назначения водителя');
     }
