@@ -279,7 +279,7 @@ class RentalService:
         rental = (
             db.query(Rental)
             .options(selectinload(Rental.items))
-            .filter(Rental.id == rental_id, Rental.company_id == company_id)
+            .filter(Rental.id == rental_id, Rental.company_id.in_(company_ids))
             .first()
         )
         if not rental:
@@ -289,7 +289,7 @@ class RentalService:
     @staticmethod
     def list_rentals(
         db: Session,
-        company_id: int,
+        company_ids: list[int],
         status: RentalStatus | None = None,
         client_id: int | None = None,
         limit: int = 100,
@@ -299,7 +299,7 @@ class RentalService:
         query = (
             db.query(Rental)
             .options(selectinload(Rental.items))
-            .filter(Rental.company_id == company_id)
+            .filter(Rental.company_id.in_(company_ids))
         )
         if status:
             query = query.filter(Rental.status == status)
