@@ -11,6 +11,7 @@ import apiClient from '../api/client';
 interface Driver {
   id: number;
   full_name: string;
+  is_assigned?: boolean;
 }
 
 const ALL_COLS = [
@@ -122,12 +123,7 @@ export const VehiclesPage: React.FC = () => {
 
   useEffect(() => { loadVehicles(); }, [sortBy, sortOrder]);
 
-  useEffect(() => {
-    apiClient.get('/vehicles/drivers?limit=500').then(r => {
-      const items = Array.isArray(r.data) ? r.data : r.data?.items || [];
-      setDrivers(items.map((d: any) => ({ id: d.id, full_name: d.full_name || d.name || `#${d.id}` })));
-    }).catch(() => {});
-  }, []);
+  useEffect(() => { loadDrivers(); }, []);
 
   const handleCreate = () => { setEditingVehicle(null); setShowFormModal(true); };
   const handleEdit = (vehicle: Vehicle) => { setEditingVehicle(vehicle); setShowFormModal(true); };
@@ -142,12 +138,20 @@ export const VehiclesPage: React.FC = () => {
     } catch (err: any) { alert(err.response?.data?.detail || 'Ошибка удаления'); }
   };
 
+  const loadDrivers = async () => {
+    try {
+      const r = await apiClient.get('/vehicles/drivers?limit=500');
+      const items = Array.isArray(r.data) ? r.data : r.data?.items || [];
+      setDrivers(items.map((d: any) => ({ id: d.id, full_name: d.full_name || d.name || `#${d.id}`, is_assigned: d.is_assigned || false })));
+    } catch {}
+  };
+
   const handleDriverChange = async (vehicleId: number, driverId: string) => {
     try {
       const newDriverId = driverId ? parseInt(driverId) : null;
       await vehiclesApi.update(vehicleId, { assigned_driver_id: newDriverId });
-      // Reload all vehicles to reflect unique driver assignment (driver removed from other vehicles)
-      await loadVehicles();
+      // Reload both vehicles and drivers to reflect unique assignment
+      await Promise.all([loadVehicles(), loadDrivers()]);
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Ошибка назначения водителя');
     }
@@ -309,8 +313,8 @@ export const VehiclesPage: React.FC = () => {
                               className="w-full max-w-[160px] px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                             >
                               <option value="">— Не назначен —</option>
-                              {drivers.map(d => (
-                                <option key={d.id} value={d.id}>{d.full_name}</option>
+                              {drivers.filter(d => !d.is_assigned || d.id === ((vehicle as any).assigned_driver_id)).map(d => (
+                                <option key={d.id} value={d.id}>{d.full_name}{d.is_assigned && d.id !== (vehicle as any).assigned_driver_id ? ' (занят)' : ''}</option>
                               ))}
                             </select>
                           ) : (
