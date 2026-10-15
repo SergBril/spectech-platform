@@ -76,7 +76,6 @@ export const RequestsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // 🆕 Фильтры
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,11 +87,12 @@ export const RequestsPage: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [categories, setCategories] = useState<{id:number;name:string}[]>([]);
   const [vehicles, setVehicles] = useState<{id:number;name:string}[]>([]);
+
   // === Resizable + Visibility ===
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
   const resizingRef = useRef<{key: string; startX: number; startW: number} | null>(null);
   const ALL_COLS = [
-    { key: 'id', label: 'No' }, { key: 'work_type', label: 'Тип работы' },
+    { key: 'id', label: '№' }, { key: 'work_type', label: 'Тип работы' },
     { key: 'address', label: 'Адрес' }, { key: 'period', label: 'Период' },
     { key: 'category', label: 'Категория' }, { key: 'vehicle', label: 'Техника' },
     { key: 'client', label: 'Клиент' }, { key: 'status', label: 'Статус' },
@@ -141,15 +141,13 @@ export const RequestsPage: React.FC = () => {
   }, [showColMenu]);
 
   const colSt = (key: string, def: number) => { const w = colWidths[key]; return w ? { width: w+'px', minWidth: w+'px' } : { minWidth: def+'px' }; };
-  const isVis = (key: string) => visibleCols[key] !== false;
+  const isVis = (key: string) => visibleCols[key] === undefined ? true : visibleCols[key] !== false;
   const toggleVis = (key: string) => setVisibleCols(p => ({ ...p, [key]: !isVis(key) }));
   const onMouseDownResize = (e: React.MouseEvent, colKey: string, defaultW: number) => {
     e.preventDefault(); e.stopPropagation();
     resizingRef.current = { key: colKey, startX: e.clientX, startW: colWidths[colKey] || defaultW };
     document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none';
   };
-
-
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<Request | null>(null);
@@ -171,8 +169,6 @@ export const RequestsPage: React.FC = () => {
     params.sort_order = sortOrder;
     return params;
   };
-
-
 
   const loadRequests = async () => {
     try {
@@ -208,7 +204,6 @@ export const RequestsPage: React.FC = () => {
     loadRequests();
   }, [filterStatus, filterPriority, searchQuery, filterCategory, filterVehicleId, filterDateFrom, filterDateTo, sortBy, sortOrder]);
 
-  // 🆕 Фильтрация заявок
   const filteredRequests = useMemo(() => {
     return requests.filter((req) => {
       if (filterStatus !== 'all' && req.status !== filterStatus) return false;
@@ -275,7 +270,6 @@ export const RequestsPage: React.FC = () => {
     }
   };
 
-  // Подсчёт статистики для фильтров
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { all: requests.length };
     requests.forEach(r => {
@@ -373,7 +367,6 @@ export const RequestsPage: React.FC = () => {
           </div>
         )}
 
-        {/* 🆕 Панель фильтров */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
           <div className="flex flex-wrap gap-3 items-center">
             <div className="flex-1 min-w-[200px]">
@@ -475,6 +468,7 @@ export const RequestsPage: React.FC = () => {
                   {isVis("address") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("address", 200)}>Адрес<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "address", 200)} /></th>)}
                   {isVis("period") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("period", 220)}>Период<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "period", 220)} /></th>)}
                   {isVis("category") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("category", 160)}>Категория<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "category", 160)} /></th>)}
+                  {isVis("vehicle") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("vehicle", 160)}>Техника<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "vehicle", 160)} /></th>)}
                   {isVis("client") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("client", 160)}>Клиент<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "client", 160)} /></th>)}
                   {isVis("status") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("status", 120)}>Статус<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "status", 120)} /></th>)}
                   {isVis("priority") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("priority", 100)}>Приоритет<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "priority", 100)} /></th>)}
@@ -570,7 +564,6 @@ export const RequestsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 🆕 ИСПРАВЛЕНО: Рендеринг модальных окон, которых не хватало */}
       {isModalOpen && (
         <RequestFormModal
           request={editingRequest}
