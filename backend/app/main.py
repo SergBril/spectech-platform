@@ -1,5 +1,7 @@
 """Главный файл приложения FastAPI."""
 
+from dotenv import load_dotenv
+load_dotenv()  # Загружает backend/.env
 import logging
 from contextlib import asynccontextmanager
 from app.tasks.scheduler import start_scheduler, stop_scheduler
