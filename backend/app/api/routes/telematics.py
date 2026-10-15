@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_company_id, get_current_user
+from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
@@ -244,7 +244,7 @@ async def receive_single_gps_point(
         rules = (
             db.query(AlertRule)
             .filter(
-                AlertRule.company_id == company_id,
+                AlertRule.company_id.in_(company_ids),
                 AlertRule.is_active == True,
             )
             .all()
@@ -458,12 +458,12 @@ def get_track_stats(
 def list_geofences(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Список геозон (только своей компании)."""
     stmt = (
         select(Geofence)
-        .where(Geofence.company_id == company_id)
+        .where(Geofence.company_id.in_(company_ids))
         .order_by(Geofence.name)
     )
     return db.scalars(stmt).all()
@@ -509,13 +509,13 @@ def list_fuel_transactions(
     vehicle_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Список заправок/сливов (только своей компании)."""
     stmt = (
         select(FuelTransaction)
         .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
-        .where(Vehicle.company_id == company_id)
+        .where(Vehicle.company_id.in_(company_ids))
         .order_by(FuelTransaction.occurred_at.desc())
     )
     if vehicle_id:
@@ -553,13 +553,13 @@ def get_fuel_stats(
     vehicle_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Статистика по топливу (только для техники своей компании)."""
     stmt = (
         select(FuelTransaction)
         .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
-        .where(Vehicle.company_id == company_id)
+        .where(Vehicle.company_id.in_(company_ids))
     )
     if vehicle_id:
         _check_vehicle_access(db, vehicle_id, company_id)
@@ -724,12 +724,12 @@ def list_alerts(
     limit: int = Query(default=100, ge=1, le=1000),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Список алертов (только своей компании)."""
     stmt = (
         select(Alert)
-        .where(Alert.company_id == company_id)
+        .where(Alert.company_id.in_(company_ids))
         .order_by(Alert.occurred_at.desc())
     )
     if status_filter:
@@ -878,7 +878,7 @@ class AlertRuleRead(BaseModel):
 def list_alert_rules(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Список правил алертов (только своей компании)."""
     stmt = select(AlertRule).where(AlertRule.company_id == company_id)
@@ -938,7 +938,7 @@ def delete_alert_rule(
 def get_dashboard_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Агрегированная статистика для дашборда (только своей компании)."""
     from datetime import timedelta
@@ -953,7 +953,7 @@ def get_dashboard_summary(
         # Машины (только своей компании)
         total_vehicles = (
             db.query(func.count(Vehicle.id))
-            .filter(Vehicle.company_id == company_id)
+            .filter(Vehicle.company_id.in_(company_ids))
             .scalar()
             or 0
         )
@@ -962,7 +962,7 @@ def get_dashboard_summary(
         total_points = (
             db.query(func.count(GpsPoint.id))
             .join(Vehicle, GpsPoint.vehicle_id == Vehicle.id)
-            .filter(Vehicle.company_id == company_id)
+            .filter(Vehicle.company_id.in_(company_ids))
             .scalar()
             or 0
         )
@@ -970,7 +970,7 @@ def get_dashboard_summary(
             db.query(func.count(GpsPoint.id))
             .join(Vehicle, GpsPoint.vehicle_id == Vehicle.id)
             .filter(
-                Vehicle.company_id == company_id,
+                Vehicle.company_id.in_(company_ids),
                 GpsPoint.recorded_at >= today_start,
             )
             .scalar()
@@ -980,12 +980,12 @@ def get_dashboard_summary(
         # Алерты (только своей компании)
         total_alerts = (
             db.query(func.count(Alert.id))
-            .filter(Alert.company_id == company_id)
+            .filter(Alert.company_id.in_(company_ids))
             .scalar()
             or 0
         )
 
-        all_alerts = db.query(Alert).filter(Alert.company_id == company_id).all()
+        all_alerts = db.query(Alert).filter(Alert.company_id.in_(company_ids)).all()
         active_alerts = len(
             [
                 a
@@ -1009,7 +1009,7 @@ def get_dashboard_summary(
             db.query(FuelTransaction)
             .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
             .filter(
-                Vehicle.company_id == company_id,
+                Vehicle.company_id.in_(company_ids),
                 FuelTransaction.transaction_type == "refuel",
                 FuelTransaction.occurred_at >= week_ago,
             )
@@ -1023,7 +1023,7 @@ def get_dashboard_summary(
             db.query(FuelTransaction)
             .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
             .filter(
-                Vehicle.company_id == company_id,
+                Vehicle.company_id.in_(company_ids),
                 FuelTransaction.transaction_type == "refuel",
             )
             .all()
@@ -1036,7 +1036,7 @@ def get_dashboard_summary(
             db.query(func.count(FuelTransaction.id))
             .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
             .filter(
-                Vehicle.company_id == company_id,
+                Vehicle.company_id.in_(company_ids),
                 FuelTransaction.transaction_type == "drain",
             )
             .scalar()
