@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = (
-        "postgresql+psycopg://spectech:spectech_dev_password@localhost:5432/spectech"
+        "postgresql+psycopg://spectech:spectech_dev_password@localhost:5432/spectech?sslmode=disable"
     )
 
     # Diadoc (EDO)
