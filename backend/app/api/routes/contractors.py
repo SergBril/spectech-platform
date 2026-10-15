@@ -115,11 +115,11 @@ def get_contractor(
     contractor_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Получить контрагента по ID (только своей компании)."""
     contractor = db.get(Contractor, contractor_id)
-    if not contractor or contractor.company_id != company_id:
+    if not contractor or contractor.company_id not in company_ids:
         raise HTTPException(status_code=404, detail="Contractor not found")
     return contractor
 

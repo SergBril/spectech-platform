@@ -85,8 +85,8 @@ export const RequestDetailPage: React.FC = () => {
       setLoading(true);
       const [reqData, allInvoices, allActs, historyData] = await Promise.allSettled([
         requestsApi.getById(requestId),
-        financeApi.getInvoices({ limit: 500 }),
-        financeApi.getActs({ limit: 500 }),
+        financeApi.getInvoices({ limit: 200 }),
+        financeApi.getActs({ limit: 200 }),
         requestsApi.getHistory(requestId),
       ]);
 

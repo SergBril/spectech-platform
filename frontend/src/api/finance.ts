@@ -312,33 +312,33 @@ export const financeApi = {
   },
 
   downloadActPdf: async (actId: number): Promise<Blob> => {
-    const response = await apiClient.get(`/finance/acts/${actId}/pdf`, { responseType: 'blob' });
+    const response = await apiClient.get(`/acts/${actId}/pdf`, { responseType: 'blob' });
     return response.data;
   },
 
   async downloadInvoiceFacturePdf(actId: number): Promise<Blob> {
-    const response = await apiClient.get(`/finance/acts/${actId}/invoice-facture`, { responseType: 'blob' });
+    const response = await apiClient.get(`/acts/${actId}/invoice-facture`, { responseType: 'blob' });
     return response.data;
   },
 
   async downloadUpdPdf(actId: number): Promise<Blob> {
-    const response = await apiClient.get(`/finance/acts/${actId}/upd`, { responseType: 'blob' });
+    const response = await apiClient.get(`/acts/${actId}/upd`, { responseType: 'blob' });
     return response.data;
   },
 
   async downloadTorg12Pdf(actId: number): Promise<Blob> {
-    const response = await apiClient.get(`/finance/acts/${actId}/torg12`, { responseType: 'blob' });
+    const response = await apiClient.get(`/acts/${actId}/torg12`, { responseType: 'blob' });
     return response.data;
   },
 
   // === Acts ===
   async getActs(params?: { status?: ActStatus; limit?: number; offset?: number; contractor_id?: number }): Promise<Act[]> {
-    const response = await apiClient.get<Act[]>('/finance/acts', { params });
+    const response = await apiClient.get<Act[]>('/acts', { params });
     return response.data;
   },
 
   async getAct(id: number): Promise<Act> {
-    const response = await apiClient.get<Act>(`/finance/acts/${id}`);
+    const response = await apiClient.get<Act>(`/acts/${id}`);
     return response.data;
   },
 
@@ -348,21 +348,21 @@ export const financeApi = {
   },
 
   async createAct(data: ActCreate): Promise<Act> {
-    const response = await apiClient.post<Act>('/finance/acts', data);
+    const response = await apiClient.post<Act>('/acts', data);
     return response.data;
   },
 
   async updateAct(id: number, data: Partial<ActCreate>): Promise<Act> {
-    const response = await apiClient.patch<Act>(`/finance/acts/${id}`, data);
+    const response = await apiClient.patch<Act>(`/acts/${id}`, data);
     return response.data;
   },
 
   async deleteAct(id: number): Promise<void> {
-    await apiClient.delete(`/finance/acts/${id}`);
+    await apiClient.delete(`/acts/${id}`);
   },
 
   async signAct(id: number, signedBy: 'client' | 'executor'): Promise<Act> {
-    const response = await apiClient.post<Act>(`/finance/acts/${id}/sign`, { signed_by: signedBy });
+    const response = await apiClient.post<Act>(`/acts/${id}/sign`, { signed_by: signedBy });
     return response.data;
   },
 
@@ -418,7 +418,7 @@ export const financeApi = {
   },
 
   async resendActEmail(id: number): Promise<Act> {
-    const response = await apiClient.post<Act>(`/finance/acts/${id}/resend-email`);
+    const response = await apiClient.post<Act>(`/acts/${id}/resend-email`);
     return response.data;
   },
 
