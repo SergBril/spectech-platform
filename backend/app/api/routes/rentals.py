@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_company_id, get_current_user
+from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.rental import RentalStatus
@@ -47,12 +47,12 @@ def list_rentals(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Возвращает список аренд с фильтрами."""
     return rental_service.list_rentals(
         db=db,
-        company_id=company_id,
+        company_ids=company_ids,
         status=status,
         client_id=client_id,
         limit=limit,

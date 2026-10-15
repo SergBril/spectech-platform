@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_company_id, get_current_user
+from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.contractor import Contractor, Employee
@@ -46,7 +46,7 @@ def get_my_contractor(
     contractor = db.scalar(
         select(Contractor)
         .where(
-            Contractor.company_id == company_id,
+            Contractor.company_id.in_(company_ids),
             Contractor.type == "client",
             Contractor.is_active == True,
         )
@@ -70,10 +70,10 @@ def list_contractors(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Список контрагентов (только своей компании)."""
-    stmt = select(Contractor).where(Contractor.company_id == company_id)
+    stmt = select(Contractor).where(Contractor.company_id.in_(company_ids))
 
     if type_filter:
         stmt = stmt.where(Contractor.type == type_filter)
@@ -196,7 +196,7 @@ async def suggest_contractor_by_inn(
     existing = db.scalar(
         select(Contractor).where(
             Contractor.inn == inn,
-            Contractor.company_id == company_id,
+            Contractor.company_id.in_(company_ids),
         )
     )
 

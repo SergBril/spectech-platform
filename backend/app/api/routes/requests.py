@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_company_id, get_current_user, require_permission
+from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids, require_permission
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
@@ -32,7 +32,7 @@ def list_requests(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Список заявок (только своей компании)."""
     from app.models.catalog import Category, Vehicle
@@ -43,7 +43,7 @@ def list_requests(
         .outerjoin(Contractor, Request.client_id == Contractor.id)
         .outerjoin(Category, Request.vehicle_category_id == Category.id)
         .outerjoin(Vehicle, Request.assigned_vehicle_id == Vehicle.id)
-        .where(Request.company_id == company_id)
+        .where(Request.company_id.in_(company_ids))
     )
     if status_filter:
         stmt = stmt.where(Request.status == status_filter)

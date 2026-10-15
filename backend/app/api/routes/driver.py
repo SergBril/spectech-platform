@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy import select, desc
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_company_id, get_current_user
+from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.shift import ShiftTask, ShiftReport, ShiftTaskStatus, ShiftReportStatus
@@ -32,12 +32,12 @@ def get_my_shifts(
     limit: int = 20,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """📋 Мои смены (задачи)."""
     stmt = (
         select(ShiftTask)
-        .where(ShiftTask.company_id == company_id)
+        .where(ShiftTask.company_id.in_(company_ids))
         .order_by(desc(ShiftTask.shift_date))
         .limit(limit)
     )

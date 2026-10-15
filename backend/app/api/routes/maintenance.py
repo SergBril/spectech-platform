@@ -12,7 +12,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_company_id, get_current_user
+from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User, UserStatus
 from app.models.catalog import Vehicle
@@ -88,13 +88,13 @@ def list_maintenance_orders(
     priority: MaintenancePriority | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Получить список наряд-заказов своей компании с фильтрами."""
     query = (
         select(MaintenanceOrder)
         .options(joinedload(MaintenanceOrder.vehicle))
-        .where(MaintenanceOrder.company_id == company_id)
+        .where(MaintenanceOrder.company_id.in_(company_ids))
     )
 
     if status_filter:
@@ -107,7 +107,7 @@ def list_maintenance_orders(
         query = query.where(MaintenanceOrder.priority == priority)
 
     count_query = select(MaintenanceOrder).where(
-        MaintenanceOrder.company_id == company_id
+        MaintenanceOrder.company_id.in_(company_ids)
     )
     if status_filter:
         count_query = count_query.where(MaintenanceOrder.status == status_filter)
@@ -245,7 +245,7 @@ def get_maintenance_order(
         )
         .filter(
             MaintenanceOrder.id == order_id,
-            MaintenanceOrder.company_id == company_id,
+            MaintenanceOrder.company_id.in_(company_ids),
         )
         .first()
     )
@@ -276,7 +276,7 @@ def update_maintenance_order(
         db.query(MaintenanceOrder)
         .filter(
             MaintenanceOrder.id == order_id,
-            MaintenanceOrder.company_id == company_id,
+            MaintenanceOrder.company_id.in_(company_ids),
         )
         .first()
     )
@@ -328,7 +328,7 @@ def complete_maintenance_order(
         .options(joinedload(MaintenanceOrder.vehicle))
         .filter(
             MaintenanceOrder.id == order_id,
-            MaintenanceOrder.company_id == company_id,
+            MaintenanceOrder.company_id.in_(company_ids),
         )
         .first()
     )

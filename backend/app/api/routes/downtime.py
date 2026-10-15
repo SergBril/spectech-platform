@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 
-from app.api.deps import get_current_company_id, get_current_user
+from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.downtime import DowntimeCause, DowntimeStatus, FaultParty
@@ -58,14 +58,14 @@ def list_downtimes(
     limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Список простоев с фильтрами."""
     from sqlalchemy import select
 
     from app.models.downtime import DowntimeEvent
 
-    stmt = select(DowntimeEvent).where(DowntimeEvent.company_id == company_id)
+    stmt = select(DowntimeEvent).where(DowntimeEvent.company_id.in_(company_ids))
 
     if shift_task_id:
         stmt = stmt.where(DowntimeEvent.shift_task_id == shift_task_id)
