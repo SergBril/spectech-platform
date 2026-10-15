@@ -38,6 +38,8 @@ export interface Vehicle {
   attribute_values?: AttributeValue[];
   category_name?: string | null;
   subcategory_name?: string | null;
+  assigned_driver_id?: number | null;
+  assigned_driver_name?: string | null;
 }
 
 export interface VehicleCreate {
@@ -60,7 +62,9 @@ export interface VehicleCreate {
   attributes?: Record<string, any>;
 }
 
-export interface VehicleUpdate extends Partial<VehicleCreate> {}
+export interface VehicleUpdate extends Partial<VehicleCreate> {
+  assigned_driver_id?: number | null;
+}
 
 export interface VehicleListResponse {
   items: Vehicle[];

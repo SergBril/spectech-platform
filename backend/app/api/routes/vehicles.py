@@ -27,7 +27,7 @@ from app.schemas.vehicles import (
 router = APIRouter(prefix="/vehicles", tags=["🚜 Vehicles (Спецтехника)"])
 
 
-def _enrich_vehicle(vehicle: Vehicle) -> dict:
+def _enrich_vehicle(vehicle: Vehicle, db: Session = None) -> dict:
     """Обогащает VehicleRead названиями категории/подкатегории и атрибутами."""
     # Сначала получаем базовый dict (attribute_values пока с SQLAlchemy-объектами)
     data = VehicleRead.model_validate(vehicle, from_attributes=True).model_dump()
@@ -258,7 +258,7 @@ def list_vehicles(
         or 0
     )
 
-    enriched_items = [_enrich_vehicle(v) for v in vehicles]
+    enriched_items = [_enrich_vehicle(v, db) for v in vehicles]
     return VehicleListResponse(items=enriched_items, total=total)
 
 
@@ -346,7 +346,7 @@ def create_vehicle(
 
     # Перезагружаем с joinedload
     vehicle = _load_vehicle_with_relations(db, vehicle.id)
-    return _enrich_vehicle(vehicle)
+    return _enrich_vehicle(vehicle, db)
 
 
 # ============================================================
@@ -373,7 +373,7 @@ def get_vehicle(
             detail="Техника не найдена",
         )
 
-    return _enrich_vehicle(vehicle)
+    return _enrich_vehicle(vehicle, db)
 
 # ============================================================
 # PATCH /vehicles/{id} — частичное обновление техники
@@ -402,6 +402,15 @@ def update_vehicle_partial(
         )
 
     update_data = payload.model_dump(exclude_unset=True, exclude={"attributes"})
+
+    # === Уникальность водителя: снять с других машин перед назначением ===
+    if "assigned_driver_id" in update_data and update_data["assigned_driver_id"] is not None:
+        db.query(Vehicle).filter(
+            Vehicle.assigned_driver_id == update_data["assigned_driver_id"],
+            Vehicle.id != vehicle_id,
+            Vehicle.company_id == company_id,
+        ).update({"assigned_driver_id": None}, synchronize_session="fetch")
+        db.flush()
 
     # Проверка уникальности id_value
     if "id_value" in update_data and update_data["id_value"] != vehicle.id_value:
@@ -440,7 +449,7 @@ def update_vehicle_partial(
     db.commit()
 
     vehicle = _load_vehicle_with_relations(db, vehicle_id)
-    return _enrich_vehicle(vehicle)
+    return _enrich_vehicle(vehicle, db)
 
 
 # ============================================================
@@ -471,6 +480,15 @@ def update_vehicle(
 
     update_data = payload.model_dump(exclude_unset=True, exclude={"attributes"})
 
+    # === Уникальность водителя: снять с других машин перед назначением ===
+    if "assigned_driver_id" in update_data and update_data["assigned_driver_id"] is not None:
+        db.query(Vehicle).filter(
+            Vehicle.assigned_driver_id == update_data["assigned_driver_id"],
+            Vehicle.id != vehicle_id,
+            Vehicle.company_id == company_id,
+        ).update({"assigned_driver_id": None}, synchronize_session="fetch")
+        db.flush()
+
     # Проверка уникальности id_value
     if "id_value" in update_data and update_data["id_value"] != vehicle.id_value:
         existing = db.scalar(
@@ -508,7 +526,7 @@ def update_vehicle(
     db.commit()
 
     vehicle = _load_vehicle_with_relations(db, vehicle_id)
-    return _enrich_vehicle(vehicle)
+    return _enrich_vehicle(vehicle, db)
 
 
 # ============================================================

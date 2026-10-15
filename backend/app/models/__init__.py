@@ -1,4 +1,4 @@
-# Auth
+﻿# Auth
 from app.models.auth import User, UserSession
 from app.models.dispute import Dispute, DisputeStatus, DisputeType, InitiatorRole, AssignedRole
 
@@ -28,7 +28,7 @@ from app.models.salary import SalaryRecord, SalaryStatus  # noqa: F401
 from app.models.bank_statement import BankStatement, BankTransaction  # noqa: F401
 
 # Contractor
-from app.models.contractor import Contractor, Employee, EmployeeCertificate
+from app.models.contractor import Contractor, Employee, EmployeeCertificate, DriverProfile
 
 # Dispatch
 from app.models.dispatch import Request, RequestAssignment, RequestStatusLog
