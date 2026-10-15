@@ -27,7 +27,16 @@ BLOCKING_ASSIGNMENT_STATUSES = ("planned", "confirmed", "active")
 @router.get("", response_model=list[RequestRead])
 def list_requests(
     status_filter: str | None = Query(default=None, alias="status"),
+    priority: str | None = None,
     client_id: int | None = None,
+    vehicle_category_id: int | None = None,
+    assigned_vehicle_id: int | None = None,
+    work_type: str | None = None,
+    search: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc"),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -47,9 +56,29 @@ def list_requests(
     )
     if status_filter:
         stmt = stmt.where(Request.status == status_filter)
+    if priority:
+        stmt = stmt.where(Request.priority == priority)
     if client_id:
         stmt = stmt.where(Request.client_id == client_id)
-    stmt = stmt.order_by(Request.created_at.desc()).offset(offset).limit(limit)
+    if vehicle_category_id:
+        stmt = stmt.where(Request.vehicle_category_id == vehicle_category_id)
+    if assigned_vehicle_id:
+        stmt = stmt.where(Request.assigned_vehicle_id == assigned_vehicle_id)
+    if work_type:
+        stmt = stmt.where(Request.work_type.ilike(f"%{work_type}%"))
+    if search:
+        stmt = stmt.where((Request.work_type.ilike(f"%{search}%")) | (Request.object_address.ilike(f"%{search}%")))
+    if date_from:
+        from datetime import datetime as dt
+        stmt = stmt.where(Request.planned_start >= dt.fromisoformat(date_from))
+    if date_to:
+        from datetime import datetime as dt
+        stmt = stmt.where(Request.planned_end <= dt.fromisoformat(date_to))
+    sort_col = getattr(Request, sort_by, Request.created_at)
+    if sort_order == "desc":
+        stmt = stmt.order_by(sort_col.desc()).offset(offset).limit(limit)
+    else:
+        stmt = stmt.order_by(sort_col.asc()).offset(offset).limit(limit)
 
     requests_list = db.scalars(stmt).all()
 
@@ -95,6 +124,13 @@ def create_request(
             status_code=422, detail="planned_end must be after planned_start"
         )
 
+    # Validate vehicle_category_id exists
+    if payload.vehicle_category_id:
+        from app.models.catalog import Category
+        cat = db.get(Category, payload.vehicle_category_id)
+        if not cat:
+            raise HTTPException(status_code=422, detail=f"Vehicle category {payload.vehicle_category_id} not found")
+
     request = Request(
         **payload.model_dump(),
         company_id=company_id,
@@ -123,14 +159,14 @@ def get_request(
     request_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Получить заявку по ID (только своей компании)."""
     from app.models.catalog import Category, Vehicle
     from app.models.contractor import Contractor
 
     request = db.get(Request, request_id)
-    if not request or request.company_id != company_id:
+    if not request or request.company_id not in company_ids:
         raise HTTPException(status_code=404, detail="Request not found")
 
     data = RequestRead.model_validate(request).model_dump()
