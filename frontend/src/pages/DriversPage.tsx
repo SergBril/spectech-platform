@@ -23,6 +23,7 @@ export const DriversPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [showExpiredOnly, setShowExpiredOnly] = useState(false);
   const [editingDriver, setEditingDriver] = useState<DriverProfile | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -91,12 +92,32 @@ export const DriversPage: React.FC = () => {
     return 'text-gray-600';
   };
 
+  const isExpired = (d: string | null) => d ? new Date(d).getTime() < Date.now() : false;
+  const hasExpiredDocs = (drv: any) =>
+    isExpired(drv.license_expiry_date) || isExpired(drv.machinist_certificate_expiry) || isExpired(drv.medical_cert_expiry);
+
+  const filteredDrivers = showExpiredOnly
+    ? drivers.filter(hasExpiredDocs)
+    : drivers;
+
+  const expiredCount = drivers.filter(hasExpiredDocs).length;
+
   return (
     <Layout>
       <div className="px-4 py-6 sm:px-0">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">Водители ({total})</h2>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {expiredCount > 0 && (
+              <span className="bg-red-100 text-red-700 px-3 py-1.5 rounded-full text-xs font-semibold animate-pulse">
+                ⚠️ {expiredCount} с просроченными документами
+              </span>
+            )}
+            <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
+              <input type="checkbox" checked={showExpiredOnly} onChange={e => setShowExpiredOnly(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500" />
+              Только просроченные
+            </label>
             <button onClick={() => setShowCreateForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center shadow-sm text-sm">
               <span className="mr-2">+</span> Добавить водителя
             </button>
@@ -145,7 +166,7 @@ export const DriversPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {drivers.map(drv => (
+                  {filteredDrivers.map(drv => (
                     <tr key={drv.contractor_id} className="hover:bg-blue-50 transition-colors">
                       {isVis('full_name') && <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{drv.full_name}</td>}
                       {isVis('position') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{drv.position || '—'}</td>}
@@ -183,6 +204,21 @@ export const DriversPage: React.FC = () => {
 };
 
 // === Inline Form Modal Component ===
+// Standalone Field component to prevent re-mount on state changes
+const FormField: React.FC<{
+  label: string;
+  field: string;
+  type?: string;
+  form: Record<string, any>;
+  onChange: (field: string, value: string) => void;
+}> = ({ label, field, type = 'text', form, onChange }) => (
+  <div>
+    <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+    <input type={type} value={form[field] || ''} onChange={e => onChange(field, e.target.value)}
+      className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+  </div>
+);
+
 const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> = ({ driver, onClose }) => {
   const [form, setForm] = useState<Record<string, any>>({
     date_of_birth: driver.date_of_birth || '',
@@ -252,14 +288,6 @@ const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> 
     } finally { setSaving(false); }
   };
 
-  const Field = ({ label, field, type = 'text' }: { label: string; field: string; type?: string }) => (
-    <div>
-      <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-      <input type={type} value={form[field] || ''} onChange={e => handleChange(field, e.target.value)}
-        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-    </div>
-  );
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto m-4">
@@ -283,7 +311,7 @@ const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> 
           <div>
             <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase border-b pb-1">📋 Персональные данные</h4>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Дата рождения" field="date_of_birth" type="date" />
+              <FormField form={form} onChange={handleChange} label="Дата рождения" field="date_of_birth" type="date" />
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Должность</label>
                 <input type="text" value={driver.position || ''} disabled className="w-full px-3 py-2 border border-gray-200 rounded text-sm bg-gray-50 text-gray-500" />
@@ -293,27 +321,27 @@ const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> 
           <div>
             <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase border-b pb-1">🛂 Паспорт</h4>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Серия" field="passport_series" />
-              <Field label="Номер" field="passport_number" />
-              <div className="col-span-2"><Field label="Кем выдан" field="passport_issued_by" /></div>
-              <Field label="Дата выдачи" field="passport_issue_date" type="date" />
+              <FormField form={form} onChange={handleChange} label="Серия" field="passport_series" />
+              <FormField form={form} onChange={handleChange} label="Номер" field="passport_number" />
+              <div className="col-span-2"><FormField form={form} onChange={handleChange} label="Кем выдан" field="passport_issued_by" /></div>
+              <FormField form={form} onChange={handleChange} label="Дата выдачи" field="passport_issue_date" type="date" />
             </div>
           </div>
           <div>
             <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase border-b pb-1">🚗 Водительское удостоверение</h4>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Номер ВУ" field="license_number" />
-              <Field label="Категория" field="license_category" />
-              <Field label="Дата выдачи" field="license_issue_date" type="date" />
-              <Field label="Действительно до" field="license_expiry_date" type="date" />
+              <FormField form={form} onChange={handleChange} label="Номер ВУ" field="license_number" />
+              <FormField form={form} onChange={handleChange} label="Категория" field="license_category" />
+              <FormField form={form} onChange={handleChange} label="Дата выдачи" field="license_issue_date" type="date" />
+              <FormField form={form} onChange={handleChange} label="Действительно до" field="license_expiry_date" type="date" />
             </div>
           </div>
           <div>
             <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase border-b pb-1">🏗️ Удостоверение машиниста</h4>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Номер корочки" field="machinist_certificate" />
-              <Field label="Тип (экскаваторщик, крановщик...)" field="machinist_certificate_type" />
-              <Field label="Действительно до" field="machinist_certificate_expiry" type="date" />
+              <FormField form={form} onChange={handleChange} label="Номер корочки" field="machinist_certificate" />
+              <FormField form={form} onChange={handleChange} label="Тип (экскаваторщик, крановщик...)" field="machinist_certificate_type" />
+              <FormField form={form} onChange={handleChange} label="Действительно до" field="machinist_certificate_expiry" type="date" />
             </div>
           </div>
           <div>
@@ -383,8 +411,8 @@ const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> 
           <div>
             <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase border-b pb-1">🏥 Прочее</h4>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Медосмотр до" field="medical_cert_expiry" type="date" />
-              <Field label="Охрана труда до" field="safety_training_expiry" type="date" />
+              <FormField form={form} onChange={handleChange} label="Медосмотр до" field="medical_cert_expiry" type="date" />
+              <FormField form={form} onChange={handleChange} label="Охрана труда до" field="safety_training_expiry" type="date" />
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-500 mb-1">Заметки</label>
                 <textarea value={form.notes || ''} onChange={e => handleChange('notes', e.target.value)} rows={2}
