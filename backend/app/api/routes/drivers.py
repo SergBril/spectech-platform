@@ -95,6 +95,33 @@ def list_drivers(
     }
 
 
+@router.get("/users", summary="Список пользователей компании (для привязки)")
+def list_company_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Список пользователей компании для выбора при привязке водителя."""
+    from app.models.user_company import UserCompany
+
+    stmt = (
+        select(User)
+        .join(UserCompany, User.id == UserCompany.user_id)
+        .where(UserCompany.company_id == company_id)
+        .order_by(User.full_name)
+    )
+    users = db.scalars(stmt).all()
+    return [
+        {
+            "id": u.id,
+            "email": u.email,
+            "full_name": u.full_name or u.email,
+        }
+        for u in users
+    ]
+
+
+
 @router.get("/{contractor_id}", summary="Профиль водителя")
 def get_driver(
     contractor_id: int,
@@ -265,32 +292,6 @@ def create_driver(
     return {"contractor_id": contractor.id, "message": "Водитель создан"}
 
 
-@router.get("/users", summary="Список пользователей компании (для привязки)")
-def list_company_users(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
-):
-    """Список пользователей компании для выбора при привязке водителя."""
-    from app.models.user_company import UserCompany
-
-    stmt = (
-        select(User)
-        .join(UserCompany, User.id == UserCompany.user_id)
-        .where(UserCompany.company_id == company_id)
-        .order_by(User.full_name)
-    )
-    users = db.scalars(stmt).all()
-    return [
-        {
-            "id": u.id,
-            "email": u.email,
-            "full_name": u.full_name or u.email,
-        }
-        for u in users
-    ]
-
-
 @router.post("/create-user", summary="Создать пользователя и привязать к водителю")
 def create_and_bind_user(
     payload: dict[str, Any],
@@ -307,8 +308,11 @@ def create_and_bind_user(
     password = payload.get("password", "")
     contractor_id = payload.get("contractor_id")
 
+    import re
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email и пароль обязательны")
+    if not re.match(r'^[a-z0-9._-]+@[a-z0-9.-]+\.(ru|com|net|org)$', email):
+        raise HTTPException(status_code=400, detail="Некорректный email. Используйте латиницу: name@domain.ru")
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="Пароль минимум 6 символов")
     if not contractor_id:
