@@ -111,7 +111,7 @@ def list_requests(
 
 
 @router.post("", response_model=RequestRead, status_code=201)
-def create_request(
+async def create_request(
     payload: RequestCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -151,6 +151,21 @@ def create_request(
 
     db.commit()
     db.refresh(request)
+
+    # Send notification to company admins about new request
+    # Send notification
+    from app.services.notification_service import create_notification
+    try:
+        await create_notification(
+            db=db,
+            user_id=current_user.id,
+            title="Новая заявка создана",
+            body=f"Заявка #{request.id} ({request.work_type or 'без типа'}) на период {request.planned_start:%d.%m} — {request.planned_end:%d.%m}",
+            channel="in_app",
+        )
+    except Exception as e:
+        logger.warning("Failed to send notification: %s", e)
+
     return request
 
 
@@ -191,7 +206,7 @@ def get_request(
 
 
 @router.post("/{request_id}/assign", response_model=RequestRead)
-def assign_request(
+async def assign_request(
     request_id: int,
     payload: RequestAssign,
     db: Session = Depends(get_db),
@@ -344,6 +359,21 @@ def assign_request(
             f"Request #{request_id} assigned: vehicle={vehicle.name}, "
             f"assignment=#{assignment.id}"
         )
+
+        # Send notification about vehicle assignment
+        # Send notification
+        from app.services.notification_service import create_notification
+        try:
+            await create_notification(
+                db=db,
+                user_id=current_user.id,
+                title="Техника назначена на заявку",
+                body=f"{vehicle.name} → Заявка #{request.id} ({request.work_type or 'без типа'})",
+                channel="in_app",
+            )
+        except Exception as e:
+            logger.warning("Failed to send assignment notification: %s", e)
+
         return request
 
     except IntegrityError as e:

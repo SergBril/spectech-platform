@@ -36,10 +36,8 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
     if (!token) return;
 
     // Use Vite proxy in dev, direct connection in production
-    const isDev = import.meta.env.DEV;
-    const wsUrl = isDev
-      ? `ws://${window.location.host}/ws?token=${token}`
-      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/ws?token=${token}`;
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/ws?token=${token}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;

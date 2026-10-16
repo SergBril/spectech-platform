@@ -43,21 +43,26 @@ async def create_notification(
     db.commit()
     db.refresh(notification)
 
-    # Отправляем через WebSocket в реальном времени
-    await manager.broadcast_to_user(
-        user_id=user_id,
-        message={
-            "type": "new_notification",
-            "data": {
-                "id": notification.id,
-                "title": notification.title,
-                "body": notification.body,
-                "channel": notification.channel,
-                "is_read": notification.is_read,
-                "sent_at": notification.sent_at.isoformat(),
+    # Отправляем через WebSocket в реальном времени всем пользователям компании
+    # Определяем company_id пользователя
+    from app.models.auth import User as UserModel
+    user_obj = db.query(UserModel).filter(UserModel.id == user_id).first()
+    if user_obj and user_obj.company_id:
+        await manager.broadcast_to_company(
+            company_id=user_obj.company_id,
+            message={
+                "type": "new_notification",
+                "data": {
+                    "id": notification.id,
+                    "title": notification.title,
+                    "body": notification.body,
+                    "channel": notification.channel,
+                    "is_read": notification.is_read,
+                    "sent_at": notification.sent_at.isoformat(),
+                    "target_user_id": user_id,
+                },
             },
-        },
-    )
+        )
 
     return notification
 
