@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { vehiclesApi, type Vehicle } from '../api/vehicles';
 import { requestsApi, type Request } from '../api/requests';
 import { financeApi, type PaymentsDashboard } from '../api/finance';
+import apiClient from '../api/client';
 import { RevenueChart, StatusPieChart, TopRequestsChart, Sparkline } from '../components/AnalyticsCharts';
 import { MetricCardSkeleton, ChartSkeleton } from '../components/Skeleton';
 import Layout from '../components/Layout';
@@ -18,6 +19,9 @@ export const DashboardPage: React.FC = () => {
   const [requests, setRequests] = useState<Request[]>([]);
   const [financeData, setFinanceData] = useState<PaymentsDashboard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [gpsStats, setGpsStats] = useState<{ total_points: number; vehicles_with_data: number; latest_point: string | null } | null>(null);
+  const [usersCount, setUsersCount] = useState<number>(0);
+  const [driversCount, setDriversCount] = useState<number>(0);
 
   useEffect(() => {
     loadData();
@@ -35,6 +39,24 @@ export const DashboardPage: React.FC = () => {
       if (vehiclesData.status === 'fulfilled') setVehicles(vehiclesData.value);
       if (requestsData.status === 'fulfilled') setRequests(requestsData.value);
       if (financeRes.status === 'fulfilled') setFinanceData(financeRes.value);
+
+      // Load GPS stats
+      try {
+        const gpsRes = await apiClient.get('/gps/points/stats');
+        setGpsStats(gpsRes.data);
+      } catch { /* ignore */ }
+
+      // Load users count via drivers/users endpoint
+      try {
+        const usersRes = await apiClient.get('/drivers/users');
+        setUsersCount(Array.isArray(usersRes.data) ? usersRes.data.length : 0);
+      } catch { /* ignore */ }
+
+      // Load drivers count (contractors with type=employee)
+      try {
+        const driversRes = await apiClient.get('/contractors', { params: { type: 'employee', limit: 1000 } });
+        setDriversCount(Array.isArray(driversRes.data) ? driversRes.data.length : 0);
+      } catch { /* ignore */ }
     } catch (err) {
       console.error('Failed to load dashboard:', err);
     } finally {
@@ -135,6 +157,38 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
+        {/* === ПОЛЬЗОВАТЕЛИ И ВОДИТЕЛИ === */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Пользователи системы</p>
+                <p className="text-3xl font-bold text-gray-900">{usersCount}</p>
+              </div>
+              <span className="text-4xl">👤</span>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Водители</p>
+                <p className="text-3xl font-bold text-gray-900">{driversCount}</p>
+              </div>
+              <span className="text-4xl">👷</span>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Техника на карте</p>
+                <p className="text-3xl font-bold text-indigo-600">{gpsStats?.vehicles_with_data ?? 0}</p>
+                <p className="text-xs text-gray-600">С GPS-данными</p>
+              </div>
+              <span className="text-4xl">🗺️</span>
+            </div>
+          </div>
+        </div>
+
         {/* === ВИДЖЕТЫ === */}
         <DashboardWidgets />
 
@@ -155,8 +209,8 @@ export const DashboardPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-gray-500 uppercase font-semibold">GPS точки</p>
-                  <p className="text-xl font-bold text-gray-900">0</p>
-                  <p className="text-xs text-gray-600">Всего</p>
+                  <p className="text-xl font-bold text-gray-900">{gpsStats?.total_points?.toLocaleString('ru-RU') ?? '—'}</p>
+                  <p className="text-xs text-gray-600">{gpsStats?.vehicles_with_data ? `${gpsStats.vehicles_with_data} ед. с данными` : 'Всего'}</p>
                 </div>
                 <span className="text-3xl">📍</span>
               </div>
@@ -223,7 +277,7 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div>
               <dt className="text-gray-500">Роль</dt>
-              <dd className="font-medium text-gray-900">user</dd>
+              <dd className="font-medium text-gray-900">{(user as any)?.role || (user as any)?.is_superuser ? 'Администратор' : 'Пользователь'}</dd>
             </div>
             <div>
               <dt className="text-gray-500">Superuser</dt>
