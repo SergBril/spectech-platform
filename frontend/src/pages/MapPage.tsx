@@ -10,6 +10,7 @@ import Layout from '../components/Layout';
 import { showToast } from '../utils/toast';
 import { mapApi, VehiclePosition, TrackPoint } from '../api/map';
 import apiClient from '../api/client';
+import { useWebSocket } from '../contexts/WebSocketContext';
 
 // Исправляем иконки Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -33,15 +34,31 @@ export const MapPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [trackLoading, setTrackLoading] = useState(false);
 
+  // WebSocket real-time positions
+  const { subscribe, connected } = useWebSocket();
+
   // Фильтры
   const [filterEngine, setFilterEngine] = useState<'all' | 'on' | 'off'>('all');
   const [filterSearch, setFilterSearch] = useState('');
+
+  // WebSocket subscription for real-time GPS updates
+  useEffect(() => {
+    const unsubscribe = subscribe('gps_positions', (data: any) => {
+      if (data.positions && Array.isArray(data.positions)) {
+        setPositions(data.positions);
+      }
+    });
+    return unsubscribe;
+  }, [subscribe]);
 
   // Автообновление
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(30);
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wsConnectedRef = useRef(false);
   const isAutoRefreshRef = useRef(false);
+
+  useEffect(() => { wsConnectedRef.current = connected; }, [connected]);
 
   // Период для маршрута
   const now = new Date();
@@ -480,7 +497,11 @@ export const MapPage: React.FC = () => {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                 </span>
+                {connected ? (
+                <span className="text-[10px] text-blue-600 font-medium">⚡ WebSocket Real-time</span>
+              ) : (
                 <span className="text-[10px] text-green-600">Live • каждые {refreshInterval}с</span>
+              )}
               </div>
             )}
 

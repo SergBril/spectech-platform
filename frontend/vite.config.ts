@@ -13,7 +13,7 @@ export default defineConfig({
         secure: false,
       },
       '/ws': {
-        target: 'ws://127.0.0.1:8000',
+        target: 'ws://127.0.0.1:8000/api/v1',
         ws: true,
         changeOrigin: true,
       },
