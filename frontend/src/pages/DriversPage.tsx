@@ -258,10 +258,13 @@ export const DriversPage: React.FC = () => {
                             className="w-32 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-500 outline-none" />
                           <button onClick={async () => {
                             if (!bulkNewUser.email || !bulkNewUser.password) { alert('Email и пароль обязательны'); return; }
+                            const emailRe = /^[a-z0-9._-]+@[a-z0-9.-]+\.(ru|com|net|org)$/i;
+                            if (!emailRe.test(bulkNewUser.email)) { alert('Некорректный email. Используйте латиницу: name@domain.ru'); return; }
+                            if (bulkNewUser.password.length < 6) { alert('Пароль минимум 6 символов'); return; }
                             try {
                               const res = await apiClient.post('/drivers/create-user', {
                                 email: bulkNewUser.email, password: bulkNewUser.password,
-                                full_name: drv.full_name, contractor_id: drv.contractor_id,
+                                full_name: drv.full_name, contractor_id: Number(drv.contractor_id),
                               });
                               alert('Создан! ID: ' + res.data.user_id);
                               setBulkNewUser({ email: '', password: '', full_name: '', forContractorId: null });
@@ -391,7 +394,7 @@ const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await driversApi.updateProfile(driver.contractor_id, form);
+      await driversApi.updateProfile(Number(driver.contractor_id), form);
       onClose();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Ошибка сохранения');
@@ -472,7 +475,7 @@ const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> 
                       if (!e.target.value) return;
                       if (!confirm('Привязать этого пользователя к водителю?')) return;
                       try {
-                        await driversApi.updateProfile(driver.contractor_id, { user_id: parseInt(e.target.value) } as any);
+                        await driversApi.updateProfile(Number(driver.contractor_id), { user_id: parseInt(e.target.value) } as any);
                         alert('Пользователь привязан!');
                         onClose();
                       } catch (err: any) { alert(err.response?.data?.detail || 'Ошибка'); }
