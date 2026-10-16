@@ -438,3 +438,168 @@ def bulk_bind_users(
     
     db.commit()
     return {"updated": updated, "errors": errors}
+
+
+@router.get("/{contractor_id}/history/export/excel", summary="Экспорт истории пересадок в Excel")
+def export_driver_history_excel(
+    contractor_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт истории назначений водителя в Excel."""
+    from app.models.catalog import Vehicle
+    from io import BytesIO
+    from openpyxl import Workbook
+    from fastapi.responses import StreamingResponse
+
+    ctr = db.query(Contractor).filter(
+        Contractor.id == contractor_id,
+        Contractor.company_id == company_id,
+    ).first()
+    if not ctr:
+        raise HTTPException(status_code=404, detail="Водитель не найден")
+
+    stmt = (
+        select(DriverAssignmentLog, Vehicle)
+        .join(Vehicle, DriverAssignmentLog.vehicle_id == Vehicle.id)
+        .where(DriverAssignmentLog.driver_contractor_id == contractor_id)
+        .order_by(DriverAssignmentLog.assigned_at.desc())
+    )
+    rows = db.execute(stmt).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "История пересадок"
+    ws.append(["ФИО водителя", ctr.name])
+    ws.append([])
+    ws.append(["Техника", "Гос. номер", "Назначен с", "Снят по", "Статус", "Примечание"])
+
+    for log, veh in rows:
+        status = "Текущее" if not log.unassigned_at else "Завершено"
+        ws.append([
+            veh.name,
+            veh.psm_number or "",
+            log.assigned_at.strftime("%d.%m.%Y") if log.assigned_at else "",
+            log.unassigned_at.strftime("%d.%m.%Y") if log.unassigned_at else "",
+            status,
+            log.notes or "",
+        ])
+
+    # Auto-width
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 30)
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    from urllib.parse import quote
+    safe_name = f"history_{contractor_id}.xlsx"
+    encoded_name = quote(f"history_{ctr.name}_{contractor_id}.xlsx")
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=\"{safe_name}\"; filename*=UTF-8''{encoded_name}"},
+    )
+
+
+@router.get("/{contractor_id}/history/export/pdf", summary="Экспорт истории пересадок в PDF")
+def export_driver_history_pdf(
+    contractor_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт истории назначений водителя в PDF."""
+    from app.models.catalog import Vehicle
+    from io import BytesIO
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from fastapi.responses import StreamingResponse
+    import os
+
+    # Register Cyrillic font
+    font_path = "C:/Windows/Fonts/arial.ttf"
+    if os.path.exists(font_path):
+        pdfmetrics.registerFont(TTFont("Arial", font_path))
+        FONT_NAME = "Arial"
+        FONT_BOLD = "Arial"
+    else:
+        FONT_NAME = "Helvetica"
+        FONT_BOLD = "Helvetica-Bold"
+
+    ctr = db.query(Contractor).filter(
+        Contractor.id == contractor_id,
+        Contractor.company_id == company_id,
+    ).first()
+    if not ctr:
+        raise HTTPException(status_code=404, detail="Водитель не найден")
+
+    stmt = (
+        select(DriverAssignmentLog, Vehicle)
+        .join(Vehicle, DriverAssignmentLog.vehicle_id == Vehicle.id)
+        .where(DriverAssignmentLog.driver_contractor_id == contractor_id)
+        .order_by(DriverAssignmentLog.assigned_at.desc())
+    )
+    rows = db.execute(stmt).all()
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4))
+    styles = getSampleStyleSheet()
+
+    # Create Cyrillic-aware style
+    cyrillic_title = ParagraphStyle("CyrillicTitle", parent=styles["Title"], fontName=FONT_BOLD, fontSize=16)
+    cyrillic_cell = ParagraphStyle("CyrillicCell", fontName=FONT_NAME, fontSize=8)
+
+    elements = []
+    elements.append(Paragraph(f"История пересадок: {ctr.name}", cyrillic_title))
+    elements.append(Spacer(1, 12))
+
+    data = [[
+        Paragraph("Техника", cyrillic_cell),
+        Paragraph("Гос. номер", cyrillic_cell),
+        Paragraph("Назначен с", cyrillic_cell),
+        Paragraph("Снят по", cyrillic_cell),
+        Paragraph("Статус", cyrillic_cell),
+        Paragraph("Примечание", cyrillic_cell),
+    ]]
+    for log, veh in rows:
+        status = "Текущее" if not log.unassigned_at else "Завершено"
+        data.append([
+            Paragraph(veh.name or "", cyrillic_cell),
+            Paragraph(veh.psm_number or "", cyrillic_cell),
+            Paragraph(log.assigned_at.strftime("%d.%m.%Y") if log.assigned_at else "", cyrillic_cell),
+            Paragraph(log.unassigned_at.strftime("%d.%m.%Y") if log.unassigned_at else "", cyrillic_cell),
+            Paragraph(status, cyrillic_cell),
+            Paragraph(log.notes or "", cyrillic_cell),
+        ])
+
+    table = Table(data)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4B5563")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F9FAFB")]),
+    ]))
+    elements.append(table)
+
+    doc.build(elements)
+    buf.seek(0)
+
+    from urllib.parse import quote
+    safe_name = f"history_{contractor_id}.pdf"
+    encoded_name = quote(f"history_{ctr.name}_{contractor_id}.pdf")
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=\"{safe_name}\"; filename*=UTF-8''{encoded_name}"},
+    )
