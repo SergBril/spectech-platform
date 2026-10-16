@@ -178,7 +178,7 @@ def get_my_driver_profile(
     current_user: User = Depends(get_current_user),
 ):
     """Вернуть профиль водителя, связанного с текущим пользователем."""
-    from app.models.contractor import Employee
+    from app.models.contractor import Employee, Contractor
     
     emp = db.query(Employee).filter(
         Employee.user_id == current_user.id,
