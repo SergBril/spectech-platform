@@ -108,6 +108,55 @@ def sync_gps_positions() -> None:
         if total_new_points > 0:
             db.commit()
 
+            # Broadcast updated positions via WebSocket
+            try:
+                import asyncio
+                from app.services.websocket_manager import manager
+                from sqlalchemy import func, and_
+
+                latest_subq = (
+                    db.query(
+                        GpsPoint.vehicle_id,
+                        func.max(GpsPoint.recorded_at).label("max_recorded_at"),
+                    )
+                    .group_by(GpsPoint.vehicle_id)
+                    .subquery()
+                )
+                latest_points = (
+                    db.query(GpsPoint)
+                    .join(
+                        latest_subq,
+                        and_(
+                            GpsPoint.vehicle_id == latest_subq.c.vehicle_id,
+                            GpsPoint.recorded_at == latest_subq.c.max_recorded_at,
+                        ),
+                    )
+                    .all()
+                )
+
+                positions = []
+                for p in latest_points:
+                    vehicle = db.query(Vehicle).filter(Vehicle.id == p.vehicle_id).first()
+                    positions.append({
+                        "vehicle_id": p.vehicle_id,
+                        "vehicle_name": vehicle.name if vehicle else f"Vehicle #{p.vehicle_id}",
+                        "latitude": p.latitude,
+                        "longitude": p.longitude,
+                        "speed": p.speed,
+                        "heading": p.heading,
+                        "engine_on": p.engine_on,
+                        "fuel_level": p.fuel_level,
+                        "recorded_at": p.recorded_at.isoformat() if p.recorded_at else None,
+                    })
+
+                if positions:
+                    loop = asyncio.new_event_loop()
+                    loop.run_until_complete(manager.broadcast_positions(positions))
+                    loop.close()
+                    logger.info("📡 Broadcast %d positions via WebSocket", len(positions))
+            except Exception as ws_err:
+                logger.warning("⚠️ WebSocket broadcast failed: %s", ws_err)
+
     except Exception as e:
         logger.error("❌ GPS sync task error: %s", e)
     finally:

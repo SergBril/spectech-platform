@@ -99,6 +99,19 @@ class ConnectionManager:
             len(self.chat_connections[chat_id]),
         )
 
+    async def broadcast_positions(self, positions: list[dict], company_id: int = 0):
+        """Broadcast GPS positions to all connected users of a company."""
+        import json
+        message = json.dumps({"type": "gps_positions", "positions": positions})
+        disconnected = []
+        for uid, ws in self.user_connections.items():
+            try:
+                await ws.send_text(message)
+            except Exception:
+                disconnected.append(uid)
+        for uid in disconnected:
+            self.user_connections.pop(uid, None)
+
     def disconnect_chat(self, websocket: WebSocket, chat_id: int):
         """Отключение от чата."""
         if chat_id in self.chat_connections:
