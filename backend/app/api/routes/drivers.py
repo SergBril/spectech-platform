@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.api.deps import get_current_company_id, get_current_user, require_permission
 from app.core.db import get_db
 from app.models.auth import User
-from app.models.contractor import Contractor, Employee, DriverProfile
+from app.models.contractor import Contractor, Employee, DriverProfile, DriverAssignmentLog
 from app.models.user_company import UserCompany
 
 router = APIRouter()
@@ -71,7 +71,6 @@ def list_drivers(
         .where(
             Contractor.company_id == company_id,
             Contractor.is_active == True,  # noqa: E712
-            Employee.user_id.isnot(None),
         )
     )
     if search:
@@ -173,6 +172,26 @@ def upsert_driver_profile(
                 val = None
             setattr(profile, field, val)
 
+    # Привязка пользователя (user_id)
+    if "user_id" in payload:
+        new_user_id = payload["user_id"]
+        if new_user_id is not None:
+            # Проверяем что пользователь существует
+            user = db.get(User, new_user_id)
+            if not user:
+                raise HTTPException(status_code=400, detail="Пользователь не найден")
+            # Проверяем что пользователь не привязан к другому сотруднику
+            existing_emp = db.query(Employee).filter(
+                Employee.user_id == new_user_id,
+                Employee.contractor_id != contractor_id,
+            ).first()
+            if existing_emp:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Пользователь уже привязан к другому сотруднику (contractor_id={existing_emp.contractor_id})"
+                )
+        emp.user_id = new_user_id
+
     db.commit()
     db.refresh(profile)
 
@@ -244,3 +263,129 @@ def create_driver(
     db.commit()
 
     return {"contractor_id": contractor.id, "message": "Водитель создан"}
+
+
+@router.get("/users", summary="Список пользователей компании (для привязки)")
+def list_company_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Список пользователей компании для выбора при привязке водителя."""
+    from app.models.user_company import UserCompany
+
+    stmt = (
+        select(User)
+        .join(UserCompany, User.id == UserCompany.user_id)
+        .where(UserCompany.company_id == company_id)
+        .order_by(User.full_name)
+    )
+    users = db.scalars(stmt).all()
+    return [
+        {
+            "id": u.id,
+            "email": u.email,
+            "full_name": u.full_name or u.email,
+        }
+        for u in users
+    ]
+
+
+@router.post("/create-user", summary="Создать пользователя и привязать к водителю")
+def create_and_bind_user(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+    _: None = Depends(require_permission("vehicles", "update")),
+):
+    """Создать нового пользователя и привязать к водителю."""
+    from app.core.security import get_password_hash
+    from app.models.user_company import UserCompany
+
+    email = payload.get("email", "").strip().lower()
+    password = payload.get("password", "")
+    contractor_id = payload.get("contractor_id")
+
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email и пароль обязательны")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Пароль минимум 6 символов")
+    if not contractor_id:
+        raise HTTPException(status_code=400, detail="contractor_id обязателен")
+
+    # Проверяем что сотрудник существует
+    emp = db.query(Employee).filter(
+        Employee.contractor_id == contractor_id,
+    ).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Сотрудник не найден")
+
+    # Проверяем уникальность email
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Пользователь с email '{email}' уже существует")
+
+    # Создаём пользователя
+    full_name = payload.get("full_name", "").strip()
+    user = User(
+        email=email,
+        hashed_password=get_password_hash(password),
+        full_name=full_name or None,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+
+    # Привязываем к компании
+    uc = UserCompany(user_id=user.id, company_id=company_id)
+    db.add(uc)
+
+    # Привязываем к сотруднику
+    emp.user_id = user.id
+
+    db.commit()
+
+    return {"user_id": user.id, "email": email, "message": "Пользователь создан и привязан"}
+
+
+@router.get("/{contractor_id}/history", summary="История назначений водителя")
+def get_driver_history(
+    contractor_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Получить историю назначений водителя на технику."""
+    from app.models.catalog import Vehicle
+    
+    # Проверяем что водитель принадлежит компании
+    ctr = db.query(Contractor).filter(
+        Contractor.id == contractor_id,
+        Contractor.company_id == company_id,
+    ).first()
+    if not ctr:
+        raise HTTPException(status_code=404, detail="Водитель не найден")
+    
+    stmt = (
+        select(DriverAssignmentLog, Vehicle)
+        .join(Vehicle, DriverAssignmentLog.vehicle_id == Vehicle.id)
+        .where(DriverAssignmentLog.driver_contractor_id == contractor_id)
+        .order_by(DriverAssignmentLog.assigned_at.desc())
+        .limit(limit)
+    )
+    rows = db.execute(stmt).all()
+    
+    return [
+        {
+            "id": log.id,
+            "vehicle_id": log.vehicle_id,
+            "vehicle_name": veh.name,
+            "vehicle_plate": veh.plate_number,
+            "assigned_at": log.assigned_at.isoformat() if log.assigned_at else None,
+            "unassigned_at": log.unassigned_at.isoformat() if log.unassigned_at else None,
+            "notes": log.notes,
+        }
+        for log, veh in rows
+    ]

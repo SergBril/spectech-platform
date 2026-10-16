@@ -204,6 +204,20 @@ const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> 
   const [saving, setSaving] = useState(false);
   const [users, setUsers] = useState<{id: number; email: string; full_name: string}[]>([]);
   const [showNewUser, setShowNewUser] = useState(false);
+  const [historyTab, setHistoryTab] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  const loadHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const res = await apiClient.get(`/drivers/${driver.contractor_id}/history`);
+      setHistory(Array.isArray(res.data) ? res.data : []);
+    } catch { setHistory([]); }
+    finally { setLoadingHistory(false); }
+  };
+
+  useEffect(() => { if (historyTab) loadHistory(); }, [historyTab]);
   const [newUser, setNewUser] = useState({ email: '', password: '', full_name: '' });
 
   useEffect(() => {
@@ -253,6 +267,18 @@ const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> 
           <h3 className="text-lg font-bold text-gray-900">Профиль: {driver.full_name}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
         </div>
+        {/* Tab switcher */}
+        <div className="px-6 pt-4 flex gap-1 border-b">
+          <button onClick={() => setHistoryTab(false)}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${!historyTab ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
+            ✏️ Профиль
+          </button>
+          <button onClick={() => setHistoryTab(true)}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${historyTab ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
+            📜 История пересадок
+          </button>
+        </div>
+        {!historyTab ? (
         <div className="p-6 space-y-6">
           <div>
             <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase border-b pb-1">📋 Персональные данные</h4>
@@ -367,12 +393,54 @@ const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> 
             </div>
           </div>
         </div>
+        ) : (
+          /* History Tab */
+          <div className="p-6">
+            {loadingHistory ? (
+              <div className="text-center py-8 text-gray-500">Загрузка...</div>
+            ) : history.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <div className="text-4xl mb-2">📭</div>
+                <p>История пересадок пуста</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                {history.map((item: any) => (
+                  <div key={item.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="text-2xl mt-1">🚜</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 truncate">{item.vehicle_name}</div>
+                      <div className="text-xs text-gray-500">{item.vehicle_plate}</div>
+                      <div className="mt-1 flex gap-3 text-xs">
+                        <span className="text-green-600">
+                          ✅ с {new Date(item.assigned_at).toLocaleDateString('ru-RU')}
+                        </span>
+                        {item.unassigned_at && (
+                          <span className="text-red-500">
+                            ❌ по {new Date(item.unassigned_at).toLocaleDateString('ru-RU')}
+                          </span>
+                        )}
+                        {!item.unassigned_at && (
+                          <span className="text-blue-600 font-medium">🔵 Текущее назначение</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 sticky bottom-0 bg-white">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Отмена</button>
-          <button onClick={handleSave} disabled={saving}
-            className="px-6 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50">
-            {saving ? 'Сохранение...' : 'Сохранить'}
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">
+            {historyTab ? 'Закрыть' : 'Отмена'}
           </button>
+          {!historyTab && (
+            <button onClick={handleSave} disabled={saving}
+              className="px-6 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50">
+              {saving ? 'Сохранение...' : 'Сохранить'}
+            </button>
+          )}
         </div>
       </div>
     </div>
