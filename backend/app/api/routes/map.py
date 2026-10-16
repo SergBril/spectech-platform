@@ -54,6 +54,96 @@ def get_vehicle_positions(
     return {"positions": positions}
 
 
+
+
+@router.get("/vehicles/{vehicle_id}/detail", summary="Детальная информация о технике для карты")
+def get_vehicle_detail(
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_ids: list[int] = Depends(get_user_company_ids),
+):
+    """Полная карточка техники: данные, текущий водитель, активное задание."""
+    from app.models.catalog import Vehicle
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
+    from app.models.contractor import DriverAssignmentLog
+
+    vehicle = db.query(Vehicle).filter(
+        Vehicle.id == vehicle_id,
+        Vehicle.company_id.in_(company_ids),
+    ).first()
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Техника не найдена")
+
+    # Текущий водитель (последняя активная привязка)
+    driver = None
+    active_assignment = (
+        db.query(DriverAssignmentLog)
+        .filter(
+            DriverAssignmentLog.vehicle_id == vehicle_id,
+            DriverAssignmentLog.unassigned_at.is_(None),
+        )
+        .order_by(DriverAssignmentLog.assigned_at.desc())
+        .first()
+    )
+    if active_assignment:
+        ctr = db.query(Contractor).filter(Contractor.id == active_assignment.driver_contractor_id).first()
+        if ctr:
+            driver = {
+                "contractor_id": ctr.id,
+                "name": ctr.name,
+                "phone": getattr(ctr, "phone", None),
+                "assigned_at": active_assignment.assigned_at.isoformat() if active_assignment.assigned_at else None,
+            }
+
+    # Активное задание (заявка в работе)
+    active_request = None
+    req = (
+        db.query(Request)
+        .filter(
+            Request.assigned_vehicle_id == vehicle_id,
+            Request.status.in_(["new", "in_progress", "assigned", "confirmed"]),
+        )
+        .order_by(Request.planned_start.desc())
+        .first()
+    )
+    if req:
+        active_request = {
+            "id": req.id,
+            "status": req.status.value if hasattr(req.status, 'value') else str(req.status),
+            "description": req.work_type or None,
+            "address": req.object_address or None,
+            "planned_start": req.planned_start.isoformat() if req.planned_start else None,
+            "planned_end": req.planned_end.isoformat() if req.planned_end else None,
+        }
+
+    # Последняя GPS-точка
+    last_point = (
+        db.query(GpsPoint)
+        .filter(GpsPoint.vehicle_id == vehicle_id)
+        .order_by(desc(GpsPoint.recorded_at))
+        .first()
+    )
+
+    return {
+        "vehicle_id": vehicle.id,
+        "vehicle_name": vehicle.name or f"Vehicle #{vehicle.id}",
+        "vehicle_type": getattr(vehicle, "type", None),
+        "status": getattr(vehicle, "status", None),
+        "plate_number": getattr(vehicle, "psm_number", None),
+        "latitude": last_point.latitude if last_point else None,
+        "longitude": last_point.longitude if last_point else None,
+        "speed": last_point.speed if last_point else None,
+        "heading": last_point.heading if last_point else None,
+        "engine_on": last_point.engine_on if last_point else None,
+        "fuel_level": last_point.fuel_level if last_point else None,
+        "recorded_at": last_point.recorded_at.isoformat() if last_point and last_point.recorded_at else None,
+        "driver": driver,
+        "active_request": active_request,
+    }
+
+
 @router.get("/vehicles/{vehicle_id}/track")
 def get_vehicle_track(
     vehicle_id: int,
