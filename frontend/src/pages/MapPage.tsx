@@ -263,8 +263,27 @@ export const MapPage: React.FC = () => {
 
     filtered.forEach((pos) => {
       const isSelected = selectedVehicles.has(pos.vehicle_id);
-      const color = isSelected ? '#dc2626' : pos.engine_on ? '#16a34a' : '#6b7280';
-      const size = isSelected ? 20 : 14;
+      
+      // Determine marker color based on status
+      let color: string;
+      let borderColor = 'white';
+      if (isSelected) {
+        color = '#2563eb'; // Blue for selected
+        borderColor = '#1d4ed8';
+      } else {
+        // Check if last update was more than 1 hour ago (no connection)
+        const lastUpdate = pos.recorded_at ? new Date(pos.recorded_at).getTime() : 0;
+        const hoursSinceUpdate = (Date.now() - lastUpdate) / (1000 * 60 * 60);
+        
+        if (hoursSinceUpdate > 1) {
+          color = '#f59e0b'; // Orange/yellow - no connection
+        } else if (pos.engine_on) {
+          color = '#10b981'; // Green - engine on (moving)
+        } else {
+          color = '#6b7280'; // Gray - engine off (parked)
+        }
+      }
+      const size = isSelected ? 22 : 14;
 
       const icon = L.divIcon({
         className: 'custom-marker',
@@ -272,7 +291,7 @@ export const MapPage: React.FC = () => {
           background: ${color};
           width: ${size}px; height: ${size}px;
           border-radius: 50%;
-          border: 3px solid white;
+          border: 3px solid ${borderColor};
           box-shadow: 0 2px 6px rgba(0,0,0,0.3);
           transition: all 0.2s;
         "></div>`,
@@ -475,6 +494,14 @@ export const MapPage: React.FC = () => {
               onChange={(e) => setFilterSearch(e.target.value)}
               className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             />
+
+            {/* Легенда цветов маркеров */}
+            <div className="flex flex-wrap gap-2 text-[10px] mb-2">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#10b981]"></span>Движется</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#6b7280]"></span>Стоит</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#f59e0b]"></span>Нет связи</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#2563eb]"></span>Выбран</span>
+            </div>
 
             {/* Фильтр двигателя */}
             <div className="flex gap-1">
