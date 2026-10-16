@@ -33,6 +33,8 @@ export const MapPage: React.FC = () => {
   const [selectedVehicle, setSelectedVehicle] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [trackLoading, setTrackLoading] = useState(false);
+  const [vehicleDetail, setVehicleDetail] = useState<any>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   // WebSocket real-time positions
   const { subscribe, connected } = useWebSocket();
@@ -257,21 +259,21 @@ export const MapPage: React.FC = () => {
         iconAnchor: [size / 2, size / 2],
       });
 
-      const marker = L.marker([pos.latitude, pos.longitude], { icon })
-        .bindPopup(`
-          <div style="min-width: 200px;">
-            <strong>${pos.vehicle_name}</strong><br/>
-            📍 ${pos.latitude.toFixed(5)}, ${pos.longitude.toFixed(5)}<br/>
-            🏎️ ${formatSpeed(pos.speed)}<br/>
-            ⛽ Топливо: ${pos.fuel_level != null ? `${Math.round(pos.fuel_level)}%` : '—'}<br/>
-            🔧 Двигатель: ${pos.engine_on ? '✅ Вкл' : '❌ Выкл'}<br/>
-            🕐 ${formatDate(pos.recorded_at)}
-          </div>
-        `);
+      const marker = L.marker([pos.latitude, pos.longitude], { icon });
 
-      marker.on('click', () => {
+      marker.on('click', async () => {
         setSelectedVehicle(pos.vehicle_id);
         loadTrack(pos.vehicle_id);
+        setDetailLoading(true);
+        setVehicleDetail(null);
+        try {
+          const detail = await mapApi.getVehicleDetail(pos.vehicle_id);
+          setVehicleDetail(detail);
+        } catch (err) {
+          console.error('Failed to load vehicle detail:', err);
+        } finally {
+          setDetailLoading(false);
+        }
       });
 
       clusterRef.current!.addLayer(marker);
@@ -506,6 +508,57 @@ export const MapPage: React.FC = () => {
             )}
 
             {/* Период маршрута */}
+            {selectedVehicle && vehicleDetail && (
+              <div className="pt-2 border-t space-y-2 bg-blue-50 rounded-lg p-3 -mx-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-gray-900 truncate">{vehicleDetail.vehicle_name}</h3>
+                  <button onClick={() => { setVehicleDetail(null); setSelectedVehicle(null); }}
+                    className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                </div>
+                {vehicleDetail.plate_number && (
+                  <p className="text-xs text-gray-600">🔢 {vehicleDetail.plate_number}</p>
+                )}
+                <div className="grid grid-cols-2 gap-1 text-xs">
+                  <span>🏎️ {formatSpeed(vehicleDetail.speed)}</span>
+                  <span>⛽ {vehicleDetail.fuel_level != null ? `${Math.round(vehicleDetail.fuel_level)}%` : '—'}</span>
+                  <span>🔧 {vehicleDetail.engine_on ? '✅ Вкл' : '❌ Выкл'}</span>
+                  <span>🕐 {formatDate(vehicleDetail.recorded_at)}</span>
+                </div>
+                {vehicleDetail.driver && (
+                  <div className="mt-1 pt-1 border-t border-blue-200">
+                    <p className="text-xs font-medium text-blue-800">👷 Водитель</p>
+                    <p className="text-xs text-gray-800">{vehicleDetail.driver.name}</p>
+                    {vehicleDetail.driver.phone && <p className="text-[10px] text-gray-500">📞 {vehicleDetail.driver.phone}</p>}
+                    <p className="text-[10px] text-gray-400">с {formatDate(vehicleDetail.driver.assigned_at)}</p>
+                  </div>
+                )}
+                {!vehicleDetail.driver && (
+                  <p className="text-xs text-orange-500 mt-1">⚠️ Водитель не назначен</p>
+                )}
+                {vehicleDetail.active_request && (
+                  <div className="mt-1 pt-1 border-t border-blue-200">
+                    <p className="text-xs font-medium text-purple-800">📋 Задание #{vehicleDetail.active_request.id}</p>
+                    <p className="text-xs text-gray-700 truncate">{vehicleDetail.active_request.description || 'Без описания'}</p>
+                    {vehicleDetail.active_request.address && (
+                      <p className="text-[10px] text-gray-500 truncate">📍 {vehicleDetail.active_request.address}</p>
+                    )}
+                    <span className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                      vehicleDetail.active_request.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                      vehicleDetail.active_request.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                      'bg-blue-100 text-blue-800'
+                    }`}>{vehicleDetail.active_request.status}</span>
+                  </div>
+                )}
+                {!vehicleDetail.active_request && (
+                  <p className="text-xs text-gray-400 mt-1 italic">Нет активных заданий</p>
+                )}
+              </div>
+            )}
+            {selectedVehicle && detailLoading && (
+              <div className="pt-2 border-t text-center py-3">
+                <span className="text-xs text-gray-500 animate-pulse">⏳ Загрузка карточки...</span>
+              </div>
+            )}
             {selectedVehicle && (
               <div className="pt-2 border-t space-y-2">
                 <p className="text-xs font-medium text-gray-700">📅 Период маршрута:</p>

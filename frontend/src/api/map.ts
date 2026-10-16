@@ -86,6 +86,12 @@ export const mapApi = {
     return res.data;
   },
 
+
+  getVehicleDetail: async (vehicleId: number): Promise<any> => {
+    const res = await apiClient.get(`/map/vehicles/${vehicleId}/detail`);
+    return res.data;
+  },
+
   deleteGeofence: async (id: number): Promise<{ message: string }> => {
     const res = await apiClient.delete(`/map/geofences/${id}`);
     return res.data;
