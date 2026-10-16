@@ -418,6 +418,28 @@ const DriverFormModal: React.FC<{ driver: DriverProfile; onClose: () => void }> 
             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${historyTab ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
             📜 История пересадок
           </button>
+          {historyTab && (
+            <div className="ml-auto flex gap-2">
+              <button onClick={async () => {
+                try {
+                  const res = await apiClient.get(`/drivers/${driver.contractor_id}/history/export/excel`, { responseType: 'blob' });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const a = document.createElement('a'); a.href = url;
+                  a.download = `history_${driver.contractor_id}.xlsx`; a.click();
+                  window.URL.revokeObjectURL(url);
+                } catch (err: any) { alert('Ошибка экспорта: ' + (err.message || err)); }
+              }} className="px-3 py-1.5 bg-green-600 text-white text-xs rounded hover:bg-green-700">📊 Excel</button>
+              <button onClick={async () => {
+                try {
+                  const res = await apiClient.get(`/drivers/${driver.contractor_id}/history/export/pdf`, { responseType: 'blob' });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const a = document.createElement('a'); a.href = url;
+                  a.download = `history_${driver.contractor_id}.pdf`; a.click();
+                  window.URL.revokeObjectURL(url);
+                } catch (err: any) { alert('Ошибка экспорта: ' + (err.message || err)); }
+              }} className="px-3 py-1.5 bg-red-600 text-white text-xs rounded hover:bg-red-700">📄 PDF</button>
+            </div>
+          )}
         </div>
         {!historyTab ? (
         <div className="p-6 space-y-6">
