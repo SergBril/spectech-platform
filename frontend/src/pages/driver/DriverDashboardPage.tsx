@@ -53,7 +53,36 @@ export const DriverDashboardPage: React.FC = () => {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [salary, setSalary] = useState<SalaryRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'shifts' | 'salary'>('shifts');
+  const [activeTab, setActiveTab] = useState<'shifts' | 'salary' | 'vehicle'>('shifts');
+  const [assignedVehicles, setAssignedVehicles] = useState<any[]>([]);
+  const [assignmentHistory, setAssignmentHistory] = useState<any[]>([]);
+  const [loadingVehicle, setLoadingVehicle] = useState(false);
+
+  const loadVehicleData = async () => {
+    setLoadingVehicle(true);
+    try {
+      // Get current driver profile
+      const meRes = await apiClient.get('/driver/me');
+      const myProfile = meRes.data;
+      const cid = myProfile.contractor_id;
+
+      const vehRes = await apiClient.get('/vehicles', { params: { limit: 100 } });
+      const allVeh = vehRes.data.items || vehRes.data;
+      setAssignedVehicles(allVeh.filter((v: any) => v.assigned_driver_id === cid));
+
+      const histRes = await apiClient.get(`/drivers/${cid}/history`);
+      setAssignmentHistory(Array.isArray(histRes.data) ? histRes.data : []);
+    } catch (err: any) {
+      console.error('Failed to load vehicle data:', err);
+      if (err?.response?.status === 404) {
+        showToast.error('Профиль водителя не найден. Обратитесь к администратору.');
+      } else {
+        showToast.error('Ошибка загрузки данных о технике');
+      }
+    } finally { setLoadingVehicle(false); }
+  };
+
+  useEffect(() => { if (activeTab === 'vehicle') loadVehicleData(); }, [activeTab]);
 
   useEffect(() => {
     loadData();
@@ -129,6 +158,14 @@ export const DriverDashboardPage: React.FC = () => {
           >
             💰 Зарплата
           </button>
+          <button
+            onClick={() => setActiveTab('vehicle')}
+            className={`flex-1 py-2.5 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'vehicle' ? 'bg-blue-600 text-white' : 'text-gray-600'
+            }`}
+          >
+            🚜 Техника
+          </button>
         </div>
       </div>
 
@@ -192,6 +229,60 @@ export const DriverDashboardPage: React.FC = () => {
                   )}
                 </div>
               ))
+            )}
+          </div>
+        ) : activeTab === 'vehicle' ? (
+          <div className="space-y-3">
+            {loadingVehicle ? (
+              <div className="flex justify-center py-12">
+                <div className="w-8 h-8 border-4 border-blue-200 rounded-full animate-spin border-t-blue-600" />
+              </div>
+            ) : (
+              <>
+                {assignedVehicles.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2 px-1">Текущая техника</h3>
+                    {assignedVehicles.map((v: any) => (
+                      <div key={v.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-3">
+                        <div className="flex items-start gap-3">
+                          <div className="text-3xl">🚜</div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-gray-900 truncate">{v.name}</h3>
+                            <p className="text-sm text-gray-500">{v.psm_number || v.plate_number || '—'} • {v.category_name || ''}</p>
+                            <p className="text-xs text-green-600 mt-1">✅ Назначена</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2 px-1">История пересадок</h3>
+                  {assignmentHistory.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <div className="text-4xl mb-3">📭</div>
+                      <p>История пуста</p>
+                    </div>
+                  ) : (
+                    assignmentHistory.map((item: any) => (
+                      <div key={item.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-3">
+                        <div className="flex items-start gap-3">
+                          <div className="text-2xl mt-0.5">🚜</div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-gray-900 truncate">{item.vehicle_name}</h3>
+                            <p className="text-xs text-gray-500">{item.vehicle_plate || '—'}</p>
+                            <div className="mt-1.5 flex flex-wrap gap-2 text-xs">
+                              <span className="text-green-600">✅ с {new Date(item.assigned_at).toLocaleDateString('ru-RU')}</span>
+                              {item.unassigned_at && <span className="text-red-500">❌ по {new Date(item.unassigned_at).toLocaleDateString('ru-RU')}</span>}
+                              {!item.unassigned_at && <span className="text-blue-600 font-medium">🔵 Текущее</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
             )}
           </div>
         ) : (

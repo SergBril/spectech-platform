@@ -170,3 +170,28 @@ def get_my_salary(
             for r in records
         ]
     }
+
+
+@router.get("/me", summary="Профиль текущего водителя")
+def get_my_driver_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Вернуть профиль водителя, связанного с текущим пользователем."""
+    from app.models.contractor import Employee
+    
+    emp = db.query(Employee).filter(
+        Employee.user_id == current_user.id,
+    ).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Профиль водителя не найден")
+    
+    # Get full name from Contractor (parent)
+    ctr = db.query(Contractor).filter(Contractor.id == emp.contractor_id).first()
+    
+    return {
+        "contractor_id": emp.contractor_id,
+        "full_name": ctr.name if ctr else f"Сотрудник #{emp.contractor_id}",
+        "position": emp.position,
+        "user_id": emp.user_id,
+    }
