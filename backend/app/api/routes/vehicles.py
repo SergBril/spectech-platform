@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids, require_permission
 from app.core.db import get_db
-from app.models.contractor import Employee, Contractor
+from app.models.contractor import DriverAssignmentLog, Employee, Contractor
 from app.models.auth import User
 from app.models.catalog import (
     Category,
@@ -160,6 +160,30 @@ def _load_vehicle_with_relations(db: Session, vehicle_id: int) -> Vehicle | None
 # ============================================================
 # GET /vehicles — список техники
 # ============================================================
+
+
+def _log_driver_assignment(db: Session, vehicle_id: int, old_driver_id: int | None, new_driver_id: int | None, user_id: int | None):
+    """Записать историю назначения водителя."""
+    from datetime import datetime, timezone
+    
+    # Закрываем предыдущее назначение (если был старый водитель)
+    if old_driver_id and old_driver_id != new_driver_id:
+        open_log = db.query(DriverAssignmentLog).filter(
+            DriverAssignmentLog.vehicle_id == vehicle_id,
+            DriverAssignmentLog.driver_contractor_id == old_driver_id,
+            DriverAssignmentLog.unassigned_at.is_(None),
+        ).first()
+        if open_log:
+            open_log.unassigned_at = datetime.now(timezone.utc)
+    
+    # Создаём новое назначение (если назначен новый водитель)
+    if new_driver_id and new_driver_id != old_driver_id:
+        new_log = DriverAssignmentLog(
+            vehicle_id=vehicle_id,
+            driver_contractor_id=new_driver_id,
+            assigned_by_user_id=user_id,
+        )
+        db.add(new_log)
 
 @router.get("/drivers", tags=["🚜 Vehicles (Спецтехника)"])
 def list_drivers(
@@ -407,6 +431,7 @@ def get_vehicle(
     summary="Частичное обновление техники",
     description="Обновляет отдельные поля техники (например, is_available_for_rent).",
 )
+
 def update_vehicle_partial(
     vehicle_id: int,
     payload: VehicleUpdate,
@@ -427,6 +452,7 @@ def update_vehicle_partial(
     update_data = payload.model_dump(exclude_unset=True, exclude={"attributes"})
 
     # === Уникальность водителя: снять с других машин перед назначением ===
+    old_driver_id = vehicle.assigned_driver_id if hasattr(vehicle, 'assigned_driver_id') else None
     if "assigned_driver_id" in update_data and update_data["assigned_driver_id"] is not None:
         db.query(Vehicle).filter(
             Vehicle.assigned_driver_id == update_data["assigned_driver_id"],
@@ -434,6 +460,10 @@ def update_vehicle_partial(
             Vehicle.company_id == company_id,
         ).update({"assigned_driver_id": None}, synchronize_session="fetch")
         db.flush()
+
+    # Запись истории назначения
+    if "assigned_driver_id" in update_data:
+        _log_driver_assignment(db, vehicle_id, old_driver_id, update_data["assigned_driver_id"], current_user.id)
 
     # Проверка уникальности id_value
     if "id_value" in update_data and update_data["id_value"] != vehicle.id_value:
@@ -504,6 +534,7 @@ def update_vehicle(
     update_data = payload.model_dump(exclude_unset=True, exclude={"attributes"})
 
     # === Уникальность водителя: снять с других машин перед назначением ===
+    old_driver_id = vehicle.assigned_driver_id if hasattr(vehicle, 'assigned_driver_id') else None
     if "assigned_driver_id" in update_data and update_data["assigned_driver_id"] is not None:
         db.query(Vehicle).filter(
             Vehicle.assigned_driver_id == update_data["assigned_driver_id"],
@@ -511,6 +542,10 @@ def update_vehicle(
             Vehicle.company_id == company_id,
         ).update({"assigned_driver_id": None}, synchronize_session="fetch")
         db.flush()
+
+    # Запись истории назначения
+    if "assigned_driver_id" in update_data:
+        _log_driver_assignment(db, vehicle_id, old_driver_id, update_data["assigned_driver_id"], current_user.id)
 
     # Проверка уникальности id_value
     if "id_value" in update_data and update_data["id_value"] != vehicle.id_value:

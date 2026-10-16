@@ -1,7 +1,8 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from datetime import datetime
+from sqlalchemy import func, JSON, Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -153,3 +154,20 @@ class DriverProfile(Base):
         "Employee", foreign_keys=[employee_contractor_id],
         backref="driver_profile", uselist=False
     )
+
+
+class DriverAssignmentLog(Base):
+    """Лог истории назначений водителей на технику."""
+    __tablename__ = "driver_assignment_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), nullable=False)
+    driver_contractor_id: Mapped[int] = mapped_column(ForeignKey("contractors.id"), nullable=False)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    unassigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    assigned_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    vehicle: Mapped["Vehicle"] = relationship(backref="assignment_logs")
+    driver: Mapped["Contractor"] = relationship(backref="assignment_logs")
+    assigned_by: Mapped["User"] = relationship(backref="driver_assignments")
