@@ -382,7 +382,7 @@ def get_driver_history(
             "id": log.id,
             "vehicle_id": log.vehicle_id,
             "vehicle_name": veh.name,
-            "vehicle_plate": veh.plate_number,
+            "vehicle_plate": veh.psm_number,
             "assigned_at": log.assigned_at.isoformat() if log.assigned_at else None,
             "unassigned_at": log.unassigned_at.isoformat() if log.unassigned_at else None,
             "notes": log.notes,
