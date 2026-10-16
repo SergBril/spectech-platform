@@ -16,6 +16,7 @@ const ALL_COLS = [
   { key: 'machinist_expiry', label: 'Корочки до', def: 100 },
   { key: 'medical_expiry', label: 'Медосмотр до', def: 110 },
   { key: 'date_of_birth', label: 'Дата рожд.', def: 100 },
+  { key: 'user_id', label: '📱 Приложение', def: 90 },
 ];
 
 export const DriversPage: React.FC = () => {
@@ -24,6 +25,10 @@ export const DriversPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showExpiredOnly, setShowExpiredOnly] = useState(false);
+  const [showBulkBind, setShowBulkBind] = useState(false);
+  const [bulkNewUser, setBulkNewUser] = useState<{email: string; password: string; full_name: string; forContractorId: number | null}>({ email: '', password: '', full_name: '', forContractorId: null });
+  const [bulkBindings, setBulkBindings] = useState<Record<number, number>>({});
+  const [users, setUsers] = useState<{id: number; email: string; full_name: string}[]>([]);
   const [editingDriver, setEditingDriver] = useState<DriverProfile | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -78,6 +83,7 @@ export const DriversPage: React.FC = () => {
   };
 
   useEffect(() => { loadDrivers(); }, [search, refreshKey]);
+  useEffect(() => { apiClient.get('/drivers/users').then(r => setUsers(Array.isArray(r.data) ? r.data : [])).catch(() => {}); }, []);
 
   const handleEdit = (driver: DriverProfile) => { setEditingDriver(driver); setShowForm(true); };
   const handleCloseForm = () => { setShowForm(false); setEditingDriver(null); loadDrivers(); };
@@ -118,6 +124,12 @@ export const DriversPage: React.FC = () => {
                 className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500" />
               Только просроченные
             </label>
+            {drivers.filter(d => !d.user_id).length > 0 && (
+              <button onClick={() => { setBulkBindings({}); setShowBulkBind(true); }}
+                className="bg-orange-500 text-white px-3 py-2 rounded hover:bg-orange-600 flex items-center shadow-sm text-sm">
+                🔗 Привязать ({drivers.filter(d => !d.user_id).length})
+              </button>
+            )}
             <button onClick={() => setShowCreateForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center shadow-sm text-sm">
               <span className="mr-2">+</span> Добавить водителя
             </button>
@@ -178,6 +190,9 @@ export const DriversPage: React.FC = () => {
                       {isVis('machinist_expiry') && <td className={`px-4 py-4 whitespace-nowrap text-sm ${getExpiryColor(drv.machinist_certificate_expiry)}`}>{fmtDate(drv.machinist_certificate_expiry)}</td>}
                       {isVis('medical_expiry') && <td className={`px-4 py-4 whitespace-nowrap text-sm ${getExpiryColor(drv.medical_cert_expiry)}`}>{fmtDate(drv.medical_cert_expiry)}</td>}
                       {isVis('date_of_birth') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{fmtDate(drv.date_of_birth)}</td>}
+                      {isVis('user_id') && <td className="px-4 py-4 whitespace-nowrap text-sm">
+                        {drv.user_id ? <span className="text-green-600 font-medium">✅</span> : <span className="text-orange-400">—</span>}
+                      </td>}
                       <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button onClick={() => handleEdit(drv)} className="text-blue-600 hover:text-blue-900">✏️</button>
                       </td>
@@ -198,6 +213,101 @@ export const DriversPage: React.FC = () => {
       {/* Create Driver Modal */}
       {showCreateForm && (
         <CreateDriverModal onClose={() => { setShowCreateForm(false); setRefreshKey(k => k + 1); }} />
+      )}
+
+      {/* Bulk Bind Modal */}
+      {showBulkBind && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
+            <div className="px-6 py-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+              <h3 className="text-lg font-bold text-gray-900">🔗 Массовая привязка пользователей</h3>
+              <button onClick={() => setShowBulkBind(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-500 mb-4">Выберите пользователя для каждого непривязанного водителя.</p>
+              <div className="space-y-3">
+                {drivers.filter(d => !d.user_id).map(drv => (
+                  <div key={drv.contractor_id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 truncate">{drv.full_name}</div>
+                      <div className="text-xs text-gray-500">{drv.position || 'Водитель'}</div>
+                    </div>
+                    <div className="flex flex-col gap-1 w-56">
+                      <select
+                        value={bulkBindings[drv.contractor_id] || ''}
+                        onChange={e => setBulkBindings(prev => ({ ...prev, [drv.contractor_id]: parseInt(e.target.value) }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                      >
+                        <option value="">— Выберите —</option>
+                        {users.filter(u => {
+                          if (bulkBindings[drv.contractor_id] === u.id) return true;
+                          const boundToOther = drivers.some(d => d.contractor_id !== drv.contractor_id && d.user_id === u.id);
+                          const selectedForOther = Object.entries(bulkBindings).some(([cid, uid]) => parseInt(cid) !== drv.contractor_id && uid === u.id);
+                          return !boundToOther && !selectedForOther;
+                        }).map(u => (
+                          <option key={u.id} value={u.id}>{u.full_name || u.email}</option>
+                        ))}
+                      </select>
+                      {bulkNewUser.forContractorId === drv.contractor_id ? (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <input type="email" placeholder="Email (латиница)" value={bulkNewUser.email}
+                            onChange={e => setBulkNewUser(p => ({ ...p, email: e.target.value }))}
+                            className="w-40 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+                          <input type="text" placeholder="Пароль (мин. 6)" value={bulkNewUser.password}
+                            onChange={e => setBulkNewUser(p => ({ ...p, password: e.target.value }))}
+                            className="w-32 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+                          <button onClick={async () => {
+                            if (!bulkNewUser.email || !bulkNewUser.password) { alert('Email и пароль обязательны'); return; }
+                            try {
+                              const res = await apiClient.post('/drivers/create-user', {
+                                email: bulkNewUser.email, password: bulkNewUser.password,
+                                full_name: drv.full_name, contractor_id: drv.contractor_id,
+                              });
+                              alert('Создан! ID: ' + res.data.user_id);
+                              setBulkNewUser({ email: '', password: '', full_name: '', forContractorId: null });
+                              const r = await apiClient.get('/drivers/users');
+                              setUsers(Array.isArray(r.data) ? r.data : []);
+                              loadDrivers();
+                            } catch (err: any) { alert(err.response?.data?.detail || 'Ошибка'); }
+                          }} className="px-2 py-1 bg-green-600 text-white rounded text-xs">✓</button>
+                          <button onClick={() => setBulkNewUser(p => ({ ...p, forContractorId: null }))}
+                            className="px-2 py-1 bg-gray-300 rounded text-xs">✕</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setBulkNewUser({ email: '', password: '', full_name: '', forContractorId: drv.contractor_id })}
+                          className="text-xs text-blue-600 hover:text-blue-800 self-start">+ Создать</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-3 sticky bottom-0 bg-white">
+              <button onClick={() => setShowBulkBind(false)} className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Отмена</button>
+              <button
+                onClick={async () => {
+                  const bindings = Object.entries(bulkBindings)
+                    .filter(([, uid]) => uid)
+                    .map(([cid, uid]) => ({ contractor_id: Number(cid), user_id: Number(uid) }));
+                  if (bindings.length === 0) { alert('Выберите хотя бы одного пользователя'); return; }
+                  try {
+                    const res = await apiClient.post('/drivers/bulk-bind-users', { bindings });
+                    const d = res.data;
+                    if (d.errors && d.errors.length) alert('Привязано: ' + d.updated + '. Ошибки: ' + d.errors.join(', '));
+                    else alert('Успешно привязано: ' + d.updated);
+                    setShowBulkBind(false);
+                    loadDrivers();
+                  } catch (err: any) {
+                    alert('Ошибка: ' + (err.response?.data?.detail || err.message));
+                  }
+                }}
+                className="px-6 py-2 bg-orange-500 text-white rounded text-sm hover:bg-orange-600"
+              >
+                Привязать ({Object.values(bulkBindings).filter(Boolean).length})
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </Layout>
   );

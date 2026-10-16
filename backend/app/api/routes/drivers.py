@@ -300,7 +300,7 @@ def create_and_bind_user(
     _: None = Depends(require_permission("vehicles", "update")),
 ):
     """Создать нового пользователя и привязать к водителю."""
-    from app.core.security import get_password_hash
+    from app.services.auth_service import hash_password
     from app.models.user_company import UserCompany
 
     email = payload.get("email", "").strip().lower()
@@ -330,9 +330,8 @@ def create_and_bind_user(
     full_name = payload.get("full_name", "").strip()
     user = User(
         email=email,
-        hashed_password=get_password_hash(password),
+        password_hash=hash_password(password),
         full_name=full_name or None,
-        is_active=True,
     )
     db.add(user)
     db.flush()
@@ -389,3 +388,49 @@ def get_driver_history(
         }
         for log, veh in rows
     ]
+
+
+@router.post("/bulk-bind-users", summary="Массовая привязка пользователей к водителям")
+def bulk_bind_users(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Привязать пользователей к водителям массово.
+    Body: {"bindings": [{"contractor_id": 1, "user_id": 5}, ...]}
+    """
+    from app.models.contractor import Employee
+    
+    bindings = payload.get("bindings", [])
+    if not bindings:
+        raise HTTPException(status_code=400, detail="Список привязок пуст")
+    
+    updated = 0
+    errors = []
+    for b in bindings:
+        cid = b.get("contractor_id")
+        uid = b.get("user_id")
+        if not cid or not uid:
+            errors.append(f"Пропущены contractor_id или user_id")
+            continue
+        
+        emp = db.query(Employee).filter(Employee.contractor_id == cid).first()
+        if not emp:
+            errors.append(f"Сотрудник {cid} не найден")
+            continue
+        
+        # Check if user is already bound to another driver
+        existing = db.query(Employee).filter(
+            Employee.user_id == uid,
+            Employee.contractor_id != cid,
+        ).first()
+        if existing:
+            errors.append(f"Пользователь {uid} уже привязан к другому водителю")
+            continue
+        
+        emp.user_id = uid
+        updated += 1
+    
+    db.commit()
+    return {"updated": updated, "errors": errors}
