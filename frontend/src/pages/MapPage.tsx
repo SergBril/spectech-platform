@@ -5,6 +5,26 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
 import 'leaflet-draw/dist/leaflet.draw.css';
+
+// Custom styles for vehicle name labels on map
+const style = document.createElement('style');
+style.textContent = `
+  .vehicle-label-tooltip {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid #3b82f6 !important;
+    border-radius: 4px !important;
+    padding: 2px 6px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: #1e3a5f !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
+    white-space: nowrap !important;
+  }
+  .vehicle-label-tooltip::before {
+    border-top-color: #3b82f6 !important;
+  }
+`;
+document.head.appendChild(style);
 import 'leaflet-draw';
 import Layout from '../components/Layout';
 import { showToast } from '../utils/toast';
@@ -27,10 +47,11 @@ export const MapPage: React.FC = () => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
-  const polylineRef = useRef<L.Polyline | null>(null);
+  const polylinesRef = useRef<Map<number, L.Polyline>>(new Map());
+  const TRACK_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
   const [positions, setPositions] = useState<VehiclePosition[]>([]);
-  const [selectedVehicle, setSelectedVehicle] = useState<number | null>(null);
+  const [selectedVehicles, setSelectedVehicles] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [trackLoading, setTrackLoading] = useState(false);
   const [vehicleDetail, setVehicleDetail] = useState<any>(null);
@@ -241,7 +262,7 @@ export const MapPage: React.FC = () => {
     const bounds = L.latLngBounds([]);
 
     filtered.forEach((pos) => {
-      const isSelected = selectedVehicle === pos.vehicle_id;
+      const isSelected = selectedVehicles.has(pos.vehicle_id);
       const color = isSelected ? '#dc2626' : pos.engine_on ? '#16a34a' : '#6b7280';
       const size = isSelected ? 20 : 14;
 
@@ -259,11 +280,28 @@ export const MapPage: React.FC = () => {
         iconAnchor: [size / 2, size / 2],
       });
 
-      const marker = L.marker([pos.latitude, pos.longitude], { icon });
+      const marker = L.marker([pos.latitude, pos.longitude], { icon })
+        .bindTooltip(pos.vehicle_name, {
+          permanent: true,
+          direction: 'top',
+          offset: [0, -10],
+          className: 'vehicle-label-tooltip',
+        });
 
       marker.on('click', async () => {
-        setSelectedVehicle(pos.vehicle_id);
-        loadTrack(pos.vehicle_id);
+        const newSet = new Set(selectedVehicles);
+        if (newSet.has(pos.vehicle_id)) {
+          newSet.delete(pos.vehicle_id);
+          // Remove track
+          const pl = polylinesRef.current.get(pos.vehicle_id);
+          if (pl) { pl.remove(); polylinesRef.current.delete(pos.vehicle_id); }
+        } else {
+          newSet.add(pos.vehicle_id);
+        }
+        setSelectedVehicles(newSet);
+        if (newSet.has(pos.vehicle_id)) {
+          loadTrack(pos.vehicle_id);
+        }
         setDetailLoading(true);
         setVehicleDetail(null);
         try {
@@ -281,13 +319,13 @@ export const MapPage: React.FC = () => {
     });
 
     // Центрируем карту только при первой загрузке или ручном обновлении (не при автообновлении)
-    if (!selectedVehicle && filtered.length > 0 && bounds.isValid() && !isAutoRefreshRef.current) {
+    if (selectedVehicles.size === 0 && filtered.length > 0 && bounds.isValid() && !isAutoRefreshRef.current) {
       mapInstance.current.fitBounds(bounds, { padding: [50, 50] });
     }
 
     // Сбрасываем флаг автообновления после рендера
     isAutoRefreshRef.current = false;
-  }, [positions, selectedVehicle, filterEngine, filterSearch]);
+  }, [positions, selectedVehicles, filterEngine, filterSearch]);
 
   const loadPositions = async () => {
     try {
@@ -361,22 +399,31 @@ export const MapPage: React.FC = () => {
         }));
       }
 
-      if (polylineRef.current) {
-        polylineRef.current.remove();
-        polylineRef.current = null;
+      // Remove existing track for this vehicle
+      const existingPolyline = polylinesRef.current.get(vehicleId);
+      if (existingPolyline) {
+        existingPolyline.remove();
+        polylinesRef.current.delete(vehicleId);
       }
 
       if (points.length > 0 && mapInstance.current) {
         const latlngs = points.map((p: TrackPoint) => [p.latitude, p.longitude] as [number, number]);
+        const colorIdx = Array.from(selectedVehicles).indexOf(vehicleId) % TRACK_COLORS.length;
         const polyline = L.polyline(latlngs, {
-          color: '#3b82f6',
+          color: TRACK_COLORS[colorIdx >= 0 ? colorIdx : 0],
           weight: 3,
           opacity: 0.7,
         }).addTo(mapInstance.current);
 
-        polylineRef.current = polyline;
-        mapInstance.current.fitBounds(polyline.getBounds(), { padding: [50, 50] });
-        showToast.success(`🛤️ Маршрут: ${points.length} точек`);
+        polylinesRef.current.set(vehicleId, polyline);
+
+        // Fit bounds to all visible tracks
+        const allBounds = L.latLngBounds([]);
+        polylinesRef.current.forEach((pl) => allBounds.extend(pl.getBounds()));
+        if (allBounds.isValid()) {
+          mapInstance.current.fitBounds(allBounds, { padding: [50, 50] });
+        }
+        showToast.success(`🛤️ ${points.length} точек`);
       } else {
         showToast.info('Нет данных маршрута за выбранный период');
       }
@@ -388,11 +435,10 @@ export const MapPage: React.FC = () => {
   };
 
   const clearSelection = () => {
-    setSelectedVehicle(null);
-    if (polylineRef.current) {
-      polylineRef.current.remove();
-      polylineRef.current = null;
-    }
+    setSelectedVehicles(new Set());
+    setVehicleDetail(null);
+    polylinesRef.current.forEach((pl) => pl.remove());
+    polylinesRef.current.clear();
     if (positions.length > 0 && mapInstance.current) {
       const bounds = L.latLngBounds(positions.map((p) => [p.latitude, p.longitude] as [number, number]));
       if (bounds.isValid()) mapInstance.current.fitBounds(bounds, { padding: [50, 50] });
@@ -459,7 +505,7 @@ export const MapPage: React.FC = () => {
               >
                 {loading ? '⏳' : '🔄 Обновить'}
               </button>
-              {selectedVehicle && (
+              {selectedVehicles.size > 0 && (
                 <button
                   onClick={clearSelection}
                   className="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-300"
@@ -508,7 +554,7 @@ export const MapPage: React.FC = () => {
             )}
 
             {/* Период маршрута */}
-            {selectedVehicle && vehicleDetail && (
+            {vehicleDetail && (
               <div className="pt-2 border-t space-y-2 bg-blue-50 rounded-lg p-3 -mx-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-gray-900 truncate">{vehicleDetail.vehicle_name}</h3>
@@ -554,14 +600,14 @@ export const MapPage: React.FC = () => {
                 )}
               </div>
             )}
-            {selectedVehicle && detailLoading && (
+            {detailLoading && (
               <div className="pt-2 border-t text-center py-3">
                 <span className="text-xs text-gray-500 animate-pulse">⏳ Загрузка карточки...</span>
               </div>
             )}
-            {selectedVehicle && (
+            {selectedVehicles.size > 0 && (
               <div className="pt-2 border-t space-y-2">
-                <p className="text-xs font-medium text-gray-700">📅 Период маршрута:</p>
+                <p className="text-xs font-medium text-gray-700">📅 Период маршрута ({selectedVehicles.size} ед.):</p>
                 <div className="flex gap-2">
                   <input
                     type="date"
@@ -577,7 +623,7 @@ export const MapPage: React.FC = () => {
                   />
                 </div>
                 <button
-                  onClick={() => loadTrack(selectedVehicle)}
+                  onClick={() => selectedVehicles.forEach(id => loadTrack(id))}
                   disabled={trackLoading}
                   className="w-full bg-indigo-600 text-white px-3 py-1.5 rounded text-xs hover:bg-indigo-700 disabled:opacity-50"
                 >
@@ -693,11 +739,19 @@ export const MapPage: React.FC = () => {
               <div
                 key={pos.vehicle_id}
                 onClick={() => {
-                  setSelectedVehicle(pos.vehicle_id);
-                  loadTrack(pos.vehicle_id);
+                  const newSet = new Set(selectedVehicles);
+                  if (newSet.has(pos.vehicle_id)) {
+                    newSet.delete(pos.vehicle_id);
+                    const pl = polylinesRef.current.get(pos.vehicle_id);
+                    if (pl) { pl.remove(); polylinesRef.current.delete(pos.vehicle_id); }
+                  } else {
+                    newSet.add(pos.vehicle_id);
+                    loadTrack(pos.vehicle_id);
+                  }
+                  setSelectedVehicles(newSet);
                 }}
                 className={`p-3 cursor-pointer hover:bg-gray-50 transition-colors ${
-                  selectedVehicle === pos.vehicle_id ? 'bg-blue-50 border-l-4 border-blue-600' : ''
+                  selectedVehicles.has(pos.vehicle_id) ? 'bg-blue-50 border-l-4 border-blue-600' : ''
                 }`}
               >
                 <div className="flex items-center justify-between">
