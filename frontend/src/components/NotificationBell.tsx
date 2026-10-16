@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { notificationsApi, type Notification } from '../api/notifications';
 import { useWebSocket } from '../contexts/WebSocketContext';
+import { showToast } from '../utils/toast';
+import { useAuth } from '../contexts/AuthContext';
 
 export const NotificationBell: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -8,7 +10,8 @@ export const NotificationBell: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [animate, setAnimate] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { lastMessage } = useWebSocket();
+  const { subscribe } = useWebSocket();
+  const { user } = useAuth();
 
   // Загружаем количество непрочитанных
   useEffect(() => {
@@ -17,16 +20,22 @@ export const NotificationBell: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Слушаем WebSocket сообщения
+  // Подписываемся на уведомления через WebSocket
   useEffect(() => {
-    if (lastMessage?.type === 'new_notification') {
+    const unsubscribe = subscribe('new_notification', (data: any) => {
+      const notif = data.data || data;
+      // Only show notifications targeted at current user (or broadcast without target)
+      if (notif.target_user_id && user?.id && notif.target_user_id !== user.id) return;
       setUnreadCount((prev) => prev + 1);
-      setNotifications((prev) => [lastMessage.data, ...prev].slice(0, 20));
+      setNotifications((prev) => [notif, ...prev].slice(0, 20));
       // Пульсация при новом уведомлении
       setAnimate(true);
       setTimeout(() => setAnimate(false), 1000);
-    }
-  }, [lastMessage]);
+      // Toast-уведомление
+      showToast.info(`🔔 ${notif.title}: ${notif.body}`);
+    });
+    return unsubscribe;
+  }, [subscribe]);
 
   // Закрытие по Escape и клику вне
   useEffect(() => {

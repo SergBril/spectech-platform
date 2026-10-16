@@ -77,6 +77,10 @@ class ConnectionManager:
             except Exception as e:
                 logger.warning("Failed to send to user %s: %s", user_id, e)
 
+    async def broadcast_to_user(self, user_id: int, message: dict):
+        """Отправить сообщение конкретному пользователю."""
+        await self.send_to_user(user_id, message)
+
     async def broadcast_to_company(self, company_id: int, message: dict):
         """Отправить всем пользователям компании (GPS)."""
         user_ids = self.company_users.get(company_id, set())
