@@ -419,9 +419,11 @@ def _build_offer_response(offer: MarketplaceOffer, db: Session) -> OfferRead:
     # Получить категорию техники
     vehicle_category_name = None
     if vehicle and vehicle.category_id:
-        from app.models.catalog import Category
 
-        category = db.get(Category, vehicle.category_id)
+        category = db.get(
+            __import__("app.models.catalog", fromlist=["Category"]).Category,
+            vehicle.category_id,
+        )
         if category:
             vehicle_category_name = category.name
 
@@ -449,12 +451,12 @@ def _build_offer_response(offer: MarketplaceOffer, db: Session) -> OfferRead:
     )
 
 
-
 # === ПУБЛИКАЦИЯ ЗАЯВКИ В МАРКЕТПЛЕЙС ===
 
 
 class PublishRequestResponse(BaseModel):
     """Ответ при публикации заявки."""
+
     request_id: int
     is_published: bool
     published_at: str | None
@@ -483,27 +485,36 @@ def publish_request(
     if request.company_id != company_id:
         raise HTTPException(status_code=403, detail="Нет доступа к этой заявке")
 
-    if request.status in (RequestStatus.completed, RequestStatus.closed, RequestStatus.cancelled):
+    if request.status in (
+        RequestStatus.completed,
+        RequestStatus.closed,
+        RequestStatus.cancelled,
+    ):
         raise HTTPException(
             status_code=400,
-            detail=f"Нельзя опубликовать заявку в статусе '{request.status.value}'"
+            detail=f"Нельзя опубликовать заявку в статусе '{request.status.value}'",
         )
 
     if request.is_published:
         return PublishRequestResponse(
             request_id=request.id,
             is_published=True,
-            published_at=request.published_at.isoformat() if request.published_at else None,
+            published_at=(
+                request.published_at.isoformat() if request.published_at else None
+            ),
             message="Заявка уже опубликована",
         )
 
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
+
     request.is_published = True
     request.published_at = datetime.now(UTC)
     db.commit()
     db.refresh(request)
 
-    logger.info("Request #%s published to marketplace by user #%s", request_id, current_user.id)
+    logger.info(
+        "Request #%s published to marketplace by user #%s", request_id, current_user.id
+    )
 
     return PublishRequestResponse(
         request_id=request.id,
@@ -544,7 +555,11 @@ def unpublish_request(
     request.published_at = None
     db.commit()
 
-    logger.info("Request #%s unpublished from marketplace by user #%s", request_id, current_user.id)
+    logger.info(
+        "Request #%s unpublished from marketplace by user #%s",
+        request_id,
+        current_user.id,
+    )
 
     return PublishRequestResponse(
         request_id=request.id,
@@ -559,6 +574,7 @@ def unpublish_request(
 
 class MarketplaceRequestRead(BaseModel):
     """Публичная информация о заявке в маркетплейсе."""
+
     id: int
     work_type: str | None = None
     object_address: str | None = None
@@ -597,11 +613,13 @@ def list_marketplace_requests(
         .where(
             Request.is_published == True,
             Request.company_id != company_id,  # Только чужие заявки
-            Request.status.notin_([
-                RequestStatus.completed,
-                RequestStatus.closed,
-                RequestStatus.cancelled,
-            ]),
+            Request.status.notin_(
+                [
+                    RequestStatus.completed,
+                    RequestStatus.closed,
+                    RequestStatus.cancelled,
+                ]
+            ),
         )
         .order_by(Request.published_at.desc())
         .offset(skip)
@@ -628,25 +646,36 @@ def list_marketplace_requests(
         # Название категории
         cat_name = None
         if req.vehicle_category_id:
-            cat = db.get(Category, req.vehicle_category_id)
+            cat = db.get(
+                __import__("app.models.catalog", fromlist=["Category"]).Category,
+                req.vehicle_category_id,
+            )
             if cat:
                 cat_name = cat.name
 
-        result.append(MarketplaceRequestRead(
-            id=req.id,
-            work_type=req.work_type,
-            object_address=req.object_address,
-            planned_start=req.planned_start,
-            planned_end=req.planned_end,
-            shift_duration_hours=float(req.shift_duration_hours) if req.shift_duration_hours else None,
-            client_rate=float(req.client_rate) if req.client_rate else None,
-            rate_type=req.rate_type,
-            estimated_amount=float(req.estimated_amount) if req.estimated_amount else None,
-            priority=req.priority,
-            vehicle_category_id=req.vehicle_category_id,
-            vehicle_category_name=cat_name,
-            offers_count=offers_count,
-            published_at=req.published_at,
-        ))
+        result.append(
+            MarketplaceRequestRead(
+                id=req.id,
+                work_type=req.work_type,
+                object_address=req.object_address,
+                planned_start=req.planned_start,
+                planned_end=req.planned_end,
+                shift_duration_hours=(
+                    float(req.shift_duration_hours)
+                    if req.shift_duration_hours
+                    else None
+                ),
+                client_rate=float(req.client_rate) if req.client_rate else None,
+                rate_type=req.rate_type,
+                estimated_amount=(
+                    float(req.estimated_amount) if req.estimated_amount else None
+                ),
+                priority=req.priority,
+                vehicle_category_id=req.vehicle_category_id,
+                vehicle_category_name=cat_name,
+                offers_count=offers_count,
+                published_at=req.published_at,
+            )
+        )
 
     return result

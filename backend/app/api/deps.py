@@ -115,14 +115,14 @@ def get_current_user_optional(
     """
     Опциональная аутентификация.
     Возвращает User если токен валиден, иначе None.
-    
+
     Используется для публичных endpoints которые могут работать
     как с авторизацией (для привязки отзыва к пользователю),
     так и без неё (анонимные отзывы).
     """
     if not credentials:
         return None
-    
+
     try:
         payload = decode_access_token(credentials.credentials)
         user_id = int(payload.get("sub"))
@@ -131,9 +131,26 @@ def get_current_user_optional(
     except Exception:
         return None
 
-def get_user_company_ids(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[int]:
+
+def get_user_company_ids(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> list[int]:
     from app.models.user_company import UserCompany
+
     if user.is_superuser:
         from app.models.company import Company
-        return list(db.scalars(select(Company.id).where(Company.is_active == True)).all())
-    return list(db.scalars(select(UserCompany.company_id).where(UserCompany.user_id == user.id, UserCompany.is_active == True)).all())
+
+        return list(
+            db.scalars(select(Company.id).where(Company.is_active == True)).all()
+        )
+    # Collect company IDs from both UserCompany table AND user.company_id field
+    ids = set(
+        db.scalars(
+            select(UserCompany.company_id).where(
+                UserCompany.user_id == user.id, UserCompany.is_active == True
+            )
+        ).all()
+    )
+    if user.company_id:
+        ids.add(user.company_id)
+    return list(ids)
