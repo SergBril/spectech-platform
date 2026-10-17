@@ -169,4 +169,14 @@ export const requestsApi = {
     return response.data;
   },
 
+  async publish(id: number): Promise<{ request_id: number; is_published: boolean; message: string }> {
+    const res = await apiClient.post(`/marketplace/requests/${id}/publish`);
+    return res.data;
+  },
+
+  async unpublish(id: number): Promise<{ request_id: number; is_published: boolean; message: string }> {
+    const res = await apiClient.post(`/marketplace/requests/${id}/unpublish`);
+    return res.data;
+  },
+
 };

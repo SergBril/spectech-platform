@@ -9,6 +9,7 @@ import type {
   Priority,
 } from '../api/requests';
 import apiClient from '../api/client';
+import { requestsApi } from '../api/requests';
 import { getCatalogTree, getSubcategoryAttributes, addCustomOption, type CategoryTree, type AttributeDefinition } from '../api/catalog';
 
 interface Contractor {
@@ -93,6 +94,7 @@ export const RequestFormModal: React.FC<Props> = ({
   const [status, setStatus] = useState<RequestStatus>(request?.status || 'new');
   const [comment, setComment] = useState(request?.comment || '');
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState('');
 
   // Выбор клиента
@@ -129,7 +131,8 @@ export const RequestFormModal: React.FC<Props> = ({
         const res = await apiClient.get('/contractors', { params: { type: 'client', limit: 500 } });
         const list = Array.isArray(res.data) ? res.data : [];
         setClients(list);
-        if (!selectedClientId && list.length > 0) setSelectedClientId(list[0].id);
+        // Only set default client for new requests, not when editing
+        if (!request && !selectedClientId && list.length > 0) setSelectedClientId(list[0].id);
       } catch (e) { console.warn('Failed to load clients:', e); }
       setLoadingClients(false);
 
@@ -151,6 +154,20 @@ export const RequestFormModal: React.FC<Props> = ({
     };
     loadData();
   }, []);
+
+  // При редактировании: определяем категорию по подкатегории
+  useEffect(() => {
+    if (request?.vehicle_category_id && catalogTree.length > 0 && !selectedCategoryId) {
+      for (const cat of catalogTree) {
+        const sub = cat.subcategories.find(s => s.id === request.vehicle_category_id);
+        if (sub) {
+          setSelectedCategoryId(cat.id);
+          setSelectedSubcategoryId(sub.id);
+          break;
+        }
+      }
+    }
+  }, [request, catalogTree]);
 
   // Загрузка атрибутов при выборе подкатегории
   useEffect(() => {
@@ -742,6 +759,26 @@ export const RequestFormModal: React.FC<Props> = ({
               >
                 {saving ? 'Сохранение...' : (request ? 'Сохранить' : 'Создать заявку')}
               </button>
+              {request && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setPublishing(true);
+                    try {
+                      const result = await requestsApi.publish(request.id);
+                      alert(result.message);
+                    } catch (err: any) {
+                      alert(err.response?.data?.detail || 'Ошибка публикации');
+                    } finally {
+                      setPublishing(false);
+                    }
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                  disabled={publishing || saving}
+                >
+                  {publishing ? 'Публикация...' : '🌐 Опубликовать в маркетплейсе'}
+                </button>
+              )}
             </div>
           </form>
         </div>
