@@ -44,4 +44,14 @@ export const driversApi = {
     const response = await apiClient.put(`/drivers/${contractorId}/profile`, data);
     return response.data;
   },
+
+  async create(data: {
+    full_name: string;
+    position?: string;
+    phone?: string;
+    email?: string;
+  }): Promise<{ contractor_id: number; message: string }> {
+    const response = await apiClient.post('/drivers', data);
+    return response.data;
+  },
 };

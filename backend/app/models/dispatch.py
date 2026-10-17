@@ -3,6 +3,7 @@ from decimal import Decimal
 from enum import Enum
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
@@ -98,6 +99,16 @@ class Request(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    # === МАРКЕТПЛЕЙС ===
+    is_published: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+        comment="Опубликована ли заявка в маркетплейсе"
+    )
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="Дата публикации в маркетплейсе"
+    )
+
     # === МАРКЕТПЛЕЙС: отклики на заявку ===
     marketplace_offers = relationship(
         "MarketplaceOffer",

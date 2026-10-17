@@ -100,7 +100,7 @@ const AppRoutes = () => {
         <Route path="/admin/gps" element={<ProtectedRoute><GpsAdminPage /></ProtectedRoute>} />
         {/* Catch-all — должен быть последним */}
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+                </Routes>
     </Suspense>
   );
 };

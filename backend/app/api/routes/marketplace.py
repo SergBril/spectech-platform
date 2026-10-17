@@ -447,3 +447,206 @@ def _build_offer_response(offer: MarketplaceOffer, db: Session) -> OfferRead:
         created_at=offer.created_at,
         updated_at=offer.updated_at,
     )
+
+
+
+# === ПУБЛИКАЦИЯ ЗАЯВКИ В МАРКЕТПЛЕЙС ===
+
+
+class PublishRequestResponse(BaseModel):
+    """Ответ при публикации заявки."""
+    request_id: int
+    is_published: bool
+    published_at: str | None
+    message: str
+
+
+@router.post(
+    "/requests/{request_id}/publish",
+    response_model=PublishRequestResponse,
+    summary="Опубликовать заявку в маркетплейсе",
+)
+def publish_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Публикует заявку в маркетплейсе.
+    Другие компании смогут видеть заявку и предлагать свою технику.
+    """
+    request = db.get(Request, request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    if request.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Нет доступа к этой заявке")
+
+    if request.status in (RequestStatus.completed, RequestStatus.closed, RequestStatus.cancelled):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Нельзя опубликовать заявку в статусе '{request.status.value}'"
+        )
+
+    if request.is_published:
+        return PublishRequestResponse(
+            request_id=request.id,
+            is_published=True,
+            published_at=request.published_at.isoformat() if request.published_at else None,
+            message="Заявка уже опубликована",
+        )
+
+    from datetime import datetime, UTC
+    request.is_published = True
+    request.published_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(request)
+
+    logger.info("Request #%s published to marketplace by user #%s", request_id, current_user.id)
+
+    return PublishRequestResponse(
+        request_id=request.id,
+        is_published=True,
+        published_at=request.published_at.isoformat() if request.published_at else None,
+        message="Заявка успешно опубликована в маркетплейсе",
+    )
+
+
+@router.post(
+    "/requests/{request_id}/unpublish",
+    response_model=PublishRequestResponse,
+    summary="Снять заявку с маркетплейса",
+)
+def unpublish_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Снимает публикацию заявки из маркетплейса."""
+    request = db.get(Request, request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    if request.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Нет доступа к этой заявке")
+
+    if not request.is_published:
+        return PublishRequestResponse(
+            request_id=request.id,
+            is_published=False,
+            published_at=None,
+            message="Заявка не опубликована",
+        )
+
+    request.is_published = False
+    request.published_at = None
+    db.commit()
+
+    logger.info("Request #%s unpublished from marketplace by user #%s", request_id, current_user.id)
+
+    return PublishRequestResponse(
+        request_id=request.id,
+        is_published=False,
+        published_at=None,
+        message="Заявка снята с маркетплейса",
+    )
+
+
+# === ПРОСМОТР ОПУБЛИКОВАННЫХ ЗАЯВОК (для других компаний) ===
+
+
+class MarketplaceRequestRead(BaseModel):
+    """Публичная информация о заявке в маркетплейсе."""
+    id: int
+    work_type: str | None = None
+    object_address: str | None = None
+    planned_start: datetime
+    planned_end: datetime
+    shift_duration_hours: float | None = None
+    client_rate: float | None = None
+    rate_type: str | None = None
+    estimated_amount: float | None = None
+    priority: str = "normal"
+    vehicle_category_id: int | None = None
+    vehicle_category_name: str | None = None
+    offers_count: int = 0
+    published_at: datetime | None = None
+
+
+@router.get(
+    "/requests",
+    response_model=list[MarketplaceRequestRead],
+    summary="Список опубликованных заявок (маркетплейс)",
+)
+def list_marketplace_requests(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    category_id: int | None = Query(None, description="Фильтр по категории техники"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Список опубликованных заявок от ДРУГИХ компаний.
+    Текущая компания видит чужие заявки и может предложить свою технику.
+    """
+    query = (
+        select(Request)
+        .where(
+            Request.is_published == True,
+            Request.company_id != company_id,  # Только чужие заявки
+            Request.status.notin_([
+                RequestStatus.completed,
+                RequestStatus.closed,
+                RequestStatus.cancelled,
+            ]),
+        )
+        .order_by(Request.published_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+
+    if category_id:
+        query = query.where(Request.vehicle_category_id == category_id)
+
+    requests = db.execute(query).scalars().all()
+
+    result = []
+    for req in requests:
+        # Подсчёт откликов
+        offers_count = (
+            db.query(MarketplaceOffer)
+            .filter(
+                MarketplaceOffer.request_id == req.id,
+                MarketplaceOffer.status != "withdrawn",
+            )
+            .count()
+        )
+
+        # Название категории
+        cat_name = None
+        if req.vehicle_category_id:
+            cat = db.get(Category, req.vehicle_category_id)
+            if cat:
+                cat_name = cat.name
+
+        result.append(MarketplaceRequestRead(
+            id=req.id,
+            work_type=req.work_type,
+            object_address=req.object_address,
+            planned_start=req.planned_start,
+            planned_end=req.planned_end,
+            shift_duration_hours=float(req.shift_duration_hours) if req.shift_duration_hours else None,
+            client_rate=float(req.client_rate) if req.client_rate else None,
+            rate_type=req.rate_type,
+            estimated_amount=float(req.estimated_amount) if req.estimated_amount else None,
+            priority=req.priority,
+            vehicle_category_id=req.vehicle_category_id,
+            vehicle_category_name=cat_name,
+            offers_count=offers_count,
+            published_at=req.published_at,
+        ))
+
+    return result
