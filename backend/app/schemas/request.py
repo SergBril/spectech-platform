@@ -1,11 +1,11 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 
 class RequestCreate(BaseModel):
-    client_id: int
+    client_id: int | None = None
     request_type: str = "one_time"
     vehicle_category_id: int | None = None
     work_type: str | None = None
@@ -37,8 +37,10 @@ class RequestUpdate(BaseModel):
 
 
 class RequestRead(BaseModel):
+    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "arbitrary_types_allowed": True}
     id: int
-    client_id: int
+    client_id: int | None = None
     status: str
     request_type: str
     vehicle_category_id: int | None = None
@@ -65,8 +67,6 @@ class RequestRead(BaseModel):
     vehicle_category_name: str | None = None
     assigned_vehicle_name: str | None = None
     assigned_operator_name: str | None = None
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class RequestAssign(BaseModel):

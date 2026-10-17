@@ -5,7 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids, require_permission
+from app.api.deps import (
+    get_current_company_id,
+    get_current_user,
+    get_user_company_ids,
+    require_permission,
+)
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
@@ -67,12 +72,17 @@ def list_requests(
     if work_type:
         stmt = stmt.where(Request.work_type.ilike(f"%{work_type}%"))
     if search:
-        stmt = stmt.where((Request.work_type.ilike(f"%{search}%")) | (Request.object_address.ilike(f"%{search}%")))
+        stmt = stmt.where(
+            (Request.work_type.ilike(f"%{search}%"))
+            | (Request.object_address.ilike(f"%{search}%"))
+        )
     if date_from:
         from datetime import datetime as dt
+
         stmt = stmt.where(Request.planned_start >= dt.fromisoformat(date_from))
     if date_to:
         from datetime import datetime as dt
+
         stmt = stmt.where(Request.planned_end <= dt.fromisoformat(date_to))
     sort_col = getattr(Request, sort_by, Request.created_at)
     if sort_order == "desc":
@@ -85,7 +95,40 @@ def list_requests(
     # Enrichment: добавляем client_name, vehicle_category_name
     enriched = []
     for req in requests_list:
-        data = RequestRead.model_validate(req).model_dump()
+        data = {
+            "id": req.id,
+            "client_id": req.client_id,
+            "status": (
+                req.status.value if hasattr(req.status, "value") else str(req.status)
+            ),
+            "request_type": req.request_type,
+            "vehicle_category_id": req.vehicle_category_id,
+            "work_type": req.work_type,
+            "object_address": req.object_address,
+            "planned_start": req.planned_start,
+            "planned_end": req.planned_end,
+            "actual_start": req.actual_start,
+            "actual_end": req.actual_end,
+            "shift_duration_hours": (
+                float(req.shift_duration_hours) if req.shift_duration_hours else None
+            ),
+            "client_rate": float(req.client_rate) if req.client_rate else None,
+            "rate_type": req.rate_type,
+            "estimated_amount": (
+                float(req.estimated_amount) if req.estimated_amount else None
+            ),
+            "final_amount": float(req.final_amount) if req.final_amount else None,
+            "assigned_vehicle_id": req.assigned_vehicle_id,
+            "assigned_operator_id": req.assigned_operator_id,
+            "assigned_owner_id": req.assigned_owner_id,
+            "source_channel": req.source_channel,
+            "priority": req.priority,
+            "comment": req.comment,
+            "company_id": req.company_id,
+            "created_by": req.created_by,
+            "created_at": req.created_at,
+            "updated_at": req.updated_at,
+        }
 
         # Имя клиента
         if req.client_id:
@@ -127,9 +170,13 @@ async def create_request(
     # Validate vehicle_category_id exists
     if payload.vehicle_category_id:
         from app.models.catalog import Category
+
         cat = db.get(Category, payload.vehicle_category_id)
         if not cat:
-            raise HTTPException(status_code=422, detail=f"Vehicle category {payload.vehicle_category_id} not found")
+            raise HTTPException(
+                status_code=422,
+                detail=f"Vehicle category {payload.vehicle_category_id} not found",
+            )
 
     request = Request(
         **payload.model_dump(),
@@ -155,6 +202,7 @@ async def create_request(
     # Send notification to company admins about new request
     # Send notification
     from app.services.notification_service import create_notification
+
     try:
         await create_notification(
             db=db,
@@ -363,6 +411,7 @@ async def assign_request(
         # Send notification about vehicle assignment
         # Send notification
         from app.services.notification_service import create_notification
+
         try:
             await create_notification(
                 db=db,
@@ -505,11 +554,13 @@ def export_requests_pdf(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Экспорт заявок в PDF с теми же фильтрами что и список."""
+    import io
+
+    from fastapi.responses import StreamingResponse
+
     from app.models.catalog import Category, Vehicle
     from app.models.contractor import Contractor
     from app.utils.export_utils import export_requests_pdf as gen_pdf
-    from fastapi.responses import StreamingResponse
-    import io
 
     stmt = (
         select(Request)
@@ -537,12 +588,16 @@ def export_requests_pdf(
         )
     if date_from:
         from datetime import datetime as dt
+
         stmt = stmt.where(Request.planned_start >= dt.fromisoformat(date_from))
     if date_to:
         from datetime import datetime as dt
+
         stmt = stmt.where(Request.planned_end <= dt.fromisoformat(date_to))
     sort_col = getattr(Request, sort_by, Request.created_at)
-    stmt = stmt.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc()).limit(5000)
+    stmt = stmt.order_by(
+        sort_col.desc() if sort_order == "desc" else sort_col.asc()
+    ).limit(5000)
 
     requests_list = db.scalars(stmt).all()
 
@@ -564,18 +619,27 @@ def export_requests_pdf(
             v = db.get(Vehicle, req.assigned_vehicle_id)
             if v:
                 vehicle_name = v.name
-        data = {"id": req.id, "work_type": req.work_type, "object_address": req.object_address,
-                "planned_start": req.planned_start, "planned_end": req.planned_end,
-                "status": req.status, "priority": req.priority,
-                "estimated_amount": req.estimated_amount, "final_amount": req.final_amount,
-                "vehicle_category_name": cat_name, "assigned_vehicle_name": vehicle_name, "client_name": client_name}
+        data = {
+            "id": req.id,
+            "work_type": req.work_type,
+            "object_address": req.object_address,
+            "planned_start": req.planned_start,
+            "planned_end": req.planned_end,
+            "status": req.status,
+            "priority": req.priority,
+            "estimated_amount": req.estimated_amount,
+            "final_amount": req.final_amount,
+            "vehicle_category_name": cat_name,
+            "assigned_vehicle_name": vehicle_name,
+            "client_name": client_name,
+        }
         enriched.append(data)
 
     pdf_bytes = gen_pdf(enriched)
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": "attachment; filename=requests.pdf"}
+        headers={"Content-Disposition": "attachment; filename=requests.pdf"},
     )
 
 
@@ -597,11 +661,13 @@ def export_requests_excel(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Экспорт заявок в Excel с теми же фильтрами что и список."""
+    import io
+
+    from fastapi.responses import StreamingResponse
+
     from app.models.catalog import Category, Vehicle
     from app.models.contractor import Contractor
     from app.utils.export_utils import export_requests_excel as gen_excel
-    from fastapi.responses import StreamingResponse
-    import io
 
     stmt = (
         select(Request)
@@ -629,12 +695,16 @@ def export_requests_excel(
         )
     if date_from:
         from datetime import datetime as dt
+
         stmt = stmt.where(Request.planned_start >= dt.fromisoformat(date_from))
     if date_to:
         from datetime import datetime as dt
+
         stmt = stmt.where(Request.planned_end <= dt.fromisoformat(date_to))
     sort_col = getattr(Request, sort_by, Request.created_at)
-    stmt = stmt.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc()).limit(5000)
+    stmt = stmt.order_by(
+        sort_col.desc() if sort_order == "desc" else sort_col.asc()
+    ).limit(5000)
 
     requests_list = db.scalars(stmt).all()
 
@@ -655,16 +725,25 @@ def export_requests_excel(
             v = db.get(Vehicle, req.assigned_vehicle_id)
             if v:
                 vehicle_name = v.name
-        data = {"id": req.id, "work_type": req.work_type, "object_address": req.object_address,
-                "planned_start": req.planned_start, "planned_end": req.planned_end,
-                "status": req.status, "priority": req.priority,
-                "estimated_amount": req.estimated_amount, "final_amount": req.final_amount,
-                "vehicle_category_name": cat_name, "assigned_vehicle_name": vehicle_name, "client_name": client_name}
+        data = {
+            "id": req.id,
+            "work_type": req.work_type,
+            "object_address": req.object_address,
+            "planned_start": req.planned_start,
+            "planned_end": req.planned_end,
+            "status": req.status,
+            "priority": req.priority,
+            "estimated_amount": req.estimated_amount,
+            "final_amount": req.final_amount,
+            "vehicle_category_name": cat_name,
+            "assigned_vehicle_name": vehicle_name,
+            "client_name": client_name,
+        }
         enriched.append(data)
 
     excel_bytes = gen_excel(enriched)
     return StreamingResponse(
         io.BytesIO(excel_bytes),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=requests.xlsx"}
+        headers={"Content-Disposition": "attachment; filename=requests.xlsx"},
     )

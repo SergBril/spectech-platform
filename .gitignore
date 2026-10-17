@@ -133,10 +133,11 @@ backend/app/services/edoxml/certificates/
 # Diadoc mock files (generated at runtime)
 diadoc_mock/
 *.sig
-# Backup files 
-*.bak 
-# Migration scripts 
-migrate_layout.py 
-migrate_to_layout.py 
-curl 
-backend/test_pdf.py 
+# Backup files
+*.bak
+# Migration scripts
+migrate_layout.py
+migrate_to_layout.py
+curl
+backend/test_pdf.py
+backend/_token.json
