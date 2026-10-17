@@ -1,28 +1,26 @@
-"""Адаптер для Mapix — российская платформа ГЛОНАСС/GPS мониторинга.
+﻿"""Адаптер для Mapix — российская платформа ГЛОНАСС/GPS мониторинга.
 
-API документация:
-- POST /api/io — последние позиции всех объектов (по IMEI)
-- POST /api/io/t?ts=600 — трек за интервал (60-1200 сек)
-- Авторизация: cookie-based сессия (login/password)
-- Сессия живёт 3 дня
-- Anti-cache: добавлять ?time={unix_ts} к URL
+Объекты идентифицируются по ObjectId (не IMEI).
+Данные получаются через /index/infodata/ObjectId/{id}
+Авторизация: cookie-based сессия (PHPSESSID + t_uid), живёт 3 дня
+Anti-cache: добавлять ?_={unix_ts_ms} к URL
 """
 
+import json
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 
-from app.services.gps_providers.base import GpsProviderAdapter, GpsPointData
+from app.services.gps_providers.base import GpsPointData, GpsProviderAdapter
 
 logger = logging.getLogger("spectech.gps.mapix")
 
 
 class MapixAdapter(GpsProviderAdapter):
     provider_name = "mapix"
-
     DEFAULT_API_URL = "https://gps.mapix.su"
 
     def __init__(self, config: dict[str, Any]):
@@ -30,96 +28,39 @@ class MapixAdapter(GpsProviderAdapter):
         self.api_url = config.get("api_url", self.DEFAULT_API_URL).rstrip("/")
         self.login = config.get("login", "")
         self.password = config.get("password", "")
-        self.cookies: dict[str, str] = {}
+        # Список ObjectId из конфига (разделённые запятой или списком)
+        raw_ids = config.get("object_ids", "")
+        if isinstance(raw_ids, list):
+            self.object_ids: list[str] = [
+                str(x).strip() for x in raw_ids if str(x).strip()
+            ]
+        elif isinstance(raw_ids, str) and raw_ids.strip():
+            self.object_ids = [x.strip() for x in raw_ids.split(",") if x.strip()]
+        else:
+            self.object_ids = []
+
+        self._cookies: httpx.Cookies | None = None
         self._session_valid = False
 
-    async def _ensure_session(self, client: httpx.AsyncClient) -> None:
-        """Авторизуется в Mapix через /auth если сессия невалидна."""
-        if self._session_valid and self.cookies:
-            return
-
-        if not self.login or not self.password:
-            raise ValueError("Mapix login/password not configured")
-
-        resp = await client.post(
-            f"{self.api_url}/auth",
-            data={
-                "username": self.login,
-                "password": self.password,
-                "tzoffset": "3",
-                "lang": "ru",
-                "soglasie": "on",
-            },
-            follow_redirects=True,
+        logger.info(
+            "MapixAdapter init: user=%s, object_ids=%s",
+            self.login,
+            self.object_ids,
         )
 
-        if resp.status_code >= 400:
-            raise ValueError(f"Mapix auth failed: HTTP {resp.status_code}")
+    async def _ensure_session(self, client: httpx.AsyncClient) -> bool:
+        """Авторизуется в Mapix если сессия невалидна."""
+        if self._session_valid and self._cookies:
+            for name, value in self._cookies.items():
+                client.cookies.set(name, value)
+            return True
 
-        # Проверяем что получили PHPSESSID
-        if "PHPSESSID" not in resp.cookies and "PHPSESSID" not in client.cookies:
-            raise ValueError("Mapix auth failed: no PHPSESSID cookie received")
+        if not self.login or not self.password:
+            logger.error("Mapix login/password not configured")
+            return False
 
-        # Сохраняем ВСЕ cookies (PHPSESSID + t_uid + другие)
-        self.cookies = dict(client.cookies)
-        self._session_valid = True
-        logger.info("✅ Mapix session established for user %s (cookies: %s)", 
-                     self.login, list(self.cookies.keys()))
-
-    def _anti_cache_url(self, base_url: str) -> str:
-        """Добавляет anti-cache параметр к URL."""
-        separator = "&" if "?" in base_url else "?"
-        return f"{base_url}{separator}time={int(time.time())}"
-
-    async def get_last_position(self) -> GpsPointData | None:
-        """Получает последнюю позицию первого доступного объекта."""
-        positions = await self._fetch_positions()
-        if not positions:
-            return None
-        return positions[0]
-
-    async def get_all_positions(self) -> list[GpsPointData]:
-        """Получает последние позиции ВСЕХ объектов."""
-        return await self._fetch_positions()
-
-    def get_all_positions_sync(self) -> list[GpsPointData]:
-        """Синхронная версия для APScheduler."""
-        import asyncio
         try:
-            return asyncio.run(self._fetch_positions())
-        except RuntimeError:
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, self._fetch_positions())
-                return future.result(timeout=60)
-
-    async def _fetch_positions(self) -> list[GpsPointData]:
-        """Внутренний метод: запрашивает /api/io через httpx с браузерными заголовками."""
-        import json
-
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/javascript, */*; q=0.01",
-            "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "X-Requested-With": "XMLHttpRequest",
-            "Origin": self.api_url,
-            "Referer": f"{self.api_url}/",
-            "Connection": "keep-alive",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-origin",
-            "DNT": "1",
-        }
-
-        async with httpx.AsyncClient(
-            timeout=30,
-            follow_redirects=True,
-            headers=headers,
-        ) as client:
-            # Шаг 1: Авторизация
-            auth_resp = await client.post(
+            resp = await client.post(
                 f"{self.api_url}/auth",
                 data={
                     "username": self.login,
@@ -128,131 +69,222 @@ class MapixAdapter(GpsProviderAdapter):
                     "lang": "ru",
                     "soglasie": "on",
                 },
+                follow_redirects=True,
             )
-            logger.info("Mapix auth: status=%s, cookies=%s", auth_resp.status_code, list(client.cookies.keys()))
 
-            if auth_resp.status_code >= 400:
-                logger.error("Mapix auth failed: HTTP %s", auth_resp.status_code)
-                return []
+            if resp.status_code >= 400:
+                logger.error("Mapix auth failed: HTTP %s", resp.status_code)
+                return False
 
-            # Шаг 2: Прогрев — GET главная страница
-            warmup_resp = await client.get(f"{self.api_url}/")
-            logger.debug("Mapix warmup: status=%s, len=%d", warmup_resp.status_code, len(warmup_resp.text))
+            all_cookies = dict(client.cookies)
+            if "PHPSESSID" not in all_cookies:
+                logger.error(
+                    "Mapix auth: no PHPSESSID in cookies: %s", list(all_cookies.keys())
+                )
+                return False
 
-            # Шаг 3: Инициализация API — POST /api/io БЕЗ anti-cache
-            init_resp = await client.post(f"{self.api_url}/api/io", content=b"")
+            self._cookies = client.cookies
+            self._session_valid = True
             logger.info(
-                "Mapix /api/io init: status=%s, body_len=%d",
-                init_resp.status_code,
-                len(init_resp.text),
+                "✅ Mapix session established for user %s (cookies: %s)",
+                self.login,
+                list(all_cookies.keys()),
             )
+            return True
 
-            # Шаг 4: Основной запрос С anti-cache
-            url = self._anti_cache_url(f"{self.api_url}/api/io")
-            api_resp = await client.post(url, content=b"")
+        except Exception as e:
+            logger.error("Mapix auth exception: %s", e)
+            return False
 
-            logger.info(
-                "Mapix /api/io main: status=%s, content-type=%s, body_len=%d, preview=%s",
-                api_resp.status_code,
-                api_resp.headers.get("content-type", "N/A"),
-                len(api_resp.text),
-                api_resp.text[:300] if api_resp.text else "(empty)",
+    async def _fetch_object_data(
+        self, client: httpx.AsyncClient, object_id: str
+    ) -> GpsPointData | None:
+        """Получает данные одного объекта через /index/infodata/ObjectId/{id}."""
+        url = f"{self.api_url}/index/infodata/ObjectId/{object_id}?_={int(time.time() * 1000)}"
+
+        try:
+            resp = await client.get(url)
+        except Exception as e:
+            logger.warning(
+                "Mapix infodata request failed for ObjectId %s: %s", object_id, e
             )
+            return None
 
-            # Используем ответ с данными
-            resp_text = ""
-            for r in [api_resp, init_resp]:
-                if r.text and r.text.strip() and not r.text.strip().startswith("<"):
-                    resp_text = r.text
-                    break
+        if resp.status_code != 200:
+            logger.warning(
+                "Mapix infodata HTTP %s for ObjectId %s", resp.status_code, object_id
+            )
+            return None
 
-            if not resp_text:
-                logger.warning("⚠️ Mapix returned no JSON data (empty or HTML). Skipping this sync cycle.")
-                return []
+        text = resp.text.strip()
+        if not text:
+            return None
 
-            try:
-                data = json.loads(resp_text)
-            except json.JSONDecodeError as e:
-                logger.error("Mapix JSON parse error: %s, body: %s", e, resp_text[:300])
-                return []
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            # Ответ может быть HTML — пробуем извлечь данные из основного списка
+            logger.debug("Mapix infodata returned non-JSON for ObjectId %s", object_id)
+            return None
 
-            if not isinstance(data, dict):
-                logger.error("Mapix returned unexpected type: %s", type(data))
-                return []
+        if not data.get("success"):
+            logger.debug("Mapix infodata success=false for ObjectId %s", object_id)
+            return None
 
+        lat = float(data.get("lat", 0))
+        lon = float(data.get("long", 0))
+
+        if lat == 0 and lon == 0:
+            return None
+
+        return GpsPointData(
+            latitude=lat,
+            longitude=lon,
+            speed=None,  # infodata не возвращает скорость напрямую
+            heading=None,
+            engine_on=None,
+            recorded_at=None,  # Нет точного timestamp в infodata
+            raw_data={"object_id": object_id, **data},
+        )
+
+    async def _fetch_positions_from_main_page(
+        self, client: httpx.AsyncClient
+    ) -> list[GpsPointData]:
+        """
+        Fallback: парсит главную страницу Mapix для получения позиций всех объектов.
+        Главная страница содержит JSON-массив с данными всех объектов.
+        """
+        try:
+            resp = await client.get(f"{self.api_url}/")
+        except Exception as e:
+            logger.warning("Mapix main page request failed: %s", e)
+            return []
+
+        if resp.status_code != 200:
+            return []
+
+        text = resp.text
         results: list[GpsPointData] = []
-        for imei, points in data.items():
-            if not points or not isinstance(points, list):
+
+        # Ищем JSON-массив объектов в HTML страницы
+        # Формат: [{ObjectId:"18625", X:"37.254", Y:"55.776", Unixdt:"1792156227", ...}, ...]
+        import re
+
+        # Более надёжный подход: ищем полные JSON-подобные блоки
+        # Парсим каждый объект отдельно
+        obj_pattern = r'ObjectId\s*:\s*"(\d+)".*?Number\s*:\s*"([^"]*)".*?X\s*:\s*"([\d.]+)".*?Y\s*:\s*"([\d.]+)".*?Unixdt\s*:\s*"(\d+)"'
+
+        for match in re.finditer(obj_pattern, text, re.DOTALL):
+            obj_id = match.group(1)
+            number = match.group(2)
+            lon = float(match.group(3))
+            lat = float(match.group(4))
+            unix_ts = int(match.group(5))
+
+            if lat == 0 and lon == 0:
                 continue
-            pt = points[0]
-            try:
-                results.append(GpsPointData(
-                    latitude=float(pt.get("la", 0)),
-                    longitude=float(pt.get("ln", 0)),
-                    speed=int(pt.get("s", 0)) if pt.get("s") else None,
-                    heading=int(pt.get("a", 0)) if pt.get("a") else None,
-                    engine_on=bool(int(pt.get("ebs", 0))) if pt.get("ebs") is not None else None,
-                    recorded_at=datetime.fromtimestamp(int(pt["t"]), tz=timezone.utc) if pt.get("t") else None,
-                    raw_data={"imei": imei, **pt},
-                ))
-            except (ValueError, KeyError, TypeError) as e:
-                logger.warning("Mapix parse error for IMEI %s: %s", imei, e)
+
+            results.append(
+                GpsPointData(
+                    latitude=lat,
+                    longitude=lon,
+                    speed=None,
+                    heading=None,
+                    engine_on=None,
+                    recorded_at=datetime.fromtimestamp(unix_ts, tz=UTC),
+                    raw_data={"object_id": obj_id, "number": number},
+                )
+            )
+
+        if results:
+            logger.info("✅ Parsed %d positions from Mapix main page", len(results))
+        else:
+            logger.warning("⚠️ Could not parse positions from Mapix main page")
 
         return results
+
+    async def _fetch_positions(self) -> list[GpsPointData]:
+        """Основной метод получения позиций."""
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Accept-Language": "ru-RU,ru;q=0.9",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": f"{self.api_url}/",
+        }
+
+        async with httpx.AsyncClient(
+            timeout=30.0,
+            follow_redirects=True,
+            headers=headers,
+        ) as client:
+            if not await self._ensure_session(client):
+                return []
+
+            # Способ 1: Если есть object_ids — запрашиваем каждый через infodata
+            if self.object_ids:
+                results: list[GpsPointData] = []
+                for oid in self.object_ids:
+                    point = await self._fetch_object_data(client, oid)
+                    if point:
+                        results.append(point)
+                if results:
+                    logger.info(
+                        "✅ Mapix fetched %d/%d objects via infodata",
+                        len(results),
+                        len(self.object_ids),
+                    )
+                    return results
+                logger.warning(
+                    "⚠️ infodata returned no data, falling back to main page parsing"
+                )
+
+            # Способ 2: Парсинг главной страницы (fallback)
+            return await self._fetch_positions_from_main_page(client)
+
+    async def get_last_position(self) -> GpsPointData | None:
+        positions = await self._fetch_positions()
+        return positions[0] if positions else None
+
+    async def get_all_positions(self) -> list[GpsPointData]:
+        return await self._fetch_positions()
+
+    def get_all_positions_sync(self) -> list[GpsPointData]:
+        """Синхронная обёртка для APScheduler."""
+        import asyncio
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self._fetch_positions())
+                return future.result(timeout=60)
+        else:
+            return asyncio.run(self._fetch_positions())
 
     async def get_track(
         self, date_from: datetime, date_to: datetime, limit: int = 1000
     ) -> list[GpsPointData]:
-        """Получает трек за период (максимум 1200 секунд за запрос)."""
-        delta_seconds = int((date_to - date_from).total_seconds())
-        ts = min(max(delta_seconds, 60), 1200)
-
-        async with httpx.AsyncClient(timeout=30) as client:
-            await self._ensure_session(client)
-
-            url = self._anti_cache_url(f"{self.api_url}/api/io/t")
-            resp = await client.post(url, cookies=self.cookies, data={"ts": str(ts)})
-
-            if resp.status_code != 200:
-                logger.error("Mapix /api/io/t error: HTTP %s", resp.status_code)
-                return []
-
-            data = resp.json()
-            results: list[GpsPointData] = []
-
-            for imei, points in data.items():
-                if not points or not isinstance(points, list):
-                    continue
-                for p in points:
-                    try:
-                        results.append(GpsPointData(
-                            latitude=float(p.get("la", 0)),
-                            longitude=float(p.get("ln", 0)),
-                            speed=int(p.get("s", 0)) if p.get("s") else None,
-                            heading=int(p.get("a", 0)) if p.get("a") else None,
-                            engine_on=bool(int(p.get("i", 0))) if p.get("i") is not None else None,
-                            recorded_at=datetime.fromtimestamp(int(p["t"]), tz=timezone.utc) if p.get("t") else None,
-                            raw_data={"imei": imei, **p},
-                        ))
-                    except (ValueError, KeyError, TypeError) as e:
-                        logger.warning("Mapix track parse error for IMEI %s: %s", imei, e)
-
-            return results[:limit]
+        """Треки пока не поддерживаются для ObjectId-based API."""
+        logger.warning("Mapix track API not implemented for ObjectId-based objects")
+        return []
 
     async def test_connection(self) -> bool:
-        """Проверяет соединение с Mapix API."""
         try:
             async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-                await self._ensure_session(client)
-                url = self._anti_cache_url(f"{self.api_url}/api/io")
-                resp = await client.post(
-                    url,
-                    headers={
-                        "X-Requested-With": "XMLHttpRequest",
-                        "Referer": f"{self.api_url}/",
-                    },
-                )
-                return resp.status_code == 200 and bool(resp.text.strip())
+                ok = await self._ensure_session(client)
+                if ok:
+                    logger.info(
+                        "✅ Mapix connection test passed (user: %s, objects: %s)",
+                        self.login,
+                        self.object_ids,
+                    )
+                return ok
         except Exception as e:
-            logger.error("Mapix connection test failed: %s", e)
+            logger.error("Mapix connection test exception: %s", e)
             return False

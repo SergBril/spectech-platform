@@ -1,3 +1,5 @@
+import os
+
 """Сервис для работы с объектным хранилищем (MinIO/S3)."""
 
 import logging
@@ -12,7 +14,7 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger("spectech.storage")
 
 # Конфигурация (в production — через переменные окружения)
-MINIO_ENDPOINT = "minio:9000"
+MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
 MINIO_BUCKET = "spectech-docs"

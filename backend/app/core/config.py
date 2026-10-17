@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = Field(default="http://localhost:8080", alias="FRONTEND_URL")
 
     # MinIO (S3) Storage Settings
-    MINIO_ENDPOINT: str = "http://minio:9000"
+    MINIO_ENDPOINT: str = "http://localhost:9000"
     MINIO_ROOT_USER: str = "minioadmin"
     MINIO_ROOT_PASSWORD: str = "minioadmin"
     MINIO_BUCKET: str = "spectech-docs"
