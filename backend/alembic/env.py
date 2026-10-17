@@ -1,4 +1,4 @@
-"""Alembic environment configuration for PostgreSQL."""
+﻿"""Alembic environment configuration for PostgreSQL."""
 
 import os
 from logging.config import fileConfig
@@ -34,7 +34,7 @@ else:
 # Model metadata for 'autogenerate' support
 target_metadata = Base.metadata
 
-print(f"📊 Found {len(Base.metadata.tables)} tables in Base.metadata:")
+print(f"[INFO] Found {len(Base.metadata.tables)} tables in Base.metadata:")
 for table_name in Base.metadata.tables.keys():
     print(f"   - {table_name}")
 
