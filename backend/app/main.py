@@ -59,7 +59,8 @@ from app.api.routes import (
     driver,
     admin,
     gps,
-)
+
+    drivers,)
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from app.api.routes import websocket as ws_routes
@@ -193,6 +194,7 @@ app.include_router(categories.router, prefix="/api/v1/categories", tags=["catalo
 app.include_router(
     vehicles.router, prefix="/api/v1", tags=["🚜 Vehicles (Спецтехника)"]
 )
+app.include_router(drivers.router, prefix="/api/v1/drivers", tags=["👷 Drivers (Водители)"])
 app.include_router(requests.router, prefix="/api/v1/requests", tags=["dispatch"])
 app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["dispatch"])
 app.include_router(

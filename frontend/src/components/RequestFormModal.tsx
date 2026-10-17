@@ -9,6 +9,7 @@ import type {
   Priority,
 } from '../api/requests';
 import apiClient from '../api/client';
+import { getCatalogTree, getSubcategoryAttributes, addCustomOption, type CategoryTree, type AttributeDefinition } from '../api/catalog';
 
 interface Contractor {
   id: number;
@@ -94,37 +95,80 @@ export const RequestFormModal: React.FC<Props> = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // 🆕 Автоматически определяем client_id
-  const [myContractorId, setMyContractorId] = useState<number | null>(null);
-  const [loadingContractor, setLoadingContractor] = useState(true);
+  // Выбор клиента
+  const [clients, setClients] = useState<Contractor[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<number | null>(request?.client_id || null);
+  const [loadingClients, setLoadingClients] = useState(true);
 
-  // 🆕 Загружаем contractor_id текущего пользователя
+  // Категория и подкатегория
+  const [catalogTree, setCatalogTree] = useState<CategoryTree[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<number | null>(request?.vehicle_category_id || null);
+  const [subcategoryAttributes, setSubcategoryAttributes] = useState<AttributeDefinition[]>([]);
+  const [attributeValues, setAttributeValues] = useState<Record<string, string>>({});
+  const [loadingAttributes, setLoadingAttributes] = useState(false);
+
+  // Назначение: свой водитель или маркетплейс
+  const [assignmentMode, setAssignmentMode] = useState<'own' | 'marketplace'>('own');
+  const [drivers, setDrivers] = useState<{id: number; name: string}[]>([]);
+  const [selectedDriverId, setSelectedDriverId] = useState<number | null>(null);
+  const [loadingDrivers, setLoadingDrivers] = useState(false);
+
+  // Custom attribute value modal
+  const [customAttrModal, setCustomAttrModal] = useState<{ attrId: number; attrName: string; slug: string } | null>(null);
+  const [customValue, setCustomValue] = useState('');
+  const [customNumericValue, setCustomNumericValue] = useState('');
+  const [addingCustom, setAddingCustom] = useState(false);
+  const [customError, setCustomError] = useState('');
+
+  // Загрузка клиентов, каталога и водителей
   useEffect(() => {
-    const loadMyContractor = async () => {
+    const loadData = async () => {
+      // Клиенты
       try {
-        // Пробуем получить свой contractor
-        const res = await apiClient.get('/contractors/me');
-        if (res.data?.id) {
-          setMyContractorId(res.data.id);
-        }
-      } catch (e) {
-        // Fallback: получаем список и берём первый client
-        try {
-          const res = await apiClient.get('/contractors?type=client&limit=1');
-          const contractors = Array.isArray(res.data) ? res.data : res.data?.items || [];
-          if (contractors.length > 0) {
-            setMyContractorId(contractors[0].id);
-          }
-        } catch (err) {
-          console.warn('Failed to load contractor:', err);
-        }
-      } finally {
-        setLoadingContractor(false);
-      }
-    };
+        const res = await apiClient.get('/contractors', { params: { type: 'client', limit: 500 } });
+        const list = Array.isArray(res.data) ? res.data : [];
+        setClients(list);
+        if (!selectedClientId && list.length > 0) setSelectedClientId(list[0].id);
+      } catch (e) { console.warn('Failed to load clients:', e); }
+      setLoadingClients(false);
 
-    loadMyContractor();
+      // Каталог
+      try {
+        const tree = await getCatalogTree();
+        console.log('[RequestForm] Catalog tree loaded:', tree.length, 'categories');
+        setCatalogTree(tree);
+      } catch (e) { console.warn('Failed to load catalog:', e); }
+
+      // Водители
+      try {
+        setLoadingDrivers(true);
+        const res = await apiClient.get('/drivers', { params: { limit: 500 } });
+        const list = Array.isArray(res.data) ? res.data : [];
+        setDrivers(list.map((d: any) => ({ id: d.id, name: d.name || d.full_name || `Водитель #${d.id}` })));
+      } catch (e) { console.warn('Failed to load drivers:', e); }
+      setLoadingDrivers(false);
+    };
+    loadData();
   }, []);
+
+  // Загрузка атрибутов при выборе подкатегории
+  useEffect(() => {
+    if (selectedSubcategoryId) {
+      setLoadingAttributes(true);
+      getSubcategoryAttributes(selectedSubcategoryId)
+        .then(attrs => {
+          console.log('[RequestForm] Attributes loaded:', attrs.length);
+          setSubcategoryAttributes(attrs);
+        })
+        .catch((e) => { console.warn('Failed to load attributes:', e); setSubcategoryAttributes([]); })
+        .finally(() => setLoadingAttributes(false));
+    } else {
+      setSubcategoryAttributes([]);
+    }
+  }, [selectedSubcategoryId]);
+
+
 
   // 🆕 АВТО-РАСЧЁТ суммы: часы × ставка
   useEffect(() => {
@@ -190,9 +234,8 @@ export const RequestFormModal: React.FC<Props> = ({
       return;
     }
 
-    // 🆕 Проверяем наличие client_id
-    if (!myContractorId) {
-      setError('Не удалось определить вашу компанию. Обратитесь к администратору.');
+    if (!selectedClientId) {
+      setError('Выберите клиента');
       return;
     }
 
@@ -208,7 +251,8 @@ export const RequestFormModal: React.FC<Props> = ({
         source_channel: sourceChannel,
         priority: priority,
         comment: comment.trim() || undefined,
-        client_id: myContractorId, // 🆕 ОБЯЗАТЕЛЬНОЕ поле
+        client_id: selectedClientId,
+        vehicle_category_id: selectedSubcategoryId || undefined,
       };
 
       // 🆕 Добавляем vehicle_id для заявок с маркетплейса
@@ -251,12 +295,7 @@ export const RequestFormModal: React.FC<Props> = ({
             </div>
           )}
 
-          {/* 🆕 Индикатор загрузки contractor */}
-          {loadingContractor && (
-            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-              ⏳ Определение вашей компании...
-            </div>
-          )}
+
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
@@ -291,6 +330,166 @@ export const RequestFormModal: React.FC<Props> = ({
                 </select>
               </div>
             </div>
+
+            {/* === КЛИЕНТ === */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Клиент *</label>
+              <select
+                value={selectedClientId ?? ''}
+                onChange={(e) => setSelectedClientId(Number(e.target.value) || null)}
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                disabled={loadingClients}
+              >
+                <option value="">Выберите клиента</option>
+                {clients.map(cl => (
+                  <option key={cl.id} value={cl.id}>{cl.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* === КАТЕГОРИЯ И ПОДКАТЕГОРИЯ === */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Категория техники</label>
+                <select
+                  value={selectedCategoryId ?? ''}
+                  onChange={(e) => {
+                    const catId = Number(e.target.value) || null;
+                    setSelectedCategoryId(catId);
+                    setSelectedSubcategoryId(null);
+                    setAttributeValues({});
+                  }}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">Выберите категорию</option>
+                  {catalogTree.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Подкатегория</label>
+                <select
+                  value={selectedSubcategoryId ?? ''}
+                  onChange={(e) => {
+                    setSelectedSubcategoryId(Number(e.target.value) || null);
+                    setAttributeValues({});
+                  }}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                  disabled={!selectedCategoryId}
+                >
+                  <option value="">Выберите подкатегорию</option>
+                  {(catalogTree.find(c => c.id === selectedCategoryId)?.subcategories || []).map(sub => (
+                    <option key={sub.id} value={sub.id}>{sub.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* === АТРИБУТЫ ПОДКАТЕГОРИИ === */}
+            {subcategoryAttributes.length > 0 && (
+              <div className="p-4 bg-gray-50 rounded-lg space-y-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase">Характеристики техники</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {subcategoryAttributes.map(attr => (
+                    <div key={attr.id}>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        {attr.name} {attr.is_required && '*'}
+                        {attr.unit && <span className="text-gray-400"> ({attr.unit})</span>}
+                      </label>
+                      {attr.data_type === 'select' ? (
+                        <div className="flex gap-1">
+                          <select
+                            value={attributeValues[attr.slug] || ''}
+                            onChange={(e) => setAttributeValues(prev => ({ ...prev, [attr.slug]: e.target.value }))}
+                            className="flex-1 p-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                          >
+                            <option value="">Выберите</option>
+                            {attr.options.map(opt => (
+                              <option key={opt.id} value={opt.value}>{opt.value}</option>
+                            ))}
+                          </select>
+                          {attr.allow_custom_values && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCustomAttrModal({ attrId: attr.id, attrName: attr.name, slug: attr.slug });
+                                setCustomValue('');
+                                setCustomNumericValue('');
+                                setCustomError('');
+                              }}
+                              className="px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-bold transition-colors"
+                              title="Добавить новое значение"
+                            >+</button>
+                          )}
+                        </div>
+                      ) : (
+                        <input
+                          type={attr.data_type === 'number' ? 'number' : 'text'}
+                          value={attributeValues[attr.slug] || ''}
+                          onChange={(e) => setAttributeValues(prev => ({ ...prev, [attr.slug]: e.target.value }))}
+                          className="w-full p-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                          placeholder={attr.data_type === 'number' ? '0' : ''}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* === НАЗНАЧЕНИЕ: СВОЙ ВОДИТЕЛЬ ИЛИ МАРКЕТПЛЕЙС === */}
+            {!request && (
+              <div className="p-4 border border-gray-200 rounded-lg">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Назначение заявки</label>
+                <div className="flex gap-4 mb-3">
+                  <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border transition-all ${
+                    assignmentMode === 'own' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="assignmentMode"
+                      value="own"
+                      checked={assignmentMode === 'own'}
+                      onChange={() => setAssignmentMode('own')}
+                      className="accent-blue-600"
+                    />
+                    <span className="text-sm font-medium">👷 Свой водитель</span>
+                  </label>
+                  <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border transition-all ${
+                    assignmentMode === 'marketplace' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="assignmentMode"
+                      value="marketplace"
+                      checked={assignmentMode === 'marketplace'}
+                      onChange={() => setAssignmentMode('marketplace')}
+                      className="accent-green-600"
+                    />
+                    <span className="text-sm font-medium">🌐 Маркетплейс</span>
+                  </label>
+                </div>
+                {assignmentMode === 'own' && (
+                  <select
+                    value={selectedDriverId ?? ''}
+                    onChange={(e) => setSelectedDriverId(Number(e.target.value) || null)}
+                    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                    disabled={loadingDrivers}
+                  >
+                    <option value="">Выберите водителя</option>
+                    {drivers.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                )}
+                {assignmentMode === 'marketplace' && (
+                  <p className="text-sm text-green-700 bg-green-50 p-3 rounded">
+                    📢 Заявка будет опубликована в маркетплейсе. Компании-партнёры с подходящей техникой смогут откликнуться.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Тип работы *</label>
@@ -438,6 +637,95 @@ export const RequestFormModal: React.FC<Props> = ({
               />
             </div>
 
+            {/* === МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ ЗНАЧЕНИЯ === */}
+            {customAttrModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+                <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">
+                    Новое значение: {customAttrModal.attrName}
+                  </h3>
+                  {customError && (
+                    <div className="mb-3 p-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded">
+                      {customError}
+                    </div>
+                  )}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Значение *</label>
+                      <input
+                        type="text"
+                        value={customValue}
+                        onChange={(e) => { setCustomValue(e.target.value); setCustomError(''); }}
+                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder={`Например: ${customAttrModal.attrName}`}
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Числовое значение <span className="text-gray-400">(опционально)</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={customNumericValue}
+                        onChange={(e) => setCustomNumericValue(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="36"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => setCustomAttrModal(null)}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                      disabled={addingCustom}
+                    >Отмена</button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!customValue.trim()) {
+                          setCustomError('Введите значение');
+                          return;
+                        }
+                        // Check duplicates locally
+                        const attr = subcategoryAttributes.find(a => a.id === customAttrModal.attrId);
+                        if (attr?.options.some(o => o.value.toLowerCase() === customValue.trim().toLowerCase())) {
+                          setCustomError(`Значение "${customValue.trim()}" уже существует`);
+                          return;
+                        }
+                        setAddingCustom(true);
+                        setCustomError('');
+                        try {
+                          const newOpt = await addCustomOption(customAttrModal.attrId, {
+                            value: customValue.trim(),
+                            numeric_value: customNumericValue ? parseFloat(customNumericValue) : null,
+                          });
+                          // Update attributes list
+                          setSubcategoryAttributes(prev => prev.map(a =>
+                            a.id === customAttrModal.attrId
+                              ? { ...a, options: [...a.options, newOpt] }
+                              : a
+                          ));
+                          // Auto-select new value
+                          setAttributeValues(prev => ({ ...prev, [customAttrModal.slug]: newOpt.value }));
+                          setCustomAttrModal(null);
+                        } catch (err: any) {
+                          const msg = err.response?.data?.detail || 'Ошибка при добавлении';
+                          setCustomError(msg);
+                        } finally {
+                          setAddingCustom(false);
+                        }
+                      }}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                      disabled={addingCustom}
+                    >{addingCustom ? 'Добавление...' : 'Добавить'}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end space-x-3 pt-4 border-t">
               <button
                 type="button"
@@ -450,7 +738,7 @@ export const RequestFormModal: React.FC<Props> = ({
               <button
                 type="submit"
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                disabled={saving || loadingContractor}
+                disabled={saving || loadingClients}
               >
                 {saving ? 'Сохранение...' : (request ? 'Сохранить' : 'Создать заявку')}
               </button>
