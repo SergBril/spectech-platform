@@ -417,8 +417,10 @@ class TestReviewsAPI:
         response = auth_client.get("/api/v1/reviews/my")
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
-        assert len(data) >= 0
+        assert isinstance(data, dict)
+        assert "items" in data
+        assert "total" in data
+        assert len(data["items"]) >= 0
 
     # === ПУБЛИЧНЫЕ ENDPOINTS ===
 
@@ -447,8 +449,10 @@ class TestReviewsAPI:
         )
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
-        assert len(data) >= 0
+        assert isinstance(data, dict)
+        assert "items" in data
+        assert "total" in data
+        assert len(data["items"]) >= 0
 
     def test_public_company_rating(
         self,
