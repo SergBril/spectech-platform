@@ -11,7 +11,6 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Numeric,
-    String,
     Text,
 )
 from sqlalchemy import Enum as SqlEnum
@@ -97,7 +96,9 @@ class DowntimeEvent(Base):
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     photos: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="Список фото-доказательств (объекты с url, filename)"
+        JSON,
+        nullable=True,
+        comment="Список фото-доказательств (объекты с url, filename)",
     )
 
     # Финансы

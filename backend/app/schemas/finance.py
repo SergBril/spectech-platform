@@ -59,8 +59,7 @@ class InvoiceRead(BaseModel):
     id: int
     document_number: str
     request_id: int | None = Field(  # ← было int, стало int | None
-        default=None,
-        description="ID связанной заявки (опционально)"
+        default=None, description="ID связанной заявки (опционально)"
     )
     client_id: int
     company_id: int | None = None
@@ -114,8 +113,7 @@ class ActRead(BaseModel):
     id: int
     document_number: str
     request_id: int | None = Field(  # ← было int, стало int | None
-        default=None,
-        description="ID связанной заявки (опционально)"
+        default=None, description="ID связанной заявки (опционально)"
     )
     client_id: int
     total_amount: Decimal

@@ -1,8 +1,7 @@
 from datetime import UTC, datetime
-from fastapi import File, UploadFile
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
-from app.services import storage_service
-from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,6 +16,8 @@ from app.schemas.shift import (
     ShiftTaskCreate,
     ShiftTaskRead,
 )
+from app.services import storage_service
+
 
 class SubmitReportPayload(BaseModel):
     signature: str  # Base64 строка или URL
@@ -24,8 +25,10 @@ class SubmitReportPayload(BaseModel):
     operator_odometer: float | None = None
     operator_fuel_used: float | None = None
 
+
 class SignReportPayload(BaseModel):
     signature: str  # Base64 строка или URL
+
 
 router = APIRouter()
 
@@ -239,6 +242,7 @@ def dispute_shift_report(
 
     return report
 
+
 @router.post("/reports/{report_id}/photos", response_model=ShiftReportRead)
 async def upload_shift_report_photos(
     report_id: int,
@@ -264,12 +268,14 @@ async def upload_shift_report_photos(
             folder=f"shifts/{report_id}/photos",
             content_type=file.content_type or "image/jpeg",
         )
-        uploaded_photos.append({
-            "url": result.get("url", ""),
-            "path": result["path"],
-            "filename": file.filename,
-            "size": result["size"]
-        })
+        uploaded_photos.append(
+            {
+                "url": result.get("url", ""),
+                "path": result["path"],
+                "filename": file.filename,
+                "size": result["size"],
+            }
+        )
 
     report.operator_photos = uploaded_photos
     db.commit()
@@ -296,7 +302,7 @@ def submit_shift_report(
     # Сохраняем подпись и метку времени
     report.operator_signature = payload.signature
     report.operator_signed_at = datetime.now(UTC)
-    
+
     # Обновляем данные, если переданы
     if payload.operator_moto_hours is not None:
         report.operator_moto_hours = payload.operator_moto_hours
@@ -308,7 +314,7 @@ def submit_shift_report(
     # Переводим в статус ожидания клиента
     report.status = ShiftReportStatus.client_review
     report.operator_submitted_at = datetime.now(UTC)
-    
+
     db.commit()
     db.refresh(report)
     return report
@@ -329,8 +335,7 @@ def approve_and_sign_shift_report(
 
     if report.status != ShiftReportStatus.client_review:
         raise HTTPException(
-            status_code=400, 
-            detail=f"Cannot sign report in status {report.status}"
+            status_code=400, detail=f"Cannot sign report in status {report.status}"
         )
 
     # Сохраняем подпись клиента
@@ -338,7 +343,7 @@ def approve_and_sign_shift_report(
     report.client_signed_at = datetime.now(UTC)
     report.client_status = "approved"
     report.client_responded_at = datetime.now(UTC)
-    
+
     # Фиксируем финальные значения на основе данных оператора
     report.final_moto_hours = report.operator_moto_hours
     report.final_odometer = report.operator_odometer

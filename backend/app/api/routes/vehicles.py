@@ -6,9 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids, require_permission
+from app.api.deps import (
+    get_current_company_id,
+    get_current_user,
+    get_user_company_ids,
+    require_permission,
+)
 from app.core.db import get_db
-from app.models.contractor import DriverAssignmentLog, Employee, Contractor
 from app.models.auth import User
 from app.models.catalog import (
     Category,
@@ -17,6 +21,7 @@ from app.models.catalog import (
     EquipmentAttributeValue,
     Vehicle,
 )
+from app.models.contractor import Contractor, DriverAssignmentLog, Employee
 from app.schemas.vehicles import (
     VehicleCreate,
     VehicleListResponse,
@@ -69,11 +74,14 @@ def _enrich_vehicle(vehicle: Vehicle, db: Session = None) -> dict:
 
     # Assigned driver name
     data["assigned_driver_name"] = None
-    if hasattr(vehicle, 'assigned_driver_id') and vehicle.assigned_driver_id:
+    if hasattr(vehicle, "assigned_driver_id") and vehicle.assigned_driver_id:
         try:
-            from sqlalchemy import select as sa_select
             # Driver name comes from Contractor.name via Employee
-            emp = db.query(Employee).filter(Employee.contractor_id == vehicle.assigned_driver_id).first()
+            emp = (
+                db.query(Employee)
+                .filter(Employee.contractor_id == vehicle.assigned_driver_id)
+                .first()
+            )
             if emp and emp.contractor:
                 data["assigned_driver_name"] = emp.contractor.name
         except Exception:
@@ -162,20 +170,30 @@ def _load_vehicle_with_relations(db: Session, vehicle_id: int) -> Vehicle | None
 # ============================================================
 
 
-def _log_driver_assignment(db: Session, vehicle_id: int, old_driver_id: int | None, new_driver_id: int | None, user_id: int | None):
+def _log_driver_assignment(
+    db: Session,
+    vehicle_id: int,
+    old_driver_id: int | None,
+    new_driver_id: int | None,
+    user_id: int | None,
+):
     """Записать историю назначения водителя."""
-    from datetime import datetime, timezone
-    
+    from datetime import datetime
+
     # Закрываем предыдущее назначение (если был старый водитель)
     if old_driver_id and old_driver_id != new_driver_id:
-        open_log = db.query(DriverAssignmentLog).filter(
-            DriverAssignmentLog.vehicle_id == vehicle_id,
-            DriverAssignmentLog.driver_contractor_id == old_driver_id,
-            DriverAssignmentLog.unassigned_at.is_(None),
-        ).first()
+        open_log = (
+            db.query(DriverAssignmentLog)
+            .filter(
+                DriverAssignmentLog.vehicle_id == vehicle_id,
+                DriverAssignmentLog.driver_contractor_id == old_driver_id,
+                DriverAssignmentLog.unassigned_at.is_(None),
+            )
+            .first()
+        )
         if open_log:
-            open_log.unassigned_at = datetime.now(timezone.utc)
-    
+            open_log.unassigned_at = datetime.now(UTC)
+
     # Создаём новое назначение (если назначен новый водитель)
     if new_driver_id and new_driver_id != old_driver_id:
         new_log = DriverAssignmentLog(
@@ -185,10 +203,14 @@ def _log_driver_assignment(db: Session, vehicle_id: int, old_driver_id: int | No
         )
         db.add(new_log)
 
+
 @router.get("/drivers", tags=["🚜 Vehicles (Спецтехника)"])
 def list_drivers(
     limit: int = Query(500, ge=1, le=1000),
-    vehicle_id: int | None = Query(None, description="ID техники — исключить её текущего водителя из фильтра занятости"),
+    vehicle_id: int | None = Query(
+        None,
+        description="ID техники — исключить её текущего водителя из фильтра занятости",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_ids: list[int] = Depends(get_user_company_ids),
@@ -225,13 +247,15 @@ def list_drivers(
     for emp, ctr in rows:
         cid = emp.contractor_id
         is_busy = cid in busy_ids and cid != current_driver_id
-        result.append({
-            "id": cid,
-            "full_name": ctr.name,
-            "position": emp.position,
-            "user_id": emp.user_id,
-            "is_assigned": is_busy,
-        })
+        result.append(
+            {
+                "id": cid,
+                "full_name": ctr.name,
+                "position": emp.position,
+                "user_id": emp.user_id,
+                "is_assigned": is_busy,
+            }
+        )
 
     # Сортируем: свободные сначала
     result.sort(key=lambda x: (x["is_assigned"], x["full_name"]))
@@ -422,6 +446,7 @@ def get_vehicle(
 
     return _enrich_vehicle(vehicle, db)
 
+
 # ============================================================
 # PATCH /vehicles/{id} — частичное обновление техники
 # ============================================================
@@ -431,7 +456,6 @@ def get_vehicle(
     summary="Частичное обновление техники",
     description="Обновляет отдельные поля техники (например, is_available_for_rent).",
 )
-
 def update_vehicle_partial(
     vehicle_id: int,
     payload: VehicleUpdate,
@@ -452,8 +476,13 @@ def update_vehicle_partial(
     update_data = payload.model_dump(exclude_unset=True, exclude={"attributes"})
 
     # === Уникальность водителя: снять с других машин перед назначением ===
-    old_driver_id = vehicle.assigned_driver_id if hasattr(vehicle, 'assigned_driver_id') else None
-    if "assigned_driver_id" in update_data and update_data["assigned_driver_id"] is not None:
+    old_driver_id = (
+        vehicle.assigned_driver_id if hasattr(vehicle, "assigned_driver_id") else None
+    )
+    if (
+        "assigned_driver_id" in update_data
+        and update_data["assigned_driver_id"] is not None
+    ):
         db.query(Vehicle).filter(
             Vehicle.assigned_driver_id == update_data["assigned_driver_id"],
             Vehicle.id != vehicle_id,
@@ -463,7 +492,13 @@ def update_vehicle_partial(
 
     # Запись истории назначения
     if "assigned_driver_id" in update_data:
-        _log_driver_assignment(db, vehicle_id, old_driver_id, update_data["assigned_driver_id"], current_user.id)
+        _log_driver_assignment(
+            db,
+            vehicle_id,
+            old_driver_id,
+            update_data["assigned_driver_id"],
+            current_user.id,
+        )
 
     # Проверка уникальности id_value
     if "id_value" in update_data and update_data["id_value"] != vehicle.id_value:
@@ -534,8 +569,13 @@ def update_vehicle(
     update_data = payload.model_dump(exclude_unset=True, exclude={"attributes"})
 
     # === Уникальность водителя: снять с других машин перед назначением ===
-    old_driver_id = vehicle.assigned_driver_id if hasattr(vehicle, 'assigned_driver_id') else None
-    if "assigned_driver_id" in update_data and update_data["assigned_driver_id"] is not None:
+    old_driver_id = (
+        vehicle.assigned_driver_id if hasattr(vehicle, "assigned_driver_id") else None
+    )
+    if (
+        "assigned_driver_id" in update_data
+        and update_data["assigned_driver_id"] is not None
+    ):
         db.query(Vehicle).filter(
             Vehicle.assigned_driver_id == update_data["assigned_driver_id"],
             Vehicle.id != vehicle_id,
@@ -545,7 +585,13 @@ def update_vehicle(
 
     # Запись истории назначения
     if "assigned_driver_id" in update_data:
-        _log_driver_assignment(db, vehicle_id, old_driver_id, update_data["assigned_driver_id"], current_user.id)
+        _log_driver_assignment(
+            db,
+            vehicle_id,
+            old_driver_id,
+            update_data["assigned_driver_id"],
+            current_user.id,
+        )
 
     # Проверка уникальности id_value
     if "id_value" in update_data and update_data["id_value"] != vehicle.id_value:

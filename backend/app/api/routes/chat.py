@@ -1,7 +1,7 @@
 """Endpoints для чата по заявке (REST + WebSocket)."""
+
 import logging
 from datetime import datetime
-from typing import Optional, List
 
 from fastapi import (
     APIRouter,
@@ -14,7 +14,6 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -43,6 +42,7 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 
 class FileUploadResponse(BaseModel):
     """Ответ после загрузки файла в MinIO."""
+
     path: str
     url: str
     size: int
@@ -52,6 +52,7 @@ class FileUploadResponse(BaseModel):
 
 class MessageCreate(BaseModel):
     """Схема создания сообщения."""
+
     content: str = Field(default="", max_length=5000)
     message_type: ChatMessageType = Field(default=ChatMessageType.text)
     attachments: dict | None = None
@@ -62,6 +63,7 @@ class MessageCreate(BaseModel):
 
 class MessageRead(BaseModel):
     """Схема чтения сообщения."""
+
     id: int
     chat_id: int
     sender_id: int | None = None
@@ -80,6 +82,7 @@ class MessageRead(BaseModel):
 
 class ChatRead(BaseModel):
     """Схема чтения чата."""
+
     id: int
     request_id: int
     request_title: str | None = None
@@ -91,6 +94,7 @@ class ChatRead(BaseModel):
 
 class MessagesCursorResponse(BaseModel):
     """Ответ с cursor-based пагинацией."""
+
     messages: list[MessageRead]
     next_cursor: int | None = None
     has_more: bool = False
@@ -172,6 +176,7 @@ async def upload_chat_file(
         logger.error(f"File upload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
 
+
 @router.post(
     "/requests/{request_id}/upload-multiple",
     response_model=list[FileUploadResponse],
@@ -180,7 +185,7 @@ async def upload_chat_file(
 )
 async def upload_multiple_chat_files(
     request_id: int,
-    files: List[UploadFile] = File(...),
+    files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -215,10 +220,10 @@ async def upload_multiple_chat_files(
             logger.error(f"File upload failed for {file.filename}: {e}")
             # Продолжаем загрузку остальных файлов, но логируем ошибку
             continue
-    
+
     if not results:
         raise HTTPException(status_code=500, detail="All file uploads failed")
-    
+
     return results
 
 

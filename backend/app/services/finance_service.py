@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 

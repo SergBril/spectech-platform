@@ -116,14 +116,16 @@ def get_scheduler_status() -> dict:
     return {
         "enabled": settings.SCHEDULER_ENABLED,
         "running": scheduler.running,
-        "jobs": [
-            {
-                "id": job.id,
-                "name": job.name,
-                "next_run": str(job.next_run_time) if job.next_run_time else None,
-            }
-            for job in scheduler.get_jobs()
-        ]
-        if scheduler.running
-        else [],
+        "jobs": (
+            [
+                {
+                    "id": job.id,
+                    "name": job.name,
+                    "next_run": str(job.next_run_time) if job.next_run_time else None,
+                }
+                for job in scheduler.get_jobs()
+            ]
+            if scheduler.running
+            else []
+        ),
     }

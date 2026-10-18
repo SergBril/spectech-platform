@@ -10,7 +10,7 @@ from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user
@@ -36,6 +36,7 @@ router = APIRouter()
 
 class PayoutWorkflowResponse(BaseModel):
     """Ответ на действия approve/pay."""
+
     status: str = "success"
     message: str
     payout_id: int
@@ -45,6 +46,7 @@ class PayoutWorkflowResponse(BaseModel):
 
 class PayoutsSummaryResponse(BaseModel):
     """Сводка по выплатам за период."""
+
     date_from: date
     date_to: date
     total_payouts: int
@@ -166,7 +168,9 @@ def get_payouts_summary(
 
 @router.get("/csv")
 def export_payouts_csv(
-    date_from: str | None = Query(default=None, description="Начало периода YYYY-MM-DD"),
+    date_from: str | None = Query(
+        default=None, description="Начало периода YYYY-MM-DD"
+    ),
     date_to: str | None = Query(default=None, description="Конец периода YYYY-MM-DD"),
     status: str | None = Query(default=None, description="Фильтр по статусу"),
     db: Session = Depends(get_db),
@@ -189,29 +193,40 @@ def export_payouts_csv(
     payouts = db.scalars(stmt).all()
 
     output = io.StringIO()
-    writer = csv.writer(output, delimiter=';')
+    writer = csv.writer(output, delimiter=";")
 
-    writer.writerow([
-        'ID', 'Номер документа', 'Дата выплаты', 'Статус',
-        'Собственник (ID)', 'Техника (ID)',
-        'Gross (₽)', 'Комиссия (%)', 'Комиссия (₽)', 'Net (₽)',
-        'Дата создания',
-    ])
+    writer.writerow(
+        [
+            "ID",
+            "Номер документа",
+            "Дата выплаты",
+            "Статус",
+            "Собственник (ID)",
+            "Техника (ID)",
+            "Gross (₽)",
+            "Комиссия (%)",
+            "Комиссия (₽)",
+            "Net (₽)",
+            "Дата создания",
+        ]
+    )
 
     for p in payouts:
-        writer.writerow([
-            p.id,
-            p.document_number or '',
-            p.payout_date.isoformat() if p.payout_date else '',
-            p.status.value if hasattr(p.status, 'value') else str(p.status),
-            p.owner_id or '',
-            p.vehicle_id or '',
-            float(p.gross_amount or 0),
-            float(p.commission_rate or 0),
-            float(p.platform_commission or 0),
-            float(p.net_amount or 0),
-            p.created_at.isoformat() if p.created_at else '',
-        ])
+        writer.writerow(
+            [
+                p.id,
+                p.document_number or "",
+                p.payout_date.isoformat() if p.payout_date else "",
+                p.status.value if hasattr(p.status, "value") else str(p.status),
+                p.owner_id or "",
+                p.vehicle_id or "",
+                float(p.gross_amount or 0),
+                float(p.commission_rate or 0),
+                float(p.platform_commission or 0),
+                float(p.net_amount or 0),
+                p.created_at.isoformat() if p.created_at else "",
+            ]
+        )
 
     output.seek(0)
 
@@ -242,6 +257,7 @@ def get_payout(
         raise HTTPException(status_code=404, detail="Payout not found")
     return payout
 
+
 @router.post("/{payout_id}/send-email")
 def send_payout_email(
     payout_id: int,
@@ -250,8 +266,8 @@ def send_payout_email(
     company_id: int = Depends(get_current_company_id),
 ):
     """📧 Ручная отправка уведомления о выплате собственнику."""
-    from app.services.email_service import email_service
     from app.models.contractor import Contractor
+    from app.services.email_service import email_service
 
     payout = db.get(Payout, payout_id)
     if not payout or payout.company_id != company_id:
@@ -270,7 +286,10 @@ def send_payout_email(
             owner_email=owner.contact_email,
             owner_name=owner.name,
         )
-        return {"status": "success", "message": f"Уведомление отправлено на {owner.contact_email}"}
+        return {
+            "status": "success",
+            "message": f"Уведомление отправлено на {owner.contact_email}",
+        }
     except Exception as e:
         logger.error(f"Failed to send payout email: {e}")
         raise HTTPException(status_code=500, detail=f"Ошибка отправки: {str(e)}")
@@ -320,15 +339,17 @@ def approve_payout(
             detail=f"Only draft payouts can be approved. Current status: {payout.status}",
         )
 
-    old_status = payout.status.value if hasattr(payout.status, "value") else str(payout.status)
+    old_status = (
+        payout.status.value if hasattr(payout.status, "value") else str(payout.status)
+    )
     payout.status = DocumentStatus.sent
     db.commit()
     db.refresh(payout)
 
     # 📧 Отправляем уведомление собственнику
     try:
-        from app.services.email_service import email_service
         from app.models.contractor import Contractor
+        from app.services.email_service import email_service
 
         owner = db.get(Contractor, payout.owner_id)
         if owner and owner.contact_email:
@@ -369,7 +390,9 @@ def pay_payout(
             detail=f"Only sent payouts can be marked as paid. Current status: {payout.status}. Must be 'sent' first.",
         )
 
-    old_status = payout.status.value if hasattr(payout.status, "value") else str(payout.status)
+    old_status = (
+        payout.status.value if hasattr(payout.status, "value") else str(payout.status)
+    )
     payout.status = DocumentStatus.paid
     payout.paid_at = datetime.utcnow()
     db.commit()

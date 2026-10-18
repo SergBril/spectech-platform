@@ -1,11 +1,13 @@
 import logging
+
 logger = logging.getLogger("spectech.auth")
 import secrets
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from app.api.deps import get_db, get_current_user
-from app.core.db import SessionLocal
+
+from app.api.deps import get_current_user, get_db
 from app.models.auth import User
 from app.schemas.auth import TokenResponse, UserLogin, UserRead, UserRegister
 from app.services.auth_service import (
@@ -56,22 +58,20 @@ def generate_telegram_link_code(
 ):
     """
     🔗 Генерирует одноразовый код для привязки Telegram.
-    
+
     Пользователь отправляет этот код боту командой /link_account.
     """
     # Удаляем старый код, если был
     if current_user.telegram_link_code:
         current_user.telegram_link_code = None
-    
+
     # Генерируем новый код
     code = secrets.token_urlsafe(16)
     current_user.telegram_link_code = code
     db.commit()
-    
-    logger.info(
-        f"User {current_user.id} generated Telegram link code"
-    )
-    
+
+    logger.info(f"User {current_user.id} generated Telegram link code")
+
     return {
         "code": code,
         "message": "Отправьте этот код в Telegram бот после команды /link_account",
@@ -90,12 +90,12 @@ def unlink_telegram(
     """🔗 Отвязывает Telegram-аккаунт от пользователя."""
     if not current_user.telegram_id:
         raise HTTPException(status_code=400, detail="Telegram is not linked")
-    
+
     current_user.telegram_id = None
     db.commit()
-    
+
     logger.info(f"User {current_user.id} unlinked Telegram")
-    
+
     return {"message": "Telegram успешно отвязан"}
 
 

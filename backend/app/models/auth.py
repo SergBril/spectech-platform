@@ -4,12 +4,12 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
     Integer,
     String,
-    BigInteger,
 )
 from sqlalchemy import (
     Enum as SqlEnum,
@@ -60,12 +60,18 @@ class User(Base):
 
     # Telegram интеграция
     telegram_id: Mapped[int | None] = mapped_column(
-        BigInteger, nullable=True, unique=True, index=True,
-        comment="Telegram user ID для привязки аккаунта"
+        BigInteger,
+        nullable=True,
+        unique=True,
+        index=True,
+        comment="Telegram user ID для привязки аккаунта",
     )
     telegram_link_code: Mapped[str | None] = mapped_column(
-        String(32), nullable=True, unique=True, index=True,
-        comment="Одноразовый код для привязки Telegram"
+        String(32),
+        nullable=True,
+        unique=True,
+        index=True,
+        comment="Одноразовый код для привязки Telegram",
     )
 
 

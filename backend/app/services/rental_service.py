@@ -1,17 +1,13 @@
 """Сервис аренды техники — бизнес-логика."""
 
 import logging
-from datetime import UTC, datetime, date, timedelta
-from decimal import Decimal, ROUND_HALF_UP
-from app.models.finance import Invoice, InvoiceItem, Act, DocumentStatus
-from app.services.finance_service import generate_document_number
-from app.core.constants import TaxSystem
-from collections import defaultdict
+from datetime import UTC, datetime
+from decimal import ROUND_HALF_UP, Decimal
+
 from fastapi import HTTPException
-from sqlalchemy import and_
 from sqlalchemy.orm import Session, selectinload
-from app.models.catalog import Vehicle
-from app.models.finance import Invoice, InvoiceItem, Act, Payout, DocumentStatus
+
+from app.models.finance import Act, Invoice
 from app.models.rental import (
     PrepaymentStatus,
     RateType,
@@ -177,10 +173,12 @@ class RentalService:
             .join(Rental)
             .filter(
                 RentalItem.vehicle_id == vehicle_id,
-                Rental.status.in_([
-                    RentalStatus.DRAFT,
-                    RentalStatus.ACTIVE,
-                ]),
+                Rental.status.in_(
+                    [
+                        RentalStatus.DRAFT,
+                        RentalStatus.ACTIVE,
+                    ]
+                ),
                 Rental.start_date < end,
                 Rental.end_date > start,
             )
@@ -269,7 +267,10 @@ class RentalService:
 
         logger.info(
             "Rental #%s created: client=%s, rate_type=%s, total=%s",
-            rental.id, rental.client_id, rental.rate_type.value, rental.total_amount,
+            rental.id,
+            rental.client_id,
+            rental.rate_type.value,
+            rental.total_amount,
         )
         return rental
 
@@ -307,10 +308,7 @@ class RentalService:
             query = query.filter(Rental.client_id == client_id)
 
         return (
-            query.order_by(Rental.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+            query.order_by(Rental.created_at.desc()).offset(offset).limit(limit).all()
         )
 
     @staticmethod
@@ -584,7 +582,10 @@ class RentalService:
 
         logger.info(
             "Rental #%s closed: actual=%s, penalty=%s, total=%s",
-            rental.id, actual_amount, overdue_penalty, rental.total_amount,
+            rental.id,
+            actual_amount,
+            overdue_penalty,
+            rental.total_amount,
         )
 
         # 🆕 Автосоздание Invoice при завершении аренды
@@ -594,7 +595,9 @@ class RentalService:
             # Логируем ошибку, но не прерываем завершение аренды
             logger.error(
                 "Failed to auto-create documents for Rental #%s: %s",
-                rental.id, str(e), exc_info=True
+                rental.id,
+                str(e),
+                exc_info=True,
             )
 
         return rental
@@ -606,26 +609,27 @@ class RentalService:
         - Invoice (счёт клиенту)
         - Act (акт выполненных работ)
         - Payout(s) (выплаты собственникам техники)
-        
+
         Также отправляет уведомления по всем каналам.
         """
         invoice = RentalService._create_invoice_from_rental(db, rental)
         act = RentalService._create_act_from_rental(db, rental, invoice)
         payouts = RentalService._create_payouts_from_rental(db, rental)
-        
+
         # 🆕 Отправляем уведомления асинхронно
         RentalService._send_rental_notifications(db, rental, invoice, payouts)
-        
+
         return invoice, act, payouts
 
     @staticmethod
     def _create_invoice_from_rental(db: Session, rental: Rental) -> "Invoice":
         """Создаёт Invoice на основе завершённой аренды."""
-        from app.models.finance import Invoice, InvoiceItem, DocumentStatus
-        from app.services.finance_service import generate_document_number
-        from app.core.constants import TaxSystem
         from datetime import date, timedelta
-        
+
+        from app.core.constants import TaxSystem
+        from app.models.finance import DocumentStatus, Invoice, InvoiceItem
+        from app.services.finance_service import generate_document_number
+
         vat_rate = Decimal("20.00")
         subtotal = rental.total_amount
         vat_amount = (subtotal * vat_rate / Decimal("100")).quantize(
@@ -687,18 +691,24 @@ class RentalService:
 
         logger.info(
             "Auto-created Invoice #%s (%s) for Rental #%s: total=%s",
-            invoice.id, invoice.document_number, rental.id, total,
+            invoice.id,
+            invoice.document_number,
+            rental.id,
+            total,
         )
         return invoice
 
     @staticmethod
-    def _create_act_from_rental(db: Session, rental: Rental, invoice: "Invoice") -> "Act":
+    def _create_act_from_rental(
+        db: Session, rental: Rental, invoice: "Invoice"
+    ) -> "Act":
         """Создаёт Act на основе завершённой аренды."""
+        from datetime import date
+
+        from app.core.constants import TaxSystem
         from app.models.finance import Act, DocumentStatus
         from app.services.finance_service import generate_document_number
-        from app.core.constants import TaxSystem
-        from datetime import date
-        
+
         act = Act(
             document_number=generate_document_number(db, "ACT"),
             rental_id=rental.id,
@@ -719,58 +729,70 @@ class RentalService:
 
         logger.info(
             "Auto-created Act #%s (%s) for Rental #%s: total=%s",
-            act.id, act.document_number, rental.id, act.total_amount,
+            act.id,
+            act.document_number,
+            rental.id,
+            act.total_amount,
         )
         return act
 
     @staticmethod
     def _create_payouts_from_rental(db: Session, rental: Rental) -> list:
         """Создаёт Payout для каждого собственника техники в аренде."""
-        from app.models.catalog import Vehicle
-        from app.models.finance import Payout, DocumentStatus
-        from app.services.finance_service import generate_document_number
-        from datetime import date
         from collections import defaultdict
-        
+        from datetime import date
+
+        from app.models.catalog import Vehicle
+        from app.models.finance import DocumentStatus, Payout
+        from app.services.finance_service import generate_document_number
+
         total_items_cost = Decimal("0")
         for item in rental.items:
-            item_cost = Decimal(str(item.unit_price or 0)) * Decimal(str(item.quantity or 1))
+            item_cost = Decimal(str(item.unit_price or 0)) * Decimal(
+                str(item.quantity or 1)
+            )
             total_items_cost += item_cost
-        
+
         if total_items_cost == Decimal("0"):
             logger.warning(f"Rental #{rental.id} has zero total, skipping payouts")
             return []
-        
-        owner_data = defaultdict(lambda: {
-            "gross": Decimal("0"),
-            "vehicle_ids": [],
-        })
-        
+
+        owner_data = defaultdict(
+            lambda: {
+                "gross": Decimal("0"),
+                "vehicle_ids": [],
+            }
+        )
+
         total_rental_amount = rental.total_amount
-        
+
         for item in rental.items:
             vehicle = db.get(Vehicle, item.vehicle_id)
             if not vehicle:
                 logger.warning(f"Vehicle {item.vehicle_id} not found, skipping")
                 continue
-            
+
             if not vehicle.owner_id:
-                logger.warning(f"Vehicle {item.vehicle_id} has no owner, skipping payout")
+                logger.warning(
+                    f"Vehicle {item.vehicle_id} has no owner, skipping payout"
+                )
                 continue
-            
-            item_cost = Decimal(str(item.unit_price or 0)) * Decimal(str(item.quantity or 1))
+
+            item_cost = Decimal(str(item.unit_price or 0)) * Decimal(
+                str(item.quantity or 1)
+            )
             share = item_cost / total_items_cost
             owner_share = total_rental_amount * share
-            
+
             owner_data[vehicle.owner_id]["gross"] += owner_share
             owner_data[vehicle.owner_id]["vehicle_ids"].append(vehicle.id)
-        
+
         payouts = []
         commission_rate = rental.commission_rate or Decimal("10.00")
-        
+
         base_doc_number = generate_document_number(db, "PAY")
         base_number_part = base_doc_number.replace("PAY-", "")
-        
+
         for idx, (owner_id, data) in enumerate(owner_data.items(), start=1):
             gross_amount = data["gross"].quantize(
                 Decimal("0.01"), rounding=ROUND_HALF_UP
@@ -779,9 +801,9 @@ class RentalService:
                 Decimal("0.01"), rounding=ROUND_HALF_UP
             )
             net_amount = gross_amount - commission
-            
+
             unique_doc_number = f"PAY-{base_number_part}-{idx}"
-            
+
             payout = Payout(
                 document_number=unique_doc_number,
                 rental_id=rental.id,
@@ -809,17 +831,19 @@ class RentalService:
             )
             db.add(payout)
             payouts.append(payout)
-        
+
         if payouts:
             db.commit()
             for p in payouts:
                 db.refresh(p)
-            
+
             logger.info(
                 "Auto-created %d Payout(s) for Rental #%s (commission_rate=%s%%)",
-                len(payouts), rental.id, commission_rate,
+                len(payouts),
+                rental.id,
+                commission_rate,
             )
-        
+
         return payouts
 
     @staticmethod
@@ -828,25 +852,28 @@ class RentalService:
     ) -> None:
         """Отправляет уведомления о завершении аренды."""
         try:
-            from app.services.notification_dispatcher import notification_dispatcher
             from app.models.contractor import Contractor
-            
+            from app.services.notification_dispatcher import notification_dispatcher
+
             # Получаем email клиента
             client = db.get(Contractor, rental.client_id)
             if not client:
                 logger.warning(f"Client {rental.client_id} not found for notifications")
                 return
-            
+
             # В реальной системе email нужно брать из связанного User или contact_email
             # Пока используем заглушку
-            client_email = getattr(client, 'email', None) or f"client_{client.id}@spectech.dev"
+            client_email = (
+                getattr(client, "email", None) or f"client_{client.id}@spectech.dev"
+            )
             client_name = client.name
-            
+
             # Получаем client_user_id (если есть связь contractor -> user)
-            client_user_id = getattr(client, 'user_id', None)
-            
+            client_user_id = getattr(client, "user_id", None)
+
             # Асинхронно отправляем уведомления клиенту
             import asyncio
+
             try:
                 loop = asyncio.get_running_loop()
                 # В event loop — создаём задачу
@@ -863,17 +890,19 @@ class RentalService:
             except RuntimeError:
                 # Нет event loop — пропускаем (будет отправлено позже)
                 logger.info("No event loop, skipping async notifications")
-            
+
             # Уведомления собственникам (по каждому payout)
             for payout in payouts:
                 owner = db.get(Contractor, payout.owner_id)
                 if not owner:
                     continue
-                
-                owner_email = getattr(owner, 'email', None) or f"owner_{owner.id}@spectech.dev"
+
+                owner_email = (
+                    getattr(owner, "email", None) or f"owner_{owner.id}@spectech.dev"
+                )
                 owner_name = owner.name
-                owner_user_id = getattr(owner, 'user_id', None)
-                
+                owner_user_id = getattr(owner, "user_id", None)
+
                 try:
                     loop = asyncio.get_running_loop()
                     loop.create_task(
@@ -887,7 +916,7 @@ class RentalService:
                     )
                 except RuntimeError:
                     logger.info("No event loop, skipping payout notification")
-        
+
         except Exception as e:
             # Не ломаем основной процесс при ошибке уведомлений
             logger.error(f"Failed to send rental notifications: {e}", exc_info=True)

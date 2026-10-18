@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from app.services.gps_providers.base import GpsProviderAdapter, GpsPointData
+from app.services.gps_providers.base import GpsPointData, GpsProviderAdapter
 
 logger = logging.getLogger("spectech.gps.gdemoi")
 
@@ -22,7 +22,10 @@ class GdeMoiAdapter(GpsProviderAdapter):
         self.api_key = config.get("api_key", "")
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
 
     async def get_last_position(self) -> GpsPointData | None:
         device_id = self.config["device_id"]

@@ -8,9 +8,9 @@ from app.core.db import get_db
 from app.models.auth import User
 from app.schemas.dispute import (
     DisputeCreate,
+    DisputeListResponse,
     DisputeRead,
     DisputeResolution,
-    DisputeListResponse,
     DisputeStatus,
 )
 from app.services import dispute_service
@@ -53,6 +53,7 @@ def list_disputes(
 ):
     """List disputes for current company."""
     from sqlalchemy import select
+
     from app.models.dispute import Dispute
 
     stmt = select(Dispute).where(Dispute.company_id == company_id)

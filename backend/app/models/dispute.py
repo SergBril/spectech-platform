@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -58,9 +58,7 @@ class Dispute(Base):
     shift_report_id: Mapped[int] = mapped_column(
         ForeignKey("shift_reports.id"), nullable=False
     )
-    request_id: Mapped[int] = mapped_column(
-        ForeignKey("requests.id"), nullable=False
-    )
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), nullable=False)
     company_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
     status: Mapped[DisputeStatus] = mapped_column(
@@ -69,9 +67,7 @@ class Dispute(Base):
         nullable=False,
     )
 
-    opened_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     sla_deadline: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -82,9 +78,7 @@ class Dispute(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    initiator_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id"), nullable=False
-    )
+    initiator_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     initiator_role: Mapped[InitiatorRole] = mapped_column(
         SqlEnum(InitiatorRole, name="initiator_role"), nullable=False
     )
@@ -111,13 +105,9 @@ class Dispute(Base):
     resolved_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )
-    resolution_time_minutes: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
+    resolution_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    sla_breached: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    sla_breached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

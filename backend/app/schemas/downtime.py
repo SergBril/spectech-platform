@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.downtime import DowntimeCause, DowntimeStatus, FaultParty
+from app.models.downtime import DowntimeCause, FaultParty
 
 
 class DowntimeCreate(BaseModel):

@@ -419,7 +419,6 @@ def _build_offer_response(offer: MarketplaceOffer, db: Session) -> OfferRead:
     # Получить категорию техники
     vehicle_category_name = None
     if vehicle and vehicle.category_id:
-
         category = db.get(
             __import__("app.models.catalog", fromlist=["Category"]).Category,
             vehicle.category_id,

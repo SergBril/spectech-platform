@@ -9,15 +9,16 @@ Multi-Channel Salary Notification Dispatcher.
 """
 
 import logging
+
 from sqlalchemy.orm import Session
 
 from app.models.auth import User
-from app.models.contractor import Employee, Contractor
+from app.models.contractor import Contractor, Employee
 from app.models.salary import SalaryRecord
-from app.services.salary_pdf import generate_salary_payslip
-from app.services.notification_service import create_notification
-from app.services.telegram_service import telegram_service
 from app.services.email_service import email_service
+from app.services.notification_service import create_notification
+from app.services.salary_pdf import generate_salary_payslip
+from app.services.telegram_service import telegram_service
 
 logger = logging.getLogger("spectech.salary_notifications")
 
@@ -40,18 +41,25 @@ class SalaryNotificationDispatcher:
         results = {"email": False, "telegram": False, "internal": False}
 
         # Находим сотрудника и пользователя
-        employee = db.query(Employee).filter(
-            Employee.id == record.employee_contractor_id
-        ).first()
+        employee = (
+            db.query(Employee)
+            .filter(Employee.id == record.employee_contractor_id)
+            .first()
+        )
 
         if not employee:
-            logger.warning("Employee #%s not found for salary record #%s",
-                           record.employee_contractor_id, record.id)
+            logger.warning(
+                "Employee #%s not found for salary record #%s",
+                record.employee_contractor_id,
+                record.id,
+            )
             return results
 
-        contractor = db.query(Contractor).filter(
-            Contractor.id == record.employee_contractor_id
-        ).first()
+        contractor = (
+            db.query(Contractor)
+            .filter(Contractor.id == record.employee_contractor_id)
+            .first()
+        )
 
         employee_name = contractor.name if contractor else f"Сотрудник #{employee.id}"
 
@@ -59,7 +67,9 @@ class SalaryNotificationDispatcher:
         try:
             pdf_bytes = generate_salary_payslip(record, employee_name)
         except Exception as e:
-            logger.error("Failed to generate payslip PDF for record #%s: %s", record.id, e)
+            logger.error(
+                "Failed to generate payslip PDF for record #%s: %s", record.id, e
+            )
             pdf_bytes = None
 
         # Определяем доступные каналы
@@ -67,7 +77,9 @@ class SalaryNotificationDispatcher:
         if employee.user_id:
             user = db.query(User).filter(User.id == employee.user_id).first()
 
-        contact_email = getattr(contractor, "contact_email", None) if contractor else None
+        contact_email = (
+            getattr(contractor, "contact_email", None) if contractor else None
+        )
         user_email = getattr(user, "email", None) if user else None
         target_email = contact_email or user_email
 
@@ -138,7 +150,11 @@ class SalaryNotificationDispatcher:
                     caption=caption,
                 )
                 results["telegram"] = True
-                logger.info("✅ Telegram document sent to user #%s (tg:%s)", user.id, telegram_id)
+                logger.info(
+                    "✅ Telegram document sent to user #%s (tg:%s)",
+                    user.id,
+                    telegram_id,
+                )
             except Exception as e:
                 logger.error("Failed to send Telegram to %s: %s", telegram_id, e)
         elif telegram_id and not pdf_bytes:
@@ -164,7 +180,9 @@ class SalaryNotificationDispatcher:
         channels_used = [k for k, v in results.items() if v]
         logger.info(
             "📨 Salary notification for employee #%s (%s): channels=%s",
-            record.employee_contractor_id, employee_name, channels_used
+            record.employee_contractor_id,
+            employee_name,
+            channels_used,
         )
 
         return results

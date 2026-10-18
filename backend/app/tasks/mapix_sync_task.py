@@ -1,7 +1,7 @@
 """Фоновая задача синхронизации GPS-данных из всех провайдеров."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -71,15 +71,15 @@ def sync_gps_positions() -> None:
                         vehicle_id=vehicle.id,
                         latitude=pos.latitude,
                         longitude=pos.longitude,
-                        altitude=getattr(pos, 'altitude', None),
+                        altitude=getattr(pos, "altitude", None),
                         speed=pos.speed,
                         heading=pos.heading,
                         engine_on=pos.engine_on,
-                        fuel_level=getattr(pos, 'fuel_level', None),
-                        engine_hours=getattr(pos, 'engine_hours', None),
-                        signal_quality=getattr(pos, 'signal_quality', None),
-                        recorded_at=pos.recorded_at or datetime.now(timezone.utc),
-                        received_at=datetime.now(timezone.utc),
+                        fuel_level=getattr(pos, "fuel_level", None),
+                        engine_hours=getattr(pos, "engine_hours", None),
+                        signal_quality=getattr(pos, "signal_quality", None),
+                        recorded_at=pos.recorded_at or datetime.now(UTC),
+                        received_at=datetime.now(UTC),
                         device_id=pos.raw_data.get("imei") if pos.raw_data else None,
                         raw_data=pos.raw_data,
                     )
@@ -89,20 +89,33 @@ def sync_gps_positions() -> None:
                 if new_points > 0:
                     total_new_points += new_points
                     _skip_counts[vehicle.id] = 0
-                    logger.info("✅ Vehicle #%s (%s) [%s]: %d new GPS points",
-                                vehicle.id, vehicle.name, provider, new_points)
+                    logger.info(
+                        "✅ Vehicle #%s (%s) [%s]: %d new GPS points",
+                        vehicle.id,
+                        vehicle.name,
+                        provider,
+                        new_points,
+                    )
                 else:
                     _skip_counts[vehicle.id] = _skip_counts.get(vehicle.id, 0) + 1
                     skip = _skip_counts[vehicle.id]
                     if skip % 10 == 1:
                         logger.warning(
                             "⚠️ Vehicle #%s (%s) [%s]: skipped %d cycles (no new data)",
-                            vehicle.id, vehicle.name, provider, skip,
+                            vehicle.id,
+                            vehicle.name,
+                            provider,
+                            skip,
                         )
 
             except Exception as e:
-                logger.error("❌ GPS sync failed for vehicle #%s (%s) [%s]: %s",
-                             vehicle.id, vehicle.name, provider, e)
+                logger.error(
+                    "❌ GPS sync failed for vehicle #%s (%s) [%s]: %s",
+                    vehicle.id,
+                    vehicle.name,
+                    provider,
+                    e,
+                )
                 db.rollback()
 
         if total_new_points > 0:
@@ -111,8 +124,10 @@ def sync_gps_positions() -> None:
             # Broadcast updated positions via WebSocket
             try:
                 import asyncio
+
+                from sqlalchemy import and_, func
+
                 from app.services.websocket_manager import manager
-                from sqlalchemy import func, and_
 
                 latest_subq = (
                     db.query(
@@ -136,24 +151,34 @@ def sync_gps_positions() -> None:
 
                 positions = []
                 for p in latest_points:
-                    vehicle = db.query(Vehicle).filter(Vehicle.id == p.vehicle_id).first()
-                    positions.append({
-                        "vehicle_id": p.vehicle_id,
-                        "vehicle_name": vehicle.name if vehicle else f"Vehicle #{p.vehicle_id}",
-                        "latitude": p.latitude,
-                        "longitude": p.longitude,
-                        "speed": p.speed,
-                        "heading": p.heading,
-                        "engine_on": p.engine_on,
-                        "fuel_level": p.fuel_level,
-                        "recorded_at": p.recorded_at.isoformat() if p.recorded_at else None,
-                    })
+                    vehicle = (
+                        db.query(Vehicle).filter(Vehicle.id == p.vehicle_id).first()
+                    )
+                    positions.append(
+                        {
+                            "vehicle_id": p.vehicle_id,
+                            "vehicle_name": (
+                                vehicle.name if vehicle else f"Vehicle #{p.vehicle_id}"
+                            ),
+                            "latitude": p.latitude,
+                            "longitude": p.longitude,
+                            "speed": p.speed,
+                            "heading": p.heading,
+                            "engine_on": p.engine_on,
+                            "fuel_level": p.fuel_level,
+                            "recorded_at": (
+                                p.recorded_at.isoformat() if p.recorded_at else None
+                            ),
+                        }
+                    )
 
                 if positions:
                     loop = asyncio.new_event_loop()
                     loop.run_until_complete(manager.broadcast_positions(positions))
                     loop.close()
-                    logger.info("📡 Broadcast %d positions via WebSocket", len(positions))
+                    logger.info(
+                        "📡 Broadcast %d positions via WebSocket", len(positions)
+                    )
             except Exception as ws_err:
                 logger.warning("⚠️ WebSocket broadcast failed: %s", ws_err)
 

@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from app.services.gps_providers.base import GpsProviderAdapter, GpsPointData
+from app.services.gps_providers.base import GpsPointData, GpsProviderAdapter
 
 logger = logging.getLogger("spectech.gps.gps_trace")
 
@@ -57,7 +57,9 @@ class GpsTraceAdapter(GpsProviderAdapter):
     async def test_connection(self) -> bool:
         try:
             async with httpx.AsyncClient() as client:
-                resp = await client.get(f"{self.api_url}/api/v2/units", headers=self._headers())
+                resp = await client.get(
+                    f"{self.api_url}/api/v2/units", headers=self._headers()
+                )
                 return resp.status_code == 200
         except Exception as e:
             logger.error(f"GPS-Trace connection test failed: {e}")

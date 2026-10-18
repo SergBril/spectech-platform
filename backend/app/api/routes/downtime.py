@@ -4,12 +4,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User
-from app.models.downtime import DowntimeCause, DowntimeStatus, FaultParty
+from app.models.downtime import DowntimeStatus, FaultParty
 from app.schemas.downtime import (
     DowntimeCreate,
     DowntimeEnd,
@@ -96,17 +95,22 @@ def get_downtime_stats(
         date_to=date_to,
     )
 
-from fastapi import UploadFile, File
-from app.services import storage_service
+
+from fastapi import File, UploadFile
 from pydantic import BaseModel
+
+from app.services import storage_service
+
 
 class PhotoUploadResponse(BaseModel):
     """Ответ после загрузки фото простоя."""
+
     path: str
     url: str
     size: int
     content_type: str
     original_filename: str
+
 
 @router.post("/upload", response_model=PhotoUploadResponse, status_code=201)
 async def upload_downtime_photo(
@@ -124,9 +128,9 @@ async def upload_downtime_photo(
     if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}"
+            detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}",
         )
-    
+
     # Загружаем в MinIO
     try:
         result = storage_service.upload_file(
@@ -140,9 +144,12 @@ async def upload_downtime_photo(
         logger.error(f"Photo upload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
 
-@router.post("/upload-multiple", response_model=list[PhotoUploadResponse], status_code=201)
+
+@router.post(
+    "/upload-multiple", response_model=list[PhotoUploadResponse], status_code=201
+)
 async def upload_multiple_downtime_photos(
-    files: List[UploadFile] = File(...),
+    files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
@@ -152,13 +159,15 @@ async def upload_multiple_downtime_photos(
     """
     # Валидация типов файлов
     allowed_types = ["image/jpeg", "image/png", "image/webp"]
-    
+
     results = []
     for file in files:
         if file.content_type not in allowed_types:
-            logger.warning(f"Skipping invalid file type: {file.filename} ({file.content_type})")
+            logger.warning(
+                f"Skipping invalid file type: {file.filename} ({file.content_type})"
+            )
             continue
-        
+
         try:
             result = storage_service.upload_file(
                 file_obj=file.file,
@@ -170,13 +179,13 @@ async def upload_multiple_downtime_photos(
         except Exception as e:
             logger.error(f"Photo upload failed for {file.filename}: {e}")
             continue
-    
+
     if not results:
         raise HTTPException(
             status_code=400,
-            detail="No valid files uploaded. Check file types (allowed: jpeg, png, webp)"
+            detail="No valid files uploaded. Check file types (allowed: jpeg, png, webp)",
         )
-    
+
     return results
 
 

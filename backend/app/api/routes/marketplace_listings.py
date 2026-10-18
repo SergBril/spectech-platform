@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user
@@ -31,9 +31,12 @@ router = APIRouter(
 
 class ListingCreate(BaseModel):
     """Публикация техники на маркетплейсе."""
+
     vehicle_id: int = Field(..., description="ID техники")
     hourly_rate: Decimal | None = Field(default=None, gt=0, description="Ставка за час")
-    shift_rate: Decimal | None = Field(default=None, gt=0, description="Ставка за смену")
+    shift_rate: Decimal | None = Field(
+        default=None, gt=0, description="Ставка за смену"
+    )
     downtime_hourly_rate: Decimal | None = Field(default=None, ge=0)
     description: str | None = Field(default=None, max_length=5000)
     photos: list[str] | None = Field(default=None)
@@ -43,6 +46,7 @@ class ListingCreate(BaseModel):
 
 class ListingUpdate(BaseModel):
     """Обновление публикации."""
+
     hourly_rate: Decimal | None = Field(default=None, gt=0)
     shift_rate: Decimal | None = Field(default=None, gt=0)
     downtime_hourly_rate: Decimal | None = Field(default=None, ge=0)
@@ -55,6 +59,7 @@ class ListingUpdate(BaseModel):
 
 class ListingRead(BaseModel):
     """Публикация с полной информацией."""
+
     vehicle_id: int
     vehicle_name: str
     category_name: str | None = None
@@ -66,17 +71,18 @@ class ListingRead(BaseModel):
     photos: list[str] | None = None
     base_location_lat: float | None = None
     base_location_lon: float | None = None
-    
+
     # Статистика
     total_views: int = 0
     total_requests: int = 0
     accepted_offers: int = 0
-    
+
     model_config = {"from_attributes": True}
 
 
 class MyListingsResponse(BaseModel):
     """Список публикаций со статистикой."""
+
     items: list[ListingRead]
     total: int
     stats: dict
@@ -94,11 +100,11 @@ def publish_listing(
 ):
     """
     🔐 Опубликовать технику на маркетплейсе.
-    
+
     Требуется хотя бы одна ставка (hourly_rate или shift_rate).
     """
     from app.services.marketplace_service import marketplace_service
-    
+
     try:
         vehicle = marketplace_service.publish_vehicle(
             db=db,
@@ -112,9 +118,9 @@ def publish_listing(
             base_location_lat=data.base_location_lat,
             base_location_lon=data.base_location_lon,
         )
-        
+
         return _build_listing_response(vehicle, db)
-    
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -129,7 +135,7 @@ def get_my_listings(
 ):
     """
     🔐 Мои публикации на маркетплейсе со статистикой.
-    
+
     Возвращает все техники компании (опубликованные и неопубликованные).
     """
     stmt = (
@@ -139,29 +145,40 @@ def get_my_listings(
         .offset(offset)
         .limit(limit)
     )
-    
+
     vehicles = list(db.scalars(stmt).all())
-    
+
     # Статистика
-    total = db.query(func.count(Vehicle.id)).filter(
-        Vehicle.company_id == current_company_id,
-        Vehicle.is_deleted == False,
-    ).scalar() or 0
-    
-    published_count = db.query(func.count(Vehicle.id)).filter(
-        Vehicle.company_id == current_company_id,
-        Vehicle.is_deleted == False,
-        Vehicle.is_available_for_rent == True,
-    ).scalar() or 0
-    
+    total = (
+        db.query(func.count(Vehicle.id))
+        .filter(
+            Vehicle.company_id == current_company_id,
+            Vehicle.is_deleted == False,
+        )
+        .scalar()
+        or 0
+    )
+
+    published_count = (
+        db.query(func.count(Vehicle.id))
+        .filter(
+            Vehicle.company_id == current_company_id,
+            Vehicle.is_deleted == False,
+            Vehicle.is_available_for_rent == True,
+        )
+        .scalar()
+        or 0
+    )
+
     # Количество заявок на эту технику
     total_offers = (
         db.query(func.count(MarketplaceOffer.id))
         .join(Vehicle, MarketplaceOffer.vehicle_id == Vehicle.id)
         .filter(Vehicle.company_id == current_company_id)
-        .scalar() or 0
+        .scalar()
+        or 0
     )
-    
+
     accepted_offers = (
         db.query(func.count(MarketplaceOffer.id))
         .join(Vehicle, MarketplaceOffer.vehicle_id == Vehicle.id)
@@ -169,9 +186,10 @@ def get_my_listings(
             Vehicle.company_id == current_company_id,
             MarketplaceOffer.status == "accepted",
         )
-        .scalar() or 0
+        .scalar()
+        or 0
     )
-    
+
     return MyListingsResponse(
         items=[_build_listing_response(v, db) for v in vehicles],
         total=total,
@@ -182,7 +200,8 @@ def get_my_listings(
             "accepted_offers": accepted_offers,
             "conversion_rate": (
                 round(accepted_offers / total_offers * 100, 2)
-                if total_offers > 0 else 0
+                if total_offers > 0
+                else 0
             ),
         },
     )
@@ -200,7 +219,7 @@ def update_listing(
     🔐 Обновить публикацию (цены, описание, фото, статус).
     """
     from app.services.marketplace_service import marketplace_service
-    
+
     try:
         updates = data.model_dump(exclude_unset=True)
 
@@ -213,9 +232,9 @@ def update_listing(
             company_id=current_company_id,
             **updates,
         )
-        
+
         return _build_listing_response(vehicle, db)
-    
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -231,7 +250,7 @@ def unpublish_listing(
     🔐 Снять технику с публикации на маркетплейсе.
     """
     from app.services.marketplace_service import marketplace_service
-    
+
     try:
         marketplace_service.unpublish_vehicle(db, vehicle_id, current_company_id)
     except ValueError as e:
@@ -247,26 +266,29 @@ def _build_listing_response(vehicle: Vehicle, db: Session) -> ListingRead:
     category_name = None
     if vehicle.category:
         category_name = vehicle.category.name
-    
+
     # Статистика: количество заявок (offers) на эту технику
     from sqlalchemy import func
+
     from app.models.marketplace import MarketplaceOffer
-    
+
     total_requests = (
         db.query(func.count(MarketplaceOffer.id))
         .filter(MarketplaceOffer.vehicle_id == vehicle.id)
-        .scalar() or 0
+        .scalar()
+        or 0
     )
-    
+
     accepted_offers = (
         db.query(func.count(MarketplaceOffer.id))
         .filter(
             MarketplaceOffer.vehicle_id == vehicle.id,
             MarketplaceOffer.status == "accepted",
         )
-        .scalar() or 0
+        .scalar()
+        or 0
     )
-    
+
     # Нормализация photos
     photos = None
     if vehicle.photos:
@@ -274,7 +296,7 @@ def _build_listing_response(vehicle: Vehicle, db: Session) -> ListingRead:
             photos = [str(p) for p in vehicle.photos if p]
         elif isinstance(vehicle.photos, dict):
             photos = [str(v) for v in vehicle.photos.values() if v]
-    
+
     return ListingRead(
         vehicle_id=vehicle.id,
         vehicle_name=vehicle.name,

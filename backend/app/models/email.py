@@ -20,10 +20,10 @@ class EmailTemplateType(str, PyEnum):
     maintenance_completed = "maintenance_completed"
     welcome = "welcome"
     custom = "custom"
-    rental_completed = "rental_completed"        # Клиенту: аренда завершена + счёт
-    payout_created = "payout_created"             # Собственнику: выплата создана
-    dispute_opened = "dispute_opened"             # Диспетчеру: новый спор
-    dispute_escalated = "dispute_escalated"       # Менеджеру/CEO: эскалация
+    rental_completed = "rental_completed"  # Клиенту: аренда завершена + счёт
+    payout_created = "payout_created"  # Собственнику: выплата создана
+    dispute_opened = "dispute_opened"  # Диспетчеру: новый спор
+    dispute_escalated = "dispute_escalated"  # Менеджеру/CEO: эскалация
 
 
 class EmailTemplate(Base):

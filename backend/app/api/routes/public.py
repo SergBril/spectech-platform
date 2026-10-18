@@ -14,13 +14,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
 
 from app.core.db import get_db
-from app.models.auth import User
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
-from app.api.deps import get_current_company_id, get_current_user, get_current_user_optional
 
 logger = logging.getLogger("spectech.public")
 
@@ -122,10 +119,12 @@ def _build_vehicle_response(
 
 # === Endpoints: Компании ===
 
+
 @router.get("/health", summary="Health check")
 def health_check():
     """🌐 Проверка работоспособности."""
     return {"status": "ok", "timestamp": "2026-10-12"}
+
 
 @router.get("/companies", response_model=list[PublicCompanyRead])
 def list_public_companies(
@@ -297,6 +296,7 @@ def list_public_vehicles(
         logger.exception("❌ Error in list_public_vehicles: %s", e)
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
+
 # === Endpoints: Детальная страница техники ===
 
 
@@ -307,18 +307,20 @@ def get_public_vehicle_details(
 ):
     """
     🌐 Детальная страница техники (публичная).
-    
+
     Возвращает только опубликованную технику.
     """
     try:
         from app.services.marketplace_service import marketplace_service
-        
+
         vehicle = marketplace_service.get_vehicle_details(db, vehicle_id)
         if not vehicle:
-            raise HTTPException(status_code=404, detail="Vehicle not found or not published")
-        
+            raise HTTPException(
+                status_code=404, detail="Vehicle not found or not published"
+            )
+
         return _build_vehicle_response(vehicle)
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -328,12 +330,13 @@ def get_public_vehicle_details(
 
 class VehicleAvailabilityResponse(BaseModel):
     """Календарь доступности техники."""
+
     vehicle_id: int
     vehicle_name: str
     from_date: str
     to_date: str
     calendar: list[dict]
-    
+
     model_config = {"from_attributes": True}
 
 
@@ -355,25 +358,28 @@ def get_vehicle_availability(
 ):
     """
     🌐 Календарь доступности техники на основе Rental.
-    
+
     Возвращает список дат с флагом `available` и `rental_id` (если занята).
     """
     from datetime import date as DateType
+
     from app.services.marketplace_service import marketplace_service
-    
+
     try:
         vehicle = marketplace_service.get_vehicle_details(db, vehicle_id)
         if not vehicle:
-            raise HTTPException(status_code=404, detail="Vehicle not found or not published")
-        
+            raise HTTPException(
+                status_code=404, detail="Vehicle not found or not published"
+            )
+
         # Парсим даты
         from_dt = DateType.fromisoformat(from_date) if from_date else None
         to_dt = DateType.fromisoformat(to_date) if to_date else None
-        
+
         calendar = marketplace_service.get_availability_calendar(
             db, vehicle_id, from_dt, to_dt
         )
-        
+
         return VehicleAvailabilityResponse(
             vehicle_id=vehicle.id,
             vehicle_name=vehicle.name,
@@ -381,7 +387,7 @@ def get_vehicle_availability(
             to_date=calendar[-1]["date"] if calendar else "",
             calendar=calendar,
         )
-    
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
     except HTTPException:
@@ -396,11 +402,14 @@ def get_vehicle_availability(
 
 class PublicRequestCreate(BaseModel):
     """Схема создания заявки из публичной витрины."""
+
     work_type: str = Field(..., min_length=1, max_length=255, description="Тип работ")
     planned_start: str = Field(..., description="Начало (ISO format)")
     planned_end: str = Field(..., description="Окончание (ISO format)")
-    comment: str | None = Field(default=None, max_length=2000, description="Комментарий")
-    
+    comment: str | None = Field(
+        default=None, max_length=2000, description="Комментарий"
+    )
+
     # Контакты (для связи с заказчиком)
     contact_name: str = Field(..., min_length=1, max_length=255)
     contact_phone: str = Field(..., min_length=10, max_length=20)
@@ -409,6 +418,7 @@ class PublicRequestCreate(BaseModel):
 
 class PublicRequestResponse(BaseModel):
     """Ответ с созданной заявкой."""
+
     request_id: int
     vehicle_id: int
     vehicle_name: str
@@ -416,7 +426,7 @@ class PublicRequestResponse(BaseModel):
     planned_start: str
     planned_end: str
     message: str
-    
+
     model_config = {"from_attributes": True}
 
 
@@ -432,35 +442,38 @@ def create_request_from_listing(
 ):
     """
     🌐 Создание заявки из публичной витрины (без регистрации).
-    
+
     Отправляет уведомление собственнику техники.
-    
+
     **Примечание:** В production здесь должна быть проверка reCAPTCHA
     или регистрация через телефон/email для защиты от спама.
     """
     from datetime import datetime as dt
-    from app.services.marketplace_service import marketplace_service
+
     from app.models.contractor import Contractor
-    
+    from app.services.marketplace_service import marketplace_service
+
     try:
         # 1. Проверяем технику
         vehicle = marketplace_service.get_vehicle_details(db, vehicle_id)
         if not vehicle:
-            raise HTTPException(status_code=404, detail="Vehicle not found or not published")
-        
+            raise HTTPException(
+                status_code=404, detail="Vehicle not found or not published"
+            )
+
         # 2. Парсим даты
         try:
             planned_start = dt.fromisoformat(data.planned_start)
             planned_end = dt.fromisoformat(data.planned_end)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid datetime format: {e}")
-        
+
         if planned_start >= planned_end:
             raise HTTPException(
                 status_code=400,
                 detail="planned_end must be after planned_start",
             )
-        
+
         # 3. Создаём или находим Contractor (клиента) по контактным данным
         # В production: через регистрацию или привязку к user
         # Сейчас: создаём временного contractor для заявки
@@ -474,7 +487,7 @@ def create_request_from_listing(
         )
         db.add(client_contractor)
         db.flush()
-        
+
         # 4. Создаём заявку
         request = marketplace_service.create_request_from_listing(
             db=db,
@@ -486,12 +499,16 @@ def create_request_from_listing(
             planned_end=planned_end,
             comment=data.comment,
         )
-        
+
         return PublicRequestResponse(
             request_id=request.id,
             vehicle_id=vehicle_id,
             vehicle_name=vehicle.name,
-            status=request.status.value if hasattr(request.status, "value") else str(request.status),
+            status=(
+                request.status.value
+                if hasattr(request.status, "value")
+                else str(request.status)
+            ),
             planned_start=planned_start.isoformat(),
             planned_end=planned_end.isoformat(),
             message=(
@@ -499,7 +516,7 @@ def create_request_from_listing(
                 f"Собственник техники '{vehicle.name}' получит уведомление."
             ),
         )
-    
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
@@ -507,6 +524,7 @@ def create_request_from_listing(
     except Exception as e:
         logger.exception("❌ Error in create_request_from_listing: %s", e)
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
 
 # === Endpoints: Рейтинг и отзывы компании ===
 
@@ -526,7 +544,7 @@ def get_public_company_rating(
         # Сейчас возвращаем захардкоженные значения из PublicCompanyRead
         return {
             "average_rating": 4.5,  # Заглушка
-            "total_reviews": 10,    # Заглушка
+            "total_reviews": 10,  # Заглушка
         }
 
     except HTTPException:
@@ -555,7 +573,7 @@ def get_public_company_reviews(
                 "id": 1,
                 "rating": 5,
                 "comment": "Отличная компания! Техника в хорошем состоянии, операторы профессионалы. Доставили вовремя, всё работает как часы. Рекомендую!",
-                "reviewer_contractor_name": "ООО \"СтройМонтаж\"",
+                "reviewer_contractor_name": 'ООО "СтройМонтаж"',
                 "reviewer_name": "Иван Петров",
                 "created_at": "2026-09-15T10:30:00+00:00",
             },
@@ -571,7 +589,7 @@ def get_public_company_reviews(
                 "id": 3,
                 "rating": 5,
                 "comment": "Работаем уже второй год. Всегда есть нужная техника в наличии, гибкие условия оплаты. Менеджеры на связи 24/7.",
-                "reviewer_contractor_name": "АО \"МегаСтрой\"",
+                "reviewer_contractor_name": 'АО "МегаСтрой"',
                 "reviewer_name": "Ольга Козлова",
                 "created_at": "2026-07-10T09:45:00+00:00",
             },
@@ -628,6 +646,7 @@ def list_public_categories(db: Session = Depends(get_db)):
 
 class PublicCompanyReviewCreate(BaseModel):
     """Схема для создания отзыва о компании."""
+
     rating: int = Field(..., ge=1, le=5)
     comment: str = Field(..., min_length=10, max_length=2000)
     reviewer_name: str | None = Field(None, max_length=255)
@@ -649,20 +668,25 @@ def create_company_review(
 
     # Проверяем дубликат по reviewer_name + company_id
     existing = db.execute(
-        text("""
-            SELECT id FROM company_reviews 
-            WHERE company_id = :cid 
-              AND reviewer_name = :rname 
+        text(
+            """
+            SELECT id FROM company_reviews
+            WHERE company_id = :cid
+              AND reviewer_name = :rname
               AND is_published = true
-        """),
+        """
+        ),
         {"cid": company_id, "rname": payload.reviewer_name or "Анонимный пользователь"},
     ).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Вы уже оставляли отзыв об этой компании")
+        raise HTTPException(
+            status_code=400, detail="Вы уже оставляли отзыв об этой компании"
+        )
 
     # Создаём отзыв (используем reviewer_user_id = NULL для анонимных)
     result = db.execute(
-        text("""
+        text(
+            """
             INSERT INTO company_reviews
                 (company_id, reviewer_user_id, reviewer_name, reviewer_email,
                  rating, comment, is_verified, is_published, moderation_status,
@@ -672,7 +696,8 @@ def create_company_review(
                  :rating, :comment, false, true, 'approved',
                  NOW(), NOW())
             RETURNING id, rating, comment, created_at
-        """),
+        """
+        ),
         {
             "cid": company_id,
             "rname": payload.reviewer_name or "Анонимный пользователь",
@@ -691,6 +716,7 @@ def create_company_review(
         "message": "Отзыв успешно опубликован",
     }
 
+
 @router.get("/companies/{company_id}/marketplace-reviews")
 def get_company_reviews_public(
     company_id: int,
@@ -699,19 +725,23 @@ def get_company_reviews_public(
     db: Session = Depends(get_db),
 ):
     """🌐 Получить отзывы о компании."""
-    from sqlalchemy import text, func
+    from sqlalchemy import text
 
     company = db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Компания не найдена")
 
     avg_result = db.execute(
-        text("SELECT COALESCE(AVG(rating), 0) as avg_rating, COUNT(*) as total FROM company_reviews WHERE company_id = :cid AND is_published = true"),
+        text(
+            "SELECT COALESCE(AVG(rating), 0) as avg_rating, COUNT(*) as total FROM company_reviews WHERE company_id = :cid AND is_published = true"
+        ),
         {"cid": company_id},
     ).one()
 
     dist_result = db.execute(
-        text("SELECT rating, COUNT(*) as cnt FROM company_reviews WHERE company_id = :cid AND is_published = true GROUP BY rating"),
+        text(
+            "SELECT rating, COUNT(*) as cnt FROM company_reviews WHERE company_id = :cid AND is_published = true GROUP BY rating"
+        ),
         {"cid": company_id},
     ).all()
     distribution = {str(i): 0 for i in range(1, 6)}
@@ -719,13 +749,15 @@ def get_company_reviews_public(
         distribution[str(row.rating)] = row.cnt
 
     reviews_result = db.execute(
-        text("""
+        text(
+            """
             SELECT id, rating, comment, reviewer_name, is_verified, created_at
             FROM company_reviews
             WHERE company_id = :cid AND is_published = true
             ORDER BY created_at DESC
             LIMIT :limit OFFSET :offset
-        """),
+        """
+        ),
         {"cid": company_id, "limit": limit, "offset": offset},
     ).all()
 

@@ -1,8 +1,9 @@
 """API админ-панели платформы."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func, and_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -12,7 +13,6 @@ from app.models.catalog import Vehicle
 from app.models.company import Company
 from app.models.dispatch import Request
 from app.models.telematics import Notification
-from app.models.contractor import Contractor
 
 router = APIRouter()
 
@@ -27,18 +27,19 @@ def get_platform_stats(
     """📊 Общая статистика платформы."""
     if not getattr(current_user, "is_superuser", False):
         from fastapi import HTTPException
+
         raise HTTPException(status_code=403, detail="Admin access required")
 
     # Парсинг дат
     if date_from:
-        dt_from = datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc)
+        dt_from = datetime.fromisoformat(date_from).replace(tzinfo=UTC)
     else:
-        dt_from = datetime.now(timezone.utc) - timedelta(days=30)
+        dt_from = datetime.now(UTC) - timedelta(days=30)
 
     if date_to:
-        dt_to = datetime.fromisoformat(date_to).replace(tzinfo=timezone.utc)
+        dt_to = datetime.fromisoformat(date_to).replace(tzinfo=UTC)
     else:
-        dt_to = datetime.now(timezone.utc)
+        dt_to = datetime.now(UTC)
 
     # Общие счётчики
     total_users = db.query(func.count(User.id)).scalar() or 0
@@ -47,31 +48,43 @@ def get_platform_stats(
     total_requests = db.query(func.count(Request.id)).scalar() or 0
 
     # Новые за период
-    new_users = db.query(func.count(User.id)).filter(
-        User.created_at >= dt_from, User.created_at <= dt_to
-    ).scalar() or 0
+    new_users = (
+        db.query(func.count(User.id))
+        .filter(User.created_at >= dt_from, User.created_at <= dt_to)
+        .scalar()
+        or 0
+    )
 
-    new_companies = db.query(func.count(Company.id)).filter(
-        Company.created_at >= dt_from, Company.created_at <= dt_to
-    ).scalar() or 0
+    new_companies = (
+        db.query(func.count(Company.id))
+        .filter(Company.created_at >= dt_from, Company.created_at <= dt_to)
+        .scalar()
+        or 0
+    )
 
-    new_vehicles = db.query(func.count(Vehicle.id)).filter(
-        Vehicle.created_at >= dt_from, Vehicle.created_at <= dt_to
-    ).scalar() or 0
+    new_vehicles = (
+        db.query(func.count(Vehicle.id))
+        .filter(Vehicle.created_at >= dt_from, Vehicle.created_at <= dt_to)
+        .scalar()
+        or 0
+    )
 
-    new_requests = db.query(func.count(Request.id)).filter(
-        Request.created_at >= dt_from, Request.created_at <= dt_to
-    ).scalar() or 0
+    new_requests = (
+        db.query(func.count(Request.id))
+        .filter(Request.created_at >= dt_from, Request.created_at <= dt_to)
+        .scalar()
+        or 0
+    )
 
     # Техника по статусам
-    vehicles_by_status = db.query(
-        Vehicle.status, func.count(Vehicle.id)
-    ).group_by(Vehicle.status).all()
+    vehicles_by_status = (
+        db.query(Vehicle.status, func.count(Vehicle.id)).group_by(Vehicle.status).all()
+    )
 
     # Заявки по статусам
-    requests_by_status = db.query(
-        Request.status, func.count(Request.id)
-    ).group_by(Request.status).all()
+    requests_by_status = (
+        db.query(Request.status, func.count(Request.id)).group_by(Request.status).all()
+    )
 
     return {
         "totals": {
@@ -86,8 +99,8 @@ def get_platform_stats(
             "vehicles": new_vehicles,
             "requests": new_requests,
         },
-        "vehicles_by_status": {s: c for s, c in vehicles_by_status},
-        "requests_by_status": {s: c for s, c in requests_by_status},
+        "vehicles_by_status": dict(vehicles_by_status),
+        "requests_by_status": dict(requests_by_status),
         "period": {
             "from": dt_from.isoformat(),
             "to": dt_to.isoformat(),
@@ -104,6 +117,7 @@ def get_provider_requests(
     """📨 Запросы новых GPS-провайдеров."""
     if not getattr(current_user, "is_superuser", False):
         from fastapi import HTTPException
+
         raise HTTPException(status_code=403, detail="Admin access required")
 
     notifications = (

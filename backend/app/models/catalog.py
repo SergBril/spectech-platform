@@ -89,8 +89,10 @@ class Vehicle(Base):
         ForeignKey("contractors.id"), nullable=True
     )
     assigned_driver_id: Mapped[int | None] = mapped_column(
-        ForeignKey("employees.contractor_id"), nullable=True, index=True,
-        comment="Текущий водитель (FK к employees.contractor_id)"
+        ForeignKey("employees.contractor_id"),
+        nullable=True,
+        index=True,
+        comment="Текущий водитель (FK к employees.contractor_id)",
     )
     company_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     psm_number: Mapped[str | None] = mapped_column(String(100), nullable=True)

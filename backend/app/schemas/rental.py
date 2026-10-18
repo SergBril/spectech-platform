@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 
 from app.models.rental import PrepaymentStatus, RateType, RentalStatus
 
-
 # ============================================================
 # RentalItem (позиция аренды)
 # ============================================================
@@ -15,6 +14,7 @@ from app.models.rental import PrepaymentStatus, RateType, RentalStatus
 
 class RentalItemCreate(BaseModel):
     """Позиция при создании аренды."""
+
     vehicle_id: int
     quantity: int = Field(default=1, ge=1, le=100)
     unit_price: Decimal = Field(..., ge=0, decimal_places=2)
@@ -22,6 +22,7 @@ class RentalItemCreate(BaseModel):
 
 class RentalItemAdd(BaseModel):
     """Добавление позиции в существующую аренду."""
+
     vehicle_id: int
     quantity: int = Field(default=1, ge=1, le=100)
     unit_price: Decimal = Field(..., ge=0, decimal_places=2)
@@ -29,6 +30,7 @@ class RentalItemAdd(BaseModel):
 
 class RentalItemRead(BaseModel):
     """Позиция в ответе."""
+
     id: int
     rental_id: int
     vehicle_id: int
@@ -44,6 +46,7 @@ class RentalItemRead(BaseModel):
 
 class RentalItemActual(BaseModel):
     """Фактические данные по позиции при закрытии аренды."""
+
     rental_item_id: int
     actual_moto_hours: Decimal | None = Field(default=None, ge=0, decimal_places=2)
     actual_mileage: Decimal | None = Field(default=None, ge=0, decimal_places=2)
@@ -58,6 +61,7 @@ class RentalItemActual(BaseModel):
 
 class RentalCreate(BaseModel):
     """Создание договора аренды."""
+
     client_id: int
     request_id: int | None = None
     start_date: datetime
@@ -80,6 +84,7 @@ class RentalCreate(BaseModel):
 
 class RentalUpdate(BaseModel):
     """Обновление аренды (только в DRAFT)."""
+
     start_date: datetime | None = None
     end_date: datetime | None = None
     discount: Decimal | None = Field(default=None, ge=0, decimal_places=2)
@@ -90,12 +95,14 @@ class RentalUpdate(BaseModel):
 
 class RentalClose(BaseModel):
     """Закрытие аренды с фактическими данными."""
+
     actual_return_date: datetime | None = None
     items_actuals: list[RentalItemActual] | None = None
 
 
 class RentalRead(BaseModel):
     """Чтение договора аренды."""
+
     id: int
     client_id: int
     request_id: int | None = None

@@ -5,8 +5,8 @@ from datetime import datetime
 
 from app.core.celery_app import celery_app
 from app.core.db import SessionLocal
-from app.services import dispute_service
 from app.models.dispute import Dispute, DisputeStatus
+from app.services import dispute_service
 
 logger = logging.getLogger("spectech.tasks.disputes")
 
@@ -139,11 +139,13 @@ def check_sla_breaches():
         breached_disputes = (
             db.query(Dispute)
             .filter(
-                Dispute.status.in_([
-                    DisputeStatus.dispatcher_review,
-                    DisputeStatus.escalated_to_manager,
-                    DisputeStatus.escalated_to_ceo,
-                ]),
+                Dispute.status.in_(
+                    [
+                        DisputeStatus.dispatcher_review,
+                        DisputeStatus.escalated_to_manager,
+                        DisputeStatus.escalated_to_ceo,
+                    ]
+                ),
                 Dispute.sla_deadline < now,
                 Dispute.sla_breached == False,
             )
@@ -197,6 +199,7 @@ def generate_dispute_metrics():
         dict: Метрики по спорам
     """
     from datetime import timedelta
+
     from sqlalchemy import func
 
     db = SessionLocal()
@@ -204,7 +207,7 @@ def generate_dispute_metrics():
         now = datetime.utcnow()
         thirty_days_ago = now - timedelta(days=30)
 
-        logger.info(f"Generating dispute metrics for last 30 days")
+        logger.info("Generating dispute metrics for last 30 days")
 
         # Общее количество споров за последние 30 дней
         total_disputes = (
@@ -259,11 +262,13 @@ def generate_dispute_metrics():
         active_disputes = (
             db.query(func.count(Dispute.id))
             .filter(
-                Dispute.status.in_([
-                    DisputeStatus.dispatcher_review,
-                    DisputeStatus.escalated_to_manager,
-                    DisputeStatus.escalated_to_ceo,
-                ])
+                Dispute.status.in_(
+                    [
+                        DisputeStatus.dispatcher_review,
+                        DisputeStatus.escalated_to_manager,
+                        DisputeStatus.escalated_to_ceo,
+                    ]
+                )
             )
             .scalar()
         )
@@ -280,10 +285,12 @@ def generate_dispute_metrics():
                 round(avg_resolution_time, 2) if avg_resolution_time else 0
             ),
             "disputes_by_type": {
-                dtype.value: count for dtype, count in disputes_by_type  # ✅ enum.value = "hours"
+                dtype.value: count
+                for dtype, count in disputes_by_type  # ✅ enum.value = "hours"
             },
             "disputes_by_status": {
-                status.value: count for status, count in disputes_by_status  # ✅ enum.value = "resolved"
+                status.value: count
+                for status, count in disputes_by_status  # ✅ enum.value = "resolved"
             },
             "active_disputes": active_disputes,
             "generated_at": now.isoformat(),

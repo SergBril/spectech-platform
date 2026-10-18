@@ -7,13 +7,12 @@ Notification Dispatcher — координатор всех каналов ув�
 
 import asyncio
 import logging
-from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.services.email_service import email_service
-from app.services.telegram_service import telegram_service
 from app.services.notification_service import create_notification
+from app.services.telegram_service import telegram_service
 
 logger = logging.getLogger("spectech.notifications")
 
@@ -25,7 +24,7 @@ class NotificationDispatcher:
     def _run_async(coro):
         """Запускает async функцию из sync контекста."""
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # Если уже в event loop — создаём задачу
             return asyncio.create_task(coro)
         except RuntimeError:
@@ -43,14 +42,14 @@ class NotificationDispatcher:
     ) -> dict[str, bool]:
         """
         Уведомление клиенту о завершении аренды.
-        
+
         Channels:
         - 📧 Email: счёт + детали аренды
         - 🤖 Telegram: короткое уведомление
         - 💬 In-app: если есть user_id
         """
         results = {"email": False, "telegram": False, "in_app": False}
-        
+
         try:
             # Email
             results["email"] = email_service.send_rental_completed(
@@ -58,7 +57,7 @@ class NotificationDispatcher:
             )
         except Exception as e:
             logger.error(f"Failed to send rental_completed email: {e}")
-        
+
         try:
             # Telegram
             results["telegram"] = await telegram_service.send_alert(
@@ -72,7 +71,7 @@ class NotificationDispatcher:
             )
         except Exception as e:
             logger.error(f"Failed to send rental_completed telegram: {e}")
-        
+
         try:
             # In-app
             if client_user_id:
@@ -86,7 +85,7 @@ class NotificationDispatcher:
                 results["in_app"] = True
         except Exception as e:
             logger.error(f"Failed to create in-app notification: {e}")
-        
+
         return results
 
     @staticmethod
@@ -99,14 +98,14 @@ class NotificationDispatcher:
     ) -> dict[str, bool]:
         """Уведомление собственнику о созданной выплате."""
         results = {"email": False, "telegram": False, "in_app": False}
-        
+
         try:
             results["email"] = email_service.send_payout_created(
                 payout, owner_email, owner_name
             )
         except Exception as e:
             logger.error(f"Failed to send payout_created email: {e}")
-        
+
         try:
             results["telegram"] = await telegram_service.send_alert(
                 title=f"💰 Выплата {payout.document_number}",
@@ -119,7 +118,7 @@ class NotificationDispatcher:
             )
         except Exception as e:
             logger.error(f"Failed to send payout_created telegram: {e}")
-        
+
         try:
             if owner_user_id:
                 await create_notification(
@@ -132,7 +131,7 @@ class NotificationDispatcher:
                 results["in_app"] = True
         except Exception as e:
             logger.error(f"Failed to create in-app notification: {e}")
-        
+
         return results
 
     @staticmethod
@@ -145,14 +144,14 @@ class NotificationDispatcher:
     ) -> dict[str, bool]:
         """Уведомление диспетчеру о новом споре."""
         results = {"email": False, "telegram": False, "in_app": False}
-        
+
         try:
             results["email"] = email_service.send_dispute_opened(
                 dispute, dispatcher_email, dispatcher_name
             )
         except Exception as e:
             logger.error(f"Failed to send dispute_opened email: {e}")
-        
+
         try:
             results["telegram"] = await telegram_service.send_dispute_alert(
                 dispute_id=dispute.id,
@@ -161,7 +160,7 @@ class NotificationDispatcher:
             )
         except Exception as e:
             logger.error(f"Failed to send dispute_opened telegram: {e}")
-        
+
         try:
             if dispatcher_user_id:
                 await create_notification(
@@ -174,7 +173,7 @@ class NotificationDispatcher:
                 results["in_app"] = True
         except Exception as e:
             logger.error(f"Failed to create in-app notification: {e}")
-        
+
         return results
 
     @staticmethod
@@ -189,14 +188,14 @@ class NotificationDispatcher:
     ) -> dict[str, bool]:
         """Уведомление менеджеру/CEO об эскалации."""
         results = {"email": False, "telegram": False, "in_app": False}
-        
+
         try:
             results["email"] = email_service.send_dispute_escalated(
                 dispute, manager_email, manager_name, from_role, to_role
             )
         except Exception as e:
             logger.error(f"Failed to send dispute_escalated email: {e}")
-        
+
         try:
             results["telegram"] = await telegram_service.send_escalation_alert(
                 dispute_id=dispute.id,
@@ -205,7 +204,7 @@ class NotificationDispatcher:
             )
         except Exception as e:
             logger.error(f"Failed to send dispute_escalated telegram: {e}")
-        
+
         try:
             if manager_user_id:
                 await create_notification(
@@ -218,7 +217,7 @@ class NotificationDispatcher:
                 results["in_app"] = True
         except Exception as e:
             logger.error(f"Failed to create in-app notification: {e}")
-        
+
         return results
 
 

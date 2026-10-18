@@ -106,6 +106,7 @@ class ConnectionManager:
     async def broadcast_positions(self, positions: list[dict], company_id: int = 0):
         """Broadcast GPS positions to all connected users of a company."""
         import json
+
         message = json.dumps({"type": "gps_positions", "positions": positions})
         disconnected = []
         for uid, ws in self.user_connections.items():

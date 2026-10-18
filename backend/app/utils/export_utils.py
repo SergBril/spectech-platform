@@ -1,25 +1,35 @@
 """Утилиты экспорта заявок в PDF и Excel."""
+
 import io
 from datetime import datetime
 from typing import Any
 
 from fpdf import FPDF
 from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 FONT_REGULAR = "app/services/fonts/DejaVuSans.ttf"
 FONT_BOLD = "app/services/fonts/DejaVuSans-Bold.ttf"
 
 STATUS_LABELS = {
-    "new": "Новая", "processing": "В обработке", "assigned": "Назначена",
-    "confirmed": "Подтверждена", "released": "Выпущена", "in_progress": "В работе",
-    "completed": "Завершена", "signed": "Подписана", "closed": "Закрыта",
-    "cancelled": "Отменена", "disputed": "Спорная",
+    "new": "Новая",
+    "processing": "В обработке",
+    "assigned": "Назначена",
+    "confirmed": "Подтверждена",
+    "released": "Выпущена",
+    "in_progress": "В работе",
+    "completed": "Завершена",
+    "signed": "Подписана",
+    "closed": "Закрыта",
+    "cancelled": "Отменена",
+    "disputed": "Спорная",
 }
 
 PRIORITY_LABELS = {
-    "low": "Низкий", "normal": "Обычный", "high": "Высокий", "urgent": "Срочный",
+    "low": "Низкий",
+    "normal": "Обычный",
+    "high": "Высокий",
+    "urgent": "Срочный",
 }
 
 COLUMNS = [
@@ -56,9 +66,20 @@ def _prepare_rows(requests: list[Any]) -> list[dict]:
     for r in requests:
         data = r if isinstance(r, dict) else {}
         if not isinstance(r, dict):
-            for attr in ["id", "work_type", "object_address", "planned_start",
-                         "planned_end", "status", "priority", "estimated_amount",
-                         "final_amount", "vehicle_category_name", "assigned_vehicle_name", "client_name"]:
+            for attr in [
+                "id",
+                "work_type",
+                "object_address",
+                "planned_start",
+                "planned_end",
+                "status",
+                "priority",
+                "estimated_amount",
+                "final_amount",
+                "vehicle_category_name",
+                "assigned_vehicle_name",
+                "client_name",
+            ]:
                 data[attr] = getattr(r, attr, None)
 
         ps = data.get("planned_start")
@@ -76,18 +97,22 @@ def _prepare_rows(requests: list[Any]) -> list[dict]:
         priority = data.get("priority", "")
         amount = data.get("estimated_amount") or data.get("final_amount")
 
-        rows.append({
-            "id": str(data.get("id", "")),
-            "work_type": str(data.get("work_type", "") or "-"),
-            "object_address": str(data.get("object_address", "") or "-"),
-            "period": period,
-            "vehicle_category_name": str(data.get("vehicle_category_name", "") or "-"),
-            "vehicle_name": str(data.get("assigned_vehicle_name", "") or "-"),
-            "client_name": str(data.get("client_name", "") or "-"),
-            "status_label": STATUS_LABELS.get(status, str(status)),
-            "priority_label": PRIORITY_LABELS.get(priority, str(priority)),
-            "amount": "{:,.0f} RUB".format(float(amount)) if amount else "-",
-        })
+        rows.append(
+            {
+                "id": str(data.get("id", "")),
+                "work_type": str(data.get("work_type", "") or "-"),
+                "object_address": str(data.get("object_address", "") or "-"),
+                "period": period,
+                "vehicle_category_name": str(
+                    data.get("vehicle_category_name", "") or "-"
+                ),
+                "vehicle_name": str(data.get("assigned_vehicle_name", "") or "-"),
+                "client_name": str(data.get("client_name", "") or "-"),
+                "status_label": STATUS_LABELS.get(status, str(status)),
+                "priority_label": PRIORITY_LABELS.get(priority, str(priority)),
+                "amount": f"{float(amount):,.0f} RUB" if amount else "-",
+            }
+        )
     return rows
 
 
@@ -102,7 +127,9 @@ def export_requests_pdf(requests: list[Any], title: str = "Заявки") -> byt
     pdf.set_font("DejaVu", "B", 14)
     pdf.cell(0, 10, title, ln=True, align="C")
     pdf.set_font("DejaVu", "", 8)
-    pdf.cell(0, 6, "Data: " + datetime.now().strftime("%d.%m.%Y %H:%M"), ln=True, align="C")
+    pdf.cell(
+        0, 6, "Data: " + datetime.now().strftime("%d.%m.%Y %H:%M"), ln=True, align="C"
+    )
     pdf.ln(3)
 
     # Header
@@ -135,17 +162,23 @@ def export_requests_excel(requests: list[Any], title: str = "Заявки") -> b
     ws.title = title[:31]
 
     header_font = Font(bold=True, size=10)
-    header_fill = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
+    header_fill = PatternFill(
+        start_color="E0E0E0", end_color="E0E0E0", fill_type="solid"
+    )
     thin_border = Border(
-        left=Side(style="thin"), right=Side(style="thin"),
-        top=Side(style="thin"), bottom=Side(style="thin"),
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin"),
     )
 
     # Title (only first cell, no merge to avoid duplication)
     title_cell = ws.cell(row=1, column=1, value=title)
     title_cell.font = Font(bold=True, size=14)
 
-    ws.cell(row=2, column=1, value="Data: " + datetime.now().strftime("%d.%m.%Y %H:%M")).font = Font(size=9)
+    ws.cell(
+        row=2, column=1, value="Data: " + datetime.now().strftime("%d.%m.%Y %H:%M")
+    ).font = Font(size=9)
 
     # Headers at row 4
     for col_idx, (label, _, _) in enumerate(COLUMNS, 1):
@@ -164,6 +197,7 @@ def export_requests_excel(requests: list[Any], title: str = "Заявки") -> b
 
     # Column widths
     from openpyxl.utils import get_column_letter
+
     for col_idx, (_, _, width) in enumerate(COLUMNS, 1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width / 2.0
 

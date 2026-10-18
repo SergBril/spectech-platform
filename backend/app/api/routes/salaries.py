@@ -1,6 +1,5 @@
 """API для управления зарплатами сотрудников."""
 
-import asyncio
 import logging
 from datetime import date
 
@@ -24,7 +23,10 @@ router = APIRouter()
 def calculate_salaries(
     date_from: date = Query(..., description="Начало периода"),
     date_to: date = Query(..., description="Конец периода"),
-    employee_id: int | None = Query(default=None, description="ID сотрудника (contractor_id). Если не указан — расчёт для всех"),
+    employee_id: int | None = Query(
+        default=None,
+        description="ID сотрудника (contractor_id). Если не указан — расчёт для всех",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
@@ -32,6 +34,7 @@ def calculate_salaries(
     """💰 Рассчитать зарплаты за период."""
     if employee_id:
         from app.models.contractor import Employee
+
         emp = db.get(Employee, employee_id)
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
@@ -86,37 +89,62 @@ def get_salary_summary(
     """📊 Сводка по зарплатам за период."""
     from sqlalchemy import func
 
-    total_gross = db.query(func.coalesce(func.sum(SalaryRecord.gross_amount), 0)).filter(
-        SalaryRecord.company_id == company_id,
-        SalaryRecord.period_start >= date_from,
-        SalaryRecord.period_end <= date_to,
-    ).scalar() or 0
+    total_gross = (
+        db.query(func.coalesce(func.sum(SalaryRecord.gross_amount), 0))
+        .filter(
+            SalaryRecord.company_id == company_id,
+            SalaryRecord.period_start >= date_from,
+            SalaryRecord.period_end <= date_to,
+        )
+        .scalar()
+        or 0
+    )
 
-    total_net = db.query(func.coalesce(func.sum(SalaryRecord.net_amount), 0)).filter(
-        SalaryRecord.company_id == company_id,
-        SalaryRecord.period_start >= date_from,
-        SalaryRecord.period_end <= date_to,
-    ).scalar() or 0
+    total_net = (
+        db.query(func.coalesce(func.sum(SalaryRecord.net_amount), 0))
+        .filter(
+            SalaryRecord.company_id == company_id,
+            SalaryRecord.period_start >= date_from,
+            SalaryRecord.period_end <= date_to,
+        )
+        .scalar()
+        or 0
+    )
 
-    count = db.query(func.count(SalaryRecord.id)).filter(
-        SalaryRecord.company_id == company_id,
-        SalaryRecord.period_start >= date_from,
-        SalaryRecord.period_end <= date_to,
-    ).scalar() or 0
+    count = (
+        db.query(func.count(SalaryRecord.id))
+        .filter(
+            SalaryRecord.company_id == company_id,
+            SalaryRecord.period_start >= date_from,
+            SalaryRecord.period_end <= date_to,
+        )
+        .scalar()
+        or 0
+    )
 
-    approved = db.query(func.count(SalaryRecord.id)).filter(
-        SalaryRecord.company_id == company_id,
-        SalaryRecord.period_start >= date_from,
-        SalaryRecord.period_end <= date_to,
-        SalaryRecord.status == SalaryStatus.approved.value,
-    ).scalar() or 0
+    approved = (
+        db.query(func.count(SalaryRecord.id))
+        .filter(
+            SalaryRecord.company_id == company_id,
+            SalaryRecord.period_start >= date_from,
+            SalaryRecord.period_end <= date_to,
+            SalaryRecord.status == SalaryStatus.approved.value,
+        )
+        .scalar()
+        or 0
+    )
 
-    paid = db.query(func.count(SalaryRecord.id)).filter(
-        SalaryRecord.company_id == company_id,
-        SalaryRecord.period_start >= date_from,
-        SalaryRecord.period_end <= date_to,
-        SalaryRecord.status == SalaryStatus.paid.value,
-    ).scalar() or 0
+    paid = (
+        db.query(func.count(SalaryRecord.id))
+        .filter(
+            SalaryRecord.company_id == company_id,
+            SalaryRecord.period_start >= date_from,
+            SalaryRecord.period_end <= date_to,
+            SalaryRecord.status == SalaryStatus.paid.value,
+        )
+        .scalar()
+        or 0
+    )
 
     return {
         "period_start": date_from.isoformat(),
@@ -133,14 +161,20 @@ def get_salary_summary(
 def export_salary_pdf(
     date_from: date = Query(...),
     date_to: date = Query(...),
-    record_id: int | None = Query(default=None, description="ID конкретной записи. Если не указан — общая ведомость"),
+    record_id: int | None = Query(
+        default=None,
+        description="ID конкретной записи. Если не указан — общая ведомость",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
     """📄 Скачать PDF расчётный листок или ведомость."""
-    from app.services.salary_pdf import generate_salary_payslip, generate_salary_register_pdf
     from app.models.contractor import Contractor
+    from app.services.salary_pdf import (
+        generate_salary_payslip,
+        generate_salary_register_pdf,
+    )
 
     if record_id:
         record = db.get(SalaryRecord, record_id)
@@ -153,23 +187,33 @@ def export_salary_pdf(
         pdf_bytes = generate_salary_payslip(record, employee_name)
         filename = f"payslip_{record.employee_contractor_id}_{record.period_start}.pdf"
     else:
-        stmt = select(SalaryRecord).where(
-            SalaryRecord.company_id == company_id,
-            SalaryRecord.period_start >= date_from,
-            SalaryRecord.period_end <= date_to,
-        ).order_by(SalaryRecord.employee_contractor_id)
+        stmt = (
+            select(SalaryRecord)
+            .where(
+                SalaryRecord.company_id == company_id,
+                SalaryRecord.period_start >= date_from,
+                SalaryRecord.period_end <= date_to,
+            )
+            .order_by(SalaryRecord.employee_contractor_id)
+        )
         records = db.scalars(stmt).all()
 
         if not records:
-            raise HTTPException(status_code=404, detail="No salary records found for this period")
+            raise HTTPException(
+                status_code=404, detail="No salary records found for this period"
+            )
 
         # Получаем имена сотрудников
-        contractor_ids = list(set(r.employee_contractor_id for r in records))
-        contractors = db.query(Contractor).filter(Contractor.id.in_(contractor_ids)).all()
-        names_map = {c.id: c.name for c in contractors}
+        contractor_ids = list({r.employee_contractor_id for r in records})
+        contractors = (
+            db.query(Contractor).filter(Contractor.id.in_(contractor_ids)).all()
+        )
+        {c.id: c.name for c in contractors}
 
         # Подставляем имена в записи для PDF
-        pdf_bytes = generate_salary_register_pdf(records, company_name=f"Company #{company_id}")
+        pdf_bytes = generate_salary_register_pdf(
+            records, company_name=f"Company #{company_id}"
+        )
         filename = f"salary_register_{date_from}_{date_to}.pdf"
 
     return Response(
@@ -188,21 +232,27 @@ def export_salary_excel(
     company_id: int = Depends(get_current_company_id),
 ):
     """📊 Скачать Excel файл с зарплатами за период."""
-    from app.services.salary_export import export_salaries_to_excel
     from app.models.contractor import Contractor
+    from app.services.salary_export import export_salaries_to_excel
 
-    stmt = select(SalaryRecord).where(
-        SalaryRecord.company_id == company_id,
-        SalaryRecord.period_start >= date_from,
-        SalaryRecord.period_end <= date_to,
-    ).order_by(SalaryRecord.employee_contractor_id)
+    stmt = (
+        select(SalaryRecord)
+        .where(
+            SalaryRecord.company_id == company_id,
+            SalaryRecord.period_start >= date_from,
+            SalaryRecord.period_end <= date_to,
+        )
+        .order_by(SalaryRecord.employee_contractor_id)
+    )
     records = db.scalars(stmt).all()
 
     if not records:
-        raise HTTPException(status_code=404, detail="No salary records found for this period")
+        raise HTTPException(
+            status_code=404, detail="No salary records found for this period"
+        )
 
     # Получаем имена сотрудников
-    contractor_ids = list(set(r.employee_contractor_id for r in records))
+    contractor_ids = list({r.employee_contractor_id for r in records})
     contractors = db.query(Contractor).filter(Contractor.id.in_(contractor_ids)).all()
     names_map = {c.id: c.name for c in contractors}
 
@@ -229,13 +279,18 @@ async def approve_salary_record(
 
         # === Multi-channel уведомление ===
         try:
-            from app.services.salary_notification_dispatcher import salary_notification_dispatcher
+            from app.services.salary_notification_dispatcher import (
+                salary_notification_dispatcher,
+            )
+
             approver_name = current_user.email if current_user else ""
             await salary_notification_dispatcher.notify_employee(
                 db, record, approver_name
             )
         except Exception as notif_err:
-            logger.warning("⚠️ Salary notification failed for record #%s: %s", record_id, notif_err)
+            logger.warning(
+                "⚠️ Salary notification failed for record #%s: %s", record_id, notif_err
+            )
 
         return _serialize_record(record)
     except ValueError as e:

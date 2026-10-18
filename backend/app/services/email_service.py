@@ -60,6 +60,7 @@ class EmailService:
 
         # RFC 2231 encoding для имён файлов
         from email.header import Header
+
         encoded_filename = str(Header(filename, "utf-8"))
         part.add_header(
             "Content-Disposition",
@@ -154,24 +155,28 @@ class EmailService:
                     elif isinstance(att, Path) and att.exists():
                         # Path объект — читаем в dict
                         with open(att, "rb") as f:
-                            normalized_attachments.append({
-                                "filename": att.name,
-                                "content": f.read(),
-                            })
+                            normalized_attachments.append(
+                                {
+                                    "filename": att.name,
+                                    "content": f.read(),
+                                }
+                            )
                     elif isinstance(att, str) and Path(att).exists():
                         # Строковый путь — читаем в dict
                         p = Path(att)
                         with open(p, "rb") as f:
-                            normalized_attachments.append({
-                                "filename": p.name,
-                                "content": f.read(),
-                            })
+                            normalized_attachments.append(
+                                {
+                                    "filename": p.name,
+                                    "content": f.read(),
+                                }
+                            )
                     else:
                         logger.warning(f"⚠️ Skipping invalid attachment: {type(att)}")
 
             # Создаём MIME-сообщение с правильными заголовками для Mail.ru
-            from email.utils import formataddr
             from email.header import Header
+            from email.utils import formataddr
 
             msg = MIMEMultipart("mixed")
 
@@ -200,7 +205,9 @@ class EmailService:
             # Вложения
             for att in normalized_attachments:
                 self._attach_file(msg, att["filename"], att["content"])
-                logger.debug(f"📎 Attached: {att['filename']} ({len(att['content'])} bytes)")
+                logger.debug(
+                    f"📎 Attached: {att['filename']} ({len(att['content'])} bytes)"
+                )
 
             # === Выбор SMTP-соединения ===
             port = settings.SMTP_PORT
@@ -293,7 +300,9 @@ class EmailService:
                     import tempfile
 
                     temp_file = tempfile.NamedTemporaryFile(
-                        delete=False, suffix=".pdf", prefix=f"{invoice.document_number}_"
+                        delete=False,
+                        suffix=".pdf",
+                        prefix=f"{invoice.document_number}_",
                     )
                     temp_file.write(pdf_bytes)
                     temp_file.close()
@@ -459,9 +468,7 @@ class EmailService:
             },
         )
 
-    def send_payout_created(
-        self, payout, owner_email: str, owner_name: str
-    ) -> bool:
+    def send_payout_created(self, payout, owner_email: str, owner_name: str) -> bool:
         """Уведомление собственнику о созданной выплате."""
         subject = f"💰 Выплата {payout.document_number} на {payout.net_amount} ₽"
         return self.send_email(
@@ -475,14 +482,12 @@ class EmailService:
             },
         )
 
-    def send_payout_approved(
-        self, payout, owner_email: str, owner_name: str
-    ) -> bool:
+    def send_payout_approved(self, payout, owner_email: str, owner_name: str) -> bool:
         """Уведомление собственнику об одобренной выплате с PDF-вложением."""
-        from app.services.pdf_service import generate_payout_pdf
+        from app.core.db import SessionLocal
         from app.models.catalog import Vehicle
         from app.models.contractor import Contractor
-        from app.core.db import SessionLocal
+        from app.services.pdf_service import generate_payout_pdf
 
         subject = f"Vyplata {payout.document_number} odobrena - {payout.net_amount} RUB"
 
@@ -508,11 +513,15 @@ class EmailService:
                         "filename": f"{payout.document_number}.pdf",
                         "content": pdf_result,
                     }
-                    logger.info(f"📎 PDF attached from memory ({len(pdf_result)} bytes)")
+                    logger.info(
+                        f"📎 PDF attached from memory ({len(pdf_result)} bytes)"
+                    )
                 else:
-                    logger.warning(f"⚠️ PDF too small or empty ({len(pdf_result)} bytes), sending WITHOUT attachment")
+                    logger.warning(
+                        f"⚠️ PDF too small or empty ({len(pdf_result)} bytes), sending WITHOUT attachment"
+                    )
 
-            elif isinstance(pdf_result, (str, Path)):
+            elif isinstance(pdf_result, str | Path):
                 pdf_path = Path(pdf_result)
                 if pdf_path.exists() and pdf_path.stat().st_size > 100:
                     with open(pdf_path, "rb") as f:
@@ -522,14 +531,18 @@ class EmailService:
                         "content": pdf_content,
                     }
                     temp_path_to_cleanup = pdf_path
-                    logger.info(f"📎 PDF attached from file: {pdf_path.name} ({len(pdf_content)} bytes)")
+                    logger.info(
+                        f"📎 PDF attached from file: {pdf_path.name} ({len(pdf_content)} bytes)"
+                    )
                 else:
                     logger.warning(f"⚠️ PDF file missing or empty: {pdf_path}")
             else:
                 logger.warning(f"⚠️ Unexpected PDF result type: {type(pdf_result)}")
 
         except Exception as e:
-            logger.warning(f"⚠️ Could not generate payout PDF for email: {e}", exc_info=True)
+            logger.warning(
+                f"⚠️ Could not generate payout PDF for email: {e}", exc_info=True
+            )
 
         if temp_path_to_cleanup and temp_path_to_cleanup.exists():
             try:
@@ -568,8 +581,13 @@ class EmailService:
         )
 
     def send_dispute_escalated(
-        self, dispute, manager_email: str, manager_name: str,
-        from_role: str, to_role: str, reason: str = "SLA breach"
+        self,
+        dispute,
+        manager_email: str,
+        manager_name: str,
+        from_role: str,
+        to_role: str,
+        reason: str = "SLA breach",
     ) -> bool:
         """Уведомление менеджеру/CEO об эскалации спора."""
         subject = f"🚨 ЭСКАЛАЦИЯ: спор #{dispute.id} требует внимания"

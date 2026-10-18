@@ -46,6 +46,7 @@ async def create_notification(
     # Отправляем через WebSocket в реальном времени всем пользователям компании
     # Определяем company_id пользователя
     from app.models.auth import User as UserModel
+
     user_obj = db.query(UserModel).filter(UserModel.id == user_id).first()
     if user_obj and user_obj.company_id:
         await manager.broadcast_to_company(
