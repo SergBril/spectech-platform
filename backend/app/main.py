@@ -1,24 +1,28 @@
 """Главный файл приложения FastAPI."""
 
 from dotenv import load_dotenv
+
 load_dotenv()  # Загружает backend/.env
 import logging
 from contextlib import asynccontextmanager
-from app.tasks.scheduler import start_scheduler, stop_scheduler
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import (
     SQLAlchemyError,
 )
 
 from app.api.routes import (
     acts,
+    admin,
     analytics,
     auth,
+    bank_statements,
     benchmark,
     catalog,
     categories,
@@ -26,12 +30,17 @@ from app.api.routes import (
     companies,
     contractors,
     debug,
+    disputes,
+    downtime,
+    driver,
+    drivers,
     email,
     email_bulk,
     email_templates,
     export,
     files,
     finance,
+    gps,
     invoices,
     maintenance,
     marketplace,
@@ -41,7 +50,9 @@ from app.api.routes import (
     payouts,
     public,  # 🆕 Маркетплейс
     rbac,
+    rentals,
     requests,
+    salaries,
     secure_test,
     shifts,
     signature,
@@ -50,21 +61,11 @@ from app.api.routes import (
     tax,
     telematics,
     vehicles,
-    downtime,
-    rentals,
-    bank_statements,
-    salaries,
+)
+from app.api.routes import (
     map as map_routes,
-    reviews,
-    driver,
-    admin,
-    gps,
-
-    drivers,)
-from fastapi.staticfiles import StaticFiles
-from pathlib import Path
+)
 from app.api.routes import websocket as ws_routes
-from app.api.routes import disputes
 from app.core.config import settings
 from app.core.exception_handlers import (
     general_exception_handler,
@@ -77,6 +78,7 @@ from app.core.middleware import RequestLoggingMiddleware
 from app.core.sentry_config import init_sentry
 from app.models import *  # noqa: F401, F403
 from app.services import storage_service
+from app.tasks.scheduler import start_scheduler, stop_scheduler
 
 # Настройка логирования
 setup_logging("INFO")
@@ -100,9 +102,30 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Останавливаем планировщик
+    # Graceful shutdown sequence
+    logger.info("🔄 Shutting down scheduler...")
     stop_scheduler()
-    logger.info("👋 SpectechPlatform shutting down...")
+
+    # Close DB connections
+    try:
+        from app.core.db import engine
+
+        engine.dispose()
+        logger.info("✅ Database connections closed")
+    except Exception as e:
+        logger.warning(f"⚠️ DB cleanup error: {e}")
+
+    # Close Redis
+    try:
+        from app.core.redis import redis_client
+
+        if redis_client:
+            redis_client.close()
+            logger.info("✅ Redis connection closed")
+    except Exception:
+        pass
+
+    logger.info("👋 SpectechPlatform shut down gracefully")
 
 
 # 1. Создание приложения
@@ -194,7 +217,9 @@ app.include_router(categories.router, prefix="/api/v1/categories", tags=["catalo
 app.include_router(
     vehicles.router, prefix="/api/v1", tags=["🚜 Vehicles (Спецтехника)"]
 )
-app.include_router(drivers.router, prefix="/api/v1/drivers", tags=["👷 Drivers (Водители)"])
+app.include_router(
+    drivers.router, prefix="/api/v1/drivers", tags=["👷 Drivers (Водители)"]
+)
 app.include_router(requests.router, prefix="/api/v1/requests", tags=["dispatch"])
 app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["dispatch"])
 app.include_router(
@@ -244,11 +269,19 @@ app.include_router(
     prefix="/api/v1/banking",
     tags=["💳 Banking (Банковские выписки)"],
 )
-app.include_router(salaries.router, prefix="/api/v1/salaries", tags=["💰 Salaries (Зарплаты)"])
-app.include_router(map_routes.router, prefix="/api/v1/map", tags=["🗺️ Map (Карта техники)"])
+app.include_router(
+    salaries.router, prefix="/api/v1/salaries", tags=["💰 Salaries (Зарплаты)"]
+)
+app.include_router(
+    map_routes.router, prefix="/api/v1/map", tags=["🗺️ Map (Карта техники)"]
+)
 app.include_router(gps.router, prefix="/api/v1/gps", tags=["📡 GPS"])
-app.include_router(driver.router, prefix="/api/v1/driver", tags=["📱 Driver (Мобильное приложение)"])
-app.include_router(admin.router, prefix="/api/v1/admin", tags=["🔧 Admin (Админ-панель)"])
+app.include_router(
+    driver.router, prefix="/api/v1/driver", tags=["📱 Driver (Мобильное приложение)"]
+)
+app.include_router(
+    admin.router, prefix="/api/v1/admin", tags=["🔧 Admin (Админ-панель)"]
+)
 # app.include_router(reviews.router, prefix="/api/v1", tags=["⭐ Reviews (Отзывы и рейтинги)"])
 
 uploads_dir = Path("uploads")

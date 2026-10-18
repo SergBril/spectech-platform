@@ -29,5 +29,15 @@ if [ "$ENVIRONMENT" != "testing" ]; then
 fi
 
 # Start the application
-echo "Starting Uvicorn server..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+# Graceful shutdown: forward SIGTERM/SIGINT to uvicorn
+# Use single worker in development for clean Ctrl+C; multi-worker in production
+WORKERS=${UVICORN_WORKERS:-4}
+GRACEFUL_TIMEOUT=${UVICORN_GRACEFUL_TIMEOUT:-30}
+
+echo "Starting Uvicorn with $WORKERS workers, graceful timeout ${GRACEFUL_TIMEOUT}s..."
+exec uvicorn app.main:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --workers "$WORKERS" \
+    --timeout-graceful-shutdown "$GRACEFUL_TIMEOUT" \
+    --log-level info
