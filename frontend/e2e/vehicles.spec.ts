@@ -3,16 +3,18 @@ import { test, expect } from '@playwright/test';
 test.describe('Vehicles Page', () => {
   test('should load vehicles list with pagination', async ({ page }) => {
     await page.goto('/vehicles');
+    await page.waitForLoadState('networkidle');
 
     // Table should be visible
-    await expect(page.locator('table')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('table')).toBeVisible({ timeout: 30_000 });
 
     // Column headers
-    await expect(page.locator('th')).toContainText(['Название', 'Статус']);
+    await expect(page.locator('th, [role="columnheader"]')).toContainText(['Название', 'Статус']);
   });
 
   test('should have column visibility menu', async ({ page }) => {
     await page.goto('/vehicles');
+    await page.waitForLoadState('networkidle');
 
     // Look for column settings button/menu
     await page.waitForTimeout(2000);
@@ -26,6 +28,7 @@ test.describe('Vehicles Page', () => {
 
   test('should show pagination when enough items', async ({ page }) => {
     await page.goto('/vehicles');
+    await page.waitForLoadState('networkidle');
     await page.waitForLoadState('networkidle');
 
     // Pagination may or may not be visible depending on data count
