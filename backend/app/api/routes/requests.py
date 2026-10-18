@@ -225,30 +225,32 @@ def get_request(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Получить заявку по ID (только своей компании)."""
+    from sqlalchemy import select as sa_select
+
     from app.models.catalog import Category, Vehicle
     from app.models.contractor import Contractor
 
-    request = db.get(Request, request_id)
-    if not request or request.company_id not in company_ids:
+    stmt = (
+        sa_select(Request, Contractor, Category, Vehicle)
+        .outerjoin(Contractor, Request.client_id == Contractor.id)
+        .outerjoin(Category, Request.vehicle_category_id == Category.id)
+        .outerjoin(Vehicle, Request.assigned_vehicle_id == Vehicle.id)
+        .where(Request.id == request_id, Request.company_id.in_(company_ids))
+    )
+    row = db.execute(stmt).one_or_none()
+    if not row:
         raise HTTPException(status_code=404, detail="Request not found")
 
+    request, contractor, category, vehicle = row
     data = RequestRead.model_validate(request).model_dump()
 
-    # Enrichment
-    if request.client_id:
-        contractor = db.get(Contractor, request.client_id)
-        if contractor:
-            data["client_name"] = contractor.name
-
-    if request.vehicle_category_id:
-        category = db.get(Category, request.vehicle_category_id)
-        if category:
-            data["vehicle_category_name"] = category.name
-
-    if request.assigned_vehicle_id:
-        vehicle = db.get(Vehicle, request.assigned_vehicle_id)
-        if vehicle:
-            data["assigned_vehicle_name"] = vehicle.name
+    # Enrichment from already-joined data (zero extra queries)
+    if contractor:
+        data["client_name"] = contractor.name
+    if category:
+        data["vehicle_category_name"] = category.name
+    if vehicle:
+        data["assigned_vehicle_name"] = vehicle.name
 
     return data
 
