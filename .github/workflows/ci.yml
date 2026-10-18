@@ -97,3 +97,73 @@ jobs:
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
+
+  e2e:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: test
+
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: spectech
+          POSTGRES_PASSWORD: spectech  # pragma: allowlist secret
+          POSTGRES_DB: spectech
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install backend deps
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Setup database
+          cd backend
+          python -c "from app.core.db import engine, Base; import app.models; Base.metadata.create_all(engine)"
+          alembic stamp head
+          python seed.py
+        env:
+          DATABASE_URL: postgresql://spectech:spectech@localhost:5432/spectech  # pragma: allowlist secret
+
+      - name: Start backend
+          cd backend
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          sleep 10
+          curl -f http://127.0.0.1:8000/api/v1/system/health
+        env:
+          DATABASE_URL: postgresql://spectech:spectech@localhost:5432/spectech  # pragma: allowlist secret
+
+      - name: Install frontend deps
+        run: cd frontend && npm ci
+
+      - name: Install Playwright browsers
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: cd frontend && npx playwright test --reporter=list
+        env:
+          E2E_NO_SERVER: "1"
+          E2E_BASE_URL: http://localhost:3000
+
+      - name: Upload E2E artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: frontend/test-results/
