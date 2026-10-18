@@ -46,7 +46,7 @@ jobs:
           python-version: "3.12"
 
       - name: Cache pip packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: pip-packages  # pragma: allowlist secret
