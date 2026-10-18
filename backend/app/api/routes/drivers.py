@@ -3,20 +3,26 @@
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, or_
-from sqlalchemy.orm import Session, joinedload
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user, require_permission
 from app.core.db import get_db
 from app.models.auth import User
-from app.models.contractor import Contractor, Employee, DriverProfile, DriverAssignmentLog
-from app.models.user_company import UserCompany
+from app.models.contractor import (
+    Contractor,
+    DriverAssignmentLog,
+    DriverProfile,
+    Employee,
+)
 
 router = APIRouter()
 
 
-def _enrich_driver(emp: Employee, ctr: Contractor, profile: DriverProfile | None) -> dict:
+def _enrich_driver(
+    emp: Employee, ctr: Contractor, profile: DriverProfile | None
+) -> dict:
     """Обогащает данные водителя."""
     data = {
         "contractor_id": emp.contractor_id,
@@ -27,29 +33,69 @@ def _enrich_driver(emp: Employee, ctr: Contractor, profile: DriverProfile | None
         "is_active": ctr.is_active,
     }
     if profile:
-        data.update({
-            "date_of_birth": profile.date_of_birth.isoformat() if profile.date_of_birth else None,
-            "passport_series": profile.passport_series,
-            "passport_number": profile.passport_number,
-            "passport_issued_by": profile.passport_issued_by,
-            "passport_issue_date": profile.passport_issue_date.isoformat() if profile.passport_issue_date else None,
-            "license_number": profile.license_number,
-            "license_category": profile.license_category,
-            "license_issue_date": profile.license_issue_date.isoformat() if profile.license_issue_date else None,
-            "license_expiry_date": profile.license_expiry_date.isoformat() if profile.license_expiry_date else None,
-            "machinist_certificate": profile.machinist_certificate,
-            "machinist_certificate_type": profile.machinist_certificate_type,
-            "machinist_certificate_expiry": profile.machinist_certificate_expiry.isoformat() if profile.machinist_certificate_expiry else None,
-            "medical_cert_expiry": profile.medical_cert_expiry.isoformat() if profile.medical_cert_expiry else None,
-            "safety_training_expiry": profile.safety_training_expiry.isoformat() if profile.safety_training_expiry else None,
-            "notes": profile.notes,
-        })
+        data.update(
+            {
+                "date_of_birth": (
+                    profile.date_of_birth.isoformat() if profile.date_of_birth else None
+                ),
+                "passport_series": profile.passport_series,
+                "passport_number": profile.passport_number,
+                "passport_issued_by": profile.passport_issued_by,
+                "passport_issue_date": (
+                    profile.passport_issue_date.isoformat()
+                    if profile.passport_issue_date
+                    else None
+                ),
+                "license_number": profile.license_number,
+                "license_category": profile.license_category,
+                "license_issue_date": (
+                    profile.license_issue_date.isoformat()
+                    if profile.license_issue_date
+                    else None
+                ),
+                "license_expiry_date": (
+                    profile.license_expiry_date.isoformat()
+                    if profile.license_expiry_date
+                    else None
+                ),
+                "machinist_certificate": profile.machinist_certificate,
+                "machinist_certificate_type": profile.machinist_certificate_type,
+                "machinist_certificate_expiry": (
+                    profile.machinist_certificate_expiry.isoformat()
+                    if profile.machinist_certificate_expiry
+                    else None
+                ),
+                "medical_cert_expiry": (
+                    profile.medical_cert_expiry.isoformat()
+                    if profile.medical_cert_expiry
+                    else None
+                ),
+                "safety_training_expiry": (
+                    profile.safety_training_expiry.isoformat()
+                    if profile.safety_training_expiry
+                    else None
+                ),
+                "notes": profile.notes,
+            }
+        )
     else:
-        for key in ["date_of_birth", "passport_series", "passport_number", "passport_issued_by",
-                     "passport_issue_date", "license_number", "license_category",
-                     "license_issue_date", "license_expiry_date", "machinist_certificate",
-                     "machinist_certificate_type", "machinist_certificate_expiry",
-                     "medical_cert_expiry", "safety_training_expiry", "notes"]:
+        for key in [
+            "date_of_birth",
+            "passport_series",
+            "passport_number",
+            "passport_issued_by",
+            "passport_issue_date",
+            "license_number",
+            "license_category",
+            "license_issue_date",
+            "license_expiry_date",
+            "machinist_certificate",
+            "machinist_certificate_type",
+            "machinist_certificate_expiry",
+            "medical_cert_expiry",
+            "safety_training_expiry",
+            "notes",
+        ]:
             data[key] = None
     return data
 
@@ -67,7 +113,10 @@ def list_drivers(
     stmt = (
         select(Employee, Contractor, DriverProfile)
         .join(Contractor, Employee.contractor_id == Contractor.id)
-        .outerjoin(DriverProfile, Employee.contractor_id == DriverProfile.employee_contractor_id)
+        .outerjoin(
+            DriverProfile,
+            Employee.contractor_id == DriverProfile.employee_contractor_id,
+        )
         .where(
             Contractor.company_id == company_id,
             Contractor.is_active == True,  # noqa: E712
@@ -77,10 +126,14 @@ def list_drivers(
         q = f"%{search.lower()}%"
         stmt = stmt.where(Contractor.name.ilike(q))
 
-    count_stmt = select(Employee.contractor_id).join(Contractor, Employee.contractor_id == Contractor.id).where(
-        Contractor.company_id == company_id,
-        Contractor.is_active == True,
-        Employee.user_id.isnot(None),
+    count_stmt = (
+        select(Employee.contractor_id)
+        .join(Contractor, Employee.contractor_id == Contractor.id)
+        .where(
+            Contractor.company_id == company_id,
+            Contractor.is_active == True,
+            Employee.user_id.isnot(None),
+        )
     )
     if search:
         count_stmt = count_stmt.where(Contractor.name.ilike(f"%{search.lower()}%"))
@@ -121,7 +174,6 @@ def list_company_users(
     ]
 
 
-
 @router.get("/{contractor_id}", summary="Профиль водителя")
 def get_driver(
     contractor_id: int,
@@ -133,7 +185,10 @@ def get_driver(
     row = db.execute(
         select(Employee, Contractor, DriverProfile)
         .join(Contractor, Employee.contractor_id == Contractor.id)
-        .outerjoin(DriverProfile, Employee.contractor_id == DriverProfile.employee_contractor_id)
+        .outerjoin(
+            DriverProfile,
+            Employee.contractor_id == DriverProfile.employee_contractor_id,
+        )
         .where(
             Employee.contractor_id == contractor_id,
             Contractor.company_id == company_id,
@@ -175,11 +230,21 @@ def upsert_driver_profile(
     # Upsert профиля
     profile = db.get(DriverProfile, contractor_id)
     allowed_fields = [
-        "date_of_birth", "passport_series", "passport_number", "passport_issued_by",
-        "passport_issue_date", "license_number", "license_category",
-        "license_issue_date", "license_expiry_date", "machinist_certificate",
-        "machinist_certificate_type", "machinist_certificate_expiry",
-        "medical_cert_expiry", "safety_training_expiry", "notes",
+        "date_of_birth",
+        "passport_series",
+        "passport_number",
+        "passport_issued_by",
+        "passport_issue_date",
+        "license_number",
+        "license_category",
+        "license_issue_date",
+        "license_expiry_date",
+        "machinist_certificate",
+        "machinist_certificate_type",
+        "machinist_certificate_expiry",
+        "medical_cert_expiry",
+        "safety_training_expiry",
+        "notes",
     ]
 
     if profile is None:
@@ -190,7 +255,12 @@ def upsert_driver_profile(
         if field in payload:
             val = payload[field]
             # Convert date strings to date objects
-            if field.endswith("_date") or field in ("date_of_birth",) and isinstance(val, str) and val:
+            if (
+                field.endswith("_date")
+                or field in ("date_of_birth",)
+                and isinstance(val, str)
+                and val
+            ):
                 try:
                     val = date.fromisoformat(val)
                 except (ValueError, TypeError):
@@ -208,14 +278,18 @@ def upsert_driver_profile(
             if not user:
                 raise HTTPException(status_code=400, detail="Пользователь не найден")
             # Проверяем что пользователь не привязан к другому сотруднику
-            existing_emp = db.query(Employee).filter(
-                Employee.user_id == new_user_id,
-                Employee.contractor_id != contractor_id,
-            ).first()
+            existing_emp = (
+                db.query(Employee)
+                .filter(
+                    Employee.user_id == new_user_id,
+                    Employee.contractor_id != contractor_id,
+                )
+                .first()
+            )
             if existing_emp:
                 raise HTTPException(
                     status_code=409,
-                    detail=f"Пользователь уже привязан к другому сотруднику (contractor_id={existing_emp.contractor_id})"
+                    detail=f"Пользователь уже привязан к другому сотруднику (contractor_id={existing_emp.contractor_id})",
                 )
         emp.user_id = new_user_id
 
@@ -234,7 +308,7 @@ def create_driver(
     _: None = Depends(require_permission("vehicles", "update")),
 ):
     """Создать нового водителя (Contractor + Employee + DriverProfile)."""
-    from app.models.contractor import Contractor, Employee, DriverProfile
+    from app.models.contractor import Contractor, DriverProfile, Employee
 
     full_name = payload.get("full_name", "").strip()
     if not full_name:
@@ -266,14 +340,22 @@ def create_driver(
     # 3. Создаём DriverProfile
     profile = DriverProfile(employee_contractor_id=contractor.id)
     date_fields = [
-        "date_of_birth", "passport_issue_date", "license_issue_date",
-        "license_expiry_date", "machinist_certificate_expiry",
-        "medical_cert_expiry", "safety_training_expiry",
+        "date_of_birth",
+        "passport_issue_date",
+        "license_issue_date",
+        "license_expiry_date",
+        "machinist_certificate_expiry",
+        "medical_cert_expiry",
+        "safety_training_expiry",
     ]
     str_fields = [
-        "passport_series", "passport_number", "passport_issued_by",
-        "license_number", "license_category",
-        "machinist_certificate", "machinist_certificate_type",
+        "passport_series",
+        "passport_number",
+        "passport_issued_by",
+        "license_number",
+        "license_category",
+        "machinist_certificate",
+        "machinist_certificate_type",
         "notes",
     ]
     for field in str_fields:
@@ -301,34 +383,44 @@ def create_and_bind_user(
     _: None = Depends(require_permission("vehicles", "update")),
 ):
     """Создать нового пользователя и привязать к водителю."""
-    from app.services.auth_service import hash_password
     from app.models.user_company import UserCompany
+    from app.services.auth_service import hash_password
 
     email = payload.get("email", "").strip().lower()
     password = payload.get("password", "")
     contractor_id = payload.get("contractor_id")
 
     import re
+
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email и пароль обязательны")
-    if not re.match(r'^[a-z0-9._-]+@[a-z0-9.-]+\.(ru|com|net|org)$', email):
-        raise HTTPException(status_code=400, detail="Некорректный email. Используйте латиницу: name@domain.ru")
+    if not re.match(r"^[a-z0-9._-]+@[a-z0-9.-]+\.(ru|com|net|org)$", email):
+        raise HTTPException(
+            status_code=400,
+            detail="Некорректный email. Используйте латиницу: name@domain.ru",
+        )
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="Пароль минимум 6 символов")
     if not contractor_id:
         raise HTTPException(status_code=400, detail="contractor_id обязателен")
 
     # Проверяем что сотрудник существует
-    emp = db.query(Employee).filter(
-        Employee.contractor_id == contractor_id,
-    ).first()
+    emp = (
+        db.query(Employee)
+        .filter(
+            Employee.contractor_id == contractor_id,
+        )
+        .first()
+    )
     if not emp:
         raise HTTPException(status_code=404, detail="Сотрудник не найден")
 
     # Проверяем уникальность email
     existing = db.query(User).filter(User.email == email).first()
     if existing:
-        raise HTTPException(status_code=409, detail=f"Пользователь с email '{email}' уже существует")
+        raise HTTPException(
+            status_code=409, detail=f"Пользователь с email '{email}' уже существует"
+        )
 
     # Создаём пользователя
     full_name = payload.get("full_name", "").strip()
@@ -349,7 +441,11 @@ def create_and_bind_user(
 
     db.commit()
 
-    return {"user_id": user.id, "email": email, "message": "Пользователь создан и привязан"}
+    return {
+        "user_id": user.id,
+        "email": email,
+        "message": "Пользователь создан и привязан",
+    }
 
 
 @router.get("/{contractor_id}/history", summary="История назначений водителя")
@@ -362,15 +458,19 @@ def get_driver_history(
 ):
     """Получить историю назначений водителя на технику."""
     from app.models.catalog import Vehicle
-    
+
     # Проверяем что водитель принадлежит компании
-    ctr = db.query(Contractor).filter(
-        Contractor.id == contractor_id,
-        Contractor.company_id == company_id,
-    ).first()
+    ctr = (
+        db.query(Contractor)
+        .filter(
+            Contractor.id == contractor_id,
+            Contractor.company_id == company_id,
+        )
+        .first()
+    )
     if not ctr:
         raise HTTPException(status_code=404, detail="Водитель не найден")
-    
+
     stmt = (
         select(DriverAssignmentLog, Vehicle)
         .join(Vehicle, DriverAssignmentLog.vehicle_id == Vehicle.id)
@@ -379,7 +479,7 @@ def get_driver_history(
         .limit(limit)
     )
     rows = db.execute(stmt).all()
-    
+
     return [
         {
             "id": log.id,
@@ -387,7 +487,9 @@ def get_driver_history(
             "vehicle_name": veh.name,
             "vehicle_plate": veh.psm_number,
             "assigned_at": log.assigned_at.isoformat() if log.assigned_at else None,
-            "unassigned_at": log.unassigned_at.isoformat() if log.unassigned_at else None,
+            "unassigned_at": (
+                log.unassigned_at.isoformat() if log.unassigned_at else None
+            ),
             "notes": log.notes,
         }
         for log, veh in rows
@@ -405,42 +507,48 @@ def bulk_bind_users(
     Body: {"bindings": [{"contractor_id": 1, "user_id": 5}, ...]}
     """
     from app.models.contractor import Employee
-    
+
     bindings = payload.get("bindings", [])
     if not bindings:
         raise HTTPException(status_code=400, detail="Список привязок пуст")
-    
+
     updated = 0
     errors = []
     for b in bindings:
         cid = b.get("contractor_id")
         uid = b.get("user_id")
         if not cid or not uid:
-            errors.append(f"Пропущены contractor_id или user_id")
+            errors.append("Пропущены contractor_id или user_id")
             continue
-        
+
         emp = db.query(Employee).filter(Employee.contractor_id == cid).first()
         if not emp:
             errors.append(f"Сотрудник {cid} не найден")
             continue
-        
+
         # Check if user is already bound to another driver
-        existing = db.query(Employee).filter(
-            Employee.user_id == uid,
-            Employee.contractor_id != cid,
-        ).first()
+        existing = (
+            db.query(Employee)
+            .filter(
+                Employee.user_id == uid,
+                Employee.contractor_id != cid,
+            )
+            .first()
+        )
         if existing:
             errors.append(f"Пользователь {uid} уже привязан к другому водителю")
             continue
-        
+
         emp.user_id = uid
         updated += 1
-    
+
     db.commit()
     return {"updated": updated, "errors": errors}
 
 
-@router.get("/{contractor_id}/history/export/excel", summary="Экспорт истории пересадок в Excel")
+@router.get(
+    "/{contractor_id}/history/export/excel", summary="Экспорт истории пересадок в Excel"
+)
 def export_driver_history_excel(
     contractor_id: int,
     db: Session = Depends(get_db),
@@ -448,15 +556,21 @@ def export_driver_history_excel(
     company_id: int = Depends(get_current_company_id),
 ):
     """Экспорт истории назначений водителя в Excel."""
-    from app.models.catalog import Vehicle
     from io import BytesIO
-    from openpyxl import Workbook
-    from fastapi.responses import StreamingResponse
 
-    ctr = db.query(Contractor).filter(
-        Contractor.id == contractor_id,
-        Contractor.company_id == company_id,
-    ).first()
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+
+    from app.models.catalog import Vehicle
+
+    ctr = (
+        db.query(Contractor)
+        .filter(
+            Contractor.id == contractor_id,
+            Contractor.company_id == company_id,
+        )
+        .first()
+    )
     if not ctr:
         raise HTTPException(status_code=404, detail="Водитель не найден")
 
@@ -473,18 +587,22 @@ def export_driver_history_excel(
     ws.title = "История пересадок"
     ws.append(["ФИО водителя", ctr.name])
     ws.append([])
-    ws.append(["Техника", "Гос. номер", "Назначен с", "Снят по", "Статус", "Примечание"])
+    ws.append(
+        ["Техника", "Гос. номер", "Назначен с", "Снят по", "Статус", "Примечание"]
+    )
 
     for log, veh in rows:
         status = "Текущее" if not log.unassigned_at else "Завершено"
-        ws.append([
-            veh.name,
-            veh.psm_number or "",
-            log.assigned_at.strftime("%d.%m.%Y") if log.assigned_at else "",
-            log.unassigned_at.strftime("%d.%m.%Y") if log.unassigned_at else "",
-            status,
-            log.notes or "",
-        ])
+        ws.append(
+            [
+                veh.name,
+                veh.psm_number or "",
+                log.assigned_at.strftime("%d.%m.%Y") if log.assigned_at else "",
+                log.unassigned_at.strftime("%d.%m.%Y") if log.unassigned_at else "",
+                status,
+                log.notes or "",
+            ]
+        )
 
     # Auto-width
     for col in ws.columns:
@@ -496,16 +614,22 @@ def export_driver_history_excel(
     buf.seek(0)
 
     from urllib.parse import quote
-    safe_name = f"history_{contractor_id}.xlsx"
-    encoded_name = quote(f"history_{ctr.name}_{contractor_id}.xlsx")
+
+    # Safe ASCII fallback name
+    safe_name = f"driver_history_{contractor_id}.xlsx"
+    # RFC 5987 encoded UTF-8 filename for modern browsers
+    utf8_name = quote(f"История_{ctr.name}_{contractor_id}.xlsx", safe="")
+    disposition = f"attachment; filename=\"{safe_name}\"; filename*=UTF-8''{utf8_name}"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=\"{safe_name}\"; filename*=UTF-8''{encoded_name}"},
+        headers={"Content-Disposition": disposition},
     )
 
 
-@router.get("/{contractor_id}/history/export/pdf", summary="Экспорт истории пересадок в PDF")
+@router.get(
+    "/{contractor_id}/history/export/pdf", summary="Экспорт истории пересадок в PDF"
+)
 def export_driver_history_pdf(
     contractor_id: int,
     db: Session = Depends(get_db),
@@ -513,16 +637,24 @@ def export_driver_history_pdf(
     company_id: int = Depends(get_current_company_id),
 ):
     """Экспорт истории назначений водителя в PDF."""
-    from app.models.catalog import Vehicle
+    import os
     from io import BytesIO
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    from fastapi.responses import StreamingResponse
     from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    from fastapi.responses import StreamingResponse
-    import os
+    from reportlab.platypus import (
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+
+    from app.models.catalog import Vehicle
 
     # Register Cyrillic font
     font_path = "C:/Windows/Fonts/arial.ttf"
@@ -534,10 +666,14 @@ def export_driver_history_pdf(
         FONT_NAME = "Helvetica"
         FONT_BOLD = "Helvetica-Bold"
 
-    ctr = db.query(Contractor).filter(
-        Contractor.id == contractor_id,
-        Contractor.company_id == company_id,
-    ).first()
+    ctr = (
+        db.query(Contractor)
+        .filter(
+            Contractor.id == contractor_id,
+            Contractor.company_id == company_id,
+        )
+        .first()
+    )
     if not ctr:
         raise HTTPException(status_code=404, detail="Водитель не найден")
 
@@ -554,52 +690,76 @@ def export_driver_history_pdf(
     styles = getSampleStyleSheet()
 
     # Create Cyrillic-aware style
-    cyrillic_title = ParagraphStyle("CyrillicTitle", parent=styles["Title"], fontName=FONT_BOLD, fontSize=16)
+    cyrillic_title = ParagraphStyle(
+        "CyrillicTitle", parent=styles["Title"], fontName=FONT_BOLD, fontSize=16
+    )
     cyrillic_cell = ParagraphStyle("CyrillicCell", fontName=FONT_NAME, fontSize=8)
 
     elements = []
     elements.append(Paragraph(f"История пересадок: {ctr.name}", cyrillic_title))
     elements.append(Spacer(1, 12))
 
-    data = [[
-        Paragraph("Техника", cyrillic_cell),
-        Paragraph("Гос. номер", cyrillic_cell),
-        Paragraph("Назначен с", cyrillic_cell),
-        Paragraph("Снят по", cyrillic_cell),
-        Paragraph("Статус", cyrillic_cell),
-        Paragraph("Примечание", cyrillic_cell),
-    ]]
+    data = [
+        [
+            Paragraph("Техника", cyrillic_cell),
+            Paragraph("Гос. номер", cyrillic_cell),
+            Paragraph("Назначен с", cyrillic_cell),
+            Paragraph("Снят по", cyrillic_cell),
+            Paragraph("Статус", cyrillic_cell),
+            Paragraph("Примечание", cyrillic_cell),
+        ]
+    ]
     for log, veh in rows:
         status = "Текущее" if not log.unassigned_at else "Завершено"
-        data.append([
-            Paragraph(veh.name or "", cyrillic_cell),
-            Paragraph(veh.psm_number or "", cyrillic_cell),
-            Paragraph(log.assigned_at.strftime("%d.%m.%Y") if log.assigned_at else "", cyrillic_cell),
-            Paragraph(log.unassigned_at.strftime("%d.%m.%Y") if log.unassigned_at else "", cyrillic_cell),
-            Paragraph(status, cyrillic_cell),
-            Paragraph(log.notes or "", cyrillic_cell),
-        ])
+        data.append(
+            [
+                Paragraph(veh.name or "", cyrillic_cell),
+                Paragraph(veh.psm_number or "", cyrillic_cell),
+                Paragraph(
+                    log.assigned_at.strftime("%d.%m.%Y") if log.assigned_at else "",
+                    cyrillic_cell,
+                ),
+                Paragraph(
+                    log.unassigned_at.strftime("%d.%m.%Y") if log.unassigned_at else "",
+                    cyrillic_cell,
+                ),
+                Paragraph(status, cyrillic_cell),
+                Paragraph(log.notes or "", cyrillic_cell),
+            ]
+        )
 
     table = Table(data)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4B5563")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F9FAFB")]),
-    ]))
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4B5563")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                (
+                    "ROWBACKGROUNDS",
+                    (0, 1),
+                    (-1, -1),
+                    [colors.white, colors.HexColor("#F9FAFB")],
+                ),
+            ]
+        )
+    )
     elements.append(table)
 
     doc.build(elements)
     buf.seek(0)
 
     from urllib.parse import quote
+
     safe_name = f"history_{contractor_id}.pdf"
     encoded_name = quote(f"history_{ctr.name}_{contractor_id}.pdf")
     return StreamingResponse(
         buf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=\"{safe_name}\"; filename*=UTF-8''{encoded_name}"},
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{safe_name}\"; filename*=UTF-8''{encoded_name}"
+        },
     )
