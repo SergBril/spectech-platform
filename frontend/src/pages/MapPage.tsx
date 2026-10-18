@@ -263,7 +263,7 @@ export const MapPage: React.FC = () => {
 
     filtered.forEach((pos) => {
       const isSelected = selectedVehicles.has(pos.vehicle_id);
-      
+
       // Determine marker color based on status
       let color: string;
       let borderColor = 'white';
@@ -274,7 +274,7 @@ export const MapPage: React.FC = () => {
         // Check if last update was more than 1 hour ago (no connection)
         const lastUpdate = pos.recorded_at ? new Date(pos.recorded_at).getTime() : 0;
         const hoursSinceUpdate = (Date.now() - lastUpdate) / (1000 * 60 * 60);
-        
+
         if (hoursSinceUpdate > 1) {
           color = '#f59e0b'; // Orange/yellow - no connection
         } else if (pos.engine_on) {
@@ -585,7 +585,7 @@ export const MapPage: React.FC = () => {
               <div className="pt-2 border-t space-y-2 bg-blue-50 rounded-lg p-3 -mx-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-gray-900 truncate">{vehicleDetail.vehicle_name}</h3>
-                  <button onClick={() => { setVehicleDetail(null); setSelectedVehicle(null); }}
+                  <button onClick={() => { setVehicleDetail(null); setSelectedVehicles(new Set()); }}
                     className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
                 </div>
                 {vehicleDetail.plate_number && (

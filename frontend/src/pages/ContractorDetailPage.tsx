@@ -57,7 +57,7 @@ export const ContractorDetailPage: React.FC = () => {
   const loadContractorData = async () => {
     try {
       setLoading(true);
-  
+
       // 1. Загружаем основную информацию
       const contractorData = await contractorsApi.getById(Number(id));
       setContractor(contractorData);
@@ -73,9 +73,9 @@ export const ContractorDetailPage: React.FC = () => {
 
       // 3. Загружаем счета контрагента
       try {
-        const invoicesData = await financeApi.getInvoices({ 
+        const invoicesData = await financeApi.getInvoices({
           contractor_id: Number(id),
-          limit: 100 
+          limit: 100
         });
         setInvoices(Array.isArray(invoicesData) ? invoicesData : []);
       } catch (invoicesErr) {
@@ -85,9 +85,9 @@ export const ContractorDetailPage: React.FC = () => {
 
       // 4. Загружаем акты контрагента
       try {
-        const actsData = await financeApi.getActs({ 
+        const actsData = await financeApi.getActs({
           contractor_id: Number(id),
-          limit: 100 
+          limit: 100
         });
         setActs(Array.isArray(actsData) ? actsData : []);
       } catch (actsErr) {
@@ -97,7 +97,7 @@ export const ContractorDetailPage: React.FC = () => {
 
       // 5. Загружаем историю
       try {
-        const historyData = await contractorsApi.getHistory(Number(id));
+        const historyData = await (contractorsApi as any).getHistory(Number(id));
         setHistory(Array.isArray(historyData) ? historyData : []);
       } catch (historyErr) {
         console.warn('History not available:', historyErr);

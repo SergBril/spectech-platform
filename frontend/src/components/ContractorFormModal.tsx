@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import type { Contractor, ContractorCreate, ContractorUpdate, BankDetails } from '../api/contractors';
 import { PhoneInput } from './PhoneInput';
 import { EmailInput, isValidEmail } from './EmailInput';
@@ -151,7 +151,7 @@ export const ContractorFormModal: React.FC<Props> = ({ contractor, onClose, onSa
   const handleInnFound = (data: any) => {
     setFormData((prev) => ({
       ...prev,
-      name: data.name || suggestion?.value || prev.name,
+      name: data.name || prev.name,
       inn: data.inn || prev.inn,
       kpp: data.kpp || prev.kpp,
       ogrn: data.ogrn || prev.ogrn,
