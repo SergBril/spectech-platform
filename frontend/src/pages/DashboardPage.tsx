@@ -22,6 +22,7 @@ export const DashboardPage: React.FC = () => {
   const [gpsStats, setGpsStats] = useState<{ total_points: number; vehicles_with_data: number; latest_point: string | null } | null>(null);
   const [usersCount, setUsersCount] = useState<number>(0);
   const [driversCount, setDriversCount] = useState<number>(0);
+  const [period, setPeriod] = useState<{ from: string; to: string }>({ from: '', to: '' });
 
   useEffect(() => {
     loadData();
@@ -103,6 +104,20 @@ export const DashboardPage: React.FC = () => {
             Добро пожаловать, {user?.email?.split('@')[0]}!
           </h2>
           <p className="text-blue-100">Обзор вашей спецтехники и финансов на сегодня</p>
+          <div className="flex items-center gap-3 mt-4">
+            <label className="text-sm text-blue-100">Период:</label>
+            <input type="date" value={period.from} onChange={(e) => setPeriod(p => ({ ...p, from: e.target.value }))}
+              className="px-2 py-1 rounded text-gray-900 text-sm" />
+            <span className="text-blue-100">—</span>
+            <input type="date" value={period.to} onChange={(e) => setPeriod(p => ({ ...p, to: e.target.value }))}
+              className="px-2 py-1 rounded text-gray-900 text-sm" />
+            {(period.from || period.to) && (
+              <button onClick={() => setPeriod({ from: '', to: '' })}
+                className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm text-white transition-colors">
+                Сбросить
+              </button>
+            )}
+          </div>
         </div>
 
         {/* === КЛЮЧЕВЫЕ МЕТРИКИ === */}
@@ -194,14 +209,14 @@ export const DashboardPage: React.FC = () => {
 
         {/* === ГРАФИКИ === */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <RevenueChart />
-          <StatusPieChart />
+          <RevenueChart dateFrom={period.from || undefined} dateTo={period.to || undefined} />
+          <StatusPieChart dateFrom={period.from || undefined} dateTo={period.to || undefined} />
         </div>
 
         {/* === ТОП ЗАЯВОК + SPARKLINE === */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <TopRequestsChart />
+            <TopRequestsChart dateFrom={period.from || undefined} dateTo={period.to || undefined} />
           </div>
           <div className="space-y-6">
             <Sparkline />

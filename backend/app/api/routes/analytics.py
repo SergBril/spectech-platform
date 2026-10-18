@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import extract, func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
+from app.api.deps import get_current_user, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.dispatch import Request
@@ -16,13 +16,18 @@ router = APIRouter()
 @router.get("/revenue-chart")
 def get_revenue_chart(
     months: int = Query(default=12, ge=1, le=24),
+    date_from: str | None = Query(default=None, description="Start date YYYY-MM-DD"),
+    date_to: str | None = Query(default=None, description="End date YYYY-MM-DD"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Данные для линейного графика доходов по месяцам."""
-    now = datetime.now()
-    start_date = now - timedelta(days=months * 30)
+    if date_from:
+        start_date = datetime.fromisoformat(date_from)
+    else:
+        now = datetime.now()
+        start_date = now - timedelta(days=months * 30)
 
     stmt = (
         select(
@@ -56,19 +61,22 @@ def get_revenue_chart(
 
 @router.get("/status-chart")
 def get_status_chart(
+    date_from: str | None = Query(default=None, description="Start date YYYY-MM-DD"),
+    date_to: str | None = Query(default=None, description="End date YYYY-MM-DD"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Данные для круговой диаграммы статусов счетов."""
-    stmt = (
-        select(
-            Invoice.status,
-            func.count(Invoice.id).label("count"),
-        )
-        .where(Invoice.company_id.in_(company_ids))  # ✅ Исправлено
-        .group_by(Invoice.status)
-    )
+    stmt = select(
+        Invoice.status,
+        func.count(Invoice.id).label("count"),
+    ).where(Invoice.company_id.in_(company_ids))
+    if date_from:
+        stmt = stmt.where(Invoice.invoice_date >= datetime.fromisoformat(date_from))
+    if date_to:
+        stmt = stmt.where(Invoice.invoice_date <= datetime.fromisoformat(date_to))
+    stmt = stmt.group_by(Invoice.status)
 
     results = db.execute(stmt).all()
 
@@ -100,6 +108,8 @@ def get_status_chart(
 @router.get("/top-requests")
 def get_top_requests(
     limit: int = Query(default=5, ge=1, le=20),
+    date_from: str | None = Query(default=None, description="Start date YYYY-MM-DD"),
+    date_to: str | None = Query(default=None, description="End date YYYY-MM-DD"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_ids: list[int] = Depends(get_user_company_ids),
@@ -113,8 +123,14 @@ def get_top_requests(
             func.sum(Invoice.total).label("total_amount"),
         )
         .outerjoin(Invoice, Invoice.request_id == Request.id)
-        .where(Request.company_id.in_(company_ids))  # ✅ Исправлено
-        .group_by(Request.id, Request.work_type, Request.object_address)
+        .where(Request.company_id.in_(company_ids))
+    )
+    if date_from:
+        stmt = stmt.where(Request.planned_start >= datetime.fromisoformat(date_from))
+    if date_to:
+        stmt = stmt.where(Request.planned_end <= datetime.fromisoformat(date_to))
+    stmt = (
+        stmt.group_by(Request.id, Request.work_type, Request.object_address)
         .order_by(func.sum(Invoice.total).desc())
         .limit(limit)
     )

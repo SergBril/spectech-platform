@@ -26,22 +26,27 @@ export interface SparklineData {
 }
 
 export const analyticsApi = {
-  async getRevenueChart(months: number = 12): Promise<RevenueChartData[]> {
-    const response = await apiClient.get<RevenueChartData[]>('/analytics/revenue-chart', {
-      params: { months },
-    });
+  async getRevenueChart(months: number = 12, dateFrom?: string, dateTo?: string): Promise<RevenueChartData[]> {
+    const params: Record<string, any> = { months };
+    if (dateFrom) params.date_from = dateFrom;
+    if (dateTo) params.date_to = dateTo;
+    const response = await apiClient.get<RevenueChartData[]>('/analytics/revenue-chart', { params });
     return response.data;
   },
 
-  async getStatusChart(): Promise<StatusChartData[]> {
-    const response = await apiClient.get<StatusChartData[]>('/analytics/status-chart');
+  async getStatusChart(dateFrom?: string, dateTo?: string): Promise<StatusChartData[]> {
+    const params: Record<string, any> = {};
+    if (dateFrom) params.date_from = dateFrom;
+    if (dateTo) params.date_to = dateTo;
+    const response = await apiClient.get<StatusChartData[]>('/analytics/status-chart', { params });
     return response.data;
   },
 
-  async getTopRequests(limit: number = 5): Promise<TopRequestData[]> {
-    const response = await apiClient.get<TopRequestData[]>('/analytics/top-requests', {
-      params: { limit },
-    });
+  async getTopRequests(limit: number = 5, dateFrom?: string, dateTo?: string): Promise<TopRequestData[]> {
+    const params: Record<string, any> = { limit };
+    if (dateFrom) params.date_from = dateFrom;
+    if (dateTo) params.date_to = dateTo;
+    const response = await apiClient.get<TopRequestData[]>('/analytics/top-requests', { params });
     return response.data;
   },
 

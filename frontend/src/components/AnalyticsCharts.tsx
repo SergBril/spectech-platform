@@ -21,16 +21,22 @@ const formatMoney = (value: number) => {
   }).format(value);
 };
 
-export const RevenueChart: React.FC = () => {
+interface DateFilterProps {
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export const RevenueChart: React.FC<DateFilterProps> = ({ dateFrom, dateTo }) => {
   const [data, setData] = useState<RevenueChartData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    analyticsApi.getRevenueChart(12)
+    setLoading(true);
+    analyticsApi.getRevenueChart(12, dateFrom, dateTo)
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [dateFrom, dateTo]);
 
   if (loading) return <div className="h-64 flex items-center justify-center text-gray-500">Загрузка...</div>;
   if (data.length === 0) return <div className="h-64 flex items-center justify-center text-gray-500">Нет данных</div>;
@@ -53,16 +59,17 @@ export const RevenueChart: React.FC = () => {
   );
 };
 
-export const StatusPieChart: React.FC = () => {
+export const StatusPieChart: React.FC<DateFilterProps> = ({ dateFrom, dateTo }) => {
   const [data, setData] = useState<StatusChartData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    analyticsApi.getStatusChart()
+    setLoading(true);
+    analyticsApi.getStatusChart(dateFrom, dateTo)
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [dateFrom, dateTo]);
 
   if (loading) return <div className="h-64 flex items-center justify-center text-gray-500">Загрузка...</div>;
   if (data.length === 0) return <div className="h-64 flex items-center justify-center text-gray-500">Нет данных</div>;
@@ -93,16 +100,17 @@ export const StatusPieChart: React.FC = () => {
   );
 };
 
-export const TopRequestsChart: React.FC = () => {
+export const TopRequestsChart: React.FC<DateFilterProps> = ({ dateFrom, dateTo }) => {
   const [data, setData] = useState<TopRequestData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    analyticsApi.getTopRequests(5)
+    setLoading(true);
+    analyticsApi.getTopRequests(5, dateFrom, dateTo)
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [dateFrom, dateTo]);
 
   if (loading) return <div className="h-64 flex items-center justify-center text-gray-500">Загрузка...</div>;
   if (data.length === 0) return <div className="h-64 flex items-center justify-center text-gray-500">Нет данных</div>;
