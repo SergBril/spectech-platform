@@ -542,9 +542,27 @@ def get_public_company_rating(
 
         # TODO: когда будет таблица Review - заменить на реальный подсчёт
         # Сейчас возвращаем захардкоженные значения из PublicCompanyRead
+        from sqlalchemy import func
+
+        from app.models.review import Review
+
+        result = (
+            db.query(
+                func.coalesce(func.avg(Review.rating), 0).label("avg_rating"),
+                func.count(Review.id).label("total"),
+            )
+            .filter(
+                Review.reviewed_company_id == company_id,
+                Review.status == "approved",
+            )
+            .one()
+        )
+
         return {
-            "average_rating": 4.5,  # Заглушка
-            "total_reviews": 10,  # Заглушка
+            "average_rating": (
+                round(float(result.avg_rating), 2) if result.total > 0 else None
+            ),
+            "total_reviews": int(result.total or 0),
         }
 
     except HTTPException:
@@ -568,34 +586,33 @@ def get_public_company_reviews(
 
         # TODO: когда будет таблица Review - заменить на реальные отзывы
         # Сейчас возвращаем мок-данные для демонстрации
-        mock_reviews = [
-            {
-                "id": 1,
-                "rating": 5,
-                "comment": "Отличная компания! Техника в хорошем состоянии, операторы профессионалы. Доставили вовремя, всё работает как часы. Рекомендую!",
-                "reviewer_contractor_name": 'ООО "СтройМонтаж"',
-                "reviewer_name": "Иван Петров",
-                "created_at": "2026-09-15T10:30:00+00:00",
-            },
-            {
-                "id": 2,
-                "rating": 4,
-                "comment": "Хороший сервис, адекватные цены. Единственный минус - немного задержали доставку, но в целом довольны сотрудничеством.",
-                "reviewer_contractor_name": "ИП Сидоров А.В.",
-                "reviewer_name": "Алексей Сидоров",
-                "created_at": "2026-08-22T14:15:00+00:00",
-            },
-            {
-                "id": 3,
-                "rating": 5,
-                "comment": "Работаем уже второй год. Всегда есть нужная техника в наличии, гибкие условия оплаты. Менеджеры на связи 24/7.",
-                "reviewer_contractor_name": 'АО "МегаСтрой"',
-                "reviewer_name": "Ольга Козлова",
-                "created_at": "2026-07-10T09:45:00+00:00",
-            },
-        ]
+        from app.models.contractor import Contractor
+        from app.models.review import Review
 
-        return mock_reviews[:limit]
+        reviews = (
+            db.query(Review)
+            .join(Contractor, Review.reviewer_contractor_id == Contractor.id)
+            .filter(
+                Review.reviewed_company_id == company_id,
+                Review.status == "approved",
+            )
+            .order_by(Review.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        return [
+            {
+                "id": r.id,
+                "rating": r.rating,
+                "comment": r.comment,
+                "reviewer_contractor_name": (
+                    r.reviewer.name if r.reviewer else "Anonymous"
+                ),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in reviews
+        ]
 
     except HTTPException:
         raise
