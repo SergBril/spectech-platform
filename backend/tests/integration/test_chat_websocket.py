@@ -1,4 +1,5 @@
 """Интеграционные тесты для WebSocket чата."""
+
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -17,10 +18,8 @@ class TestChatWebSocket:
         response = client.post(
             "/api/v1/requests",
             json={
-                "client_id": 1,
-                "vehicle_category_id": 1,
-                "planned_start": "2026-01-15T09:00:00Z",
-                "planned_end": "2026-01-15T18:00:00Z",
+                "planned_start": "2026-01-15T09:00:00",
+                "planned_end": "2026-01-15T18:00:00",
             },
             headers=auth_headers,
         )
@@ -72,10 +71,8 @@ class TestChatWebSocket:
         response = client.post(
             "/api/v1/requests",
             json={
-                "client_id": 1,
-                "vehicle_category_id": 1,
-                "planned_start": "2026-01-15T09:00:00Z",
-                "planned_end": "2026-01-15T18:00:00Z",
+                "planned_start": "2026-01-15T09:00:00",
+                "planned_end": "2026-01-15T18:00:00",
             },
             headers=auth_headers,
         )
@@ -95,11 +92,13 @@ class TestChatWebSocket:
             websocket.receive_json()
 
             # Отправляем текстовое сообщение
-            websocket.send_json({
-                "type": "message",
-                "content": "Привет через WebSocket!",
-                "message_type": "text",
-            })
+            websocket.send_json(
+                {
+                    "type": "message",
+                    "content": "Привет через WebSocket!",
+                    "message_type": "text",
+                }
+            )
 
             # Получаем broadcast сообщение
             data = websocket.receive_json()
@@ -117,10 +116,8 @@ class TestChatWebSocket:
         response = client.post(
             "/api/v1/requests",
             json={
-                "client_id": 1,
-                "vehicle_category_id": 1,
-                "planned_start": "2026-01-15T09:00:00Z",
-                "planned_end": "2026-01-15T18:00:00Z",
+                "planned_start": "2026-01-15T09:00:00",
+                "planned_end": "2026-01-15T18:00:00",
             },
             headers=auth_headers,
         )
@@ -141,12 +138,14 @@ class TestChatWebSocket:
 
             # Отправляем сообщение с file_url
             test_url = "http://localhost:9000/spectech-docs/chat/1/test.jpg"
-            websocket.send_json({
-                "type": "message",
-                "content": "Смотри фото объекта",
-                "message_type": "photo",
-                "file_url": test_url,
-            })
+            websocket.send_json(
+                {
+                    "type": "message",
+                    "content": "Смотри фото объекта",
+                    "message_type": "photo",
+                    "file_url": test_url,
+                }
+            )
 
             # Получаем broadcast
             data = websocket.receive_json()
@@ -162,10 +161,8 @@ class TestChatWebSocket:
         response = client.post(
             "/api/v1/requests",
             json={
-                "client_id": 1,
-                "vehicle_category_id": 1,
-                "planned_start": "2026-01-15T09:00:00Z",
-                "planned_end": "2026-01-15T18:00:00Z",
+                "planned_start": "2026-01-15T09:00:00",
+                "planned_end": "2026-01-15T18:00:00",
             },
             headers=auth_headers,
         )
@@ -200,10 +197,8 @@ class TestChatWebSocket:
         response = client.post(
             "/api/v1/requests",
             json={
-                "client_id": 1,
-                "vehicle_category_id": 1,
-                "planned_start": "2026-01-15T09:00:00Z",
-                "planned_end": "2026-01-15T18:00:00Z",
+                "planned_start": "2026-01-15T09:00:00",
+                "planned_end": "2026-01-15T18:00:00",
             },
             headers=auth_headers,
         )
@@ -234,10 +229,12 @@ class TestChatWebSocket:
             websocket.receive_json()
 
             # Отправляем read receipt
-            websocket.send_json({
-                "type": "read",
-                "message_id": message_id,
-            })
+            websocket.send_json(
+                {
+                    "type": "read",
+                    "message_id": message_id,
+                }
+            )
 
         # 4. Проверяем через REST, что сообщение помечено как прочитанное
         response = client.get(
