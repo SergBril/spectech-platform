@@ -185,7 +185,7 @@ async def suggest_contractor_by_inn(
     payload: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    company_id: int = Depends(get_current_company_id),
+    company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Поиск контрагента по ИНН через DaData API."""
     inn = payload.get("inn", "").strip()
