@@ -8,7 +8,9 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,
-    connect_args={"sslmode": "disable"},
+    connect_args=(
+        {"sslmode": "disable"} if "postgresql" in settings.database_url else {}
+    ),
 )
 
 SessionLocal = sessionmaker(
