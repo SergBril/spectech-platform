@@ -2,7 +2,7 @@ import axios from 'axios';
 // Если showToast не импортирован, раскомментируйте строку ниже и укажите правильный путь:
 // import { showToast } from '../utils/toast';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'; // Исправил порт на 8000, так как в логах был он
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1'; // Исправил порт на 8000, так как в логах был он
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

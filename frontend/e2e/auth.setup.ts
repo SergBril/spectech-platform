@@ -1,10 +1,21 @@
-import { test as setup } from "@playwright/test";
+import { test as setup, expect } from "@playwright/test";
+
 const AUTH_FILE = "e2e/.auth/user.json";
-setup("authenticate as admin", async ({ page }) => {
-  await page.goto("/login");
-  await page.fill("input[type=\"email\"]", "admin@spectech.dev");
-  await page.fill("input[type=\"password\"]", "admin123");
-  await page.click("button[type=\"submit\"]");
-  await page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 30_000 });
-  await page.context().storageState({ path: AUTH_FILE });
+
+
+
+setup("authenticate as admin via API", async ({ request }) => {
+
+  const response = await request.post("http://127.0.0.1:8000/api/v1/auth/login", {
+
+    data: { email: "admin@spectech.dev", password: "admin123"  # pragma: allowlist secret },
+
+  });
+
+  expect(response.ok()).toBeTruthy();
+
+  const body = await response.json();
+
+  await request.storageState({ path: AUTH_FILE });
+
 });
