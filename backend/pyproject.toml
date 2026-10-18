@@ -34,6 +34,7 @@ ignore = [
 "tests/**/*.py" = ["B011"]
 
 [tool.mypy]
+plugins = ["sqlalchemy.ext.mypy.plugin"]
 python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
