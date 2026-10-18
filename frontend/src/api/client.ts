@@ -1,6 +1,6 @@
 import axios from 'axios';
 // Если showToast не импортирован, раскомментируйте строку ниже и укажите правильный путь:
-// import { showToast } from '../utils/toast'; 
+// import { showToast } from '../utils/toast';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'; // Исправил порт на 8000, так как в логах был он
 
@@ -56,7 +56,7 @@ apiClient.interceptors.response.use(
 
       try {
         const refreshToken = localStorage.getItem('refresh_token');
-        
+
         if (!refreshToken) {
           console.warn('No refresh token, redirecting to login');
           localStorage.removeItem('access_token');
@@ -65,7 +65,7 @@ apiClient.interceptors.response.use(
         }
 
         console.log('🔄 Attempting to refresh token...');
-        
+
         // Попытка обновить токен
         const response = await axios.post(
           `${API_BASE_URL}/auth/refresh`,
@@ -73,37 +73,33 @@ apiClient.interceptors.response.use(
         );
 
         const { access_token, refresh_token: newRefreshToken } = response.data;
-        
+
         localStorage.setItem('access_token', access_token);
         if (newRefreshToken) {
           localStorage.setItem('refresh_token', newRefreshToken);
         }
-        
+
         console.log('✅ Token refreshed successfully');
 
         // Повторяем оригинальный запрос с новым токеном
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
         return apiClient(originalRequest);
-        
+
       } catch (refreshError: any) {
         console.error('❌ Refresh token failed:', refreshError.response?.data || refreshError.message);
-        
+
         // Refresh не сработал — выходим
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        
+
         // Проверка на наличие showToast, чтобы не упало, если он не импортирован
-        if (typeof showToast !== 'undefined') {
-          showToast.error('Сессия истекла. Войдите снова.');
-        } else {
-          alert('Сессия истекла. Войдите снова.');
-        }
-        
+        alert('Сессия истекла. Войдите снова.');
+
         // Небольшая задержка перед редиректом, чтобы показать ошибку
         setTimeout(() => {
           window.location.href = '/login';
         }, 1500);
-        
+
         return Promise.reject(refreshError);
       }
     }
@@ -153,10 +149,10 @@ export interface CreateReviewRequest {
 // ✅ ИСПРАВЛЕНО: Оставлен только один, полный и корректный объект reviewsApi
 export const reviewsApi = {
   // === Публичные endpoints ===
-  
+
   async getCompanyReviews(
-    companyId: number, 
-    limit = 20, 
+    companyId: number,
+    limit = 20,
     offset = 0,
     minRating?: number
   ): Promise<{ items: any[]; total: number }> {
@@ -184,7 +180,7 @@ export const reviewsApi = {
   },
 
   // === Приватные endpoints ===
-  
+
   async createReview(data: {
     rental_id: number;
     review_type: 'client_to_owner' | 'owner_to_client';

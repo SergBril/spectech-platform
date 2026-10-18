@@ -219,7 +219,7 @@ export const DriverDashboardPage: React.FC = () => {
                       📝 Завершить и отправить отчёт
                     </button>
                   )}
-                  {(shift.status === 'in_progress' || shift.status === 'draft') && shift.status !== 'completed' && (
+                  {(shift.status === 'in_progress' || shift.status === 'draft') && (
                     <button
                       onClick={() => navigate(`/driver/shift-report/${shift.id}`)}
                       className="w-full mt-2 bg-orange-500 text-white py-2.5 rounded-lg font-medium hover:bg-orange-600 transition-colors"

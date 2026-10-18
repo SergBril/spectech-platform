@@ -48,6 +48,10 @@ export const VehiclesPage: React.FC = () => {
   const [sortBy, setSortBy] = useState<string>('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
+  // Pagination
+  const [page, setPage] = useState(1);
+  const perPage = 25;
+
   // Resizable + Visibility
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
   const resizingRef = useRef<{ key: string; startX: number; startW: number } | null>(null);
@@ -110,7 +114,7 @@ export const VehiclesPage: React.FC = () => {
   const loadVehicles = async () => {
     try {
       setIsLoading(true);
-      const response = await vehiclesApi.list({ sort_by: sortBy, sort_order: sortOrder } as any);
+      const response = await vehiclesApi.list({ sort_by: sortBy, sort_order: sortOrder, skip: (page - 1) * perPage, limit: perPage } as any);
       setVehicles(response.items);
       setTotal(response.total);
       setError('');
@@ -121,7 +125,7 @@ export const VehiclesPage: React.FC = () => {
     }
   };
 
-  useEffect(() => { loadVehicles(); }, [sortBy, sortOrder]);
+  useEffect(() => { loadVehicles(); }, [sortBy, sortOrder, page]);
 
   useEffect(() => { loadDrivers(); }, []);
 
