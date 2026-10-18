@@ -1,19 +1,25 @@
 """Интеграционные тесты Finance Dashboard API (аналитика для бухгалтера)."""
 
-from datetime import datetime, timedelta, date, UTC
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models.finance import Invoice, Payment, Payout, DocumentStatus, PaymentMethod
-from app.models.rental import Rental, RentalItem, RentalStatus, RateType, PrepaymentStatus
+from app.models.bank_statement import (
+    BankStatement,
+    StatementStatus,
+)
 from app.models.catalog import Vehicle
 from app.models.contractor import Contractor
-from app.models.bank_statement import (
-    BankStatement, BankTransaction, StatementStatus,
-    TransactionType, TransactionDirection, MatchStatus,
+from app.models.finance import DocumentStatus, Invoice, Payment, PaymentMethod, Payout
+from app.models.rental import (
+    PrepaymentStatus,
+    RateType,
+    Rental,
+    RentalItem,
+    RentalStatus,
 )
 
 
@@ -259,19 +265,17 @@ class TestFinanceDashboardAPI:
 
     # === ТЕСТ 1: Ключевые метрики ===
 
-    def test_dashboard_metrics(
-        self, auth_client, db_session, dashboard_setup
-    ):
+    def test_dashboard_metrics(self, auth_client, db_session, dashboard_setup):
         """✅ Dashboard возвращает корректные ключевые метрики."""
         today = dashboard_setup["today"]
         from_date = (today - timedelta(days=30)).isoformat()
         to_date = today.isoformat()
-        
+
         response = auth_client.get(
             "/api/v1/finance/dashboard",
             params={
                 "date_from": from_date,  # ← Обязательный параметр
-                "date_to": to_date,      # ← Обязательный параметр
+                "date_to": to_date,  # ← Обязательный параметр
             },
         )
 
@@ -281,9 +285,7 @@ class TestFinanceDashboardAPI:
         # Проверяем структуру (адаптируйте под реальный ответ)
         assert "total_revenue" in data or "revenue" in data or isinstance(data, dict)
 
-    def test_dashboard_metrics_with_date_filter(
-        self, auth_client, dashboard_setup
-    ):
+    def test_dashboard_metrics_with_date_filter(self, auth_client, dashboard_setup):
         """✅ Dashboard фильтрует по дате."""
         today = dashboard_setup["today"]
         from_date = (today - timedelta(days=5)).isoformat()
@@ -298,13 +300,11 @@ class TestFinanceDashboardAPI:
 
     # === ТЕСТ 2: Выручка по клиентам ===
 
-    def test_revenue_by_client(
-        self, auth_client, dashboard_setup
-    ):
+    def test_revenue_by_client(self, auth_client, dashboard_setup):
         """✅ Топ клиентов по выручке работает корректно."""
         today = dashboard_setup["today"]
         response = auth_client.get(
-            "/api/v1/finance/revenue-by-client",
+            "/api/v1/finance/revenue/by-client",
             params={
                 "date_from": (today - timedelta(days=30)).isoformat(),
                 "date_to": today.isoformat(),
@@ -312,13 +312,11 @@ class TestFinanceDashboardAPI:
         )
         assert response.status_code == 200
 
-    def test_revenue_by_client_with_limit(
-        self, auth_client, dashboard_setup
-    ):
+    def test_revenue_by_client_with_limit(self, auth_client, dashboard_setup):
         """✅ Параметр limit ограничивает количество клиентов."""
         today = dashboard_setup["today"]
         response = auth_client.get(
-            "/api/v1/finance/revenue-by-client",
+            "/api/v1/finance/revenue/by-client",
             params={
                 "limit": 1,
                 "date_from": (today - timedelta(days=30)).isoformat(),
@@ -328,7 +326,7 @@ class TestFinanceDashboardAPI:
 
         assert response.status_code == 200
         data = response.json()
-        
+
         # 🆕 Адаптируем под существующий формат ответа
         # Существующий endpoint возвращает {"clients": [...], "period": {...}}
         if isinstance(data, dict) and "clients" in data:
@@ -341,13 +339,11 @@ class TestFinanceDashboardAPI:
             assert isinstance(data, list)
             assert len(data) <= 1
 
-    def test_revenue_by_vehicle(
-        self, auth_client, dashboard_setup
-    ):
+    def test_revenue_by_vehicle(self, auth_client, dashboard_setup):
         """✅ Топ техники по выручке работает корректно."""
         today = dashboard_setup["today"]
         response = auth_client.get(
-            "/api/v1/finance/revenue-by-vehicle",
+            "/api/v1/finance/revenue/by-vehicle",
             params={
                 "date_from": (today - timedelta(days=30)).isoformat(),
                 "date_to": today.isoformat(),
@@ -363,43 +359,40 @@ class TestFinanceDashboardAPI:
             vehicles = data["vehicles"]
             assert isinstance(vehicles, list)
             assert "period" in data
-            
+
             # Проверяем наличие нашей техники
-            vehicle_ids = [item.get("vehicle_id") for item in vehicles]
-            # В тестовой БД может не быть данных для revenue-by-vehicle
-            # (зависит от реализации существующего endpoint)
-            
+        # vehicle_ids removed - unused variable
+        # В тестовой БД может не быть данных для revenue-by-vehicle
+        # (зависит от реализации существующего endpoint)
+
         else:
             # Мой формат ответа (список)
             assert isinstance(data, list)
-            vehicle_ids = [item["vehicle_id"] for item in data]
-            assert dashboard_setup["vehicle_1"].id in vehicle_ids
-
+        vehicle_names = [item["vehicle_name"] for item in data]
+        assert dashboard_setup["vehicle_1"].name in vehicle_names
 
     # === ТЕСТЫ ВАЛИДАЦИИ ===
 
-    def test_dashboard_unauthorized_returns_401(
-        self, client: TestClient
-    ):
+    def test_dashboard_unauthorized_returns_401(self, client: TestClient):
         """❌ Без авторизации dashboard возвращает 401."""
         response = client.get("/api/v1/finance/dashboard")
         assert response.status_code in (401, 422)
 
+
 class TestWeeklyDigest:
     """Интеграционные тесты еженедельного дайджеста."""
 
-    def test_weekly_digest_endpoint_manual(
-        self, auth_client, db_session, company
-    ):
+    def test_weekly_digest_endpoint_manual(self, auth_client, db_session, company):
         """✅ Ручной запуск дайджеста работает."""
-        from app.services.weekly_digest_service import weekly_digest_service
         from unittest.mock import patch
-        
+
+        from app.services.weekly_digest_service import weekly_digest_service
+
         with patch("app.services.weekly_digest_service.email_service") as mock_email:
             mock_email.send_email.return_value = True
-            
+
             result = weekly_digest_service.send_weekly_digest(db_session, company.id)
-            
+
             assert result["success"] is True
             assert "period" in result
             assert "recipients_count" in result
