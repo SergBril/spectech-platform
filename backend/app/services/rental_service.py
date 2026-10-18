@@ -466,7 +466,7 @@ class RentalService:
         if not rental.items:
             raise HTTPException(
                 status_code=400,
-                detail="РќРµР»СЊР·СЏ Р°РєС‚РёРІРёСЂРѕРІР°С‚СЊ Р°СЂРµРЅРґСѓ Р±РµР· РїРѕР·РёС†РёР№",
+                detail="Нельзя активировать аренду без позиций",
             )
 
         # РџСЂРѕРІРµСЂРєР° РїСЂРµРґРѕРїР»Р°С‚С‹
@@ -663,16 +663,14 @@ class RentalService:
         db.flush()
 
         rate_type_desc = {
-            RateType.HOURLY: "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё (РїРѕС‡Р°СЃРѕРІР°СЏ)",
-            RateType.SHIFT: "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё (РїРѕСЃРјРµРЅРЅР°СЏ)",
-            RateType.TRIP: "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё (Р·Р° С…РѕРґРєСѓ)",
-            RateType.VOLUME: "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё (Р·Р° РѕР±СЉС‘Рј)",
-            RateType.MILEAGE: "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё (РїРѕ РїСЂРѕР±РµРіСѓ)",
-            RateType.COMBINED: "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё (РєРѕРјР±РёРЅРёСЂРѕРІР°РЅРЅР°СЏ)",
+            RateType.HOURLY: "Аренда техники (почасовая)",
+            RateType.SHIFT: "Аренда техники (посменная)",
+            RateType.TRIP: "Аренда техники (за ходку)",
+            RateType.VOLUME: "Аренда техники (за объём)",
+            RateType.MILEAGE: "Аренда техники (по пробегу)",
+            RateType.COMBINED: "Аренда техники (комбинированная)",
         }
-        description = rate_type_desc.get(
-            rental.rate_type, "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё"
-        )
+        description = rate_type_desc.get(rental.rate_type, "Аренда техники")
 
         unit_map = {
             RateType.HOURLY: "РјРѕС‚РѕС‡Р°СЃ",
@@ -686,7 +684,7 @@ class RentalService:
 
         invoice_item = InvoiceItem(
             invoice_id=invoice.id,
-            description=f"{description} (Р”РѕРіРѕРІРѕСЂ Р°СЂРµРЅРґС‹ #{rental.id})",
+            description=f"{description} (Договор аренды #{rental.id})",
             quantity=Decimal("1"),
             unit=unit,
             unit_price=rental.total_amount,
