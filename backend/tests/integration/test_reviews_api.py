@@ -527,9 +527,9 @@ class TestReviewsAPI:
         response = client.get(f"/api/v1/public/companies/{company.id}/rating")
         assert response.status_code == 200
         data = response.json()
-        # API returns stub data (not real data)
-        assert data["total_reviews"] == 10
-        assert data["average_rating"] == 4.5
+        # Company with no reviews
+        assert data["total_reviews"] == 0
+        assert data["average_rating"] is None
 
     def test_mark_review_helpful(
         self,
