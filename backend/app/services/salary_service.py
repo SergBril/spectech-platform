@@ -1,15 +1,13 @@
 """Сервис расчёта зарплат сотрудников."""
 
 import logging
-from datetime import date, datetime, UTC
-from decimal import Decimal, ROUND_HALF_UP
-from sqlalchemy import select, func, and_
+from datetime import UTC, date, datetime
+from decimal import ROUND_HALF_UP, Decimal
+
 from sqlalchemy.orm import Session
 
-from app.models.contractor import Employee, Contractor
+from app.models.contractor import Contractor, Employee
 from app.models.salary import SalaryRecord, SalaryStatus
-from app.models.shift import ShiftTask, ShiftReport
-from app.models.catalog import Vehicle
 
 logger = logging.getLogger("spectech.salary")
 
@@ -28,18 +26,27 @@ class SalaryService:
     ) -> SalaryRecord:
         """Рассчитывает зарплату сотрудника за период."""
         if not employee.salary_type:
-            raise ValueError(f"У сотрудника {employee.contractor_id} не задан тип зарплаты (salary_type)")
+            raise ValueError(
+                f"У сотрудника {employee.contractor_id} не задан тип зарплаты (salary_type)"
+            )
 
         # Проверяем существующую запись за этот период (по сотруднику + пересечение дат)
-        existing = db.query(SalaryRecord).filter(
-            SalaryRecord.employee_contractor_id == employee.contractor_id,
-            SalaryRecord.company_id == company_id,
-            SalaryRecord.period_start <= period_end,
-            SalaryRecord.period_end >= period_start,
-        ).order_by(SalaryRecord.created_at.desc()).first()
+        existing = (
+            db.query(SalaryRecord)
+            .filter(
+                SalaryRecord.employee_contractor_id == employee.contractor_id,
+                SalaryRecord.company_id == company_id,
+                SalaryRecord.period_start <= period_end,
+                SalaryRecord.period_end >= period_start,
+            )
+            .order_by(SalaryRecord.created_at.desc())
+            .first()
+        )
 
         if existing:
-            logger.info(f"Salary record #{existing.id} already exists for employee #{employee.contractor_id}, updating...")
+            logger.info(
+                f"Salary record #{existing.id} already exists for employee #{employee.contractor_id}, updating..."
+            )
             shifts_data = SalaryService._get_shifts_data(
                 db, employee.contractor_id, period_start, period_end, company_id
             )
@@ -92,20 +99,28 @@ class SalaryService:
 
     @staticmethod
     def _get_shifts_data(
-        db: Session, contractor_id: int, period_start: date, period_end: date, company_id: int
+        db: Session,
+        contractor_id: int,
+        period_start: date,
+        period_end: date,
+        company_id: int,
     ) -> dict:
         """Собирает данные о сменах сотрудника за период."""
         from app.models.shift import ShiftReport, ShiftTask
 
         # Сначала проверяем без фильтра по датам
-        all_reports = db.query(ShiftReport).filter(
-            ShiftReport.operator_id == contractor_id
-        ).all()
-        
-        logger.info(f"🔍 Total reports for operator #{contractor_id}: {len(all_reports)}")
+        all_reports = (
+            db.query(ShiftReport).filter(ShiftReport.operator_id == contractor_id).all()
+        )
+
+        logger.info(
+            f"🔍 Total reports for operator #{contractor_id}: {len(all_reports)}"
+        )
         for r in all_reports:
             task = db.get(ShiftTask, r.shift_task_id)
-            logger.info(f"   Report #{r.id}: task_date={task.shift_date if task else 'N/A'}, hours={r.operator_moto_hours}")
+            logger.info(
+                f"   Report #{r.id}: task_date={task.shift_date if task else 'N/A'}, hours={r.operator_moto_hours}"
+            )
 
         # Теперь с фильтром
         reports = (
@@ -145,7 +160,7 @@ class SalaryService:
     def _calculate_gross(employee: Employee, shifts_data: dict) -> tuple[Decimal, dict]:
         """Рассчитывает gross по типу ставки."""
         rate = Decimal(str(employee.salary_rate or 0))
-        rate_secondary = Decimal(str(employee.salary_rate_secondary or 0))
+        Decimal(str(employee.salary_rate_secondary or 0))
         commission_pct = Decimal(str(employee.salary_commission_percent or 0))
 
         shifts = shifts_data["shifts_count"]
@@ -185,7 +200,9 @@ class SalaryService:
             shift_cost = Decimal(str(shifts_data.get("total_shift_cost", 0)))
             percent_part = shift_cost * commission_pct / Decimal("100")
             gross = hourly_part + percent_part
-            details["formula"] = f"({rate}/ч × {hours}ч) + ({commission_pct}% от {shift_cost})"
+            details["formula"] = (
+                f"({rate}/ч × {hours}ч) + ({commission_pct}% от {shift_cost})"
+            )
             details["hourly_part"] = float(hourly_part)
             details["percent_part"] = float(percent_part)
 
@@ -227,7 +244,9 @@ class SalaryService:
                 records.append(record)
             except Exception as e:
                 errors.append({"employee_id": emp.contractor_id, "error": str(e)})
-                logger.error(f"❌ Failed to calculate salary for employee #{emp.contractor_id}: {e}")
+                logger.error(
+                    f"❌ Failed to calculate salary for employee #{emp.contractor_id}: {e}"
+                )
 
         if errors:
             logger.warning(f"⚠️ Batch salary: {len(records)} OK, {len(errors)} errors")

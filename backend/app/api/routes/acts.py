@@ -29,7 +29,9 @@ router = APIRouter()
 @router.get("", response_model=list[ActRead])
 def list_acts(
     status_filter: str | None = Query(default=None, alias="status"),
-    contractor_id: int | None = Query(default=None, description="Фильтр по контрагенту (client_id)"),  # 🆕
+    contractor_id: int | None = Query(
+        default=None, description="Фильтр по контрагенту (client_id)"
+    ),  # 🆕
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),

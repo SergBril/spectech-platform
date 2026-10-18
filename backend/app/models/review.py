@@ -1,15 +1,11 @@
 """Модель отзывов на завершённые аренды."""
 
-from datetime import datetime
-
 from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Enum,
     ForeignKey,
     Integer,
-    Numeric,
     String,
     Text,
 )
@@ -22,22 +18,24 @@ from app.core.db import Base
 
 class ReviewType(str):
     """Тип отзыва (кто кого оценивает)."""
-    CLIENT_TO_OWNER = "client_to_owner"    # Клиент оценивает собственника
-    OWNER_TO_CLIENT = "owner_to_client"    # Собственник оценивает клиента
+
+    CLIENT_TO_OWNER = "client_to_owner"  # Клиент оценивает собственника
+    OWNER_TO_CLIENT = "owner_to_client"  # Собственник оценивает клиента
 
 
 class ReviewStatus(str):
     """Статус отзыва (модерация)."""
-    PENDING = "pending"       # На модерации
-    APPROVED = "approved"     # Одобрено
-    REJECTED = "rejected"     # Отклонено
-    HIDDEN = "hidden"         # Скрыто администратором
+
+    PENDING = "pending"  # На модерации
+    APPROVED = "approved"  # Одобрено
+    REJECTED = "rejected"  # Отклонено
+    HIDDEN = "hidden"  # Скрыто администратором
 
 
 class Review(Base):
     """
     Отзыв на завершённую аренду.
-    
+
     Один Rental может иметь до 2 отзывов:
     - Один от клиента (о компании-собственнике техники)
     - Один от собственника (о клиенте)
@@ -55,7 +53,7 @@ class Review(Base):
         index=True,
         comment="Завершённая аренда, по которой оставлен отзыв",
     )
-    
+
     reviewer_contractor_id = Column(
         Integer,
         ForeignKey("contractors.id"),
@@ -63,7 +61,7 @@ class Review(Base):
         index=True,
         comment="Кто оставил отзыв (Contractor)",
     )
-    
+
     reviewed_company_id = Column(
         Integer,
         ForeignKey("companies.id"),
@@ -108,15 +106,18 @@ class Review(Base):
 
     # === Категории оценки (для детальной статистики) ===
     quality_rating = Column(
-        Integer, nullable=True,
+        Integer,
+        nullable=True,
         comment="Качество техники (1-5)",
     )
     punctuality_rating = Column(
-        Integer, nullable=True,
+        Integer,
+        nullable=True,
         comment="Пунктуальность (1-5)",
     )
     communication_rating = Column(
-        Integer, nullable=True,
+        Integer,
+        nullable=True,
         comment="Коммуникация (1-5)",
     )
 
@@ -132,19 +133,23 @@ class Review(Base):
         nullable=True,
         comment="Причина отклонения (если status=rejected)",
     )
-    
+
     # Полезность отзыва
     helpful_count = Column(
-        Integer, default=0, nullable=False,
+        Integer,
+        default=0,
+        nullable=False,
         comment="Сколько раз отзыв был полезен",
     )
-    
+
     # Публичность
     is_anonymous = Column(
-        Boolean, default=False, nullable=False,
+        Boolean,
+        default=False,
+        nullable=False,
         comment="Анонимный отзыв (не показывать имя автора)",
     )
-    
+
     # Кто отредактировал (для модерации)
     reviewed_by_user_id = Column(
         Integer,

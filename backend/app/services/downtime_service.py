@@ -1,10 +1,10 @@
 """Сервис учёта простоев техники (Блок 2.10 ТЗ)."""
 
 import logging
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.catalog import Vehicle
@@ -104,9 +104,7 @@ class DowntimeService:
 
         # Автоопределение виновной стороны
         if fault_party is None:
-            fault_party = DEFAULT_FAULT_BY_CAUSE.get(
-                cause_category, FaultParty.none
-            )
+            fault_party = DEFAULT_FAULT_BY_CAUSE.get(cause_category, FaultParty.none)
 
         # Рассчитываем длительность
         duration_minutes = 0
@@ -185,15 +183,15 @@ class DowntimeService:
         # ➕ ИСПРАВЛЕНИЕ: Нормализуем часовые пояса (naive -> aware UTC)
         st = event.started_at
         if st.tzinfo is None:
-            st = st.replace(tzinfo=timezone.utc)
-            
+            st = st.replace(tzinfo=UTC)
+
         et = ended_at
         if et.tzinfo is None:
-            et = et.replace(tzinfo=timezone.utc)
+            et = et.replace(tzinfo=UTC)
 
         # Сохраняем нормализованное время окончания в БД
         event.ended_at = et
-        
+
         # Теперь оба объекта aware, вычитание безопасно
         delta = et - st
         event.duration_minutes = max(0, int(delta.total_seconds() // 60))
@@ -219,9 +217,7 @@ class DowntimeService:
             raise ValueError(f"Downtime {downtime_id} not found")
 
         if event.status != DowntimeStatus.pending:
-            raise ValueError(
-                f"Cannot approve downtime in status {event.status.value}"
-            )
+            raise ValueError(f"Cannot approve downtime in status {event.status.value}")
 
         event.status = DowntimeStatus.approved
         event.approved_by = approved_by
@@ -246,9 +242,7 @@ class DowntimeService:
             raise ValueError(f"Downtime {downtime_id} not found")
 
         if event.status != DowntimeStatus.pending:
-            raise ValueError(
-                f"Cannot reject downtime in status {event.status.value}"
-            )
+            raise ValueError(f"Cannot reject downtime in status {event.status.value}")
 
         event.status = DowntimeStatus.rejected
         event.approved_by = rejected_by  # используем то же поле для аудита
@@ -291,10 +285,7 @@ class DowntimeService:
 
         # Общие метрики
         total_count = (
-            db.query(func.count(DowntimeEvent.id))
-            .filter(*base_filter)
-            .scalar()
-            or 0
+            db.query(func.count(DowntimeEvent.id)).filter(*base_filter).scalar() or 0
         )
         total_minutes = (
             db.query(func.coalesce(func.sum(DowntimeEvent.duration_minutes), 0))

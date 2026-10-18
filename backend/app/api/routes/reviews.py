@@ -12,16 +12,15 @@
 
 import logging
 from datetime import datetime
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.models.auth import User
 from app.models.review import Review
-from app.services.reviews_service import reviews_service, ReviewTypeError
+from app.services.reviews_service import reviews_service
 
 logger = logging.getLogger("spectech.reviews_api")
 
@@ -33,6 +32,7 @@ router = APIRouter(tags=["⭐ Reviews (Отзывы и рейтинги)"])
 
 class ReviewCreate(BaseModel):
     """Создание отзыва."""
+
     rental_id: int = Field(..., gt=0, description="ID завершённой аренды")
     review_type: str = Field(
         ...,
@@ -62,13 +62,12 @@ class ReviewCreate(BaseModel):
     communication_rating: int | None = Field(
         default=None, ge=1, le=5, description="Коммуникация 1-5"
     )
-    is_anonymous: bool = Field(
-        default=False, description="Анонимный отзыв"
-    )
+    is_anonymous: bool = Field(default=False, description="Анонимный отзыв")
 
 
 class ReviewUpdate(BaseModel):
     """Обновление отзыва."""
+
     rating: int | None = Field(default=None, ge=1, le=5)
     comment: str | None = Field(default=None, min_length=10, max_length=2000)
     pros: str | None = Field(default=None, max_length=1000)
@@ -81,6 +80,7 @@ class ReviewUpdate(BaseModel):
 
 class ReviewRead(BaseModel):
     """Чтение отзыва."""
+
     id: int
     rental_id: int
     reviewer_contractor_id: int
@@ -88,21 +88,21 @@ class ReviewRead(BaseModel):
     reviewed_company_id: int
     reviewed_company_name: str | None = None
     review_type: str
-    
+
     rating: int
     comment: str | None = None
     pros: str | None = None
     cons: str | None = None
     photos: list[str] | None = None
-    
+
     quality_rating: int | None = None
     punctuality_rating: int | None = None
     communication_rating: int | None = None
-    
+
     status: str
     helpful_count: int
     is_anonymous: bool
-    
+
     created_at: datetime
     updated_at: datetime
 
@@ -111,6 +111,7 @@ class ReviewRead(BaseModel):
 
 class CompanyRatingResponse(BaseModel):
     """Статистика рейтинга компании."""
+
     company_id: int
     company_name: str
     average_rating: float | None = None
@@ -121,6 +122,7 @@ class CompanyRatingResponse(BaseModel):
 
 class CanReviewResponse(BaseModel):
     """Проверка возможности оставить отзыв."""
+
     rental_id: int
     can_review_owner: bool
     can_review_client: bool
@@ -130,6 +132,7 @@ class CanReviewResponse(BaseModel):
 
 class ReviewListResponse(BaseModel):
     """Список отзывов с пагинацией."""
+
     items: list[ReviewRead]
     total: int
 
@@ -140,24 +143,20 @@ class ReviewListResponse(BaseModel):
 def _get_current_contractor_id(db: Session, current_user: User) -> int:
     """Получает contractor_id текущего пользователя."""
     from app.models.contractor import Employee
-    
+
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
     # Ищем Employee по user_id
-    employee = (
-        db.query(Employee)
-        .filter(Employee.user_id == current_user.id)
-        .first()
-    )
-    
+    employee = db.query(Employee).filter(Employee.user_id == current_user.id).first()
+
     if not employee:
         raise HTTPException(
             status_code=403,
             detail="User is not associated with any contractor. "
-                   "Cannot create or manage reviews.",
+            "Cannot create or manage reviews.",
         )
-    
+
     return employee.contractor_id
 
 
@@ -165,18 +164,18 @@ def _build_review_response(review: Review, db: Session) -> ReviewRead:
     """Построение ответа с полной информацией."""
     from app.models.company import Company
     from app.models.contractor import Contractor
-    
+
     # Получаем имя автора (если не анонимный)
     reviewer_name = None
     if not review.is_anonymous:
         reviewer = db.get(Contractor, review.reviewer_contractor_id)
         if reviewer:
             reviewer_name = reviewer.name
-    
+
     # Получаем название компании
     reviewed_company = db.get(Company, review.reviewed_company_id)
     reviewed_company_name = reviewed_company.name if reviewed_company else None
-    
+
     # Нормализация photos
     photos = None
     if review.photos:
@@ -184,7 +183,7 @@ def _build_review_response(review: Review, db: Session) -> ReviewRead:
             photos = [str(p) for p in review.photos if p]
         elif isinstance(review.photos, dict):
             photos = [str(v) for v in review.photos.values() if v]
-    
+
     return ReviewRead(
         id=review.id,
         rental_id=review.rental_id,
@@ -226,9 +225,9 @@ def create_review(
 ):
     """
     ⭐ Создать отзыв на завершённую аренду.
-    
+
     - **rental_id**: ID аренды (должна быть в статусе COMPLETED)
-    - **review_type**: 
+    - **review_type**:
       - `client_to_owner` — клиент оценивает собственника техники
       - `owner_to_client` — собственник оценивает клиента
     - **rating**: Общая оценка от 1 до 5
@@ -237,11 +236,11 @@ def create_review(
     - **photos**: URL фотографий (до 5 штук)
     - **quality_rating/punctuality_rating/communication_rating**: Детальные оценки (опционально)
     - **is_anonymous**: Анонимный отзыв (имя автора не показывается)
-    
+
     Один участник аренды может оставить только один отзыв на каждую сторону.
     """
     contractor_id = _get_current_contractor_id(db, current_user)
-    
+
     try:
         review = reviews_service.create_review(
             db=db,
@@ -258,14 +257,16 @@ def create_review(
             communication_rating=data.communication_rating,
             is_anonymous=data.is_anonymous,
         )
-        
+
         logger.info(
             "Review #%s created by user %s (contractor %s)",
-            review.id, current_user.id, contractor_id,
+            review.id,
+            current_user.id,
+            contractor_id,
         )
-        
+
         return _build_review_response(review, db)
-    
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -287,22 +288,24 @@ def get_my_reviews(
 ):
     """🔐 Получить список моих оставленных отзывов."""
     contractor_id = _get_current_contractor_id(db, current_user)
-    
+
     reviews = reviews_service.get_my_reviews(
         db=db,
         reviewer_contractor_id=contractor_id,
         limit=limit,
         offset=offset,
     )
-    
+
     # Общее количество
     from sqlalchemy import func
+
     total = (
         db.query(func.count(Review.id))
         .filter(Review.reviewer_contractor_id == contractor_id)
-        .scalar() or 0
+        .scalar()
+        or 0
     )
-    
+
     return ReviewListResponse(
         items=[_build_review_response(r, db) for r in reviews],
         total=total,
@@ -322,13 +325,13 @@ def can_leave_review(
 ):
     """🔐 Проверить, можно ли оставить отзыв на аренду."""
     contractor_id = _get_current_contractor_id(db, current_user)
-    
+
     result = reviews_service.can_leave_review(
         db=db,
         rental_id=rental_id,
         contractor_id=contractor_id,
     )
-    
+
     return CanReviewResponse(rental_id=rental_id, **result)
 
 
@@ -346,7 +349,7 @@ def update_review(
 ):
     """🔐 Обновить свой отзыв."""
     contractor_id = _get_current_contractor_id(db, current_user)
-    
+
     try:
         updates = data.model_dump(exclude_unset=True)
         review = reviews_service.update_review(
@@ -355,14 +358,15 @@ def update_review(
             reviewer_contractor_id=contractor_id,
             **updates,
         )
-        
+
         logger.info(
             "Review #%s updated by user %s",
-            review.id, current_user.id,
+            review.id,
+            current_user.id,
         )
-        
+
         return _build_review_response(review, db)
-    
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -383,21 +387,22 @@ def delete_review(
 ):
     """🔐 Удалить свой отзыв."""
     contractor_id = _get_current_contractor_id(db, current_user)
-    
+
     try:
         reviews_service.delete_review(
             db=db,
             review_id=review_id,
             reviewer_contractor_id=contractor_id,
         )
-        
+
         logger.info(
             "Review #%s deleted by user %s",
-            review_id, current_user.id,
+            review_id,
+            current_user.id,
         )
-        
+
         return None
-    
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -421,13 +426,13 @@ def mark_review_helpful(
     review = db.get(Review, review_id)
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
-    
+
     if review.status != "approved":
         raise HTTPException(status_code=400, detail="Review is not approved")
-    
+
     review.helpful_count += 1
     db.commit()
-    
+
     return {
         "message": "Review marked as helpful",
         "helpful_count": review.helpful_count,

@@ -1,6 +1,6 @@
-﻿# Auth
+# Auth
 from app.models.auth import User, UserSession
-from app.models.dispute import Dispute, DisputeStatus, DisputeType, InitiatorRole, AssignedRole
+from app.models.bank_statement import BankStatement, BankTransaction  # noqa: F401
 
 # Catalog
 from app.models.catalog import (
@@ -22,16 +22,33 @@ from app.models.chat import (
 
 # Company
 from app.models.company import Company
-from app.models.user_company import UserCompany  # noqa: F401
-
-from app.models.salary import SalaryRecord, SalaryStatus  # noqa: F401
-from app.models.bank_statement import BankStatement, BankTransaction  # noqa: F401
 
 # Contractor
-from app.models.contractor import DriverAssignmentLog, Contractor, Employee, EmployeeCertificate, DriverProfile
+from app.models.contractor import (
+    Contractor,
+    DriverAssignmentLog,
+    DriverProfile,
+    Employee,
+    EmployeeCertificate,
+)
 
 # Dispatch
 from app.models.dispatch import Request, RequestAssignment, RequestStatusLog
+from app.models.dispute import (
+    AssignedRole,
+    Dispute,
+    DisputeStatus,
+    DisputeType,
+    InitiatorRole,
+)
+
+# Downtime (Учёт простоев)
+from app.models.downtime import (
+    DowntimeCause,
+    DowntimeEvent,
+    DowntimeStatus,
+    FaultParty,
+)  # noqa: F401
 from app.models.email import EmailLog, EmailStatus, EmailTemplate, EmailTemplateType
 
 # Finance
@@ -43,10 +60,31 @@ from app.models.finance import (
     Payment,
     Payout,
 )
+
+# Maintenance (ТО и Ремонты)
+from app.models.maintenance import (
+    MaintenanceOrder,
+    MaintenanceOrderStatus,
+    MaintenanceOrderType,
+    MaintenancePart,
+    MaintenancePriority,
+    MaintenanceWork,
+)  # noqa: F401
 from app.models.marketplace import MarketplaceOffer  # noqa: F401
 
 # RBAC
 from app.models.rbac import Permission, Role, RolePermission, UserRole
+
+# Rental (Аренда)
+from app.models.rental import (
+    PrepaymentStatus,
+    RateType,
+    Rental,
+    RentalItem,
+    RentalStatus,
+)  # noqa: F401
+from app.models.review import Review  # noqa: F401
+from app.models.salary import SalaryRecord, SalaryStatus  # noqa: F401
 
 # Shift
 from app.models.shift import ShiftReport, ShiftReportStatus, ShiftTask, ShiftTaskStatus
@@ -67,36 +105,7 @@ from app.models.telematics import (
     ShiftDataReconciliation,
     UploadedFile,
 )
-
-# Maintenance (ТО и Ремонты)
-from app.models.maintenance import (
-    MaintenanceOrder,
-    MaintenanceOrderStatus,
-    MaintenanceOrderType,
-    MaintenancePart,
-    MaintenancePriority,
-    MaintenanceWork,
-)  # noqa: F401
-
-# Downtime (Учёт простоев)
-from app.models.downtime import (
-    DowntimeCause,
-    DowntimeEvent,
-    DowntimeStatus,
-    FaultParty,
-)  # noqa: F401
-
-# Rental (Аренда)
-from app.models.rental import (
-    PrepaymentStatus,
-    RateType,
-    Rental,
-    RentalItem,
-    RentalStatus,
-)  # noqa: F401
-
-from app.models.review import Review  # noqa: F401
-
+from app.models.user_company import UserCompany  # noqa: F401
 
 __all__ = [
     # Auth

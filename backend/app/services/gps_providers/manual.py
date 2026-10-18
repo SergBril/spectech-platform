@@ -2,9 +2,8 @@
 
 import logging
 from datetime import datetime
-from typing import Any
 
-from app.services.gps_providers.base import GpsProviderAdapter, GpsPointData
+from app.services.gps_providers.base import GpsPointData, GpsProviderAdapter
 
 logger = logging.getLogger("spectech.gps.manual")
 
@@ -15,6 +14,7 @@ class ManualAdapter(GpsProviderAdapter):
     Используется когда компания устанавливает собственные GPS-датчики
     и отправляет данные напрямую через MQTT/HTTP.
     """
+
     provider_name = "manual"
 
     async def get_last_position(self) -> GpsPointData | None:

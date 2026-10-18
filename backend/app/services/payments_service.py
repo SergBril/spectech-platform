@@ -1,7 +1,7 @@
 """Сервис обработки банковских выписок и платежей."""
 
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -17,7 +17,7 @@ from app.models.bank_statement import (
     TransactionDirection,
     TransactionType,
 )
-from app.models.finance import Invoice, Payment, DocumentStatus, PaymentMethod
+from app.models.finance import DocumentStatus, Invoice, Payment, PaymentMethod
 
 logger = logging.getLogger("spectech.payments")
 
@@ -44,7 +44,11 @@ class PaymentsService:
     """Сервис для обработки банковских выписок и платежей."""
 
     def __init__(self, our_account_number: str):
-        self.parser = ClientBankExchangeParser(our_account_number) if ClientBankExchangeParser else None
+        self.parser = (
+            ClientBankExchangeParser(our_account_number)
+            if ClientBankExchangeParser
+            else None
+        )
 
     def upload_statement(
         self,
@@ -55,19 +59,25 @@ class PaymentsService:
     ) -> BankStatement:
         """Загружает банковскую выписку, парсит и создаёт транзакции."""
         if not self.parser:
-            raise ValueError("Bank statement parser is not available. Check that bank_statement_parser.py exists in app/services/")
+            raise ValueError(
+                "Bank statement parser is not available. Check that bank_statement_parser.py exists in app/services/"
+            )
 
         logger.info(f"Uploading bank statement: {file_path.name}")
 
         parsed = self.parser.parse_file(file_path)
 
         # Проверяем дубликаты
-        existing = db.query(BankStatement).filter(
-            BankStatement.company_id == company_id,
-            BankStatement.account_number == parsed.account_number,
-            BankStatement.date_start == parsed.date_start,
-            BankStatement.date_end == parsed.date_end,
-        ).first()
+        existing = (
+            db.query(BankStatement)
+            .filter(
+                BankStatement.company_id == company_id,
+                BankStatement.account_number == parsed.account_number,
+                BankStatement.date_start == parsed.date_start,
+                BankStatement.date_end == parsed.date_end,
+            )
+            .first()
+        )
 
         if existing:
             raise ValueError(
@@ -139,7 +149,9 @@ class PaymentsService:
             matched_count = self.auto_match_transactions(db, statement.id)
 
             statement.matched_transactions = matched_count
-            statement.unmatched_transactions = statement.total_transactions - matched_count
+            statement.unmatched_transactions = (
+                statement.total_transactions - matched_count
+            )
             statement.status = StatementStatus.parsed
 
             db.commit()
@@ -159,7 +171,9 @@ class PaymentsService:
     def auto_match_transactions(self, db: Session, statement_id: int) -> int:
         """Автоматически привязывает транзакции к Invoice по номеру счёта."""
         if not extract_invoice_numbers_from_purpose:
-            logger.warning("⚠️ extract_invoice_numbers_from_purpose not available, skipping auto-match")
+            logger.warning(
+                "⚠️ extract_invoice_numbers_from_purpose not available, skipping auto-match"
+            )
             return 0
 
         stmt = select(BankTransaction).where(
@@ -183,7 +197,9 @@ class PaymentsService:
 
                 if invoice:
                     if invoice.status == DocumentStatus.paid:
-                        logger.warning(f"Invoice {invoice.document_number} already paid, skipping")
+                        logger.warning(
+                            f"Invoice {invoice.document_number} already paid, skipping"
+                        )
                         continue
 
                     tx.matched_invoice_id = invoice.id
@@ -269,8 +285,10 @@ class PaymentsService:
 
         # Уведомления (не блокируем основную операцию)
         try:
-            from app.services.payment_notifications import payment_notification_service
             import asyncio
+
+            from app.services.payment_notifications import payment_notification_service
+
             try:
                 loop = asyncio.get_running_loop()
                 loop.create_task(
@@ -304,7 +322,7 @@ class PaymentsService:
                 BankTransaction.direction == TransactionDirection.incoming,
                 BankTransaction.match_status == MatchStatus.unmatched,
                 BankTransaction.is_excluded == False,
-                BankTransaction.payment_id == None,
+                BankTransaction.payment_id is None,
             )
             .order_by(BankTransaction.processed_date.desc())
             .offset(offset)

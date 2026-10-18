@@ -1,29 +1,26 @@
 """Telegram Bot для управления платформой СпецТехника."""
-    
+
 import logging
 import os
-from datetime import datetime, date, timedelta
-from decimal import Decimal
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from sqlalchemy.orm import Session
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
-    CommandHandler,
     CallbackQueryHandler,
+    CommandHandler,
     ContextTypes,
     ConversationHandler,
     MessageHandler,
     filters,
 )
-from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.models.auth import User
 from app.models.catalog import Vehicle
-from app.models.rental import Rental, RentalStatus
 from app.models.dispatch import Request, RequestStatus
-from app.models.marketplace import MarketplaceOffer
+from app.models.rental import Rental, RentalStatus
 
 logger = logging.getLogger("spectech.telegram_bot")
 
@@ -40,25 +37,31 @@ class TelegramBotService:
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Команда /start — приветствие."""
         user = update.effective_user
-        
+
         # Проверяем, привязан ли аккаунт
         db = SessionLocal()
         try:
             linked_user = self._find_user_by_telegram(db, user.id)
-            
+
             if linked_user:
                 keyboard = [
                     [
-                        InlineKeyboardButton("🚜 Мои аренды", callback_data="my_rentals"),
-                        InlineKeyboardButton("🚛 Моя техника", callback_data="my_vehicles"),
+                        InlineKeyboardButton(
+                            "🚜 Мои аренды", callback_data="my_rentals"
+                        ),
+                        InlineKeyboardButton(
+                            "🚛 Моя техника", callback_data="my_vehicles"
+                        ),
                     ],
                     [
-                        InlineKeyboardButton("📋 Новые заявки", callback_data="new_requests"),
+                        InlineKeyboardButton(
+                            "📋 Новые заявки", callback_data="new_requests"
+                        ),
                         InlineKeyboardButton("📊 Статистика", callback_data="stats"),
                     ],
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                
+
                 await update.message.reply_text(
                     f"👋 Добро пожаловать, {linked_user.full_name or user.first_name}!\n\n"
                     f"Ваш аккаунт привязан к платформе.\n\n"
@@ -87,42 +90,40 @@ class TelegramBotService:
         )
         return AWAITING_CODE
 
-    async def handle_link_code(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_link_code(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
         """Обработка кода привязки."""
         code = update.message.text.strip()
         telegram_id = update.effective_user.id
-        
+
         db = SessionLocal()
         try:
             # Ищем пользователя с этим кодом
-            user = (
-                db.query(User)
-                .filter(User.telegram_link_code == code)
-                .first()
-            )
-            
+            user = db.query(User).filter(User.telegram_link_code == code).first()
+
             if not user:
                 await update.message.reply_text(
                     "❌ Неверный код привязки.\n\n"
                     "Попробуйте ещё раз или используйте /cancel для отмены."
                 )
                 return AWAITING_CODE
-            
+
             # Привязываем Telegram
             user.telegram_id = telegram_id
             user.telegram_link_code = None
             db.commit()
-            
+
             await update.message.reply_text(
-                f"✅ <b>Аккаунт успешно привязан!</b>\n\n"
-                f"Теперь вы можете управлять платформой через Telegram.\n\n"
-                f"Используйте /start для начала работы.",
+                "✅ <b>Аккаунт успешно привязан!</b>\n\n"
+                "Теперь вы можете управлять платформой через Telegram.\n\n"
+                "Используйте /start для начала работы.",
                 parse_mode="HTML",
             )
-            
+
             logger.info(f"User {user.id} linked Telegram {telegram_id}")
             return ConversationHandler.END
-            
+
         except Exception as e:
             logger.error(f"Error linking account: {e}", exc_info=True)
             await update.message.reply_text(
@@ -141,15 +142,17 @@ class TelegramBotService:
         """Мои аренды."""
         query = update.callback_query
         await query.answer()
-        
+
         telegram_id = update.effective_user.id
         db = SessionLocal()
         try:
             user = self._find_user_by_telegram(db, telegram_id)
             if not user:
-                await query.edit_message_text("❌ Аккаунт не привязан. Используйте /link_account")
+                await query.edit_message_text(
+                    "❌ Аккаунт не привязан. Используйте /link_account"
+                )
                 return
-            
+
             # Получаем активные аренды
             rentals = (
                 db.query(Rental)
@@ -161,15 +164,14 @@ class TelegramBotService:
                 .limit(10)
                 .all()
             )
-            
+
             if not rentals:
                 await query.edit_message_text(
-                    "📋 <b>Мои аренды</b>\n\n"
-                    "У вас нет активных аренд.",
+                    "📋 <b>Мои аренды</b>\n\n" "У вас нет активных аренд.",
                     parse_mode="HTML",
                 )
                 return
-            
+
             message = "📋 <b>Активные аренды:</b>\n\n"
             for rental in rentals:
                 status_emoji = "🟢" if rental.status == RentalStatus.ACTIVE else "🔴"
@@ -179,12 +181,14 @@ class TelegramBotService:
                     f"   Окончание: {rental.end_date.strftime('%d.%m.%Y')}\n"
                     f"   Сумма: {rental.total_amount:.0f} ₽\n\n"
                 )
-            
+
             keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="start_menu")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(message, parse_mode="HTML", reply_markup=reply_markup)
-            
+
+            await query.edit_message_text(
+                message, parse_mode="HTML", reply_markup=reply_markup
+            )
+
         finally:
             db.close()
 
@@ -192,15 +196,17 @@ class TelegramBotService:
         """Моя техника."""
         query = update.callback_query
         await query.answer()
-        
+
         telegram_id = update.effective_user.id
         db = SessionLocal()
         try:
             user = self._find_user_by_telegram(db, telegram_id)
             if not user:
-                await query.edit_message_text("❌ Аккаунт не привязан. Используйте /link_account")
+                await query.edit_message_text(
+                    "❌ Аккаунт не привязан. Используйте /link_account"
+                )
                 return
-            
+
             # Получаем технику компании
             vehicles = (
                 db.query(Vehicle)
@@ -212,35 +218,36 @@ class TelegramBotService:
                 .limit(10)
                 .all()
             )
-            
+
             if not vehicles:
                 await query.edit_message_text(
-                    "🚛 <b>Моя техника</b>\n\n"
-                    "У вас нет техники в системе.",
+                    "🚛 <b>Моя техника</b>\n\n" "У вас нет техники в системе.",
                     parse_mode="HTML",
                 )
                 return
-            
+
             message = "🚛 <b>Ваша техника:</b>\n\n"
             for vehicle in vehicles:
                 status_emoji = "🟢" if vehicle.status == "free" else "🔴"
                 marketplace_badge = "📢" if vehicle.is_available_for_rent else ""
-                
+
                 message += (
                     f"{status_emoji} <b>{vehicle.name}</b> {marketplace_badge}\n"
                     f"   Статус: {vehicle.status}\n"
                 )
-                
+
                 if vehicle.hourly_rate:
                     message += f"   Ставка: {vehicle.hourly_rate:.0f} ₽/час\n"
-                
+
                 message += "\n"
-            
+
             keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="start_menu")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(message, parse_mode="HTML", reply_markup=reply_markup)
-            
+
+            await query.edit_message_text(
+                message, parse_mode="HTML", reply_markup=reply_markup
+            )
+
         finally:
             db.close()
 
@@ -248,15 +255,17 @@ class TelegramBotService:
         """Новые заявки из Marketplace."""
         query = update.callback_query
         await query.answer()
-        
+
         telegram_id = update.effective_user.id
         db = SessionLocal()
         try:
             user = self._find_user_by_telegram(db, telegram_id)
             if not user:
-                await query.edit_message_text("❌ Аккаунт не привязан. Используйте /link_account")
+                await query.edit_message_text(
+                    "❌ Аккаунт не привязан. Используйте /link_account"
+                )
                 return
-            
+
             # Получаем новые заявки
             requests = (
                 db.query(Request)
@@ -268,39 +277,44 @@ class TelegramBotService:
                 .limit(10)
                 .all()
             )
-            
+
             if not requests:
                 await query.edit_message_text(
-                    "📋 <b>Новые заявки</b>\n\n"
-                    "Нет новых заявок.",
+                    "📋 <b>Новые заявки</b>\n\n" "Нет новых заявок.",
                     parse_mode="HTML",
                 )
                 return
-            
+
             message = "📋 <b>Новые заявки:</b>\n\n"
             keyboard = []
-            
+
             for req in requests:
                 message += (
                     f"🆕 <b>#{req.id}</b> — {req.work_type}\n"
                     f"   {req.planned_start.strftime('%d.%m.%Y %H:%M')}\n"
                 )
-                keyboard.append([
-                    InlineKeyboardButton(
-                        f"✅ Принять #{req.id}",
-                        callback_data=f"accept_request_{req.id}",
-                    ),
-                    InlineKeyboardButton(
-                        f"❌ Отклонить #{req.id}",
-                        callback_data=f"reject_request_{req.id}",
-                    ),
-                ])
-            
-            keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="start_menu")])
+                keyboard.append(
+                    [
+                        InlineKeyboardButton(
+                            f"✅ Принять #{req.id}",
+                            callback_data=f"accept_request_{req.id}",
+                        ),
+                        InlineKeyboardButton(
+                            f"❌ Отклонить #{req.id}",
+                            callback_data=f"reject_request_{req.id}",
+                        ),
+                    ]
+                )
+
+            keyboard.append(
+                [InlineKeyboardButton("◀️ Назад", callback_data="start_menu")]
+            )
             reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(message, parse_mode="HTML", reply_markup=reply_markup)
-            
+
+            await query.edit_message_text(
+                message, parse_mode="HTML", reply_markup=reply_markup
+            )
+
         finally:
             db.close()
 
@@ -308,7 +322,7 @@ class TelegramBotService:
         """Обработка callback от inline-кнопок."""
         query = update.callback_query
         data = query.data
-        
+
         if data == "my_rentals":
             await self.my_rentals(update, context)
         elif data == "my_vehicles":
@@ -328,14 +342,14 @@ class TelegramBotService:
         """Принять заявку."""
         query = update.callback_query
         await query.answer("✅ Заявка принята")
-        
+
         db = SessionLocal()
         try:
             request = db.get(Request, request_id)
             if request:
                 request.status = RequestStatus.assigned
                 db.commit()
-                
+
                 await query.edit_message_text(
                     f"✅ <b>Заявка #{request_id} принята</b>\n\n"
                     "Заявка переведена в статус 'assigned'.",
@@ -348,14 +362,14 @@ class TelegramBotService:
         """Отклонить заявку."""
         query = update.callback_query
         await query.answer("❌ Заявка отклонена")
-        
+
         db = SessionLocal()
         try:
             request = db.get(Request, request_id)
             if request:
                 request.status = RequestStatus.cancelled
                 db.commit()
-                
+
                 await query.edit_message_text(
                     f"❌ <b>Заявка #{request_id} отклонена</b>",
                     parse_mode="HTML",
@@ -365,27 +379,25 @@ class TelegramBotService:
 
     def _find_user_by_telegram(self, db: Session, telegram_id: int) -> User | None:
         """Находит пользователя по Telegram ID."""
-        return (
-            db.query(User)
-            .filter(User.telegram_id == telegram_id)
-            .first()
-        )
+        return db.query(User).filter(User.telegram_id == telegram_id).first()
 
     def run_bot(self):
         """Запускает бота с поддержкой прокси для РФ."""
         if not settings.TELEGRAM_BOT_TOKEN:
             logger.warning("⚠️ TELEGRAM_BOT_TOKEN not set. Bot will not start.")
             return
-        
-        proxy_url = getattr(settings, "TELEGRAM_PROXY_URL", None) or os.getenv("TELEGRAM_PROXY_URL")
-        
+
+        proxy_url = getattr(settings, "TELEGRAM_PROXY_URL", None) or os.getenv(
+            "TELEGRAM_PROXY_URL"
+        )
+
         builder = Application.builder().token(settings.TELEGRAM_BOT_TOKEN)
-        
+
         if proxy_url:
             logger.info(f"🌐 Using proxy: {proxy_url.split('@')[-1]}")
             try:
                 from telegram.request import HTTPXRequest
-                
+
                 # 🆕 ПРАВИЛЬНО для python-telegram-bot v22
                 request = HTTPXRequest(
                     proxy=proxy_url,  # ← proxy, а не proxy_url
@@ -398,9 +410,9 @@ class TelegramBotService:
             except Exception as e:
                 logger.error(f"❌ Failed to setup proxy: {e}")
                 return
-        
+
         self.application = builder.build()
-        
+
         # Conversation handler для /link_account
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler("link_account", self.link_account)],
@@ -414,13 +426,14 @@ class TelegramBotService:
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
         )
-        
+
         self.application.add_handler(CommandHandler("start", self.start))
         self.application.add_handler(conv_handler)
         self.application.add_handler(CallbackQueryHandler(self.handle_callback))
-        
+
         logger.info("🤖 Telegram bot started")
         self.application.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 # Singleton
 telegram_bot_service = TelegramBotService()

@@ -1,7 +1,7 @@
 """Сервис генерации PDF документов на русском языке."""
 
-from datetime import datetime
 import logging
+from datetime import datetime
 from pathlib import Path
 
 logger = logging.getLogger("spectech.pdf")
@@ -456,7 +456,9 @@ def _generate_act_pdf_fpdf(act, contractor=None) -> bytes:
     return bytes(pdf.output())
 
 
-def generate_payout_pdf(payout, owner_name: str = "", vehicle_name: str = "", local_path: str = None) -> bytes:
+def generate_payout_pdf(
+    payout, owner_name: str = "", vehicle_name: str = "", local_path: str = None
+) -> bytes:
     """Генерирует PDF ведомости выплаты собственнику."""
     try:
         from fpdf import FPDF
@@ -487,7 +489,14 @@ def generate_payout_pdf(payout, owner_name: str = "", vehicle_name: str = "", lo
         details = [
             ("Номер документа", payout.document_number or "N/A"),
             ("Дата выплаты", str(payout.payout_date or "N/A")),
-            ("Статус", str(getattr(payout.status, 'value', payout.status) if payout.status else "N/A")),
+            (
+                "Статус",
+                str(
+                    getattr(payout.status, "value", payout.status)
+                    if payout.status
+                    else "N/A"
+                ),
+            ),
             ("Собственник", owner_name or "N/A"),
             ("Техника", vehicle_name or "N/A"),
         ]
@@ -511,7 +520,10 @@ def generate_payout_pdf(payout, owner_name: str = "", vehicle_name: str = "", lo
 
         finance_rows = [
             ("Сумма (gross)", f"{gross:,.2f} ₽".replace(",", " ")),
-            (f"Комиссия платформы ({rate}%)", f"- {commission:,.2f} ₽".replace(",", " ")),
+            (
+                f"Комиссия платформы ({rate}%)",
+                f"- {commission:,.2f} ₽".replace(",", " "),
+            ),
             ("К выплате (net)", f"{net:,.2f} ₽".replace(",", " ")),
         ]
 
@@ -540,7 +552,14 @@ def generate_payout_pdf(payout, owner_name: str = "", vehicle_name: str = "", lo
         # Футер
         pdf.ln(10)
         _font("", 8)
-        pdf.cell(0, 5, f'Документ сгенерирован: {datetime.now().strftime("%d.%m.%Y %H:%M")}', 0, 1, "C")
+        pdf.cell(
+            0,
+            5,
+            f'Документ сгенерирован: {datetime.now().strftime("%d.%m.%Y %H:%M")}',
+            0,
+            1,
+            "C",
+        )
         pdf.cell(0, 5, 'Система "СпецТехника Про"', 0, 1, "C")
 
         result = bytes(pdf.output())

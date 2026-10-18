@@ -3,11 +3,11 @@
 from typing import Any
 
 from app.services.gps_providers.base import GpsProviderAdapter
-from app.services.gps_providers.wialon import WialonAdapter
 from app.services.gps_providers.gdemoi import GdeMoiAdapter
 from app.services.gps_providers.gps_trace import GpsTraceAdapter
-from app.services.gps_providers.mapix import MapixAdapter
 from app.services.gps_providers.manual import ManualAdapter
+from app.services.gps_providers.mapix import MapixAdapter
+from app.services.gps_providers.wialon import WialonAdapter
 
 PROVIDER_ADAPTERS: dict[str, type[GpsProviderAdapter]] = {
     "wialon": WialonAdapter,
@@ -30,7 +30,9 @@ def create_gps_adapter(provider: str, config: dict[str, Any]) -> GpsProviderAdap
     """Создаёт адаптер GPS-провайдера по имени."""
     adapter_class = PROVIDER_ADAPTERS.get(provider)
     if not adapter_class:
-        raise ValueError(f"Unknown GPS provider: {provider}. Available: {list(PROVIDER_ADAPTERS.keys())}")
+        raise ValueError(
+            f"Unknown GPS provider: {provider}. Available: {list(PROVIDER_ADAPTERS.keys())}"
+        )
     return adapter_class(config)
 
 

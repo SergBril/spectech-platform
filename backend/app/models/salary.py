@@ -5,7 +5,13 @@ from decimal import Decimal
 from enum import Enum as PyEnum
 
 from sqlalchemy import (
-    Date, DateTime, ForeignKey, Integer, Numeric, String, Text,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -52,9 +58,7 @@ class SalaryRecord(Base):
     calculation_details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # Статус
-    status: Mapped[str] = mapped_column(
-        String(20), default=SalaryStatus.draft.value
-    )
+    status: Mapped[str] = mapped_column(String(20), default=SalaryStatus.draft.value)
 
     # Связь с выплатой (если выплачено через систему)
     payout_id: Mapped[int | None] = mapped_column(

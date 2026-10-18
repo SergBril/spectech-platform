@@ -1,16 +1,17 @@
 """API для мобильного приложения водителей."""
 
-from datetime import date, datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from sqlalchemy import select, desc
+from datetime import UTC, date, datetime
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User
-from app.models.shift import ShiftTask, ShiftReport, ShiftTaskStatus, ShiftReportStatus
-from app.models.salary import SalaryRecord
 from app.models.contractor import Employee
+from app.models.salary import SalaryRecord
+from app.models.shift import ShiftReport, ShiftReportStatus, ShiftTask, ShiftTaskStatus
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ def _get_employee_contractor_id(db: Session, user_id: int) -> int:
     if not employee:
         raise HTTPException(
             status_code=400,
-            detail="Пользователь не привязан к сотруднику. Обратитесь к администратору."
+            detail="Пользователь не привязан к сотруднику. Обратитесь к администратору.",
         )
     return employee.contractor_id
 
@@ -50,10 +51,10 @@ def get_my_shifts(
             {
                 "id": t.id,
                 "shift_date": t.shift_date.isoformat(),
-                "status": t.status.value if hasattr(t.status, 'value') else t.status,
-                "vehicle_id": getattr(t, 'vehicle_id', None),
-                "address": getattr(t, 'address', None),
-                "description": getattr(t, 'description', None),
+                "status": t.status.value if hasattr(t.status, "value") else t.status,
+                "vehicle_id": getattr(t, "vehicle_id", None),
+                "address": getattr(t, "address", None),
+                "description": getattr(t, "description", None),
             }
             for t in tasks
         ]
@@ -103,10 +104,12 @@ async def submit_shift_report(
     photo_path = None
     if photo and photo.filename:
         from pathlib import Path
+
         from app.core.config import settings
+
         upload_dir = Path(settings.local_storage_dir) / "shift_photos"
         upload_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         photo_path = str(upload_dir / f"{timestamp}_{photo.filename}")
         with open(photo_path, "wb") as f:
             f.write(await photo.read())
@@ -118,7 +121,7 @@ async def submit_shift_report(
         operator_odometer=odometer,
         operator_fuel_used=fuel_used,
         operator_comment=comment,
-        operator_submitted_at=datetime.now(timezone.utc),
+        operator_submitted_at=datetime.now(UTC),
         client_status="pending",
         status=ShiftReportStatus.submitted,
         company_id=company_id,
@@ -144,10 +147,15 @@ def get_my_salary(
     # Находим contractor_id текущего пользователя
     contractor_id = _get_employee_contractor_id(db, current_user.id)
 
-    stmt = select(SalaryRecord).where(
-        SalaryRecord.company_id == company_id,
-        SalaryRecord.employee_contractor_id == contractor_id,
-    ).order_by(desc(SalaryRecord.period_start)).limit(10)
+    stmt = (
+        select(SalaryRecord)
+        .where(
+            SalaryRecord.company_id == company_id,
+            SalaryRecord.employee_contractor_id == contractor_id,
+        )
+        .order_by(desc(SalaryRecord.period_start))
+        .limit(10)
+    )
 
     if date_from:
         stmt = stmt.where(SalaryRecord.period_start >= date_from)
@@ -178,17 +186,21 @@ def get_my_driver_profile(
     current_user: User = Depends(get_current_user),
 ):
     """Вернуть профиль водителя, связанного с текущим пользователем."""
-    from app.models.contractor import Employee, Contractor
-    
-    emp = db.query(Employee).filter(
-        Employee.user_id == current_user.id,
-    ).first()
+    from app.models.contractor import Contractor, Employee
+
+    emp = (
+        db.query(Employee)
+        .filter(
+            Employee.user_id == current_user.id,
+        )
+        .first()
+    )
     if not emp:
         raise HTTPException(status_code=404, detail="Профиль водителя не найден")
-    
+
     # Get full name from Contractor (parent)
     ctr = db.query(Contractor).filter(Contractor.id == emp.contractor_id).first()
-    
+
     return {
         "contractor_id": emp.contractor_id,
         "full_name": ctr.name if ctr else f"Сотрудник #{emp.contractor_id}",

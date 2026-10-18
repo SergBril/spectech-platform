@@ -14,7 +14,9 @@ SALARY_TYPE_LABELS = {
 }
 
 
-def export_salaries_to_excel(records: list, employee_names: dict[int, str] | None = None) -> bytes:
+def export_salaries_to_excel(
+    records: list, employee_names: dict[int, str] | None = None
+) -> bytes:
     """
     Экспортирует записи зарплат в Excel.
 
@@ -27,9 +29,11 @@ def export_salaries_to_excel(records: list, employee_names: dict[int, str] | Non
     """
     try:
         from openpyxl import Workbook
-        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     except ImportError:
-        raise ImportError("openpyxl is required for Excel export. Install: pip install openpyxl")
+        raise ImportError(
+            "openpyxl is required for Excel export. Install: pip install openpyxl"
+        )
 
     wb = Workbook()
     ws = wb.active
@@ -37,20 +41,35 @@ def export_salaries_to_excel(records: list, employee_names: dict[int, str] | Non
 
     # Стили
     header_font = Font(bold=True, color="FFFFFF", size=11)
-    header_fill = PatternFill(start_color="1E40AF", end_color="1E40AF", fill_type="solid")
+    header_fill = PatternFill(
+        start_color="1E40AF", end_color="1E40AF", fill_type="solid"
+    )
     header_alignment = Alignment(horizontal="center", vertical="center")
     thin_border = Border(
-        left=Side(style='thin'), right=Side(style='thin'),
-        top=Side(style='thin'), bottom=Side(style='thin'),
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin"),
     )
-    money_format = '#,##0.00'
+    money_format = "#,##0.00"
 
     # Заголовки
     headers = [
-        "№", "Сотрудник ID", "Имя", "Период с", "Период по",
-        "Тип оплаты", "Смены", "Часы", "Пробег (км)",
-        "Начислено", "Удержания", "К выплате", "Статус",
-        "Дата расчёта", "Формула",
+        "№",
+        "Сотрудник ID",
+        "Имя",
+        "Период с",
+        "Период по",
+        "Тип оплаты",
+        "Смены",
+        "Часы",
+        "Пробег (км)",
+        "Начислено",
+        "Удержания",
+        "К выплате",
+        "Статус",
+        "Дата расчёта",
+        "Формула",
     ]
     ws.append(headers)
 
@@ -70,7 +89,11 @@ def export_salaries_to_excel(records: list, employee_names: dict[int, str] | Non
         if r.calculation_details and isinstance(r.calculation_details, dict):
             formula = r.calculation_details.get("formula", "")
 
-        status_label = {"draft": "Черновик", "approved": "Утверждено", "paid": "Выплачено"}.get(r.status, r.status)
+        status_label = {
+            "draft": "Черновик",
+            "approved": "Утверждено",
+            "paid": "Выплачено",
+        }.get(r.status, r.status)
 
         row = [
             i,
@@ -86,7 +109,7 @@ def export_salaries_to_excel(records: list, employee_names: dict[int, str] | Non
             float(r.deductions or 0),
             float(r.net_amount or 0),
             status_label,
-            r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else "",
+            r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "",
             formula,
         ]
         ws.append(row)
@@ -105,7 +128,7 @@ def export_salaries_to_excel(records: list, employee_names: dict[int, str] | Non
     # Ширина колонок
     column_widths = [5, 10, 25, 12, 12, 15, 8, 8, 10, 14, 12, 14, 12, 18, 30]
     for i, width in enumerate(column_widths, 1):
-        ws.column_dimensions[chr(64 + i) if i <= 26 else 'A'].width = width
+        ws.column_dimensions[chr(64 + i) if i <= 26 else "A"].width = width
 
     # Автофильтр
     ws.auto_filter.ref = ws.dimensions

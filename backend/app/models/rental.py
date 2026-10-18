@@ -1,6 +1,5 @@
 """Модель аренды техники (договор с клиентом)."""
 
-from datetime import datetime
 import enum
 from decimal import Decimal
 
@@ -11,7 +10,6 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Numeric,
-    String,
     Text,
 )
 from sqlalchemy.orm import relationship
@@ -22,29 +20,32 @@ from app.core.db import Base
 
 class RentalStatus(str, enum.Enum):
     """Статусы аренды."""
-    DRAFT = "draft"           # Черновик / Бронь
-    ACTIVE = "active"         # Техника выдана
-    OVERDUE = "overdue"       # Просрочено
-    COMPLETED = "completed"   # Завершено и возвращено
-    CANCELLED = "cancelled"   # Отменено
+
+    DRAFT = "draft"  # Черновик / Бронь
+    ACTIVE = "active"  # Техника выдана
+    OVERDUE = "overdue"  # Просрочено
+    COMPLETED = "completed"  # Завершено и возвращено
+    CANCELLED = "cancelled"  # Отменено
 
 
 class RateType(str, enum.Enum):
     """Типы тарификации."""
-    HOURLY = "hourly"         # За моточас
-    SHIFT = "shift"           # За смену (фикс)
-    TRIP = "trip"             # За ходку (самосвалы)
-    VOLUME = "volume"         # За куб.м (самосвалы/перевозки)
-    MILEAGE = "mileage"       # За км пробега
-    COMBINED = "combined"     # Комбо: час + пробег
+
+    HOURLY = "hourly"  # За моточас
+    SHIFT = "shift"  # За смену (фикс)
+    TRIP = "trip"  # За ходку (самосвалы)
+    VOLUME = "volume"  # За куб.м (самосвалы/перевозки)
+    MILEAGE = "mileage"  # За км пробега
+    COMBINED = "combined"  # Комбо: час + пробег
 
 
 class PrepaymentStatus(str, enum.Enum):
     """Статусы предоплаты."""
-    NONE = "none"             # Предоплата не требуется
-    REQUIRED = "required"     # Предоплата требуется
-    PAID = "paid"             # Предоплата получена
-    REFUNDED = "refunded"     # Предоплата возвращена
+
+    NONE = "none"  # Предоплата не требуется
+    REQUIRED = "required"  # Предоплата требуется
+    PAID = "paid"  # Предоплата получена
+    REFUNDED = "refunded"  # Предоплата возвращена
 
 
 class Rental(Base):
@@ -56,17 +57,18 @@ class Rental(Base):
 
     # Связи
     client_id = Column(
-        Integer, ForeignKey("contractors.id"), nullable=False,
-        comment="Клиент (contractors.id)"
+        Integer,
+        ForeignKey("contractors.id"),
+        nullable=False,
+        comment="Клиент (contractors.id)",
     )
     request_id = Column(
-        Integer, ForeignKey("requests.id"), nullable=True,
-        comment="Связанная заявка (опционально)"
+        Integer,
+        ForeignKey("requests.id"),
+        nullable=True,
+        comment="Связанная заявка (опционально)",
     )
-    company_id = Column(
-        Integer, nullable=True,
-        comment="Компания (мультитенантность)"
-    )
+    company_id = Column(Integer, nullable=True, comment="Компания (мультитенантность)")
 
     # Статус
     status = Column(
@@ -90,24 +92,23 @@ class Rental(Base):
 
     # Тарифы (зависят от rate_type)
     hourly_rate = Column(
-        Numeric(10, 2), nullable=True,
-        comment="Ставка за моточас (для rate_type=hourly/combined)"
+        Numeric(10, 2),
+        nullable=True,
+        comment="Ставка за моточас (для rate_type=hourly/combined)",
     )
     shift_rate = Column(
-        Numeric(10, 2), nullable=True,
-        comment="Ставка за смену (для rate_type=shift)"
+        Numeric(10, 2), nullable=True, comment="Ставка за смену (для rate_type=shift)"
     )
     trip_rate = Column(
-        Numeric(10, 2), nullable=True,
-        comment="Ставка за ходку (для rate_type=trip)"
+        Numeric(10, 2), nullable=True, comment="Ставка за ходку (для rate_type=trip)"
     )
     volume_rate = Column(
-        Numeric(10, 2), nullable=True,
-        comment="Ставка за куб.м (для rate_type=volume)"
+        Numeric(10, 2), nullable=True, comment="Ставка за куб.м (для rate_type=volume)"
     )
     mileage_rate = Column(
-        Numeric(10, 2), nullable=True,
-        comment="Ставка за км (для rate_type=mileage/combined)"
+        Numeric(10, 2),
+        nullable=True,
+        comment="Ставка за км (для rate_type=mileage/combined)",
     )
 
     # Суммы
@@ -123,15 +124,16 @@ class Rental(Base):
         comment="Статус предоплаты",
     )
     prepayment_amount = Column(
-        Numeric(10, 2), nullable=True,
-        comment="Сумма предоплаты"
+        Numeric(10, 2), nullable=True, comment="Сумма предоплаты"
     )
     prepayment_paid_at = Column(DateTime(timezone=True), nullable=True)
 
     # 🆕 Комиссия платформы (для расчёта Payout собственнику)
     commission_rate = Column(
-        Numeric(5, 2), default=Decimal("10.00"), nullable=False,
-        comment="Процент комиссии платформы для выплат собственникам (по умолчанию 10%)"
+        Numeric(5, 2),
+        default=Decimal("10.00"),
+        nullable=False,
+        comment="Процент комиссии платформы для выплат собственникам (по умолчанию 10%)",
     )
 
     # Метаданные
@@ -158,32 +160,29 @@ class RentalItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     rental_id = Column(Integer, ForeignKey("rentals.id"), nullable=False)
     vehicle_id = Column(
-        Integer, ForeignKey("vehicles.id"), nullable=False,
-        comment="Техника (vehicles.id)"
+        Integer,
+        ForeignKey("vehicles.id"),
+        nullable=False,
+        comment="Техника (vehicles.id)",
     )
 
     quantity = Column(Integer, default=1)
     unit_price = Column(
-        Numeric(10, 2), nullable=False,
-        comment="Цена за единицу на момент аренды"
+        Numeric(10, 2), nullable=False, comment="Цена за единицу на момент аренды"
     )
 
     # Фактические данные (заполняются по завершении аренды)
     actual_moto_hours = Column(
-        Numeric(10, 2), nullable=True,
-        comment="Фактические моточасы"
+        Numeric(10, 2), nullable=True, comment="Фактические моточасы"
     )
     actual_mileage = Column(
-        Numeric(10, 2), nullable=True,
-        comment="Фактический пробег (км)"
+        Numeric(10, 2), nullable=True, comment="Фактический пробег (км)"
     )
     actual_trips = Column(
-        Integer, nullable=True,
-        comment="Фактическое количество ходок"
+        Integer, nullable=True, comment="Фактическое количество ходок"
     )
     actual_volume = Column(
-        Numeric(10, 2), nullable=True,
-        comment="Фактический объём (куб.м)"
+        Numeric(10, 2), nullable=True, comment="Фактический объём (куб.м)"
     )
 
     # Связи

@@ -157,7 +157,9 @@ class VehicleUpdate(BaseModel):
     attributes: dict[str, Any] | None = None
     owner_id: int | None = None
     company_id: int | None = None
-    assigned_driver_id: int | None = Field(None, description='ID водителя (employees.contractor_id)')
+    assigned_driver_id: int | None = Field(
+        None, description="ID водителя (employees.contractor_id)"
+    )
     # 🆕 Поля для маркетплейса
     is_available_for_rent: bool | None = None
     hourly_rate: Decimal | None = Field(None, ge=0)

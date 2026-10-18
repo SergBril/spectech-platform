@@ -1,8 +1,18 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from datetime import datetime
-from sqlalchemy import func, JSON, Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -66,20 +76,28 @@ class Employee(Base):
 
     # 💰 Поля зарплаты
     salary_type: Mapped[str | None] = mapped_column(
-        String(20), nullable=True, default=None,
-        comment="Тип расчёта: fixed_shift, hourly, per_km, shift_percent, combo"
+        String(20),
+        nullable=True,
+        default=None,
+        comment="Тип расчёта: fixed_shift, hourly, per_km, shift_percent, combo",
     )
     salary_rate: Mapped[Decimal | None] = mapped_column(
-        Numeric(12, 2), nullable=True, default=None,
-        comment="Основная ставка (за смену/час/км)"
+        Numeric(12, 2),
+        nullable=True,
+        default=None,
+        comment="Основная ставка (за смену/час/км)",
     )
     salary_rate_secondary: Mapped[Decimal | None] = mapped_column(
-        Numeric(12, 2), nullable=True, default=None,
-        comment="Дополнительная ставка (для combo)"
+        Numeric(12, 2),
+        nullable=True,
+        default=None,
+        comment="Дополнительная ставка (для combo)",
     )
     salary_commission_percent: Mapped[Decimal | None] = mapped_column(
-        Numeric(5, 2), nullable=True, default=None,
-        comment="% от стоимости смены (для shift_percent/combo)"
+        Numeric(5, 2),
+        nullable=True,
+        default=None,
+        comment="% от стоимости смены (для shift_percent/combo)",
     )
 
     contractor: Mapped["Contractor"] = relationship(
@@ -103,6 +121,7 @@ class EmployeeCertificate(Base):
 
 class DriverProfile(Base):
     """Профиль водителя (расширение Employee)."""
+
     __tablename__ = "driver_profiles"
 
     employee_contractor_id: Mapped[int] = mapped_column(
@@ -129,9 +148,13 @@ class DriverProfile(Base):
         String(100), nullable=True, comment="Номер удостоверения машиниста"
     )
     machinist_certificate_type: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, comment="Тип: экскаваторщик, крановщик, бульдозерист"
+        String(100),
+        nullable=True,
+        comment="Тип: экскаваторщик, крановщик, бульдозерист",
     )
-    machinist_certificate_expiry: Mapped[date | None] = mapped_column(Date, nullable=True)
+    machinist_certificate_expiry: Mapped[date | None] = mapped_column(
+        Date, nullable=True
+    )
 
     # Дополнительно
     medical_cert_expiry: Mapped[date | None] = mapped_column(
@@ -151,21 +174,32 @@ class DriverProfile(Base):
 
     # Связь
     employee: Mapped["Employee"] = relationship(
-        "Employee", foreign_keys=[employee_contractor_id],
-        backref="driver_profile", uselist=False
+        "Employee",
+        foreign_keys=[employee_contractor_id],
+        backref="driver_profile",
+        uselist=False,
     )
 
 
 class DriverAssignmentLog(Base):
     """Лог истории назначений водителей на технику."""
+
     __tablename__ = "driver_assignment_logs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), nullable=False)
-    driver_contractor_id: Mapped[int] = mapped_column(ForeignKey("contractors.id"), nullable=False)
-    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    unassigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    assigned_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    driver_contractor_id: Mapped[int] = mapped_column(
+        ForeignKey("contractors.id"), nullable=False
+    )
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    unassigned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    assigned_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     vehicle: Mapped["Vehicle"] = relationship(backref="assignment_logs")

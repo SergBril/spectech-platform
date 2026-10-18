@@ -1,16 +1,15 @@
 """Сервис еженедельного дайджеста для бухгалтеров."""
 
 import logging
-from datetime import datetime, timedelta, date
-from decimal import Decimal
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.company import Company
 from app.models.auth import User
-from app.models.contractor import Employee, Contractor
-from app.models.finance import Invoice, DocumentStatus, Payout
+from app.models.company import Company
+from app.models.contractor import Contractor, Employee
+from app.models.finance import DocumentStatus, Invoice, Payout
 from app.models.rental import Rental, RentalStatus
 from app.services.email_service import email_service
 
@@ -23,7 +22,9 @@ class WeeklyDigestService:
     # === СБОР ДАННЫХ (устойчиво к отсутствию методов) ===
 
     @staticmethod
-    def _get_dashboard_metrics(db: Session, company_id: int, from_date: date, to_date: date) -> dict:
+    def _get_dashboard_metrics(
+        db: Session, company_id: int, from_date: date, to_date: date
+    ) -> dict:
         """Собирает ключевые метрики напрямую из БД."""
         try:
             # Выручка
@@ -37,18 +38,24 @@ class WeeklyDigestService:
             total_revenue, total_paid = revenue_query.one()
 
             # Комиссия
-            commission = db.query(
-                func.coalesce(func.sum(Payout.platform_commission), 0)
-            ).filter(
-                Payout.company_id == company_id,
-                Payout.payout_date.between(from_date, to_date),
-            ).scalar()
+            commission = (
+                db.query(func.coalesce(func.sum(Payout.platform_commission), 0))
+                .filter(
+                    Payout.company_id == company_id,
+                    Payout.payout_date.between(from_date, to_date),
+                )
+                .scalar()
+            )
 
             # Активные аренды
-            active_rentals = db.query(func.count(Rental.id)).filter(
-                Rental.company_id == company_id,
-                Rental.status.in_([RentalStatus.ACTIVE, RentalStatus.OVERDUE]),
-            ).scalar()
+            active_rentals = (
+                db.query(func.count(Rental.id))
+                .filter(
+                    Rental.company_id == company_id,
+                    Rental.status.in_([RentalStatus.ACTIVE, RentalStatus.OVERDUE]),
+                )
+                .scalar()
+            )
 
             # Просроченные счета
             today = date.today()
@@ -75,14 +82,20 @@ class WeeklyDigestService:
         except Exception as e:
             logger.error(f"Failed to get dashboard metrics: {e}")
             return {
-                "total_revenue": 0, "total_paid": 0, "total_unpaid": 0,
-                "total_commission": 0, "active_rentals": 0,
-                "overdue_invoices_count": 0, "overdue_invoices_amount": 0,
+                "total_revenue": 0,
+                "total_paid": 0,
+                "total_unpaid": 0,
+                "total_commission": 0,
+                "active_rentals": 0,
+                "overdue_invoices_count": 0,
+                "overdue_invoices_amount": 0,
                 "unmatched_transactions": 0,
             }
 
     @staticmethod
-    def _get_top_clients(db: Session, company_id: int, from_date: date, to_date: date, limit: int = 5) -> list:
+    def _get_top_clients(
+        db: Session, company_id: int, from_date: date, to_date: date, limit: int = 5
+    ) -> list:
         """Топ клиентов по выручке."""
         try:
             results = (
@@ -116,7 +129,9 @@ class WeeklyDigestService:
             return []
 
     @staticmethod
-    def _get_top_vehicles(db: Session, company_id: int, from_date: date, to_date: date, limit: int = 5) -> list:
+    def _get_top_vehicles(
+        db: Session, company_id: int, from_date: date, to_date: date, limit: int = 5
+    ) -> list:
         """Топ техники по выручке."""
         try:
             from app.models.catalog import Vehicle
@@ -126,7 +141,9 @@ class WeeklyDigestService:
                 db.query(
                     Vehicle.id.label("vehicle_id"),
                     Vehicle.name.label("vehicle_name"),
-                    func.coalesce(func.sum(RentalItem.unit_price * RentalItem.quantity), 0).label("total_revenue"),
+                    func.coalesce(
+                        func.sum(RentalItem.unit_price * RentalItem.quantity), 0
+                    ).label("total_revenue"),
                     func.count(func.distinct(Rental.id)).label("rentals_count"),
                 )
                 .join(RentalItem, Vehicle.id == RentalItem.vehicle_id)
@@ -219,10 +236,18 @@ class WeeklyDigestService:
 
         try:
             # Собираем данные (устойчиво к ошибкам)
-            metrics = WeeklyDigestService._get_dashboard_metrics(db, company_id, from_date, to_date)
-            top_clients = WeeklyDigestService._get_top_clients(db, company_id, from_date, to_date, limit=5)
-            top_vehicles = WeeklyDigestService._get_top_vehicles(db, company_id, from_date, to_date, limit=5)
-            overdue_invoices = WeeklyDigestService._get_overdue_invoices(db, company_id, limit=10)
+            metrics = WeeklyDigestService._get_dashboard_metrics(
+                db, company_id, from_date, to_date
+            )
+            top_clients = WeeklyDigestService._get_top_clients(
+                db, company_id, from_date, to_date, limit=5
+            )
+            top_vehicles = WeeklyDigestService._get_top_vehicles(
+                db, company_id, from_date, to_date, limit=5
+            )
+            overdue_invoices = WeeklyDigestService._get_overdue_invoices(
+                db, company_id, limit=10
+            )
         except Exception as e:
             logger.error(f"Failed to gather digest data: {e}", exc_info=True)
             return {"success": False, "recipients_count": 0, "error": str(e)}
@@ -254,14 +279,14 @@ class WeeklyDigestService:
         for user in recipients:
             try:
                 subject = f"📊 Еженедельный отчёт {company.name} ({from_date.strftime('%d.%m')} - {to_date.strftime('%d.%m')})"
-                
+
                 success = email_service.send_email(
                     to_email=user.email,
                     subject=subject,
                     template_name="email/weekly_digest.html",
                     context=context,
                 )
-                
+
                 if success:
                     sent_count += 1
                     logger.info(f"Weekly digest sent to {user.email}")
@@ -285,13 +310,13 @@ class WeeklyDigestService:
     def send_digests_for_all_companies(db: Session) -> dict:
         """Отправляет дайджест всем активным компаниям."""
         companies = db.query(Company).filter(Company.is_active == True).all()
-        
+
         logger.info(f"Starting weekly digest for {len(companies)} companies")
-        
+
         total_sent = 0
         total_recipients = 0
         errors = []
-        
+
         for company in companies:
             try:
                 result = WeeklyDigestService.send_weekly_digest(db, company.id)
@@ -299,24 +324,28 @@ class WeeklyDigestService:
                     total_sent += 1
                     total_recipients += result["recipients_count"]
                 else:
-                    errors.append({
-                        "company_id": company.id,
-                        "company_name": company.name,
-                        "error": result.get("error", "Unknown"),
-                    })
+                    errors.append(
+                        {
+                            "company_id": company.id,
+                            "company_name": company.name,
+                            "error": result.get("error", "Unknown"),
+                        }
+                    )
             except Exception as e:
                 logger.error(f"Failed to send digest to company {company.id}: {e}")
-                errors.append({
-                    "company_id": company.id,
-                    "company_name": company.name,
-                    "error": str(e),
-                })
-        
+                errors.append(
+                    {
+                        "company_id": company.id,
+                        "company_name": company.name,
+                        "error": str(e),
+                    }
+                )
+
         logger.info(
             f"Weekly digest completed: {total_sent}/{len(companies)} companies, "
             f"{total_recipients} recipients, {len(errors)} errors"
         )
-        
+
         return {
             "total_companies": len(companies),
             "successful": total_sent,
@@ -330,19 +359,21 @@ class WeeklyDigestService:
         employees = (
             db.query(Employee)
             .filter(
-                Employee.role_in_system.in_(["accountant", "admin", "manager", "owner"]),
+                Employee.role_in_system.in_(
+                    ["accountant", "admin", "manager", "owner"]
+                ),
                 Employee.user_id.isnot(None),
             )
             .all()
         )
-        
+
         if not employees:
             return []
-        
+
         user_ids = [emp.user_id for emp in employees if emp.user_id]
         if not user_ids:
             return []
-        
+
         users = (
             db.query(User)
             .filter(
@@ -351,11 +382,16 @@ class WeeklyDigestService:
             )
             .all()
         )
-        
+
         # Фильтруем по company_id, если User имеет это поле
         if hasattr(User, "company_id"):
-            users = [u for u in users if getattr(u, "company_id", None) == company_id or getattr(u, "is_superuser", False)]
-        
+            users = [
+                u
+                for u in users
+                if getattr(u, "company_id", None) == company_id
+                or getattr(u, "is_superuser", False)
+            ]
+
         return users
 
 

@@ -1,11 +1,12 @@
 """Endpoints для работы с финансовыми документами."""
 
 import logging
+
 logger = logging.getLogger("spectech.finance")
 
 from datetime import date
 from decimal import Decimal
-from app.models.contractor import Contractor
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import func, select
@@ -15,6 +16,7 @@ from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
+from app.models.contractor import Contractor
 from app.models.dispatch import Request
 from app.models.finance import Act, DocumentStatus, Invoice, Payout
 from app.models.shift import ShiftTask
@@ -183,6 +185,7 @@ def download_reconciliation_pdf(
 
     try:
         from app.services.finance.reconciliation_pdf import generate_reconciliation_pdf
+
         pdf_bytes = generate_reconciliation_pdf(
             reconciliation=reconciliation,
             shift_task=shift_task,
@@ -193,14 +196,16 @@ def download_reconciliation_pdf(
         )
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"PDF generation error: {str(e)}")
 
     import urllib.parse
+
     ascii_filename = f"Reconciliation_{reconciliation.id}.pdf"
     utf8_filename = urllib.parse.quote(f"Отчёт_сверки_{reconciliation.id}.pdf")
     content_disposition = (
-        f'attachment; filename="{ascii_filename}"; filename*=UTF-8\'\'{utf8_filename}'
+        f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{utf8_filename}"
     )
 
     return Response(
@@ -245,13 +250,17 @@ def get_finance_dashboard(
 ):
     """Полный финансовый дашборд за период."""
     from app.services.finance.finance_reports import finance_reports_service
+
     return finance_reports_service.get_comprehensive_dashboard(
-        db=db, company_id=company_id,
-        period_start=date_from, period_end=date_to,
+        db=db,
+        company_id=company_id,
+        period_start=date_from,
+        period_end=date_to,
     )
 
 
 # === RECONCILIATION ENDPOINTS ===
+
 
 @router.get("/reconciliations")
 def list_reconciliations(
@@ -279,26 +288,49 @@ def list_reconciliations(
         stmt = stmt.where(ShiftTask.shift_date <= date_to)
     if shift_task_id:
         stmt = stmt.where(ShiftDataReconciliation.shift_task_id == shift_task_id)
-    stmt = stmt.order_by(ShiftDataReconciliation.created_at.desc()).offset(offset).limit(limit)
+    stmt = (
+        stmt.order_by(ShiftDataReconciliation.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     reconciliations = db.scalars(stmt).all()
 
     return [
         {
-            "id": r.id, "shift_task_id": r.shift_task_id,
-            "operator_moto_hours": float(r.operator_moto_hours) if r.operator_moto_hours else None,
+            "id": r.id,
+            "shift_task_id": r.shift_task_id,
+            "operator_moto_hours": (
+                float(r.operator_moto_hours) if r.operator_moto_hours else None
+            ),
             "operator_odometer": r.operator_odometer,
-            "operator_fuel_used": float(r.operator_fuel_used) if r.operator_fuel_used else None,
-            "telematics_moto_hours": float(r.telematics_moto_hours) if r.telematics_moto_hours else None,
+            "operator_fuel_used": (
+                float(r.operator_fuel_used) if r.operator_fuel_used else None
+            ),
+            "telematics_moto_hours": (
+                float(r.telematics_moto_hours) if r.telematics_moto_hours else None
+            ),
             "telematics_odometer": r.telematics_odometer,
-            "telematics_fuel_used": float(r.telematics_fuel_used) if r.telematics_fuel_used else None,
+            "telematics_fuel_used": (
+                float(r.telematics_fuel_used) if r.telematics_fuel_used else None
+            ),
             "telematics_data_points_count": r.telematics_data_points_count,
-            "planned_moto_hours": float(r.planned_moto_hours) if r.planned_moto_hours else None,
+            "planned_moto_hours": (
+                float(r.planned_moto_hours) if r.planned_moto_hours else None
+            ),
             "planned_odometer": r.planned_odometer,
-            "moto_hours_diff_percent": float(r.moto_hours_diff_percent) if r.moto_hours_diff_percent else None,
-            "odometer_diff_percent": float(r.odometer_diff_percent) if r.odometer_diff_percent else None,
-            "fuel_diff_percent": float(r.fuel_diff_percent) if r.fuel_diff_percent else None,
+            "moto_hours_diff_percent": (
+                float(r.moto_hours_diff_percent) if r.moto_hours_diff_percent else None
+            ),
+            "odometer_diff_percent": (
+                float(r.odometer_diff_percent) if r.odometer_diff_percent else None
+            ),
+            "fuel_diff_percent": (
+                float(r.fuel_diff_percent) if r.fuel_diff_percent else None
+            ),
             "reconciliation_status": r.reconciliation_status,
-            "final_moto_hours": float(r.final_moto_hours) if r.final_moto_hours else None,
+            "final_moto_hours": (
+                float(r.final_moto_hours) if r.final_moto_hours else None
+            ),
             "final_odometer": r.final_odometer,
             "final_fuel_used": float(r.final_fuel_used) if r.final_fuel_used else None,
             "decision_source": r.decision_source,
@@ -332,8 +364,14 @@ def get_reconciliation_stats(
             stmt = stmt.join(ShiftTask)
         stmt = stmt.where(ShiftTask.shift_date <= date_to)
     reconciliations = db.scalars(stmt).all()
-    stats = {"total": len(reconciliations), "pending": 0, "auto_approved": 0,
-             "discrepancy_detected": 0, "manual_review": 0, "resolved": 0}
+    stats = {
+        "total": len(reconciliations),
+        "pending": 0,
+        "auto_approved": 0,
+        "discrepancy_detected": 0,
+        "manual_review": 0,
+        "resolved": 0,
+    }
     for r in reconciliations:
         if r.reconciliation_status in stats:
             stats[r.reconciliation_status] += 1
@@ -352,26 +390,38 @@ def get_contractor_finance_summary(
     if not contractor or contractor.company_id != company_id:
         raise HTTPException(status_code=404, detail="Contractor not found")
 
-    invoices_stats = db.query(
-        func.count(Invoice.id),
-        func.coalesce(func.sum(Invoice.total), 0),
-        func.coalesce(func.sum(Invoice.paid_amount), 0),
-    ).filter(
-        Invoice.company_id == company_id,
-        Invoice.client_id == contractor_id,
-        Invoice.status != DocumentStatus.cancelled,
-    ).one()
+    invoices_stats = (
+        db.query(
+            func.count(Invoice.id),
+            func.coalesce(func.sum(Invoice.total), 0),
+            func.coalesce(func.sum(Invoice.paid_amount), 0),
+        )
+        .filter(
+            Invoice.company_id == company_id,
+            Invoice.client_id == contractor_id,
+            Invoice.status != DocumentStatus.cancelled,
+        )
+        .one()
+    )
 
     total_invoices = invoices_stats[0] or 0
     total_invoices_amount = float(invoices_stats[1] or 0)
     paid_amount = float(invoices_stats[2] or 0)
     unpaid_amount = total_invoices_amount - paid_amount
-    payment_percentage = round(paid_amount / total_invoices_amount * 100, 2) if total_invoices_amount > 0 else 0.0
+    payment_percentage = (
+        round(paid_amount / total_invoices_amount * 100, 2)
+        if total_invoices_amount > 0
+        else 0.0
+    )
 
-    acts_stats = db.query(
-        func.count(Act.id),
-        func.coalesce(func.sum(Act.total_amount), 0),
-    ).filter(Act.company_id == company_id, Act.client_id == contractor_id).one()
+    acts_stats = (
+        db.query(
+            func.count(Act.id),
+            func.coalesce(func.sum(Act.total_amount), 0),
+        )
+        .filter(Act.company_id == company_id, Act.client_id == contractor_id)
+        .one()
+    )
 
     return {
         "contractor_id": contractor_id,
@@ -398,19 +448,36 @@ def get_reconciliation(
     if not r or r.company_id != company_id:
         raise HTTPException(status_code=404, detail="Reconciliation not found")
     return {
-        "id": r.id, "shift_task_id": r.shift_task_id,
-        "operator_moto_hours": float(r.operator_moto_hours) if r.operator_moto_hours else None,
+        "id": r.id,
+        "shift_task_id": r.shift_task_id,
+        "operator_moto_hours": (
+            float(r.operator_moto_hours) if r.operator_moto_hours else None
+        ),
         "operator_odometer": r.operator_odometer,
-        "operator_fuel_used": float(r.operator_fuel_used) if r.operator_fuel_used else None,
-        "telematics_moto_hours": float(r.telematics_moto_hours) if r.telematics_moto_hours else None,
+        "operator_fuel_used": (
+            float(r.operator_fuel_used) if r.operator_fuel_used else None
+        ),
+        "telematics_moto_hours": (
+            float(r.telematics_moto_hours) if r.telematics_moto_hours else None
+        ),
         "telematics_odometer": r.telematics_odometer,
-        "telematics_fuel_used": float(r.telematics_fuel_used) if r.telematics_fuel_used else None,
+        "telematics_fuel_used": (
+            float(r.telematics_fuel_used) if r.telematics_fuel_used else None
+        ),
         "telematics_data_points_count": r.telematics_data_points_count,
-        "planned_moto_hours": float(r.planned_moto_hours) if r.planned_moto_hours else None,
+        "planned_moto_hours": (
+            float(r.planned_moto_hours) if r.planned_moto_hours else None
+        ),
         "planned_odometer": r.planned_odometer,
-        "moto_hours_diff_percent": float(r.moto_hours_diff_percent) if r.moto_hours_diff_percent else None,
-        "odometer_diff_percent": float(r.odometer_diff_percent) if r.odometer_diff_percent else None,
-        "fuel_diff_percent": float(r.fuel_diff_percent) if r.fuel_diff_percent else None,
+        "moto_hours_diff_percent": (
+            float(r.moto_hours_diff_percent) if r.moto_hours_diff_percent else None
+        ),
+        "odometer_diff_percent": (
+            float(r.odometer_diff_percent) if r.odometer_diff_percent else None
+        ),
+        "fuel_diff_percent": (
+            float(r.fuel_diff_percent) if r.fuel_diff_percent else None
+        ),
         "reconciliation_status": r.reconciliation_status,
         "final_moto_hours": float(r.final_moto_hours) if r.final_moto_hours else None,
         "final_odometer": r.final_odometer,
@@ -439,8 +506,14 @@ def resolve_reconciliation(
     reconciliation = db.get(ShiftDataReconciliation, reconciliation_id)
     if not reconciliation or reconciliation.company_id != company_id:
         raise HTTPException(status_code=404, detail="Reconciliation not found")
-    if reconciliation.reconciliation_status not in ("manual_review", "discrepancy_detected"):
-        raise HTTPException(status_code=400, detail=f"Cannot resolve status '{reconciliation.reconciliation_status}'")
+    if reconciliation.reconciliation_status not in (
+        "manual_review",
+        "discrepancy_detected",
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot resolve status '{reconciliation.reconciliation_status}'",
+        )
 
     reconciliation.decision_source = payload.get("decision_source", "manual")
     reconciliation.final_moto_hours = payload.get("final_moto_hours")
@@ -453,15 +526,28 @@ def resolve_reconciliation(
     db.commit()
     db.refresh(reconciliation)
 
-    logger.info(f"✅ Reconciliation #{reconciliation_id} resolved by user {current_user.id}")
+    logger.info(
+        f"✅ Reconciliation #{reconciliation_id} resolved by user {current_user.id}"
+    )
     return {
-        "id": r.id, "reconciliation_status": reconciliation.reconciliation_status,
+        "id": r.id,
+        "reconciliation_status": reconciliation.reconciliation_status,
         "decision_source": reconciliation.decision_source,
-        "final_moto_hours": float(reconciliation.final_moto_hours) if reconciliation.final_moto_hours else None,
+        "final_moto_hours": (
+            float(reconciliation.final_moto_hours)
+            if reconciliation.final_moto_hours
+            else None
+        ),
         "final_odometer": reconciliation.final_odometer,
-        "final_fuel_used": float(reconciliation.final_fuel_used) if reconciliation.final_fuel_used else None,
+        "final_fuel_used": (
+            float(reconciliation.final_fuel_used)
+            if reconciliation.final_fuel_used
+            else None
+        ),
         "decided_by": reconciliation.decided_by,
-        "decided_at": reconciliation.decided_at.isoformat() if reconciliation.decided_at else None,
+        "decided_at": (
+            reconciliation.decided_at.isoformat() if reconciliation.decided_at else None
+        ),
         "message": "Reconciliation resolved successfully",
     }
 
@@ -469,6 +555,7 @@ def resolve_reconciliation(
 # ============================================================
 # Dashboard V2 + Revenue Analytics
 # ============================================================
+
 
 @router.get("/dashboard-v2")
 def get_finance_dashboard_v2(
@@ -479,31 +566,42 @@ def get_finance_dashboard_v2(
     company_id: int = Depends(get_current_company_id),
 ):
     """📊 Расширенный дашборд с фильтрацией по периоду."""
-    from datetime import datetime as dt, timedelta
+    from datetime import datetime as dt
+    from datetime import timedelta
 
     d_from = dt.fromisoformat(date_from)
     d_to = dt.fromisoformat(date_to) + timedelta(days=1)
 
-    revenue_q = db.query(
-        func.coalesce(func.sum(Invoice.total), 0).label("total"),
-        func.coalesce(func.sum(Invoice.paid_amount), 0).label("paid"),
-        func.count(Invoice.id).label("count"),
-    ).filter(
-        Invoice.company_id == company_id,
-        Invoice.invoice_date >= d_from, Invoice.invoice_date < d_to,
-    ).first()
+    revenue_q = (
+        db.query(
+            func.coalesce(func.sum(Invoice.total), 0).label("total"),
+            func.coalesce(func.sum(Invoice.paid_amount), 0).label("paid"),
+            func.count(Invoice.id).label("count"),
+        )
+        .filter(
+            Invoice.company_id == company_id,
+            Invoice.invoice_date >= d_from,
+            Invoice.invoice_date < d_to,
+        )
+        .first()
+    )
 
     total_revenue = float(revenue_q.total or 0)
     total_paid = float(revenue_q.paid or 0)
     invoices_count = int(revenue_q.count or 0)
 
-    payouts_q = db.query(
-        func.count(Payout.id).label("count"),
-        func.coalesce(func.sum(Payout.net_amount), 0).label("net"),
-    ).filter(
-        Payout.company_id == company_id,
-        Payout.payout_date >= d_from, Payout.payout_date < d_to,
-    ).first()
+    payouts_q = (
+        db.query(
+            func.count(Payout.id).label("count"),
+            func.coalesce(func.sum(Payout.net_amount), 0).label("net"),
+        )
+        .filter(
+            Payout.company_id == company_id,
+            Payout.payout_date >= d_from,
+            Payout.payout_date < d_to,
+        )
+        .first()
+    )
 
     payouts_count = int(payouts_q.count or 0)
     total_payouts_net = float(payouts_q.net or 0)
@@ -533,7 +631,8 @@ def get_revenue_by_client(
     company_id: int = Depends(get_current_company_id),
 ):
     """🏆 Топ клиентов по выручке за период."""
-    from datetime import datetime as dt, timedelta
+    from datetime import datetime as dt
+    from datetime import timedelta
 
     d_from = dt.fromisoformat(date_from)
     d_to = dt.fromisoformat(date_to) + timedelta(days=1)
@@ -546,14 +645,21 @@ def get_revenue_by_client(
         .join(Contractor, Invoice.client_id == Contractor.id)
         .filter(
             Invoice.company_id == company_id,
-            Invoice.invoice_date >= d_from, Invoice.invoice_date < d_to,
+            Invoice.invoice_date >= d_from,
+            Invoice.invoice_date < d_to,
         )
         .group_by(Contractor.id, Contractor.name)
         .order_by(func.sum(Invoice.total).desc())
         .limit(limit)
         .all()
     )
-    return [{"client_name": r.client_name or "Не указан", "total_revenue": float(r.total_revenue)} for r in results]
+    return [
+        {
+            "client_name": r.client_name or "Не указан",
+            "total_revenue": float(r.total_revenue),
+        }
+        for r in results
+    ]
 
 
 @router.get("/revenue/by-vehicle")
@@ -566,13 +672,15 @@ def get_revenue_by_vehicle(
     company_id: int = Depends(get_current_company_id),
 ):
     """🚜 Топ техники по моточасам за период."""
-    from datetime import datetime as dt, timedelta
+    from datetime import datetime as dt
+    from datetime import timedelta
 
     d_from = dt.fromisoformat(date_from)
     d_to = dt.fromisoformat(date_to) + timedelta(days=1)
 
     try:
         from app.models.rental import Rental
+
         results = (
             db.query(
                 Vehicle.name.label("vehicle_name"),
@@ -581,7 +689,8 @@ def get_revenue_by_vehicle(
             .join(Vehicle, Rental.vehicle_id == Vehicle.id)
             .filter(
                 Rental.company_id == company_id,
-                Rental.start_date >= d_from, Rental.start_date < d_to,
+                Rental.start_date >= d_from,
+                Rental.start_date < d_to,
             )
             .group_by(Vehicle.id, Vehicle.name)
             .order_by(func.sum(Rental.moto_hours).desc())
@@ -592,7 +701,18 @@ def get_revenue_by_vehicle(
         results = []
 
     if not results:
-        vehicles = db.query(Vehicle.name).filter(Vehicle.company_id == company_id).limit(limit).all()
+        vehicles = (
+            db.query(Vehicle.name)
+            .filter(Vehicle.company_id == company_id)
+            .limit(limit)
+            .all()
+        )
         return [{"vehicle_name": v.name, "moto_hours": 0} for v in vehicles]
 
-    return [{"vehicle_name": r.vehicle_name or "Не указана", "moto_hours": float(r.moto_hours)} for r in results]
+    return [
+        {
+            "vehicle_name": r.vehicle_name or "Не указана",
+            "moto_hours": float(r.moto_hours),
+        }
+        for r in results
+    ]

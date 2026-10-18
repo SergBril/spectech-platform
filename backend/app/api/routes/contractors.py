@@ -19,7 +19,9 @@ router = APIRouter()
 
 
 # 🆕 ВАЖНО: /me должен быть ПЕРЕД /{contractor_id}, иначе FastAPI воспримет "me" как ID
-@router.get("/me", response_model=ContractorRead, summary="Текущий contractor пользователя")
+@router.get(
+    "/me", response_model=ContractorRead, summary="Текущий contractor пользователя"
+)
 def get_my_contractor(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -27,21 +29,19 @@ def get_my_contractor(
 ):
     """
     Возвращает contractor текущего пользователя.
-    
+
     Логика:
     1. Ищем Employee связанного с user_id
     2. Если нет — возвращаем первого client-контрагента компании (fallback)
     """
     # Вариант 1: через Employee
-    employee = db.scalar(
-        select(Employee).where(Employee.user_id == current_user.id)
-    )
-    
+    employee = db.scalar(select(Employee).where(Employee.user_id == current_user.id))
+
     if employee:
         contractor = db.get(Contractor, employee.contractor_id)
         if contractor:
             return contractor
-    
+
     # Вариант 2 (fallback): первый client компании
     contractor = db.scalar(
         select(Contractor)
@@ -52,13 +52,13 @@ def get_my_contractor(
         )
         .order_by(Contractor.id)
     )
-    
+
     if not contractor:
         raise HTTPException(
             status_code=404,
-            detail="Вы не привязаны ни к одному контрагенту. Создайте client-контрагента."
+            detail="Вы не привязаны ни к одному контрагенту. Создайте client-контрагента.",
         )
-    
+
     return contractor
 
 

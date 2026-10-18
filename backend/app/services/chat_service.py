@@ -28,9 +28,7 @@ class ChatService:
     @staticmethod
     def get_chat_by_request(db: Session, request_id: int) -> RequestChat | None:
         return (
-            db.query(RequestChat)
-            .filter(RequestChat.request_id == request_id)
-            .first()
+            db.query(RequestChat).filter(RequestChat.request_id == request_id).first()
         )
 
     @staticmethod
@@ -41,9 +39,7 @@ class ChatService:
             raise ValueError(f"Request {request_id} not found")
 
         chat = (
-            db.query(RequestChat)
-            .filter(RequestChat.request_id == request_id)
-            .first()
+            db.query(RequestChat).filter(RequestChat.request_id == request_id).first()
         )
         if not chat:
             chat = RequestChat(request_id=request_id)

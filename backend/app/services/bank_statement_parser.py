@@ -3,36 +3,36 @@
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Iterator
 
 logger = logging.getLogger("spectech.bank_parser")
 
 # Regex для извлечения номера счёта из назначения платежа
 INVOICE_NUMBER_PATTERNS = [
-    re.compile(r'(?:счет[а-я]*|сч[.]?)\s*№\s*(\d+)', re.IGNORECASE),
-    re.compile(r'по\s+счету\s+№?\s*(\d+)', re.IGNORECASE),
-    re.compile(r'INV-(\d{4}-\d+)', re.IGNORECASE),
-    re.compile(r'(?:и|,)\s*№\s*(\d+)', re.IGNORECASE),
-    re.compile(r'счета?\s*№?\s*(\d+)', re.IGNORECASE),
+    re.compile(r"(?:счет[а-я]*|сч[.]?)\s*№\s*(\d+)", re.IGNORECASE),
+    re.compile(r"по\s+счету\s+№?\s*(\d+)", re.IGNORECASE),
+    re.compile(r"INV-(\d{4}-\d+)", re.IGNORECASE),
+    re.compile(r"(?:и|,)\s*№\s*(\d+)", re.IGNORECASE),
+    re.compile(r"счета?\s*№?\s*(\d+)", re.IGNORECASE),
 ]
 
 # Регулярки для определения "служебных" операций
 EXCLUSION_PATTERNS = [
-    re.compile(r'Плата за обслуживание', re.IGNORECASE),
-    re.compile(r'Плата за пакет', re.IGNORECASE),
-    re.compile(r'Комиссия банка', re.IGNORECASE),
-    re.compile(r'По решению о взыскании', re.IGNORECASE),
-    re.compile(r'ФНС России', re.IGNORECASE),
-    re.compile(r'РКО', re.IGNORECASE),
+    re.compile(r"Плата за обслуживание", re.IGNORECASE),
+    re.compile(r"Плата за пакет", re.IGNORECASE),
+    re.compile(r"Комиссия банка", re.IGNORECASE),
+    re.compile(r"По решению о взыскании", re.IGNORECASE),
+    re.compile(r"ФНС России", re.IGNORECASE),
+    re.compile(r"РКО", re.IGNORECASE),
 ]
 
 
 @dataclass
 class ParsedTransaction:
     """Распарсенная транзакция."""
+
     document_type: str
     number: str
     date: date
@@ -79,7 +79,9 @@ class ParsedTransaction:
 
     @property
     def counterparty_account(self) -> str | None:
-        return self.payee_account if self.direction == "outgoing" else self.payer_account
+        return (
+            self.payee_account if self.direction == "outgoing" else self.payer_account
+        )
 
     @property
     def counterparty_bank(self) -> str | None:
@@ -92,7 +94,9 @@ class ParsedTransaction:
     @property
     def bank_transaction_id(self) -> str:
         amount_str = str(self.amount).replace(".", "_").replace(",", "_")
-        return f"{self.document_type}_{self.number}_{self.date.isoformat()}_{amount_str}"
+        return (
+            f"{self.document_type}_{self.number}_{self.date.isoformat()}_{amount_str}"
+        )
 
     def extract_invoice_number(self) -> str | None:
         if not self.purpose:
@@ -117,6 +121,7 @@ class ParsedTransaction:
 @dataclass
 class ParsedStatement:
     """Распарсенная выписка."""
+
     account_number: str
     bank_name: str | None
     date_start: date
@@ -160,10 +165,10 @@ class ClientBankExchangeParser:
             raise FileNotFoundError(f"File not found: {file_path}")
 
         try:
-            with open(file_path, "r", encoding="windows-1251") as f:
+            with open(file_path, encoding="windows-1251") as f:
                 content = f.read()
         except UnicodeDecodeError:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
 
         return self.parse_content(content)
@@ -173,7 +178,7 @@ class ClientBankExchangeParser:
             raise ValueError("Invalid format: expected 1CClientBankExchange")
 
         lines = content.split("\n")
-        header = self._parse_header(lines)
+        self._parse_header(lines)
 
         statement_data = None
         transactions = []
@@ -265,7 +270,9 @@ class ClientBankExchangeParser:
             "total_outgoing": Decimal(data.get("ВсегоСписано", "0")),
         }
 
-    def _build_transaction(self, doc_type_ru: str, data: dict) -> ParsedTransaction | None:
+    def _build_transaction(
+        self, doc_type_ru: str, data: dict
+    ) -> ParsedTransaction | None:
         doc_type = self.DOCUMENT_TYPE_MAP.get(doc_type_ru)
         if not doc_type:
             logger.warning(f"Unknown document type: {doc_type_ru}")
@@ -281,7 +288,9 @@ class ClientBankExchangeParser:
             direction = "incoming"
             processed_date_key = "ДатаПоступило"
         else:
-            logger.warning(f"Transaction not related to our account: {data.get('Номер')}")
+            logger.warning(
+                f"Transaction not related to our account: {data.get('Номер')}"
+            )
             return None
 
         processed_date_str = data.get(processed_date_key) or data.get("Дата")

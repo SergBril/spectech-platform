@@ -9,6 +9,7 @@ from typing import Any
 @dataclass
 class GpsPointData:
     """Унифицированная структура GPS-точки от любого провайдера."""
+
     latitude: float
     longitude: float
     altitude: float | None = None
@@ -30,7 +31,7 @@ class GpsProviderAdapter(ABC):
     def __init__(self, config: dict[str, Any]):
         """
         Инициализация адаптера с конфигурацией провайдера.
-        
+
         config может содержать:
         - api_key: ключ API
         - api_url: URL сервера

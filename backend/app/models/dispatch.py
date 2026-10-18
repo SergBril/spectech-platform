@@ -101,12 +101,13 @@ class Request(Base):
     )
     # === МАРКЕТПЛЕЙС ===
     is_published: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False,
-        comment="Опубликована ли заявка в маркетплейсе"
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Опубликована ли заявка в маркетплейсе",
     )
     published_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
-        comment="Дата публикации в маркетплейсе"
+        DateTime(timezone=True), nullable=True, comment="Дата публикации в маркетплейсе"
     )
 
     # === МАРКЕТПЛЕЙС: отклики на заявку ===

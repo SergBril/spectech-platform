@@ -4,9 +4,11 @@ import logging
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
+
 # Lazy import — WeasyPrint загружается только при генерации PDF,
 # чтобы не блокировать запуск приложения на Windows без GTK
 _weasyprint = None
+
 
 def _get_weasyprint():
     """Ленивая загрузка WeasyPrint с понятным сообщением об ошибке."""
@@ -14,6 +16,7 @@ def _get_weasyprint():
     if _weasyprint is None:
         try:
             from weasyprint import HTML
+
             _weasyprint = HTML
         except (OSError, ImportError) as e:
             raise RuntimeError(
@@ -22,6 +25,7 @@ def _get_weasyprint():
                 f"Оригинальная ошибка: {e}"
             ) from e
     return _weasyprint
+
 
 from app.services.pdf_form_filler import fill_torg12_pdf, fill_upd_pdf
 from app.services.translations import translate_unit

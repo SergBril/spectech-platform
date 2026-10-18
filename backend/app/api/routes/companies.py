@@ -12,6 +12,7 @@ from app.models.company import Company
 
 router = APIRouter()
 import logging
+
 import httpx
 
 logger = logging.getLogger("spectech.companies")
@@ -73,6 +74,7 @@ def update_company_tax_settings(
         default_is_vat_included=company.default_is_vat_included,
     )
 
+
 class CompanyRequisitesUpdate(BaseModel):
     actual_address: str | None = None
     email: str | None = None
@@ -102,13 +104,19 @@ def update_company_requisites(
 
     # Проверяем доступ
     if not current_user.is_superuser:
-        uc = db.query(UserCompany).filter(
-            UserCompany.user_id == current_user.id,
-            UserCompany.company_id == company_id,
-            UserCompany.is_active == True,  # noqa: E712
-        ).first()
+        uc = (
+            db.query(UserCompany)
+            .filter(
+                UserCompany.user_id == current_user.id,
+                UserCompany.company_id == company_id,
+                UserCompany.is_active == True,  # noqa: E712
+            )
+            .first()
+        )
         if not uc or uc.role not in ("owner", "admin"):
-            raise HTTPException(status_code=403, detail="Нет прав на редактирование реквизитов")
+            raise HTTPException(
+                status_code=403, detail="Нет прав на редактирование реквизитов"
+            )
 
     company = db.get(Company, company_id)
     if not company:
@@ -126,6 +134,7 @@ def update_company_requisites(
 
     return {"detail": "Реквизиты обновлены", "company_id": company_id}
 
+
 @router.post("/companies/dadata/suggest/{suggest_type}")
 async def dadata_suggest(
     suggest_type: str,
@@ -137,11 +146,15 @@ async def dadata_suggest(
 
     api_key = os.environ.get("DADATA_API_KEY", "").strip()
     if not api_key:
-        raise HTTPException(status_code=500, detail="DADATA_API_KEY not configured on server")
+        raise HTTPException(
+            status_code=500, detail="DADATA_API_KEY not configured on server"
+        )
 
     allowed_types = ["party", "address", "bank", "fio", "email"]
     if suggest_type not in allowed_types:
-        raise HTTPException(status_code=400, detail=f"Invalid suggest type. Allowed: {allowed_types}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid suggest type. Allowed: {allowed_types}"
+        )
 
     url = f"https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/{suggest_type}"
 

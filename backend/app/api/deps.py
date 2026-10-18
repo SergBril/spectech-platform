@@ -53,7 +53,6 @@ def require_permission(entity: str, action: str):
         db: Session = Depends(get_db),
         user: User = Depends(get_current_user),
     ):
-
         if not check_permission(db, user, entity, action):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

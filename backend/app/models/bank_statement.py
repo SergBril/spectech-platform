@@ -8,7 +8,6 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Enum,
     ForeignKey,
     Integer,
     Numeric,
@@ -23,6 +22,7 @@ from app.core.db import Base
 
 class StatementStatus(str, PyEnum):
     """Статусы обработки выписки."""
+
     processing = "processing"
     parsed = "parsed"
     completed = "completed"
@@ -31,25 +31,28 @@ class StatementStatus(str, PyEnum):
 
 class TransactionDirection(str, PyEnum):
     """Направление транзакции."""
+
     incoming = "incoming"  # Поступление (клиент оплатил нам)
     outgoing = "outgoing"  # Списание (мы платим)
 
 
 class TransactionType(str, PyEnum):
     """Тип банковской операции."""
-    payment_order = "payment_order"       # Платёжное поручение
-    bank_order = "bank_order"             # Банковский ордер (комиссии)
-    demand_order = "demand_order"         # Инкассовое поручение (ФНС)
-    cash_deposit = "cash_deposit"         # Взнос наличными
-    cash_withdrawal = "cash_withdrawal"   # Выдача наличными
+
+    payment_order = "payment_order"  # Платёжное поручение
+    bank_order = "bank_order"  # Банковский ордер (комиссии)
+    demand_order = "demand_order"  # Инкассовое поручение (ФНС)
+    cash_deposit = "cash_deposit"  # Взнос наличными
+    cash_withdrawal = "cash_withdrawal"  # Выдача наличными
 
 
 class MatchStatus(str, PyEnum):
     """Статус привязки транзакции к invoice."""
-    unmatched = "unmatched"       # Не привязана
-    auto_matched = "auto_matched" # Авто-привязка по номеру счёта
+
+    unmatched = "unmatched"  # Не привязана
+    auto_matched = "auto_matched"  # Авто-привязка по номеру счёта
     manual_matched = "manual_matched"  # Привязана вручную
-    ignored = "ignored"           # Игнорируется (расходы банка, ФНС)
+    ignored = "ignored"  # Игнорируется (расходы банка, ФНС)
 
 
 class BankStatement(Base):
@@ -69,8 +72,7 @@ class BankStatement(Base):
 
     # Данные из выписки
     account_number: Mapped[str] = mapped_column(
-        String(50), nullable=False, index=True,
-        comment="Номер расчётного счёта"
+        String(50), nullable=False, index=True, comment="Номер расчётного счёта"
     )
     bank_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     date_start: Mapped[date] = mapped_column(Date, nullable=False)
@@ -126,26 +128,22 @@ class BankTransaction(Base):
     # Уникальный идентификатор транзакции
     # Формируется как: type + number + date + account
     bank_transaction_id: Mapped[str] = mapped_column(
-        String(255), unique=True, nullable=False, index=True,
-        comment="Уникальный ID в банке"
+        String(255),
+        unique=True,
+        nullable=False,
+        index=True,
+        comment="Уникальный ID в банке",
     )
 
     # Основные данные
-    document_type: Mapped[TransactionType] = mapped_column(
-        String(30), nullable=False
-    )
+    document_type: Mapped[TransactionType] = mapped_column(String(30), nullable=False)
     document_number: Mapped[str] = mapped_column(String(50), nullable=False)
     document_date: Mapped[date] = mapped_column(Date, nullable=False)
-    
-    direction: Mapped[TransactionDirection] = mapped_column(
-        String(20), nullable=False
-    )
-    amount: Mapped[Decimal] = mapped_column(
-        Numeric(14, 2), nullable=False
-    )
+
+    direction: Mapped[TransactionDirection] = mapped_column(String(20), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     processed_date: Mapped[date] = mapped_column(
-        Date, nullable=False,
-        comment="Дата поступления/списания"
+        Date, nullable=False, comment="Дата поступления/списания"
     )
 
     # Контрагент
@@ -167,12 +165,12 @@ class BankTransaction(Base):
         Integer, ForeignKey("invoices.id"), nullable=True
     )
     matched_amount: Mapped[Decimal | None] = mapped_column(
-        Numeric(14, 2), nullable=True,
-        comment="Сумма, применённая к invoice (для частичных оплат)"
+        Numeric(14, 2),
+        nullable=True,
+        comment="Сумма, применённая к invoice (для частичных оплат)",
     )
     match_confidence: Mapped[float | None] = mapped_column(
-        Numeric(3, 2), nullable=True,
-        comment="Уверенность в матчинге (0.0 - 1.0)"
+        Numeric(3, 2), nullable=True, comment="Уверенность в матчинге (0.0 - 1.0)"
     )
 
     # Связанный Payment (после применения)

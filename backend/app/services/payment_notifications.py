@@ -1,6 +1,5 @@
 """Уведомления при применении платежа к счёту."""
 
-import asyncio
 import logging
 from decimal import Decimal
 
@@ -9,8 +8,8 @@ from sqlalchemy.orm import Session
 from app.models.contractor import Contractor
 from app.models.finance import Invoice
 from app.services.email_service import email_service
-from app.services.telegram_service import telegram_service
 from app.services.notification_service import create_notification
+from app.services.telegram_service import telegram_service
 
 logger = logging.getLogger("spectech.payment_notifications")
 
@@ -30,7 +29,7 @@ class PaymentNotificationService:
     ) -> dict[str, bool]:
         """
         Отправляет уведомления клиенту об оплате счёта.
-        
+
         Channels:
         - 📧 Email клиенту
         - 🤖 Telegram (если доступен)
@@ -41,7 +40,9 @@ class PaymentNotificationService:
         # Получаем email и имя клиента
         client = db.get(Contractor, invoice.client_id)
         if not client:
-            logger.warning(f"Client {invoice.client_id} not found, skipping notifications")
+            logger.warning(
+                f"Client {invoice.client_id} not found, skipping notifications"
+            )
             return results
 
         # Email клиента (поле или fallback)
@@ -50,7 +51,7 @@ class PaymentNotificationService:
             # Fallback для тестов и клиентов без email
             client_email = f"client_{client.id}@spectech.dev"
             logger.info(f"Using fallback email for client {client.id}")
-        
+
         client_name = client.name
 
         # 1. 📧 Email
@@ -87,7 +88,7 @@ class PaymentNotificationService:
                     f"⏳ Остаток: {remaining:.2f} ₽\n"
                     f"👤 {payer_name}"
                 )
-            
+
             results["telegram"] = await telegram_service.send_message(
                 text=text,
                 parse_mode="HTML",
@@ -108,7 +109,7 @@ class PaymentNotificationService:
                         f"{invoice.document_number}: +{payment_amount:.2f} ₽. "
                         f"Остаток: {remaining:.2f} ₽"
                     )
-                
+
                 await create_notification(
                     db=db,
                     user_id=client_user_id,

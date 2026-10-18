@@ -56,13 +56,14 @@ class Invoice(Base):
     request_id: Mapped[int | None] = mapped_column(
         ForeignKey("requests.id"), nullable=True
     )
-    
+
     # 🆕 НОВОЕ: связь с арендой
     rental_id: Mapped[int | None] = mapped_column(
-        ForeignKey("rentals.id"), nullable=True,
-        comment="Связанная аренда (автосоздание при завершении)"
+        ForeignKey("rentals.id"),
+        nullable=True,
+        comment="Связанная аренда (автосоздание при завершении)",
     )
-    
+
     client_id: Mapped[int] = mapped_column(ForeignKey("contractors.id"), nullable=False)
     company_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
@@ -76,7 +77,7 @@ class Invoice(Base):
     paid_amount: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, nullable=False
     )
-    
+
     # 🆕 Новые поля для систем налогообложения
     tax_system: Mapped[str] = mapped_column(
         String(20),
@@ -122,9 +123,7 @@ class Invoice(Base):
         "InvoiceItem", back_populates="invoice", cascade="all, delete-orphan"
     )
     # 🆕 НОВОЕ: обратная связь с арендой
-    rental: Mapped["Rental | None"] = relationship(
-        "Rental", foreign_keys=[rental_id]
-    )
+    rental: Mapped["Rental | None"] = relationship("Rental", foreign_keys=[rental_id])
 
 
 class InvoiceItem(Base):
@@ -162,8 +161,9 @@ class Act(Base):
 
     request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), nullable=True)
     rental_id: Mapped[int | None] = mapped_column(
-        ForeignKey("rentals.id"), nullable=True,
-        comment="Связанная аренда (автосоздание при завершении)"
+        ForeignKey("rentals.id"),
+        nullable=True,
+        comment="Связанная аренда (автосоздание при завершении)",
     )
     client_id: Mapped[int] = mapped_column(ForeignKey("contractors.id"), nullable=False)
     company_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -233,9 +233,7 @@ class Act(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    rental: Mapped["Rental | None"] = relationship(
-        "Rental", foreign_keys=[rental_id]
-    )
+    rental: Mapped["Rental | None"] = relationship("Rental", foreign_keys=[rental_id])
 
 
 class Payout(Base):
@@ -250,12 +248,14 @@ class Payout(Base):
 
     owner_id: Mapped[int] = mapped_column(ForeignKey("contractors.id"), nullable=False)
     vehicle_id: Mapped[int | None] = mapped_column(
-        ForeignKey("vehicles.id"), nullable=True,
-        comment="Основная техника (nullable при автосоздании из аренды)"
+        ForeignKey("vehicles.id"),
+        nullable=True,
+        comment="Основная техника (nullable при автосоздании из аренды)",
     )
     rental_id: Mapped[int | None] = mapped_column(
-        ForeignKey("rentals.id"), nullable=True,
-        comment="Связанная аренда (автосоздание при завершении)"
+        ForeignKey("rentals.id"),
+        nullable=True,
+        comment="Связанная аренда (автосоздание при завершении)",
     )
     request_id: Mapped[int | None] = mapped_column(
         ForeignKey("requests.id"), nullable=True
@@ -298,8 +298,7 @@ class Payout(Base):
     )
 
     paid_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
-        comment="Дата фактической выплаты"
+        DateTime(timezone=True), nullable=True, comment="Дата фактической выплаты"
     )
 
 
@@ -335,24 +334,25 @@ class Payment(Base):
 
     # 🆕 НОВЫЕ поля для банковских выписок
     bank_transaction_id: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, unique=True, index=True,
-        comment="Связь с BankTransaction (уникальный ID в банке)"
+        String(255),
+        nullable=True,
+        unique=True,
+        index=True,
+        comment="Связь с BankTransaction (уникальный ID в банке)",
     )
     payer_name: Mapped[str | None] = mapped_column(
-        String(500), nullable=True,
-        comment="Наименование плательщика (из банковской выписки)"
+        String(500),
+        nullable=True,
+        comment="Наименование плательщика (из банковской выписки)",
     )
     payer_inn: Mapped[str | None] = mapped_column(
-        String(20), nullable=True,
-        comment="ИНН плательщика"
+        String(20), nullable=True, comment="ИНН плательщика"
     )
     payer_account: Mapped[str | None] = mapped_column(
-        String(50), nullable=True,
-        comment="Счёт плательщика"
+        String(50), nullable=True, comment="Счёт плательщика"
     )
     purpose: Mapped[str | None] = mapped_column(
-        Text, nullable=True,
-        comment="Назначение платежа (из банка)"
+        Text, nullable=True, comment="Назначение платежа (из банка)"
     )
 
     created_at: Mapped[datetime] = mapped_column(

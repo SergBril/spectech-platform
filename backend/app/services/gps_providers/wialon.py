@@ -8,12 +8,12 @@ API документация: https://sdk.wialon.com/wiki/en/sidebar/remoteapi/a
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 
-from app.services.gps_providers.base import GpsProviderAdapter, GpsPointData
+from app.services.gps_providers.base import GpsPointData, GpsProviderAdapter
 
 logger = logging.getLogger("spectech.gps.wialon")
 
@@ -59,7 +59,9 @@ class WialonAdapter(GpsProviderAdapter):
         logger.info("✅ Wialon session established for user %s", self.login)
         return eid
 
-    async def _api_call(self, client: httpx.AsyncClient, svc: str, params: dict) -> dict:
+    async def _api_call(
+        self, client: httpx.AsyncClient, svc: str, params: dict
+    ) -> dict:
         """Выполняет вызов Wialon AJAX API."""
         token = await self._ensure_token(client)
 
@@ -97,10 +99,12 @@ class WialonAdapter(GpsProviderAdapter):
 
     def get_all_positions_sync(self) -> list[GpsPointData]:
         import asyncio
+
         try:
             return asyncio.run(self._fetch_positions())
         except RuntimeError:
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, self._fetch_positions())
                 return future.result(timeout=60)
@@ -109,16 +113,20 @@ class WialonAdapter(GpsProviderAdapter):
         """Запрашивает последние позиции всех юнитов через messages/load_last."""
         async with httpx.AsyncClient(timeout=30) as client:
             # Шаг 1: Получаем список всех юнитов
-            units_data = await self._api_call(client, "core/search_items", {
-                "spec": {
-                    "itemsType": "avl_unit",
-                    "propName": "sys_name",
-                    "propValueMask": "*",
-                    "sortType": "sys_name",
+            units_data = await self._api_call(
+                client,
+                "core/search_items",
+                {
+                    "spec": {
+                        "itemsType": "avl_unit",
+                        "propName": "sys_name",
+                        "propValueMask": "*",
+                        "sortType": "sys_name",
+                    },
+                    "force": 1,
+                    "flags": 0x1,  # base info
                 },
-                "force": 1,
-                "flags": 0x1,  # base info
-            })
+            )
 
             items = units_data.get("items", [])
             if not items:
@@ -129,12 +137,16 @@ class WialonAdapter(GpsProviderAdapter):
             logger.info("Wialon: found %d unit(s)", len(unit_ids))
 
             # Шаг 2: Загружаем последние сообщения для всех юнитов
-            msg_data = await self._api_call(client, "messages/load_last", {
-                "itemId": unit_ids,
-                "lastTime": 0,  # 0 = последнее известное
-                "flags": 0x0001,  # position messages
-                "count": 1,
-            })
+            msg_data = await self._api_call(
+                client,
+                "messages/load_last",
+                {
+                    "itemId": unit_ids,
+                    "lastTime": 0,  # 0 = последнее известное
+                    "flags": 0x0001,  # position messages
+                    "count": 1,
+                },
+            )
 
             messages = msg_data.get("messages", [])
             if not messages:
@@ -155,17 +167,21 @@ class WialonAdapter(GpsProviderAdapter):
                 speed_raw = pos.get("s", 0)
                 course_raw = pos.get("c", 0)
 
-                results.append(GpsPointData(
-                    latitude=float(lat),
-                    longitude=float(lon),
-                    speed=int(speed_raw / 10) if speed_raw else None,
-                    heading=int(course_raw / 10) if course_raw else None,
-                    engine_on=None,  # Wialon требует отдельный запрос для датчиков
-                    recorded_at=datetime.fromtimestamp(
-                        int(msg.get("t", 0)), tz=timezone.utc
-                    ) if msg.get("t") else None,
-                    raw_data={"unit_id": msg.get("uid"), **msg},
-                ))
+                results.append(
+                    GpsPointData(
+                        latitude=float(lat),
+                        longitude=float(lon),
+                        speed=int(speed_raw / 10) if speed_raw else None,
+                        heading=int(course_raw / 10) if course_raw else None,
+                        engine_on=None,  # Wialon требует отдельный запрос для датчиков
+                        recorded_at=(
+                            datetime.fromtimestamp(int(msg.get("t", 0)), tz=UTC)
+                            if msg.get("t")
+                            else None
+                        ),
+                        raw_data={"unit_id": msg.get("uid"), **msg},
+                    )
+                )
             except (ValueError, KeyError, TypeError) as e:
                 logger.warning("Wialon parse error: %s", e)
 
@@ -177,16 +193,20 @@ class WialonAdapter(GpsProviderAdapter):
     ) -> list[GpsPointData]:
         """Получает трек за период."""
         async with httpx.AsyncClient(timeout=30) as client:
-            units_data = await self._api_call(client, "core/search_items", {
-                "spec": {
-                    "itemsType": "avl_unit",
-                    "propName": "sys_name",
-                    "propValueMask": "*",
-                    "sortType": "sys_name",
+            units_data = await self._api_call(
+                client,
+                "core/search_items",
+                {
+                    "spec": {
+                        "itemsType": "avl_unit",
+                        "propName": "sys_name",
+                        "propValueMask": "*",
+                        "sortType": "sys_name",
+                    },
+                    "force": 1,
+                    "flags": 0x1,
                 },
-                "force": 1,
-                "flags": 0x1,
-            })
+            )
 
             items = units_data.get("items", [])
             if not items:
@@ -194,13 +214,17 @@ class WialonAdapter(GpsProviderAdapter):
 
             unit_id = items[0]["id"]
 
-            msg_data = await self._api_call(client, "messages/load_interval", {
-                "itemId": unit_id,
-                "timeFrom": int(date_from.timestamp()),
-                "timeTo": int(date_to.timestamp()),
-                "flags": 0x0001,
-                "count": limit,
-            })
+            msg_data = await self._api_call(
+                client,
+                "messages/load_interval",
+                {
+                    "itemId": unit_id,
+                    "timeFrom": int(date_from.timestamp()),
+                    "timeTo": int(date_to.timestamp()),
+                    "flags": 0x0001,
+                    "count": limit,
+                },
+            )
 
             messages = msg_data.get("messages", [])
 
@@ -216,16 +240,20 @@ class WialonAdapter(GpsProviderAdapter):
                 speed_raw = pos.get("s", 0)
                 course_raw = pos.get("c", 0)
 
-                results.append(GpsPointData(
-                    latitude=float(lat),
-                    longitude=float(lon),
-                    speed=int(speed_raw / 10) if speed_raw else None,
-                    heading=int(course_raw / 10) if course_raw else None,
-                    recorded_at=datetime.fromtimestamp(
-                        int(msg.get("t", 0)), tz=timezone.utc
-                    ) if msg.get("t") else None,
-                    raw_data={"unit_id": msg.get("uid"), **msg},
-                ))
+                results.append(
+                    GpsPointData(
+                        latitude=float(lat),
+                        longitude=float(lon),
+                        speed=int(speed_raw / 10) if speed_raw else None,
+                        heading=int(course_raw / 10) if course_raw else None,
+                        recorded_at=(
+                            datetime.fromtimestamp(int(msg.get("t", 0)), tz=UTC)
+                            if msg.get("t")
+                            else None
+                        ),
+                        raw_data={"unit_id": msg.get("uid"), **msg},
+                    )
+                )
             except (ValueError, KeyError, TypeError) as e:
                 logger.warning("Wialon track parse error: %s", e)
 

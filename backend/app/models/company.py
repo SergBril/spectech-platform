@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, Numeric, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from app.core.constants import TaxSystem
@@ -70,15 +70,19 @@ class Company(Base):
 
     # === ⭐ РЕЙТИНГИ И ОТЗЫВЫ ===
     average_rating: Mapped[float | None] = mapped_column(
-        Numeric(3, 2), nullable=True,
+        Numeric(3, 2),
+        nullable=True,
         comment="Средний рейтинг компании (1.00 - 5.00)",
     )
     total_reviews: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False,
+        Integer,
+        default=0,
+        nullable=False,
         comment="Общее количество отзывов",
     )
     rating_distribution: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True,
+        JSON,
+        nullable=True,
         comment='Распределение оценок: {"5": 10, "4": 3, "3": 1, "2": 0, "1": 0}',
     )
 
@@ -88,13 +92,21 @@ class Company(Base):
     bank_name = Column(String(300), nullable=True, comment="Наименование банка")
     bik = Column(String(20), nullable=True, comment="БИК банка")
     checking_account = Column(String(50), nullable=True, comment="Расчётный счёт")
-    correspondent_account = Column(String(50), nullable=True, comment="Корреспондентский счёт")
+    correspondent_account = Column(
+        String(50), nullable=True, comment="Корреспондентский счёт"
+    )
     ogrn = Column(String(50), nullable=True, comment="ОГРН / ОГРНИП")
     okpo = Column(String(20), nullable=True, comment="ОКПО")
     director_name = Column(String(300), nullable=True, comment="ФИО руководителя")
     director_position = Column(
-        String(100), nullable=True, default="Генеральный директор",
+        String(100),
+        nullable=True,
+        default="Генеральный директор",
         comment="Должность руководителя",
     )
-    stamp_image_url = Column(String(500), nullable=True, comment="URL изображения печати")
-    signature_image_url = Column(String(500), nullable=True, comment="URL изображения подписи")
+    stamp_image_url = Column(
+        String(500), nullable=True, comment="URL изображения печати"
+    )
+    signature_image_url = Column(
+        String(500), nullable=True, comment="URL изображения подписи"
+    )

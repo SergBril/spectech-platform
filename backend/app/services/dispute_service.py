@@ -1,20 +1,20 @@
 """Service for handling disputes with SLA tracking."""
 
 import logging
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.dispatch import Request
 from app.models.dispute import (
+    AssignedRole,
     Dispute,
     DisputeStatus,
     DisputeType,
     InitiatorRole,
-    AssignedRole,
 )
 from app.models.shift import ShiftReport, ShiftReportStatus, ShiftTask
-from app.models.dispatch import Request
 
 logger = logging.getLogger("spectech.dispute_service")
 
@@ -23,6 +23,7 @@ INITIAL_SLA_HOURS = 3
 MANAGER_ESCALATION_HOURS = 24
 CEO_ESCALATION_HOURS = 48
 
+
 def _ensure_aware(dt: datetime | None) -> datetime | None:
     """Гарантирует, что datetime имеет timezone (UTC)."""
     if dt is None:
@@ -30,6 +31,7 @@ def _ensure_aware(dt: datetime | None) -> datetime | None:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
     return dt
+
 
 def open_dispute(
     db: Session,
@@ -97,23 +99,24 @@ def open_dispute(
 
     # 🆕 Отправляем уведомления диспетчеру
     try:
-        from app.services.notification_dispatcher import notification_dispatcher
-        from app.models.auth import User
         import asyncio
-        
+
+        from app.models.auth import User
+        from app.services.notification_dispatcher import notification_dispatcher
+
         # Получаем ответственного диспетчера (для простоты — первого admin)
         # В реальности нужно использовать role-based assignment
-        dispatcher = (
-            db.query(User)
-            .filter(User.is_active == True)
-            .first()
-        )
-        
+        dispatcher = db.query(User).filter(User.is_active == True).first()
+
         if dispatcher:
             dispatcher_email = dispatcher.email
-            dispatcher_name = dispatcher.full_name if hasattr(dispatcher, 'full_name') else dispatcher.email
+            dispatcher_name = (
+                dispatcher.full_name
+                if hasattr(dispatcher, "full_name")
+                else dispatcher.email
+            )
             dispatcher_user_id = dispatcher.id
-            
+
             try:
                 loop = asyncio.get_running_loop()
                 loop.create_task(
@@ -170,10 +173,11 @@ def escalate_dispute(
 
         # 🆕 Отправляем уведомления об эскалации
         try:
-            from app.services.notification_dispatcher import notification_dispatcher
-            from app.models.auth import User
             import asyncio
-            
+
+            from app.models.auth import User
+            from app.services.notification_dispatcher import notification_dispatcher
+
             # Определяем роли
             if dispute.status == DisputeStatus.escalated_to_manager:
                 from_role = "dispatcher"
@@ -181,24 +185,21 @@ def escalate_dispute(
             else:
                 from_role = "manager"
                 to_role = "CEO"
-            
+
             # Получаем менеджера (для простоты — второго admin)
             manager = (
-                db.query(User)
-                .filter(User.is_active == True)
-                .offset(1)
-                .first()
-            ) or (
-                db.query(User)
-                .filter(User.is_active == True)
-                .first()
-            )
-            
+                db.query(User).filter(User.is_active == True).offset(1).first()
+            ) or (db.query(User).filter(User.is_active == True).first())
+
             if manager:
                 manager_email = manager.email
-                manager_name = manager.full_name if hasattr(manager, 'full_name') else manager.email
+                manager_name = (
+                    manager.full_name
+                    if hasattr(manager, "full_name")
+                    else manager.email
+                )
                 manager_user_id = manager.id
-                
+
                 try:
                     loop = asyncio.get_running_loop()
                     loop.create_task(
@@ -244,7 +245,7 @@ def resolve_dispute(
 
     # ✅ ИСПРАВЛЕНО: используем UTC
     now = datetime.now(UTC)
-    
+
     # Нормализуем opened_at для безопасного расчёта
     opened_at = _ensure_aware(dispute.opened_at)
     if opened_at:
@@ -293,22 +294,24 @@ def get_overdue_disputes(db: Session) -> list[Dispute]:
 
     # Получаем все активные споры
     stmt = select(Dispute).where(
-        Dispute.status.in_([
-            DisputeStatus.dispatcher_review,
-            DisputeStatus.escalated_to_manager,
-            DisputeStatus.escalated_to_ceo,
-        ]),
+        Dispute.status.in_(
+            [
+                DisputeStatus.dispatcher_review,
+                DisputeStatus.escalated_to_manager,
+                DisputeStatus.escalated_to_ceo,
+            ]
+        ),
     )
-    
+
     all_disputes = list(db.scalars(stmt).all())
-    
+
     # Фильтруем по SLA вручную (для надёжности с таймзонами)
     overdue = []
     for d in all_disputes:
         sla = _ensure_aware(d.sla_deadline)
         if sla and now > sla:
             overdue.append(d)
-    
+
     return overdue
 
 

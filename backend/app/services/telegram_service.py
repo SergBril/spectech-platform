@@ -16,7 +16,7 @@ TELEGRAM_API_URL = "https://api.telegram.org/bot{token}/{method}"
 class TelegramService:
     """
     Сервис отправки уведомлений в Telegram.
-    
+
     Особенности:
     - Graceful degradation: если Telegram недоступен (например, в РФ без прокси),
       уведомления просто логируются, но не ломают приложение
@@ -29,10 +29,10 @@ class TelegramService:
         self.bot_token = settings.TELEGRAM_BOT_TOKEN
         self.default_chat_id = settings.TELEGRAM_DEFAULT_CHAT_ID
         self.timeout = settings.TELEGRAM_TIMEOUT_SECONDS
-        
+
         # Кэш доступности (чтобы не спамить при блокировке)
         self._is_available: bool | None = None
-        
+
         if not self.enabled:
             logger.info("🔇 Telegram notifications disabled (TELEGRAM_ENABLED=false)")
         elif not self.bot_token:
@@ -45,15 +45,13 @@ class TelegramService:
         """Проверяет доступность Telegram API (с кэшированием)."""
         if not self.enabled:
             return False
-        
+
         if self._is_available is not None:
             return self._is_available
-        
+
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                url = TELEGRAM_API_URL.format(
-                    token=self.bot_token, method="getMe"
-                )
+                url = TELEGRAM_API_URL.format(token=self.bot_token, method="getMe")
                 response = await client.get(url)
                 self._is_available = response.status_code == 200
                 if self._is_available:
@@ -81,25 +79,25 @@ class TelegramService:
     ) -> bool:
         """
         Отправляет сообщение в Telegram.
-        
+
         Args:
             chat_id: Chat ID получателя (или default_chat_id)
             text: Текст сообщения (поддерживает HTML)
             parse_mode: Формат (HTML/Markdown)
             disable_notification: Отправить без звука
-            
+
         Returns:
             True если отправлено, False если недоступен или ошибка
         """
         if not self.enabled:
             logger.debug(f"Telegram disabled, skipping message: {text[:50]}...")
             return False
-        
+
         target_chat_id = chat_id or self.default_chat_id
         if not target_chat_id:
             logger.warning("No chat_id provided and no default_chat_id configured")
             return False
-        
+
         # Проверяем доступность
         if not await self.is_available():
             logger.info(
@@ -107,7 +105,7 @@ class TelegramService:
                 f"chat={target_chat_id}, text={text[:100]}..."
             )
             return False
-        
+
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 url = TELEGRAM_API_URL.format(
@@ -121,7 +119,7 @@ class TelegramService:
                     **kwargs,
                 }
                 response = await client.post(url, json=payload)
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     if data.get("ok"):
@@ -137,7 +135,7 @@ class TelegramService:
                         f"❌ Telegram HTTP {response.status_code}: {response.text}"
                     )
                     return False
-                    
+
         except httpx.TimeoutException:
             logger.warning(
                 "⚠️ Telegram timeout. Marking as unavailable for future calls."
@@ -157,7 +155,7 @@ class TelegramService:
     ) -> bool:
         """
         Отправляет форматированное уведомление с эмодзи.
-        
+
         Args:
             title: Заголовок
             message: Основной текст
@@ -171,7 +169,7 @@ class TelegramService:
             "success": "✅",
         }
         emoji = emoji_map.get(urgency, "📢")
-        
+
         text = f"{emoji} <b>{title}</b>\n\n{message}"
         return await self.send_message(
             chat_id=chat_id,

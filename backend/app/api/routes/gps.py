@@ -1,19 +1,18 @@
 """GPS endpoints: manual import + points listing + provider management."""
 
+import csv
+import io
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.models.catalog import Vehicle
 from app.models.telematics import GpsPoint
-from fastapi.responses import StreamingResponse
-import csv
-import io
 
 logger = logging.getLogger("spectech.gps")
 
@@ -21,6 +20,7 @@ router = APIRouter(tags=["📡 GPS"])
 
 
 # ─── Schemas ────────────────────────────────────────────────────────────────────
+
 
 class GpsPointImport(BaseModel):
     vehicle_id: int
@@ -62,31 +62,38 @@ class VehicleGpsConfigResponse(BaseModel):
 
 # ─── Manual Import ──────────────────────────────────────────────────────────────
 
+
 @router.post("/points/import")
 def import_gps_points(
-    points: List[GpsPointImport],
+    points: list[GpsPointImport],
     db: Session = Depends(get_db),
 ):
     """Ручной импорт GPS-точек (fallback когда Mapix API недоступен)."""
     created = 0
     for p in points:
-        existing = db.query(GpsPoint).filter(
-            GpsPoint.vehicle_id == p.vehicle_id,
-            GpsPoint.recorded_at == p.recorded_at,
-        ).first()
+        existing = (
+            db.query(GpsPoint)
+            .filter(
+                GpsPoint.vehicle_id == p.vehicle_id,
+                GpsPoint.recorded_at == p.recorded_at,
+            )
+            .first()
+        )
         if not existing:
             rec_at = p.recorded_at
             if rec_at.tzinfo is None:
-                rec_at = rec_at.replace(tzinfo=timezone.utc)
-            db.add(GpsPoint(
-                vehicle_id=p.vehicle_id,
-                latitude=p.latitude,
-                longitude=p.longitude,
-                speed=p.speed,
-                heading=p.heading,
-                recorded_at=rec_at,
-                received_at=datetime.now(timezone.utc),
-            ))
+                rec_at = rec_at.replace(tzinfo=UTC)
+            db.add(
+                GpsPoint(
+                    vehicle_id=p.vehicle_id,
+                    latitude=p.latitude,
+                    longitude=p.longitude,
+                    speed=p.speed,
+                    heading=p.heading,
+                    recorded_at=rec_at,
+                    received_at=datetime.now(UTC),
+                )
+            )
             created += 1
     db.commit()
     return {"imported": created, "total": len(points)}
@@ -94,17 +101,17 @@ def import_gps_points(
 
 # ─── Points Listing ─────────────────────────────────────────────────────────────
 
-@router.get("/points", response_model=List[GpsPointResponse])
+
+@router.get("/points", response_model=list[GpsPointResponse])
 def list_gps_points(
-    vehicle_id: Optional[int] = Query(None, description="Filter by vehicle ID"),
-    date_from: Optional[datetime] = Query(None, description="Start of period"),
-    date_to: Optional[datetime] = Query(None, description="End of period"),
+    vehicle_id: int | None = Query(None, description="Filter by vehicle ID"),
+    date_from: datetime | None = Query(None, description="Start of period"),
+    date_to: datetime | None = Query(None, description="End of period"),
     limit: int = Query(1000, ge=1, le=10000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     """Список GPS-точек с фильтрацией по технике и периоду."""
-    from sqlalchemy import func
 
     q = db.query(GpsPoint)
 
@@ -123,9 +130,7 @@ def list_gps_points(
     vehicles_map = {}
     if vehicle_ids:
         vehicles = (
-            db.query(Vehicle.id, Vehicle.name)
-            .filter(Vehicle.id.in_(vehicle_ids))
-            .all()
+            db.query(Vehicle.id, Vehicle.name).filter(Vehicle.id.in_(vehicle_ids)).all()
         )
         vehicles_map = {v.id: v.name for v in vehicles}
 
@@ -146,15 +151,18 @@ def list_gps_points(
         )
         # Добавляем vehicle_name как доп. поле (не в модели, но в JSON)
         resp_dict = resp.model_dump()
-        resp_dict["vehicle_name"] = vehicles_map.get(p.vehicle_id, f"Vehicle #{p.vehicle_id}")
+        resp_dict["vehicle_name"] = vehicles_map.get(
+            p.vehicle_id, f"Vehicle #{p.vehicle_id}"
+        )
         result.append(resp_dict)
 
     return result
 
+
 @router.get("/positions/latest")
 def get_latest_positions(db: Session = Depends(get_db)):
     """Возвращает последнюю позицию каждой техники + последнее известное топливо."""
-    from sqlalchemy import func, and_
+    from sqlalchemy import and_, func
 
     # Подзапрос: максимальная recorded_at для каждого vehicle_id
     latest_subq = (
@@ -195,17 +203,19 @@ def get_latest_positions(db: Session = Depends(get_db)):
 
         vehicle = db.query(Vehicle).filter(Vehicle.id == p.vehicle_id).first()
 
-        result.append({
-            "vehicle_id": p.vehicle_id,
-            "vehicle_name": vehicle.name if vehicle else f"Vehicle #{p.vehicle_id}",
-            "latitude": p.latitude,
-            "longitude": p.longitude,
-            "speed": p.speed,
-            "heading": p.heading,
-            "engine_on": p.engine_on,
-            "fuel_level": float(last_fuel[0]) if last_fuel else None,
-            "recorded_at": p.recorded_at.isoformat() if p.recorded_at else None,
-        })
+        result.append(
+            {
+                "vehicle_id": p.vehicle_id,
+                "vehicle_name": vehicle.name if vehicle else f"Vehicle #{p.vehicle_id}",
+                "latitude": p.latitude,
+                "longitude": p.longitude,
+                "speed": p.speed,
+                "heading": p.heading,
+                "engine_on": p.engine_on,
+                "fuel_level": float(last_fuel[0]) if last_fuel else None,
+                "recorded_at": p.recorded_at.isoformat() if p.recorded_at else None,
+            }
+        )
 
     return result
 
@@ -232,9 +242,9 @@ def gps_points_stats(db: Session = Depends(get_db)):
 
 @router.get("/points/export")
 def export_gps_points(
-    vehicle_id: Optional[int] = Query(None),
-    date_from: Optional[datetime] = Query(None),
-    date_to: Optional[datetime] = Query(None),
+    vehicle_id: int | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
     format: str = Query("csv", regex="^(csv|excel)$"),
     db: Session = Depends(get_db),
 ):
@@ -253,14 +263,26 @@ def export_gps_points(
     if not points:
         raise HTTPException(status_code=404, detail="No GPS points found for export")
 
-    headers = ["vehicle_id", "latitude", "longitude", "speed", "heading",
-               "engine_on", "fuel_level", "recorded_at", "device_id"]
+    headers = [
+        "vehicle_id",
+        "latitude",
+        "longitude",
+        "speed",
+        "heading",
+        "engine_on",
+        "fuel_level",
+        "recorded_at",
+        "device_id",
+    ]
 
     if format == "excel":
         try:
             import openpyxl
         except ImportError:
-            raise HTTPException(status_code=500, detail="openpyxl not installed. Run: pip install openpyxl")
+            raise HTTPException(
+                status_code=500,
+                detail="openpyxl not installed. Run: pip install openpyxl",
+            )
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -268,12 +290,19 @@ def export_gps_points(
         ws.append(headers)
 
         for p in points:
-            ws.append([
-                p.vehicle_id, p.latitude, p.longitude,
-                p.speed, p.heading, p.engine_on, p.fuel_level,
-                p.recorded_at.isoformat() if p.recorded_at else "",
-                p.device_id or "",
-            ])
+            ws.append(
+                [
+                    p.vehicle_id,
+                    p.latitude,
+                    p.longitude,
+                    p.speed,
+                    p.heading,
+                    p.engine_on,
+                    p.fuel_level,
+                    p.recorded_at.isoformat() if p.recorded_at else "",
+                    p.device_id or "",
+                ]
+            )
 
         output = io.BytesIO()
         wb.save(output)
@@ -292,12 +321,19 @@ def export_gps_points(
         writer.writerow(headers)
 
         for p in points:
-            writer.writerow([
-                p.vehicle_id, p.latitude, p.longitude,
-                p.speed, p.heading, p.engine_on, p.fuel_level,
-                p.recorded_at.isoformat() if p.recorded_at else "",
-                p.device_id or "",
-            ])
+            writer.writerow(
+                [
+                    p.vehicle_id,
+                    p.latitude,
+                    p.longitude,
+                    p.speed,
+                    p.heading,
+                    p.engine_on,
+                    p.fuel_level,
+                    p.recorded_at.isoformat() if p.recorded_at else "",
+                    p.device_id or "",
+                ]
+            )
 
         output.seek(0)
         filename = f"gps_points_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -310,7 +346,8 @@ def export_gps_points(
 
 # ─── Provider Management ────────────────────────────────────────────────────────
 
-@router.get("/providers/vehicles", response_model=List[VehicleGpsConfigResponse])
+
+@router.get("/providers/vehicles", response_model=list[VehicleGpsConfigResponse])
 def list_vehicles_with_gps(db: Session = Depends(get_db)):
     """Список техники с GPS-провайдерами и статистикой точек."""
     from sqlalchemy import func
@@ -335,14 +372,16 @@ def list_vehicles_with_gps(db: Session = Depends(get_db)):
             .filter(GpsPoint.vehicle_id == v.id)
             .scalar()
         )
-        result.append(VehicleGpsConfigResponse(
-            id=v.id,
-            name=v.name,
-            gps_provider=v.gps_provider,
-            gps_provider_config=v.gps_provider_config,
-            last_point_at=last_point,
-            total_points=total_points,
-        ))
+        result.append(
+            VehicleGpsConfigResponse(
+                id=v.id,
+                name=v.name,
+                gps_provider=v.gps_provider,
+                gps_provider_config=v.gps_provider_config,
+                last_point_at=last_point,
+                total_points=total_points,
+            )
+        )
 
     return result
 
@@ -354,7 +393,6 @@ def update_vehicle_gps_config(
     db: Session = Depends(get_db),
 ):
     """Обновление GPS-конфигурации техники."""
-    from pydantic import BaseModel
 
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
@@ -369,8 +407,12 @@ def update_vehicle_gps_config(
     db.commit()
     db.refresh(vehicle)
 
-    logger.info("Updated GPS config for vehicle #%s (%s): provider=%s",
-                vehicle.id, vehicle.name, vehicle.gps_provider)
+    logger.info(
+        "Updated GPS config for vehicle #%s (%s): provider=%s",
+        vehicle.id,
+        vehicle.name,
+        vehicle.gps_provider,
+    )
 
     return {
         "id": vehicle.id,

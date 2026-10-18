@@ -5,7 +5,7 @@ print("🔥 BANK_STATEMENTS ROUTER LOADED")
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user
@@ -25,23 +25,23 @@ async def upload_bank_statement(
     """Загружает банковскую выписку."""
     if not file.filename or not file.filename.lower().endswith(".txt"):
         raise HTTPException(status_code=400, detail="Only .txt files supported")
-    
+
     # Сохраняем во временный файл
     with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as tmp:
         content = await file.read()
         tmp.write(content)
         tmp_path = Path(tmp.name)
-    
+
     try:
         from app.services.payments_service import payments_service
-        
+
         statement = payments_service.upload_statement(
             db=db,
             file_path=tmp_path,
             company_id=company_id,
             uploaded_by=current_user.id,
         )
-        
+
         return {
             "id": statement.id,
             "file_name": statement.file_name,
@@ -68,7 +68,7 @@ def list_bank_statements(
 ):
     """Список загруженных выписок."""
     from app.models.bank_statement import BankStatement
-    
+
     statements = (
         db.query(BankStatement)
         .filter(BankStatement.company_id == company_id)
@@ -101,11 +101,11 @@ def get_unmatched_payments(
 ):
     """Непривязанные входящие платежи."""
     from app.services.payments_service import payments_service
-    
+
     transactions = payments_service.get_unmatched_transactions(
         db=db, company_id=company_id, limit=limit, offset=offset
     )
-    
+
     return {
         "items": [
             {
@@ -135,8 +135,9 @@ def apply_payment_to_invoice(
 ):
     """Применяет транзакцию к Invoice."""
     from decimal import Decimal
+
     from app.services.payments_service import payments_service
-    
+
     try:
         payment = payments_service.apply_payment(
             db=db,

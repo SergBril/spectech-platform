@@ -1,16 +1,20 @@
 """API для карты техники."""
 
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
-from sqlalchemy import select, desc
+from datetime import datetime
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
+from app.api.deps import get_current_user, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User
-from app.models.telematics import GpsPoint, Geofence
 from app.models.catalog import Vehicle
-from app.services.gps_providers.factory import get_available_providers, create_gps_adapter
+from app.models.telematics import Geofence, GpsPoint
+from app.services.gps_providers.factory import (
+    create_gps_adapter,
+    get_available_providers,
+)
 
 router = APIRouter()
 
@@ -24,7 +28,7 @@ def get_vehicle_positions(
     """📍 Последние позиции всей техники компании."""
     # Получаем все vehicles компании
     vehicles = db.query(Vehicle).filter(Vehicle.company_id.in_(company_ids)).all()
-    
+
     positions = []
     for v in vehicles:
         # Последняя GPS точка для каждого vehicle
@@ -34,29 +38,35 @@ def get_vehicle_positions(
             .order_by(desc(GpsPoint.recorded_at))
             .first()
         )
-        
+
         if last_point:
-            positions.append({
-                "vehicle_id": v.id,
-                "vehicle_name": v.name or f"Vehicle #{v.id}",
-                "vehicle_type": getattr(v, 'type', None),
-                "status": getattr(v, 'status', None),
-                "latitude": last_point.latitude,
-                "longitude": last_point.longitude,
-                "speed": last_point.speed,
-                "heading": last_point.heading,
-                "engine_on": last_point.engine_on,
-                "fuel_level": last_point.fuel_level,
-                "altitude": last_point.altitude,
-                "recorded_at": last_point.recorded_at.isoformat() if last_point.recorded_at else None,
-            })
-    
+            positions.append(
+                {
+                    "vehicle_id": v.id,
+                    "vehicle_name": v.name or f"Vehicle #{v.id}",
+                    "vehicle_type": getattr(v, "type", None),
+                    "status": getattr(v, "status", None),
+                    "latitude": last_point.latitude,
+                    "longitude": last_point.longitude,
+                    "speed": last_point.speed,
+                    "heading": last_point.heading,
+                    "engine_on": last_point.engine_on,
+                    "fuel_level": last_point.fuel_level,
+                    "altitude": last_point.altitude,
+                    "recorded_at": (
+                        last_point.recorded_at.isoformat()
+                        if last_point.recorded_at
+                        else None
+                    ),
+                }
+            )
+
     return {"positions": positions}
 
 
-
-
-@router.get("/vehicles/{vehicle_id}/detail", summary="Детальная информация о технике для карты")
+@router.get(
+    "/vehicles/{vehicle_id}/detail", summary="Детальная информация о технике для карты"
+)
 def get_vehicle_detail(
     vehicle_id: int,
     db: Session = Depends(get_db),
@@ -65,14 +75,17 @@ def get_vehicle_detail(
 ):
     """Полная карточка техники: данные, текущий водитель, активное задание."""
     from app.models.catalog import Vehicle
-    from app.models.contractor import Contractor
+    from app.models.contractor import Contractor, DriverAssignmentLog
     from app.models.dispatch import Request
-    from app.models.contractor import DriverAssignmentLog
 
-    vehicle = db.query(Vehicle).filter(
-        Vehicle.id == vehicle_id,
-        Vehicle.company_id.in_(company_ids),
-    ).first()
+    vehicle = (
+        db.query(Vehicle)
+        .filter(
+            Vehicle.id == vehicle_id,
+            Vehicle.company_id.in_(company_ids),
+        )
+        .first()
+    )
     if not vehicle:
         raise HTTPException(status_code=404, detail="Техника не найдена")
 
@@ -88,13 +101,21 @@ def get_vehicle_detail(
         .first()
     )
     if active_assignment:
-        ctr = db.query(Contractor).filter(Contractor.id == active_assignment.driver_contractor_id).first()
+        ctr = (
+            db.query(Contractor)
+            .filter(Contractor.id == active_assignment.driver_contractor_id)
+            .first()
+        )
         if ctr:
             driver = {
                 "contractor_id": ctr.id,
                 "name": ctr.name,
                 "phone": getattr(ctr, "phone", None),
-                "assigned_at": active_assignment.assigned_at.isoformat() if active_assignment.assigned_at else None,
+                "assigned_at": (
+                    active_assignment.assigned_at.isoformat()
+                    if active_assignment.assigned_at
+                    else None
+                ),
             }
 
     # Активное задание (заявка в работе)
@@ -111,10 +132,14 @@ def get_vehicle_detail(
     if req:
         active_request = {
             "id": req.id,
-            "status": req.status.value if hasattr(req.status, 'value') else str(req.status),
+            "status": (
+                req.status.value if hasattr(req.status, "value") else str(req.status)
+            ),
             "description": req.work_type or None,
             "address": req.object_address or None,
-            "planned_start": req.planned_start.isoformat() if req.planned_start else None,
+            "planned_start": (
+                req.planned_start.isoformat() if req.planned_start else None
+            ),
             "planned_end": req.planned_end.isoformat() if req.planned_end else None,
         }
 
@@ -138,7 +163,11 @@ def get_vehicle_detail(
         "heading": last_point.heading if last_point else None,
         "engine_on": last_point.engine_on if last_point else None,
         "fuel_level": last_point.fuel_level if last_point else None,
-        "recorded_at": last_point.recorded_at.isoformat() if last_point and last_point.recorded_at else None,
+        "recorded_at": (
+            last_point.recorded_at.isoformat()
+            if last_point and last_point.recorded_at
+            else None
+        ),
         "driver": driver,
         "active_request": active_request,
     }
@@ -157,16 +186,20 @@ def get_vehicle_track(
     """🛤️ Маршрут техники за выбранный период."""
     dt_from = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
     dt_to = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
-    
+
     # Проверяем что vehicle принадлежит компании
-    vehicle = db.query(Vehicle).filter(
-        Vehicle.id == vehicle_id,
-        Vehicle.company_id.in_(company_ids),
-    ).first()
-    
+    vehicle = (
+        db.query(Vehicle)
+        .filter(
+            Vehicle.id == vehicle_id,
+            Vehicle.company_id.in_(company_ids),
+        )
+        .first()
+    )
+
     if not vehicle:
         return {"points": [], "vehicle_name": None}
-    
+
     points = (
         db.query(GpsPoint)
         .filter(
@@ -178,7 +211,7 @@ def get_vehicle_track(
         .limit(limit)
         .all()
     )
-    
+
     return {
         "vehicle_id": vehicle_id,
         "vehicle_name": vehicle.name or f"Vehicle #{vehicle_id}",
@@ -205,19 +238,17 @@ def get_geofences(
 ):
     """🔲 Список геозон компании."""
     from app.models.telematics import Geofence
-    
-    geofences = db.query(Geofence).filter(
-        Geofence.company_id.in_(company_ids)
-    ).all()
-    
+
+    geofences = db.query(Geofence).filter(Geofence.company_id.in_(company_ids)).all()
+
     return {
         "geofences": [
             {
                 "id": g.id,
                 "name": g.name,
-                "type": g.type.value if hasattr(g.type, 'value') else g.type,
-                "coordinates": g.coordinates if hasattr(g, 'coordinates') else None,
-                "radius": g.radius if hasattr(g, 'radius') else None,
+                "type": g.type.value if hasattr(g.type, "value") else g.type,
+                "coordinates": g.coordinates if hasattr(g, "coordinates") else None,
+                "radius": g.radius if hasattr(g, "radius") else None,
             }
             for g in geofences
         ]
@@ -257,14 +288,26 @@ def update_geofence(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """✏️ Обновить геозону."""
-    geofence = db.query(Geofence).filter(
-        Geofence.id == geofence_id,
-        Geofence.company_id.in_(company_ids),
-    ).first()
+    geofence = (
+        db.query(Geofence)
+        .filter(
+            Geofence.id == geofence_id,
+            Geofence.company_id.in_(company_ids),
+        )
+        .first()
+    )
     if not geofence:
         raise HTTPException(status_code=404, detail="Geofence not found")
 
-    for field in ["name", "type", "description", "center_latitude", "center_longitude", "radius_meters", "polygon"]:
+    for field in [
+        "name",
+        "type",
+        "description",
+        "center_latitude",
+        "center_longitude",
+        "radius_meters",
+        "polygon",
+    ]:
         if field in payload:
             setattr(geofence, field, payload[field])
 
@@ -281,17 +324,20 @@ def delete_geofence(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """🗑️ Удалить геозону."""
-    geofence = db.query(Geofence).filter(
-        Geofence.id == geofence_id,
-        Geofence.company_id.in_(company_ids),
-    ).first()
+    geofence = (
+        db.query(Geofence)
+        .filter(
+            Geofence.id == geofence_id,
+            Geofence.company_id.in_(company_ids),
+        )
+        .first()
+    )
     if not geofence:
         raise HTTPException(status_code=404, detail="Geofence not found")
 
     db.delete(geofence)
     db.commit()
     return {"message": "Геозона удалена"}
-
 
 
 @router.get("/providers")
@@ -315,6 +361,7 @@ async def test_gps_provider(
         return {"success": ok, "provider": provider}
     except Exception as e:
         return {"success": False, "provider": provider, "error": str(e)}
+
 
 @router.post("/providers/request")
 def request_new_provider(
@@ -344,5 +391,7 @@ def request_new_provider(
     db.add(notification)
     db.commit()
 
-    logger.info(f"📨 New GPS provider request: {provider_name} from user #{current_user.id}")
+    logger.info(
+        f"📨 New GPS provider request: {provider_name} from user #{current_user.id}"
+    )
     return {"message": "Заявка отправлена"}
