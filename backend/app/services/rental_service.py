@@ -1,4 +1,4 @@
-"""Сервис аренды техники — бизнес-логика."""
+﻿"""РЎРµСЂРІРёСЃ Р°СЂРµРЅРґС‹ С‚РµС…РЅРёРєРё вЂ” Р±РёР·РЅРµСЃ-Р»РѕРіРёРєР°."""
 
 import logging
 from datetime import UTC, datetime
@@ -24,23 +24,23 @@ from app.schemas.rental import (
 
 logger = logging.getLogger("spectech.rental_service")
 
-# Минимальная длительность для тарификации (защита от деления на 0)
+# РњРёРЅРёРјР°Р»СЊРЅР°СЏ РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ РґР»СЏ С‚Р°СЂРёС„РёРєР°С†РёРё (Р·Р°С‰РёС‚Р° РѕС‚ РґРµР»РµРЅРёСЏ РЅР° 0)
 MIN_HOURS = Decimal("0.5")
 
 
 class RentalService:
-    """Сервис для управления договорами аренды."""
+    """РЎРµСЂРІРёСЃ РґР»СЏ СѓРїСЂР°РІР»РµРЅРёСЏ РґРѕРіРѕРІРѕСЂР°РјРё Р°СЂРµРЅРґС‹."""
 
     # =====================================================================
-    # Вспомогательные методы расчёта
+    # Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅС‹Рµ РјРµС‚РѕРґС‹ СЂР°СЃС‡С‘С‚Р°
     # =====================================================================
 
     @staticmethod
     def _calculate_duration_hours(start: datetime, end: datetime) -> Decimal:
-        """Рассчитывает длительность в часах (с учётом timezone)."""
+        """Р Р°СЃСЃС‡РёС‚С‹РІР°РµС‚ РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ РІ С‡Р°СЃР°С… (СЃ СѓС‡С‘С‚РѕРј timezone)."""
         if not start or not end:
             return Decimal("0")
-        # Нормализуем таймзоны
+        # РќРѕСЂРјР°Р»РёР·СѓРµРј С‚Р°Р№РјР·РѕРЅС‹
         s = start if start.tzinfo else start.replace(tzinfo=UTC)
         e = end if end.tzinfo else end.replace(tzinfo=UTC)
         delta_seconds = (e - s).total_seconds()
@@ -49,17 +49,17 @@ class RentalService:
 
     @staticmethod
     def _calculate_days(start: datetime, end: datetime) -> Decimal:
-        """Рассчитывает количество смен (1 смена = 24 часа)."""
+        """Р Р°СЃСЃС‡РёС‚С‹РІР°РµС‚ РєРѕР»РёС‡РµСЃС‚РІРѕ СЃРјРµРЅ (1 СЃРјРµРЅР° = 24 С‡Р°СЃР°)."""
         hours = RentalService._calculate_duration_hours(start, end)
-        # Округляем вверх: 12 часов = 1 смена, 25 часов = 2 смены
+        # РћРєСЂСѓРіР»СЏРµРј РІРІРµСЂС…: 12 С‡Р°СЃРѕРІ = 1 СЃРјРµРЅР°, 25 С‡Р°СЃРѕРІ = 2 СЃРјРµРЅС‹
         shifts = (hours / Decimal("8")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         return max(shifts, Decimal("1"))
 
     @staticmethod
     def _calculate_plan_amount(rental: Rental) -> Decimal:
         """
-        Рассчитывает плановую стоимость аренды на момент создания/обновления.
-        Зависит от rate_type.
+        Р Р°СЃСЃС‡РёС‚С‹РІР°РµС‚ РїР»Р°РЅРѕРІСѓСЋ СЃС‚РѕРёРјРѕСЃС‚СЊ Р°СЂРµРЅРґС‹ РЅР° РјРѕРјРµРЅС‚ СЃРѕР·РґР°РЅРёСЏ/РѕР±РЅРѕРІР»РµРЅРёСЏ.
+        Р—Р°РІРёСЃРёС‚ РѕС‚ rate_type.
         """
         total = Decimal("0")
 
@@ -80,15 +80,15 @@ class RentalService:
                 total += shifts * price * quantity
 
             elif rental.rate_type == RateType.TRIP:
-                # При создании количество ходок неизвестно — используем unit_price как "минимальный платёж"
+                # РџСЂРё СЃРѕР·РґР°РЅРёРё РєРѕР»РёС‡РµСЃС‚РІРѕ С…РѕРґРѕРє РЅРµРёР·РІРµСЃС‚РЅРѕ вЂ” РёСЃРїРѕР»СЊР·СѓРµРј unit_price РєР°Рє "РјРёРЅРёРјР°Р»СЊРЅС‹Р№ РїР»Р°С‚С‘Р¶"
                 total += price * quantity
 
             elif rental.rate_type == RateType.VOLUME:
-                # При создании объём неизвестен — минимальный платёж
+                # РџСЂРё СЃРѕР·РґР°РЅРёРё РѕР±СЉС‘Рј РЅРµРёР·РІРµСЃС‚РµРЅ вЂ” РјРёРЅРёРјР°Р»СЊРЅС‹Р№ РїР»Р°С‚С‘Р¶
                 total += price * quantity
 
             elif rental.rate_type == RateType.MILEAGE:
-                # При создании пробег неизвестен — минимальный платёж
+                # РџСЂРё СЃРѕР·РґР°РЅРёРё РїСЂРѕР±РµРі РЅРµРёР·РІРµСЃС‚РµРЅ вЂ” РјРёРЅРёРјР°Р»СЊРЅС‹Р№ РїР»Р°С‚С‘Р¶
                 total += price * quantity
 
             elif rental.rate_type == RateType.COMBINED:
@@ -102,8 +102,8 @@ class RentalService:
     @staticmethod
     def _calculate_actual_amount(rental: Rental) -> Decimal:
         """
-        Рассчитывает фактическую стоимость по завершении аренды
-        на основе фактических данных (моточасы, пробег, ходки, объём).
+        Р Р°СЃСЃС‡РёС‚С‹РІР°РµС‚ С„Р°РєС‚РёС‡РµСЃРєСѓСЋ СЃС‚РѕРёРјРѕСЃС‚СЊ РїРѕ Р·Р°РІРµСЂС€РµРЅРёРё Р°СЂРµРЅРґС‹
+        РЅР° РѕСЃРЅРѕРІРµ С„Р°РєС‚РёС‡РµСЃРєРёС… РґР°РЅРЅС‹С… (РјРѕС‚РѕС‡Р°СЃС‹, РїСЂРѕР±РµРі, С…РѕРґРєРё, РѕР±СЉС‘Рј).
         """
         total = Decimal("0")
 
@@ -121,7 +121,7 @@ class RentalService:
                 total += hours * price * quantity
 
             elif rental.rate_type == RateType.SHIFT:
-                # Для смен — считаем по фактическому времени работы
+                # Р”Р»СЏ СЃРјРµРЅ вЂ” СЃС‡РёС‚Р°РµРј РїРѕ С„Р°РєС‚РёС‡РµСЃРєРѕРјСѓ РІСЂРµРјРµРЅРё СЂР°Р±РѕС‚С‹
                 hours = RentalService._calculate_duration_hours(
                     rental.start_date,
                     rental.actual_return_date or rental.end_date,
@@ -146,8 +146,8 @@ class RentalService:
             elif rental.rate_type == RateType.COMBINED:
                 hours = Decimal(str(item.actual_moto_hours or 0))
                 mileage = Decimal(str(item.actual_mileage or 0))
-                # Для комбо: unit_price — это ставка за час,
-                # а mileage_rate берём из rental
+                # Р”Р»СЏ РєРѕРјР±Рѕ: unit_price вЂ” СЌС‚Рѕ СЃС‚Р°РІРєР° Р·Р° С‡Р°СЃ,
+                # Р° mileage_rate Р±РµСЂС‘Рј РёР· rental
                 hourly_part = hours * price * quantity
                 mileage_rate = Decimal(str(rental.mileage_rate or 0))
                 mileage_part = mileage * mileage_rate * quantity
@@ -156,7 +156,7 @@ class RentalService:
         return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     # =====================================================================
-    # Проверка доступности техники
+    # РџСЂРѕРІРµСЂРєР° РґРѕСЃС‚СѓРїРЅРѕСЃС‚Рё С‚РµС…РЅРёРєРё
     # =====================================================================
 
     @staticmethod
@@ -167,7 +167,7 @@ class RentalService:
         end: datetime,
         exclude_rental_id: int | None = None,
     ) -> bool:
-        """Проверяет, что техника свободна в указанный период."""
+        """РџСЂРѕРІРµСЂСЏРµС‚, С‡С‚Рѕ С‚РµС…РЅРёРєР° СЃРІРѕР±РѕРґРЅР° РІ СѓРєР°Р·Р°РЅРЅС‹Р№ РїРµСЂРёРѕРґ."""
         query = (
             db.query(RentalItem)
             .join(Rental)
@@ -189,7 +189,7 @@ class RentalService:
         return query.first() is None
 
     # =====================================================================
-    # CRUD операции
+    # CRUD РѕРїРµСЂР°С†РёРё
     # =====================================================================
 
     @staticmethod
@@ -199,15 +199,15 @@ class RentalService:
         company_id: int,
         created_by: int,
     ) -> Rental:
-        """Создаёт договор аренды в статусе DRAFT."""
-        # Валидация дат
+        """РЎРѕР·РґР°С‘С‚ РґРѕРіРѕРІРѕСЂ Р°СЂРµРЅРґС‹ РІ СЃС‚Р°С‚СѓСЃРµ DRAFT."""
+        # Р’Р°Р»РёРґР°С†РёСЏ РґР°С‚
         if rental_in.start_date >= rental_in.end_date:
             raise HTTPException(
                 status_code=400,
-                detail="Дата начала должна быть раньше даты окончания",
+                detail="Р”Р°С‚Р° РЅР°С‡Р°Р»Р° РґРѕР»Р¶РЅР° Р±С‹С‚СЊ СЂР°РЅСЊС€Рµ РґР°С‚С‹ РѕРєРѕРЅС‡Р°РЅРёСЏ",
             )
 
-        # Создаём объект аренды (без items, чтобы сначала проставить rate_type)
+        # РЎРѕР·РґР°С‘Рј РѕР±СЉРµРєС‚ Р°СЂРµРЅРґС‹ (Р±РµР· items, С‡С‚РѕР±С‹ СЃРЅР°С‡Р°Р»Р° РїСЂРѕСЃС‚Р°РІРёС‚СЊ rate_type)
         rental = Rental(
             client_id=rental_in.client_id,
             request_id=rental_in.request_id,
@@ -228,19 +228,19 @@ class RentalService:
             status=RentalStatus.DRAFT,
         )
         db.add(rental)
-        db.flush()  # Получаем rental.id
+        db.flush()  # РџРѕР»СѓС‡Р°РµРј rental.id
 
-        # Добавляем позиции
+        # Р”РѕР±Р°РІР»СЏРµРј РїРѕР·РёС†РёРё
         rental_items = []
         for item_in in rental_in.items:
-            # Проверка доступности
+            # РџСЂРѕРІРµСЂРєР° РґРѕСЃС‚СѓРїРЅРѕСЃС‚Рё
             if not RentalService._check_vehicle_availability(
                 db, item_in.vehicle_id, rental_in.start_date, rental_in.end_date
             ):
                 db.rollback()
                 raise HTTPException(
                     status_code=409,
-                    detail=f"Техника {item_in.vehicle_id} уже забронирована на эти даты",
+                    detail=f"РўРµС…РЅРёРєР° {item_in.vehicle_id} СѓР¶Рµ Р·Р°Р±СЂРѕРЅРёСЂРѕРІР°РЅР° РЅР° СЌС‚Рё РґР°С‚С‹",
                 )
 
             rental_items.append(
@@ -255,7 +255,7 @@ class RentalService:
         db.add_all(rental_items)
         db.flush()
 
-        # Рассчитываем плановую стоимость
+        # Р Р°СЃСЃС‡РёС‚С‹РІР°РµРј РїР»Р°РЅРѕРІСѓСЋ СЃС‚РѕРёРјРѕСЃС‚СЊ
         rental.base_price = RentalService._calculate_plan_amount(rental)
         rental.total_amount = max(
             rental.base_price - (rental.discount or Decimal("0")),
@@ -275,8 +275,8 @@ class RentalService:
         return rental
 
     @staticmethod
-    def get_rental(db: Session, rental_id: int, company_id: int) -> Rental:
-        """Получить аренду с учётом company_id (мультитенантность)."""
+    def get_rental(db: Session, rental_id: int, company_ids: list[int]) -> Rental:
+        """РџРѕР»СѓС‡РёС‚СЊ Р°СЂРµРЅРґСѓ СЃ СѓС‡С‘С‚РѕРј company_id (РјСѓР»СЊС‚РёС‚РµРЅР°РЅС‚РЅРѕСЃС‚СЊ)."""
         rental = (
             db.query(Rental)
             .options(selectinload(Rental.items))
@@ -284,7 +284,9 @@ class RentalService:
             .first()
         )
         if not rental:
-            raise HTTPException(status_code=404, detail="Аренда не найдена")
+            raise HTTPException(
+                status_code=404, detail="РђСЂРµРЅРґР° РЅРµ РЅР°Р№РґРµРЅР°"
+            )
         return rental
 
     @staticmethod
@@ -296,7 +298,7 @@ class RentalService:
         limit: int = 100,
         offset: int = 0,
     ) -> list[Rental]:
-        """Список аренд с фильтрами."""
+        """РЎРїРёСЃРѕРє Р°СЂРµРЅРґ СЃ С„РёР»СЊС‚СЂР°РјРё."""
         query = (
             db.query(Rental)
             .options(selectinload(Rental.items))
@@ -318,16 +320,16 @@ class RentalService:
         data: RentalUpdate,
         company_id: int,
     ) -> Rental:
-        """Обновить аренду (только в DRAFT)."""
-        rental = RentalService.get_rental(db, rental_id, company_id)
+        """РћР±РЅРѕРІРёС‚СЊ Р°СЂРµРЅРґСѓ (С‚РѕР»СЊРєРѕ РІ DRAFT)."""
+        rental = RentalService.get_rental(db, rental_id, [company_id])
 
         if rental.status != RentalStatus.DRAFT:
             raise HTTPException(
                 status_code=400,
-                detail=f"Нельзя редактировать аренду в статусе {rental.status.value}",
+                detail=f"РќРµР»СЊР·СЏ СЂРµРґР°РєС‚РёСЂРѕРІР°С‚СЊ Р°СЂРµРЅРґСѓ РІ СЃС‚Р°С‚СѓСЃРµ {rental.status.value}",
             )
 
-        # Обновляем поля, если переданы
+        # РћР±РЅРѕРІР»СЏРµРј РїРѕР»СЏ, РµСЃР»Рё РїРµСЂРµРґР°РЅС‹
         if data.start_date is not None:
             rental.start_date = data.start_date
         if data.end_date is not None:
@@ -341,14 +343,14 @@ class RentalService:
         if data.prepayment_amount is not None:
             rental.prepayment_amount = data.prepayment_amount
 
-        # Валидация дат
+        # Р’Р°Р»РёРґР°С†РёСЏ РґР°С‚
         if rental.start_date >= rental.end_date:
             raise HTTPException(
                 status_code=400,
-                detail="Дата начала должна быть раньше даты окончания",
+                detail="Р”Р°С‚Р° РЅР°С‡Р°Р»Р° РґРѕР»Р¶РЅР° Р±С‹С‚СЊ СЂР°РЅСЊС€Рµ РґР°С‚С‹ РѕРєРѕРЅС‡Р°РЅРёСЏ",
             )
 
-        # Пересчёт стоимости
+        # РџРµСЂРµСЃС‡С‘С‚ СЃС‚РѕРёРјРѕСЃС‚Рё
         rental.base_price = RentalService._calculate_plan_amount(rental)
         rental.total_amount = max(
             rental.base_price - (rental.discount or Decimal("0")),
@@ -360,7 +362,7 @@ class RentalService:
         return rental
 
     # =====================================================================
-    # Управление позициями
+    # РЈРїСЂР°РІР»РµРЅРёРµ РїРѕР·РёС†РёСЏРјРё
     # =====================================================================
 
     @staticmethod
@@ -370,16 +372,16 @@ class RentalService:
         item_in: RentalItemAdd,
         company_id: int,
     ) -> RentalItem:
-        """Добавить технику в аренду (только в DRAFT)."""
-        rental = RentalService.get_rental(db, rental_id, company_id)
+        """Р”РѕР±Р°РІРёС‚СЊ С‚РµС…РЅРёРєСѓ РІ Р°СЂРµРЅРґСѓ (С‚РѕР»СЊРєРѕ РІ DRAFT)."""
+        rental = RentalService.get_rental(db, rental_id, [company_id])
 
         if rental.status != RentalStatus.DRAFT:
             raise HTTPException(
                 status_code=400,
-                detail="Нельзя добавлять позиции в активную аренду",
+                detail="РќРµР»СЊР·СЏ РґРѕР±Р°РІР»СЏС‚СЊ РїРѕР·РёС†РёРё РІ Р°РєС‚РёРІРЅСѓСЋ Р°СЂРµРЅРґСѓ",
             )
 
-        # Проверка доступности
+        # РџСЂРѕРІРµСЂРєР° РґРѕСЃС‚СѓРїРЅРѕСЃС‚Рё
         if not RentalService._check_vehicle_availability(
             db,
             item_in.vehicle_id,
@@ -389,7 +391,7 @@ class RentalService:
         ):
             raise HTTPException(
                 status_code=409,
-                detail=f"Техника {item_in.vehicle_id} уже забронирована на эти даты",
+                detail=f"РўРµС…РЅРёРєР° {item_in.vehicle_id} СѓР¶Рµ Р·Р°Р±СЂРѕРЅРёСЂРѕРІР°РЅР° РЅР° СЌС‚Рё РґР°С‚С‹",
             )
 
         item = RentalItem(
@@ -401,7 +403,7 @@ class RentalService:
         db.add(item)
         db.flush()
 
-        # Пересчёт
+        # РџРµСЂРµСЃС‡С‘С‚
         rental.base_price = RentalService._calculate_plan_amount(rental)
         rental.total_amount = max(
             rental.base_price - (rental.discount or Decimal("0")),
@@ -419,23 +421,25 @@ class RentalService:
         item_id: int,
         company_id: int,
     ) -> None:
-        """Удалить позицию из аренды (только в DRAFT)."""
-        rental = RentalService.get_rental(db, rental_id, company_id)
+        """РЈРґР°Р»РёС‚СЊ РїРѕР·РёС†РёСЋ РёР· Р°СЂРµРЅРґС‹ (С‚РѕР»СЊРєРѕ РІ DRAFT)."""
+        rental = RentalService.get_rental(db, rental_id, [company_id])
 
         if rental.status != RentalStatus.DRAFT:
             raise HTTPException(
                 status_code=400,
-                detail="Нельзя удалять позиции из активной аренды",
+                detail="РќРµР»СЊР·СЏ СѓРґР°Р»СЏС‚СЊ РїРѕР·РёС†РёРё РёР· Р°РєС‚РёРІРЅРѕР№ Р°СЂРµРЅРґС‹",
             )
 
         item = next((i for i in rental.items if i.id == item_id), None)
         if not item:
-            raise HTTPException(status_code=404, detail="Позиция не найдена")
+            raise HTTPException(
+                status_code=404, detail="РџРѕР·РёС†РёСЏ РЅРµ РЅР°Р№РґРµРЅР°"
+            )
 
         db.delete(item)
         db.flush()
 
-        # Пересчёт
+        # РџРµСЂРµСЃС‡С‘С‚
         rental.base_price = RentalService._calculate_plan_amount(rental)
         rental.total_amount = max(
             rental.base_price - (rental.discount or Decimal("0")),
@@ -445,34 +449,34 @@ class RentalService:
         db.commit()
 
     # =====================================================================
-    # Управление статусами (Workflow)
+    # РЈРїСЂР°РІР»РµРЅРёРµ СЃС‚Р°С‚СѓСЃР°РјРё (Workflow)
     # =====================================================================
 
     @staticmethod
     def activate_rental(db: Session, rental_id: int, company_id: int) -> Rental:
-        """Активировать аренду (DRAFT → ACTIVE). Техника выдана."""
-        rental = RentalService.get_rental(db, rental_id, company_id)
+        """РђРєС‚РёРІРёСЂРѕРІР°С‚СЊ Р°СЂРµРЅРґСѓ (DRAFT в†’ ACTIVE). РўРµС…РЅРёРєР° РІС‹РґР°РЅР°."""
+        rental = RentalService.get_rental(db, rental_id, [company_id])
 
         if rental.status != RentalStatus.DRAFT:
             raise HTTPException(
                 status_code=400,
-                detail=f"Нельзя активировать аренду в статусе {rental.status.value}",
+                detail=f"РќРµР»СЊР·СЏ Р°РєС‚РёРІРёСЂРѕРІР°С‚СЊ Р°СЂРµРЅРґСѓ РІ СЃС‚Р°С‚СѓСЃРµ {rental.status.value}",
             )
 
         if not rental.items:
             raise HTTPException(
                 status_code=400,
-                detail="Нельзя активировать аренду без позиций",
+                detail="РќРµР»СЊР·СЏ Р°РєС‚РёРІРёСЂРѕРІР°С‚СЊ Р°СЂРµРЅРґСѓ Р±РµР· РїРѕР·РёС†РёР№",
             )
 
-        # Проверка предоплаты
+        # РџСЂРѕРІРµСЂРєР° РїСЂРµРґРѕРїР»Р°С‚С‹
         if (
             rental.prepayment_status == PrepaymentStatus.REQUIRED
             and not rental.prepayment_paid_at
         ):
             raise HTTPException(
                 status_code=400,
-                detail="Требуется предоплата перед активацией",
+                detail="РўСЂРµР±СѓРµС‚СЃСЏ РїСЂРµРґРѕРїР»Р°С‚Р° РїРµСЂРµРґ Р°РєС‚РёРІР°С†РёРµР№",
             )
 
         rental.status = RentalStatus.ACTIVE
@@ -484,18 +488,18 @@ class RentalService:
 
     @staticmethod
     def cancel_rental(db: Session, rental_id: int, company_id: int) -> Rental:
-        """Отменить аренду (DRAFT/ACTIVE → CANCELLED)."""
-        rental = RentalService.get_rental(db, rental_id, company_id)
+        """РћС‚РјРµРЅРёС‚СЊ Р°СЂРµРЅРґСѓ (DRAFT/ACTIVE в†’ CANCELLED)."""
+        rental = RentalService.get_rental(db, rental_id, [company_id])
 
         if rental.status not in [RentalStatus.DRAFT, RentalStatus.ACTIVE]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Нельзя отменить аренду в статусе {rental.status.value}",
+                detail=f"РќРµР»СЊР·СЏ РѕС‚РјРµРЅРёС‚СЊ Р°СЂРµРЅРґСѓ РІ СЃС‚Р°С‚СѓСЃРµ {rental.status.value}",
             )
 
         rental.status = RentalStatus.CANCELLED
 
-        # Возврат предоплаты, если была
+        # Р’РѕР·РІСЂР°С‚ РїСЂРµРґРѕРїР»Р°С‚С‹, РµСЃР»Рё Р±С‹Р»Р°
         if rental.prepayment_paid_at:
             rental.prepayment_status = PrepaymentStatus.REFUNDED
 
@@ -513,29 +517,29 @@ class RentalService:
         company_id: int,
     ) -> Rental:
         """
-        Завершить аренду (ACTIVE → COMPLETED).
-        Принимает фактические данные, пересчитывает стоимость и создаёт Invoice.
+        Р—Р°РІРµСЂС€РёС‚СЊ Р°СЂРµРЅРґСѓ (ACTIVE в†’ COMPLETED).
+        РџСЂРёРЅРёРјР°РµС‚ С„Р°РєС‚РёС‡РµСЃРєРёРµ РґР°РЅРЅС‹Рµ, РїРµСЂРµСЃС‡РёС‚С‹РІР°РµС‚ СЃС‚РѕРёРјРѕСЃС‚СЊ Рё СЃРѕР·РґР°С‘С‚ Invoice.
         """
-        rental = RentalService.get_rental(db, rental_id, company_id)
+        rental = RentalService.get_rental(db, rental_id, [company_id])
 
         if rental.status != RentalStatus.ACTIVE:
             raise HTTPException(
                 status_code=400,
-                detail=f"Нельзя завершить аренду в статусе {rental.status.value}",
+                detail=f"РќРµР»СЊР·СЏ Р·Р°РІРµСЂС€РёС‚СЊ Р°СЂРµРЅРґСѓ РІ СЃС‚Р°С‚СѓСЃРµ {rental.status.value}",
             )
 
-        # Нормализуем actual_return_date
+        # РќРѕСЂРјР°Р»РёР·СѓРµРј actual_return_date
         actual_return_dt = data.actual_return_date or datetime.now(UTC)
         if actual_return_dt.tzinfo is None:
             actual_return_dt = actual_return_dt.replace(tzinfo=UTC)
         rental.actual_return_date = actual_return_dt
 
-        # Нормализуем end_date для безопасного сравнения
+        # РќРѕСЂРјР°Р»РёР·СѓРµРј end_date РґР»СЏ Р±РµР·РѕРїР°СЃРЅРѕРіРѕ СЃСЂР°РІРЅРµРЅРёСЏ
         end_date_norm = rental.end_date
         if end_date_norm.tzinfo is None:
             end_date_norm = end_date_norm.replace(tzinfo=UTC)
 
-        # Обновляем фактические данные по позициям
+        # РћР±РЅРѕРІР»СЏРµРј С„Р°РєС‚РёС‡РµСЃРєРёРµ РґР°РЅРЅС‹Рµ РїРѕ РїРѕР·РёС†РёСЏРј
         if data.items_actuals:
             items_map = {i.id: i for i in rental.items}
             for actual in data.items_actuals:
@@ -550,16 +554,16 @@ class RentalService:
                     if actual.actual_volume is not None:
                         item.actual_volume = actual.actual_volume
 
-        # Пересчёт по факту
+        # РџРµСЂРµСЃС‡С‘С‚ РїРѕ С„Р°РєС‚Сѓ
         actual_amount = RentalService._calculate_actual_amount(rental)
 
-        # Штраф за просрочку (сравниваем нормализованные даты!)
+        # РЁС‚СЂР°С„ Р·Р° РїСЂРѕСЃСЂРѕС‡РєСѓ (СЃСЂР°РІРЅРёРІР°РµРј РЅРѕСЂРјР°Р»РёР·РѕРІР°РЅРЅС‹Рµ РґР°С‚С‹!)
         overdue_penalty = Decimal("0")
         if rental.actual_return_date > end_date_norm:
             overdue_hours = RentalService._calculate_duration_hours(
                 end_date_norm, rental.actual_return_date
             )
-            # Штраф = 150% от часовой ставки за каждый час просрочки
+            # РЁС‚СЂР°С„ = 150% РѕС‚ С‡Р°СЃРѕРІРѕР№ СЃС‚Р°РІРєРё Р·Р° РєР°Р¶РґС‹Р№ С‡Р°СЃ РїСЂРѕСЃСЂРѕС‡РєРё
             penalty_rate = Decimal("1.5")
             for item in rental.items:
                 hourly_price = Decimal(str(item.unit_price or 0))
@@ -569,7 +573,7 @@ class RentalService:
                 Decimal("0.01"), rounding=ROUND_HALF_UP
             )
 
-        # Финальная сумма = факт + штраф - скидка
+        # Р¤РёРЅР°Р»СЊРЅР°СЏ СЃСѓРјРјР° = С„Р°РєС‚ + С€С‚СЂР°С„ - СЃРєРёРґРєР°
         rental.base_price = actual_amount
         rental.total_amount = max(
             actual_amount + overdue_penalty - (rental.discount or Decimal("0")),
@@ -588,11 +592,11 @@ class RentalService:
             rental.total_amount,
         )
 
-        # 🆕 Автосоздание Invoice при завершении аренды
+        # рџ†• РђРІС‚РѕСЃРѕР·РґР°РЅРёРµ Invoice РїСЂРё Р·Р°РІРµСЂС€РµРЅРёРё Р°СЂРµРЅРґС‹
         try:
             RentalService._create_documents_from_rental(db, rental)
         except Exception as e:
-            # Логируем ошибку, но не прерываем завершение аренды
+            # Р›РѕРіРёСЂСѓРµРј РѕС€РёР±РєСѓ, РЅРѕ РЅРµ РїСЂРµСЂС‹РІР°РµРј Р·Р°РІРµСЂС€РµРЅРёРµ Р°СЂРµРЅРґС‹
             logger.error(
                 "Failed to auto-create documents for Rental #%s: %s",
                 rental.id,
@@ -605,25 +609,25 @@ class RentalService:
     @staticmethod
     def _create_documents_from_rental(db: Session, rental: Rental) -> tuple:
         """
-        Создаёт полный пакет документов при завершении аренды:
-        - Invoice (счёт клиенту)
-        - Act (акт выполненных работ)
-        - Payout(s) (выплаты собственникам техники)
+        РЎРѕР·РґР°С‘С‚ РїРѕР»РЅС‹Р№ РїР°РєРµС‚ РґРѕРєСѓРјРµРЅС‚РѕРІ РїСЂРё Р·Р°РІРµСЂС€РµРЅРёРё Р°СЂРµРЅРґС‹:
+        - Invoice (СЃС‡С‘С‚ РєР»РёРµРЅС‚Сѓ)
+        - Act (Р°РєС‚ РІС‹РїРѕР»РЅРµРЅРЅС‹С… СЂР°Р±РѕС‚)
+        - Payout(s) (РІС‹РїР»Р°С‚С‹ СЃРѕР±СЃС‚РІРµРЅРЅРёРєР°Рј С‚РµС…РЅРёРєРё)
 
-        Также отправляет уведомления по всем каналам.
+        РўР°РєР¶Рµ РѕС‚РїСЂР°РІР»СЏРµС‚ СѓРІРµРґРѕРјР»РµРЅРёСЏ РїРѕ РІСЃРµРј РєР°РЅР°Р»Р°Рј.
         """
         invoice = RentalService._create_invoice_from_rental(db, rental)
         act = RentalService._create_act_from_rental(db, rental, invoice)
         payouts = RentalService._create_payouts_from_rental(db, rental)
 
-        # 🆕 Отправляем уведомления асинхронно
+        # рџ†• РћС‚РїСЂР°РІР»СЏРµРј СѓРІРµРґРѕРјР»РµРЅРёСЏ Р°СЃРёРЅС…СЂРѕРЅРЅРѕ
         RentalService._send_rental_notifications(db, rental, invoice, payouts)
 
         return invoice, act, payouts
 
     @staticmethod
     def _create_invoice_from_rental(db: Session, rental: Rental) -> "Invoice":
-        """Создаёт Invoice на основе завершённой аренды."""
+        """РЎРѕР·РґР°С‘С‚ Invoice РЅР° РѕСЃРЅРѕРІРµ Р·Р°РІРµСЂС€С‘РЅРЅРѕР№ Р°СЂРµРЅРґС‹."""
         from datetime import date, timedelta
 
         from app.core.constants import TaxSystem
@@ -653,34 +657,36 @@ class RentalService:
             status=DocumentStatus.draft,
             tax_system=TaxSystem.OSNO.value,
             is_vat_included=False,
-            comment=f"Автосоздан при завершении аренды #{rental.id}",
+            comment=f"РђРІС‚РѕСЃРѕР·РґР°РЅ РїСЂРё Р·Р°РІРµСЂС€РµРЅРёРё Р°СЂРµРЅРґС‹ #{rental.id}",
         )
         db.add(invoice)
         db.flush()
 
         rate_type_desc = {
-            RateType.HOURLY: "Аренда техники (почасовая)",
-            RateType.SHIFT: "Аренда техники (посменная)",
-            RateType.TRIP: "Аренда техники (за ходку)",
-            RateType.VOLUME: "Аренда техники (за объём)",
-            RateType.MILEAGE: "Аренда техники (по пробегу)",
-            RateType.COMBINED: "Аренда техники (комбинированная)",
+            RateType.HOURLY: "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё (РїРѕС‡Р°СЃРѕРІР°СЏ)",
+            RateType.SHIFT: "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё (РїРѕСЃРјРµРЅРЅР°СЏ)",
+            RateType.TRIP: "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё (Р·Р° С…РѕРґРєСѓ)",
+            RateType.VOLUME: "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё (Р·Р° РѕР±СЉС‘Рј)",
+            RateType.MILEAGE: "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё (РїРѕ РїСЂРѕР±РµРіСѓ)",
+            RateType.COMBINED: "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё (РєРѕРјР±РёРЅРёСЂРѕРІР°РЅРЅР°СЏ)",
         }
-        description = rate_type_desc.get(rental.rate_type, "Аренда техники")
+        description = rate_type_desc.get(
+            rental.rate_type, "РђСЂРµРЅРґР° С‚РµС…РЅРёРєРё"
+        )
 
         unit_map = {
-            RateType.HOURLY: "моточас",
-            RateType.SHIFT: "смена",
-            RateType.TRIP: "ходка",
-            RateType.VOLUME: "м³",
-            RateType.MILEAGE: "км",
-            RateType.COMBINED: "усл.",
+            RateType.HOURLY: "РјРѕС‚РѕС‡Р°СЃ",
+            RateType.SHIFT: "СЃРјРµРЅР°",
+            RateType.TRIP: "С…РѕРґРєР°",
+            RateType.VOLUME: "РјВі",
+            RateType.MILEAGE: "РєРј",
+            RateType.COMBINED: "СѓСЃР».",
         }
-        unit = unit_map.get(rental.rate_type, "усл.")
+        unit = unit_map.get(rental.rate_type, "СѓСЃР».")
 
         invoice_item = InvoiceItem(
             invoice_id=invoice.id,
-            description=f"{description} (Договор аренды #{rental.id})",
+            description=f"{description} (Р”РѕРіРѕРІРѕСЂ Р°СЂРµРЅРґС‹ #{rental.id})",
             quantity=Decimal("1"),
             unit=unit,
             unit_price=rental.total_amount,
@@ -702,7 +708,7 @@ class RentalService:
     def _create_act_from_rental(
         db: Session, rental: Rental, invoice: "Invoice"
     ) -> "Act":
-        """Создаёт Act на основе завершённой аренды."""
+        """РЎРѕР·РґР°С‘С‚ Act РЅР° РѕСЃРЅРѕРІРµ Р·Р°РІРµСЂС€С‘РЅРЅРѕР№ Р°СЂРµРЅРґС‹."""
         from datetime import date
 
         from app.core.constants import TaxSystem
@@ -722,7 +728,7 @@ class RentalService:
             is_vat_included=True,
             act_date=date.today(),
             status=DocumentStatus.sent,
-            comment=f"Автосоздан при завершении аренды #{rental.id}",
+            comment=f"РђРІС‚РѕСЃРѕР·РґР°РЅ РїСЂРё Р·Р°РІРµСЂС€РµРЅРёРё Р°СЂРµРЅРґС‹ #{rental.id}",
         )
         db.add(act)
         db.flush()
@@ -738,7 +744,7 @@ class RentalService:
 
     @staticmethod
     def _create_payouts_from_rental(db: Session, rental: Rental) -> list:
-        """Создаёт Payout для каждого собственника техники в аренде."""
+        """РЎРѕР·РґР°С‘С‚ Payout РґР»СЏ РєР°Р¶РґРѕРіРѕ СЃРѕР±СЃС‚РІРµРЅРЅРёРєР° С‚РµС…РЅРёРєРё РІ Р°СЂРµРЅРґРµ."""
         from collections import defaultdict
         from datetime import date
 
@@ -757,7 +763,7 @@ class RentalService:
             logger.warning(f"Rental #{rental.id} has zero total, skipping payouts")
             return []
 
-        owner_data = defaultdict(
+        owner_data: dict[int, dict[str, object]] = defaultdict(
             lambda: {
                 "gross": Decimal("0"),
                 "vehicle_ids": [],
@@ -820,14 +826,14 @@ class RentalService:
                 calculation_details={
                     "rental_id": rental.id,
                     "source": "auto_from_rental",
-                    "formula": f"gross × {commission_rate}% commission",
+                    "formula": f"gross Г— {commission_rate}% commission",
                     "gross_amount": str(gross_amount),
                     "commission_rate": str(commission_rate),
                     "commission": str(commission),
                     "net_amount": str(net_amount),
                     "vehicle_ids": data["vehicle_ids"],
                 },
-                comment=f"Автосоздан при завершении аренды #{rental.id}",
+                comment=f"РђРІС‚РѕСЃРѕР·РґР°РЅ РїСЂРё Р·Р°РІРµСЂС€РµРЅРёРё Р°СЂРµРЅРґС‹ #{rental.id}",
             )
             db.add(payout)
             payouts.append(payout)
@@ -850,33 +856,33 @@ class RentalService:
     def _send_rental_notifications(
         db: Session, rental: Rental, invoice, payouts: list
     ) -> None:
-        """Отправляет уведомления о завершении аренды."""
+        """РћС‚РїСЂР°РІР»СЏРµС‚ СѓРІРµРґРѕРјР»РµРЅРёСЏ Рѕ Р·Р°РІРµСЂС€РµРЅРёРё Р°СЂРµРЅРґС‹."""
         try:
             from app.models.contractor import Contractor
             from app.services.notification_dispatcher import notification_dispatcher
 
-            # Получаем email клиента
+            # РџРѕР»СѓС‡Р°РµРј email РєР»РёРµРЅС‚Р°
             client = db.get(Contractor, rental.client_id)
             if not client:
                 logger.warning(f"Client {rental.client_id} not found for notifications")
                 return
 
-            # В реальной системе email нужно брать из связанного User или contact_email
-            # Пока используем заглушку
+            # Р’ СЂРµР°Р»СЊРЅРѕР№ СЃРёСЃС‚РµРјРµ email РЅСѓР¶РЅРѕ Р±СЂР°С‚СЊ РёР· СЃРІСЏР·Р°РЅРЅРѕРіРѕ User РёР»Рё contact_email
+            # РџРѕРєР° РёСЃРїРѕР»СЊР·СѓРµРј Р·Р°РіР»СѓС€РєСѓ
             client_email = (
                 getattr(client, "email", None) or f"client_{client.id}@spectech.dev"
             )
             client_name = client.name
 
-            # Получаем client_user_id (если есть связь contractor -> user)
+            # РџРѕР»СѓС‡Р°РµРј client_user_id (РµСЃР»Рё РµСЃС‚СЊ СЃРІСЏР·СЊ contractor -> user)
             client_user_id = getattr(client, "user_id", None)
 
-            # Асинхронно отправляем уведомления клиенту
+            # РђСЃРёРЅС…СЂРѕРЅРЅРѕ РѕС‚РїСЂР°РІР»СЏРµРј СѓРІРµРґРѕРјР»РµРЅРёСЏ РєР»РёРµРЅС‚Сѓ
             import asyncio
 
             try:
                 loop = asyncio.get_running_loop()
-                # В event loop — создаём задачу
+                # Р’ event loop вЂ” СЃРѕР·РґР°С‘Рј Р·Р°РґР°С‡Сѓ
                 loop.create_task(
                     notification_dispatcher.notify_rental_completed(
                         db=db,
@@ -888,10 +894,10 @@ class RentalService:
                     )
                 )
             except RuntimeError:
-                # Нет event loop — пропускаем (будет отправлено позже)
+                # РќРµС‚ event loop вЂ” РїСЂРѕРїСѓСЃРєР°РµРј (Р±СѓРґРµС‚ РѕС‚РїСЂР°РІР»РµРЅРѕ РїРѕР·Р¶Рµ)
                 logger.info("No event loop, skipping async notifications")
 
-            # Уведомления собственникам (по каждому payout)
+            # РЈРІРµРґРѕРјР»РµРЅРёСЏ СЃРѕР±СЃС‚РІРµРЅРЅРёРєР°Рј (РїРѕ РєР°Р¶РґРѕРјСѓ payout)
             for payout in payouts:
                 owner = db.get(Contractor, payout.owner_id)
                 if not owner:
@@ -918,7 +924,7 @@ class RentalService:
                     logger.info("No event loop, skipping payout notification")
 
         except Exception as e:
-            # Не ломаем основной процесс при ошибке уведомлений
+            # РќРµ Р»РѕРјР°РµРј РѕСЃРЅРѕРІРЅРѕР№ РїСЂРѕС†РµСЃСЃ РїСЂРё РѕС€РёР±РєРµ СѓРІРµРґРѕРјР»РµРЅРёР№
             logger.error(f"Failed to send rental notifications: {e}", exc_info=True)
 
 
