@@ -13,9 +13,9 @@ test.describe('Dashboard', () => {
     await expect(page.locator('text=Добро пожаловать')).toBeVisible({ timeout: 10_000 });
 
     // Key metric cards
-    await expect(page.locator('text=Техника')).toBeVisible();
-    await expect(page.locator('text=Заявки')).toBeVisible();
-    await expect(page.locator('text=Общий доход')).toBeVisible();
+    await expect(page.getByRole('main').getByText('Техника', { exact: true })).toBeVisible();
+    await expect(page.getByRole('paragraph').filter({ hasText: 'Заявки' })).toBeVisible();
+    await expect(page.getByRole('main').getByText('Общий доход', { exact: true })).toBeVisible();
   });
 
   test('should have period filter', async ({ page }) => {
