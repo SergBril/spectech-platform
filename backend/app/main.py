@@ -52,6 +52,7 @@ from app.api.routes import (
     rbac,
     rentals,
     requests,
+    reviews,
     salaries,
     secure_test,
     shifts,
@@ -282,7 +283,7 @@ app.include_router(
 app.include_router(
     admin.router, prefix="/api/v1/admin", tags=["🔧 Admin (Админ-панель)"]
 )
-# app.include_router(reviews.router, prefix="/api/v1", tags=["⭐ Reviews (Отзывы и рейтинги)"])
+app.include_router(reviews.router, prefix="/api/v1", tags=["Reviews"])
 
 uploads_dir = Path("uploads")
 uploads_dir.mkdir(exist_ok=True)
