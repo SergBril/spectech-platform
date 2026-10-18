@@ -1,9 +1,8 @@
 """Интеграционные тесты для чата по заявке."""
 
-import pytest
 from fastapi.testclient import TestClient
 
-from app.models.chat import ChatMessageType, ChatParticipantRole
+from app.models.chat import ChatMessageType
 
 
 class TestChatAPI:
@@ -15,10 +14,10 @@ class TestChatAPI:
         response = client.post(
             "/api/v1/requests",
             json={
-                "client_id": 1,
-                "vehicle_category_id": 1,
                 "planned_start": "2026-01-15T09:00:00",
                 "planned_end": "2026-01-15T18:00:00",
+                "work_type": "test_work",
+                "object_address": "Test address",
             },
             headers=auth_headers,
         )
@@ -41,10 +40,10 @@ class TestChatAPI:
         response = client.post(
             "/api/v1/requests",
             json={
-                "client_id": 1,
-                "vehicle_category_id": 1,
                 "planned_start": "2026-01-15T09:00:00",
                 "planned_end": "2026-01-15T18:00:00",
+                "work_type": "test_work",
+                "object_address": "Test address",
             },
             headers=auth_headers,
         )
@@ -71,10 +70,10 @@ class TestChatAPI:
         response = client.post(
             "/api/v1/requests",
             json={
-                "client_id": 1,
-                "vehicle_category_id": 1,
                 "planned_start": "2026-01-15T09:00:00",
                 "planned_end": "2026-01-15T18:00:00",
+                "work_type": "test_work",
+                "object_address": "Test address",
             },
             headers=auth_headers,
         )
@@ -87,7 +86,10 @@ class TestChatAPI:
                 "message_type": ChatMessageType.photo.value,
                 "attachments": {
                     "files": [
-                        {"url": "https://storage.example.com/photo1.jpg", "name": "photo1.jpg"}
+                        {
+                            "url": "https://storage.example.com/photo1.jpg",
+                            "name": "photo1.jpg",
+                        }
                     ]
                 },
             },
@@ -98,17 +100,15 @@ class TestChatAPI:
         assert data["message_type"] == ChatMessageType.photo.value
         assert data["attachments"] is not None
 
-    def test_get_messages_with_cursor(
-        self, client: TestClient, auth_headers: dict
-    ):
+    def test_get_messages_with_cursor(self, client: TestClient, auth_headers: dict):
         """Тест: cursor-based пагинация сообщений."""
         response = client.post(
             "/api/v1/requests",
             json={
-                "client_id": 1,
-                "vehicle_category_id": 1,
                 "planned_start": "2026-01-15T09:00:00",
                 "planned_end": "2026-01-15T18:00:00",
+                "work_type": "test_work",
+                "object_address": "Test address",
             },
             headers=auth_headers,
         )
@@ -146,17 +146,15 @@ class TestChatAPI:
         assert len(data2["messages"]) == 5
         assert data2["has_more"] is False
 
-    def test_filter_messages_by_type(
-        self, client: TestClient, auth_headers: dict
-    ):
+    def test_filter_messages_by_type(self, client: TestClient, auth_headers: dict):
         """Тест: фильтрация сообщений по типу."""
         response = client.post(
             "/api/v1/requests",
             json={
-                "client_id": 1,
-                "vehicle_category_id": 1,
                 "planned_start": "2026-01-15T09:00:00",
                 "planned_end": "2026-01-15T18:00:00",
+                "work_type": "test_work",
+                "object_address": "Test address",
             },
             headers=auth_headers,
         )
@@ -175,7 +173,10 @@ class TestChatAPI:
         )
         client.post(
             f"/api/v1/chat/requests/{request_id}/messages",
-            json={"content": "Документ", "message_type": ChatMessageType.document.value},
+            json={
+                "content": "Документ",
+                "message_type": ChatMessageType.document.value,
+            },
             headers=auth_headers,
         )
 
@@ -203,10 +204,10 @@ class TestChatAPI:
         response = client.post(
             "/api/v1/requests",
             json={
-                "client_id": 1,
-                "vehicle_category_id": 1,
                 "planned_start": "2026-01-15T09:00:00",
                 "planned_end": "2026-01-15T18:00:00",
+                "work_type": "test_work",
+                "object_address": "Test address",
             },
             headers=auth_headers,
         )
@@ -264,7 +265,9 @@ class TestChatAPI:
         )
         assert response.status_code == 404
 
-    def test_upload_multiple_files_to_chat(self, client: TestClient, auth_headers: dict):
+    def test_upload_multiple_files_to_chat(
+        self, client: TestClient, auth_headers: dict
+    ):
         """Тест: batch-загрузка нескольких файлов в чат."""
         import io
         from unittest.mock import patch
@@ -273,10 +276,10 @@ class TestChatAPI:
         response = client.post(
             "/api/v1/requests",
             json={
-                "client_id": 1,
-                "vehicle_category_id": 1,
                 "planned_start": "2026-01-15T09:00:00Z",
                 "planned_end": "2026-01-15T18:00:00Z",
+                "work_type": "test_work",
+                "object_address": "Test address",
             },
             headers=auth_headers,
         )
@@ -313,7 +316,7 @@ class TestChatAPI:
         assert response.status_code == 201
         data = response.json()
         assert len(data) == 3
-        
+
         # Проверяем, что все файлы загружены
         filenames = [item["original_filename"] for item in data]
         assert "photo1.jpg" in filenames
