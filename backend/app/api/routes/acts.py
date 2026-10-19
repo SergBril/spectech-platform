@@ -379,13 +379,17 @@ def download_act_pdf(
         logger.error(f"PDF generation error for act {act_id}: {e}")
         raise HTTPException(status_code=500, detail=f"PDF generation error: {str(e)}")
 
-    filename = f"{act.document_number or f'act-{act_id}'}.pdf"
+    from urllib.parse import quote
+
+    safe_name = f"act-{act_id}.pdf"
+    quote(filename, safe="")
 
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": f'attachment; filename="{safe_name}; filename*=UTF-8'
+            '{utf8_name}"',
             "Access-Control-Expose-Headers": "Content-Disposition",
         },
     )
@@ -502,13 +506,12 @@ def download_invoice_facture_pdf(
         logger.error(f"PDF generation error for invoice facture {act_id}: {e}")
         raise HTTPException(status_code=500, detail=f"PDF generation error: {str(e)}")
 
-    filename = f"SF-{act.document_number}.pdf"
-
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": f'attachment; filename="{safe_name}; filename*=UTF-8'
+            '{utf8_name}"',
             "Access-Control-Expose-Headers": "Content-Disposition",
         },
     )
@@ -553,12 +556,12 @@ def download_upd_pdf(
     try:
         pdf_bytes = generate_upd_pdf(act, company, client, request)
 
-        filename = f"UPD-{act.document_number}.pdf"
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": f'attachment; filename="{safe_name}; filename*=UTF-8'
+                '{utf8_name}"',
                 "Content-Length": str(len(pdf_bytes)),
             },
         )
@@ -605,12 +608,12 @@ def download_torg12_pdf(
     try:
         pdf_bytes = generate_torg12_pdf(act, company, client, request)
 
-        filename = f"TORG-{act.document_number}.pdf"
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": f'attachment; filename="{safe_name}; filename*=UTF-8'
+                '{utf8_name}"',
                 "Content-Length": str(len(pdf_bytes)),
             },
         )
@@ -666,12 +669,12 @@ def download_upd_xml(
         else:
             logger.warning(f"⚠️ UPD XML for act {act_id} warnings: {errors}")
 
-        filename = f"UPD-{act.document_number}.xml"
         return Response(
             content=xml_bytes,
             media_type="application/xml",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": f'attachment; filename="{safe_name}; filename*=UTF-8'
+                '{utf8_name}"',
                 "Content-Length": str(len(xml_bytes)),
             },
         )
@@ -788,12 +791,12 @@ def download_upd_signature(
         xml_bytes = generate_upd_xml(act, company, client, request)
         signature_bytes = create_detached_signature(xml_bytes)
 
-        filename = f"UPD-{act.document_number}.xml.sig"
         return Response(
             content=signature_bytes,
             media_type="application/pkcs7-signature",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": f'attachment; filename="{safe_name}; filename*=UTF-8'
+                '{utf8_name}"',
                 "Content-Length": str(len(signature_bytes)),
             },
         )

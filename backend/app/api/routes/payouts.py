@@ -431,6 +431,6 @@ def download_payout_pdf(
 
     return FileResponse(
         path=pdf_path,
-        filename=f"payout_{payout.document_number}.pdf",
+        filename=f"payout_{payout.id}.pdf",
         media_type="application/pdf",
     )
