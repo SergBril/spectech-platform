@@ -755,7 +755,7 @@ def export_driver_history_pdf(
     from urllib.parse import quote
 
     safe_name = f"history_{contractor_id}.pdf"
-    encoded_name = quote(f"history_{ctr.name}_{contractor_id}.pdf")
+    encoded_name = quote(f"history_{ctr.name}_{contractor_id}.pdf", safe="")
     return StreamingResponse(
         buf,
         media_type="application/pdf",
