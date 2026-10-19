@@ -1,6 +1,9 @@
 # Override для разработки — монтирует тесты и исходники напрямую
 services:
   backend:
+    init: true
+    stop_grace_period: 30s
+    stop_signal: SIGINT
     volumes:
       - ./backend/tests:/app/tests:ro
       - ./backend/app:/app/app:ro
