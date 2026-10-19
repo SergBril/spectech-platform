@@ -14,7 +14,11 @@ from typing import Any
 
 import httpx
 
-from app.services.gps_providers.base import GpsPointData, GpsProviderAdapter
+from app.services.gps_providers.base import (
+    GpsPointData,
+    GpsProviderAdapter,
+    create_retry_client,
+)
 
 logger = logging.getLogger("spectech.gps.mapix")
 
@@ -213,7 +217,7 @@ class MapixAdapter(GpsProviderAdapter):
             "Referer": f"{self.api_url}/",
         }
 
-        async with httpx.AsyncClient(
+        async with create_retry_client(
             timeout=30.0,
             follow_redirects=True,
             headers=headers,
@@ -276,7 +280,7 @@ class MapixAdapter(GpsProviderAdapter):
 
     async def test_connection(self) -> bool:
         try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            async with create_retry_client(timeout=15, follow_redirects=True) as client:
                 ok = await self._ensure_session(client)
                 if ok:
                     logger.info(
