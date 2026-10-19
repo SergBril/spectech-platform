@@ -10,6 +10,8 @@ interface MenuItem {
   group?: string;
 }
 
+const PLATFORM_OWNER_EMAIL = 'admin@spectech.dev';
+
 const menuItems: MenuItem[] = [
   { label: 'Дашборд', icon: '🏠', path: '/', group: 'Основное' },
   { label: 'Заявки', icon: '📋', path: '/requests', group: 'Основное' },
@@ -33,7 +35,7 @@ const menuItems: MenuItem[] = [
   { label: 'Email шаблоны', icon: '📧', path: '/email-templates', group: 'Система' },
   { label: 'Email логи', icon: '📨', path: '/email-logs', group: 'Система' },
   { label: 'Настройки', icon: '⚙️', path: '/settings/company', group: 'Система' },
-  { label: 'Админ-панель', icon: '📊', path: '/admin/dashboard', group: 'Система' },
+  { label: 'Админ-панель', icon: '📊', path: '/admin/dashboard', group: 'Система', ownerOnly: true },
 ];
 
 export const Sidebar: React.FC = () => {
@@ -51,7 +53,8 @@ export const Sidebar: React.FC = () => {
   };
 
   // Группируем пункты меню
-  const groups = menuItems.reduce((acc, item) => {
+  const filteredItems = menuItems.filter(item => !item.ownerOnly || user?.email === PLATFORM_OWNER_EMAIL);
+  const groups = filteredItems.reduce((acc, item) => {
     const group = item.group || 'Другое';
     if (!acc[group]) acc[group] = [];
     acc[group].push(item);

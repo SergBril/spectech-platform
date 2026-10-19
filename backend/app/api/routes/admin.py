@@ -7,6 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
@@ -17,6 +18,21 @@ from app.models.telematics import Notification
 router = APIRouter()
 
 
+def _check_platform_owner(current_user: User):
+    """Проверка доступа: только владелец платформы (email из PLATFORM_OWNER_EMAIL)."""
+    from fastapi import HTTPException
+
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    if (
+        settings.PLATFORM_OWNER_EMAIL
+        and current_user.email != settings.PLATFORM_OWNER_EMAIL
+    ):
+        raise HTTPException(
+            status_code=403, detail="Access denied: platform owner only"
+        )
+
+
 @router.get("/stats")
 def get_platform_stats(
     date_from: str | None = Query(default=None),
@@ -25,10 +41,7 @@ def get_platform_stats(
     current_user: User = Depends(get_current_user),
 ):
     """📊 Общая статистика платформы."""
-    if not getattr(current_user, "is_superuser", False):
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=403, detail="Admin access required")
+    _check_platform_owner(current_user)
 
     # Парсинг дат
     if date_from:
@@ -54,21 +67,18 @@ def get_platform_stats(
         .scalar()
         or 0
     )
-
     new_companies = (
         db.query(func.count(Company.id))
         .filter(Company.created_at >= dt_from, Company.created_at <= dt_to)
         .scalar()
         or 0
     )
-
     new_vehicles = (
         db.query(func.count(Vehicle.id))
         .filter(Vehicle.created_at >= dt_from, Vehicle.created_at <= dt_to)
         .scalar()
         or 0
     )
-
     new_requests = (
         db.query(func.count(Request.id))
         .filter(Request.created_at >= dt_from, Request.created_at <= dt_to)
@@ -115,10 +125,7 @@ def get_provider_requests(
     current_user: User = Depends(get_current_user),
 ):
     """📨 Запросы новых GPS-провайдеров."""
-    if not getattr(current_user, "is_superuser", False):
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=403, detail="Admin access required")
+    _check_platform_owner(current_user)
 
     notifications = (
         db.query(Notification)
