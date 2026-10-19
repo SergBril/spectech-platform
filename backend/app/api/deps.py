@@ -98,6 +98,16 @@ def get_current_company_id(
 
         return requested_company_id
 
+    # Superuser без headerа — возвращаем первую активную компанию
+    if user.is_superuser and not user.company_id:
+        first_company = db.query(Company).filter(Company.is_active == True).first()
+        if first_company:
+            return first_company.id
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active companies found",
+        )
+
     # Обычный пользователь — только своя компания
     if not user.company_id:
         raise HTTPException(
