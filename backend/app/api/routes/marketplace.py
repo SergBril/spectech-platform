@@ -607,6 +607,19 @@ def list_marketplace_requests(
     Список опубликованных заявок от ДРУГИХ компаний.
     Текущая компания видит чужие заявки и может предложить свою технику.
     """
+    # my vehicle categories lookup
+    my_vehicle_categories = (
+        db.query(Vehicle.category_id)
+        .filter(
+            Vehicle.company_id == company_id,
+            Vehicle.category_id.isnot(None),
+            Vehicle.is_deleted == False,  # noqa: E711
+        )
+        .distinct()
+        .all()
+    )
+    my_category_ids = {row[0] for row in my_vehicle_categories if row[0]}
+
     query = (
         select(Request)
         .where(
@@ -627,6 +640,13 @@ def list_marketplace_requests(
 
     if category_id:
         query = query.where(Request.vehicle_category_id == category_id)
+
+    # Filter: only show requests matching company vehicles
+    if my_category_ids:
+        query = query.where(
+            (Request.vehicle_category_id.is_(None))
+            | (Request.vehicle_category_id.in_(my_category_ids))
+        )
 
     requests = db.execute(query).scalars().all()
 
