@@ -84,6 +84,13 @@ class Settings(BaseSettings):
     # Sentry
     sentry_dsn: str | None = None
 
+    # Platform Owner Access
+    PLATFORM_OWNER_EMAIL: str = Field(
+        default="",
+        alias="PLATFORM_OWNER_EMAIL",
+        description="Email of platform owner with admin access",
+    )
+
     # === Telegram Notifications (опционально) ===
 
     TELEGRAM_PROXY_URL: str = Field(
