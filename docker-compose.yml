@@ -42,6 +42,7 @@ services:
       timeout: 5s
       retries: 5
     restart: always
+    stop_grace_period: 60s
     networks:
       - database
     # NO port exposure in production!
@@ -52,6 +53,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: spectech-redis
+    stop_grace_period: 30s
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
@@ -70,6 +72,7 @@ services:
   minio:
     image: minio/minio
     container_name: spectech-minio
+    stop_grace_period: 30s
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
@@ -94,6 +97,9 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: spectech-backend
+    init: true
+    stop_grace_period: 45s
+    stop_signal: SIGINT
     env_file: .env.prod             # ← ИСПРАВЛЕНО: все переменные из файла
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
