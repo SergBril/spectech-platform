@@ -149,3 +149,182 @@ def get_provider_requests(
             for n in notifications
         ]
     }
+
+
+@router.get("/reviews-stats")
+def get_reviews_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Reviews and ratings statistics."""
+    from app.models.review import Review, ReviewStatus
+
+    _check_platform_owner(current_user)
+    total_reviews = db.query(func.count(Review.id)).scalar() or 0
+    approved_reviews = (
+        db.query(func.count(Review.id))
+        .filter(Review.status == ReviewStatus.APPROVED)
+        .scalar()
+        or 0
+    )
+    pending_reviews = (
+        db.query(func.count(Review.id))
+        .filter(Review.status == ReviewStatus.PENDING)
+        .scalar()
+        or 0
+    )
+    avg_rating = (
+        db.query(func.avg(Review.rating))
+        .filter(Review.status == ReviewStatus.APPROVED)
+        .scalar()
+        or 0
+    )
+    avg_quality = (
+        db.query(func.avg(Review.quality_rating))
+        .filter(
+            Review.status == ReviewStatus.APPROVED, Review.quality_rating.isnot(None)
+        )
+        .scalar()
+        or 0
+    )
+    avg_punctuality = (
+        db.query(func.avg(Review.punctuality_rating))
+        .filter(
+            Review.status == ReviewStatus.APPROVED,
+            Review.punctuality_rating.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+    avg_communication = (
+        db.query(func.avg(Review.communication_rating))
+        .filter(
+            Review.status == ReviewStatus.APPROVED,
+            Review.communication_rating.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+    return {
+        "total_reviews": total_reviews,
+        "approved_reviews": approved_reviews,
+        "pending_reviews": pending_reviews,
+        "avg_rating": round(float(avg_rating), 2),
+        "avg_quality": round(float(avg_quality), 2),
+        "avg_punctuality": round(float(avg_punctuality), 2),
+        "avg_communication": round(float(avg_communication), 2),
+    }
+
+
+@router.get("/finance-stats")
+def get_finance_stats(
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Platform finance statistics."""
+    from app.models.finance import DocumentStatus, Invoice, Payment
+
+    _check_platform_owner(current_user)
+    if date_from:
+        dt_from = datetime.fromisoformat(date_from).replace(tzinfo=UTC)
+    else:
+        dt_from = datetime.now(UTC) - timedelta(days=30)
+    if date_to:
+        dt_to = datetime.fromisoformat(date_to).replace(tzinfo=UTC)
+    else:
+        dt_to = datetime.now(UTC)
+    total_invoices = db.query(func.count(Invoice.id)).scalar() or 0
+    total_revenue = (
+        db.query(func.sum(Invoice.paid_amount))
+        .filter(
+            Invoice.status == DocumentStatus.paid,
+            Invoice.created_at >= dt_from,
+            Invoice.created_at <= dt_to,
+        )
+        .scalar()
+        or 0
+    )
+    unpaid_amount = (
+        db.query(func.sum(Invoice.total_amount - Invoice.paid_amount))
+        .filter(
+            Invoice.status.in_([DocumentStatus.draft, DocumentStatus.sent]),
+            Invoice.total_amount > Invoice.paid_amount,
+        )
+        .scalar()
+        or 0
+    )
+    total_payments = db.query(func.count(Payment.id)).scalar() or 0
+    return {
+        "total_invoices": total_invoices,
+        "total_revenue": float(total_revenue),
+        "unpaid_amount": float(unpaid_amount),
+        "total_payments": total_payments,
+        "period": {"from": dt_from.isoformat(), "to": dt_to.isoformat()},
+    }
+
+
+@router.get("/top-companies")
+def get_top_companies(
+    limit: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Top companies by activity."""
+    _check_platform_owner(current_user)
+    top_by_requests = (
+        db.query(
+            Company.id, Company.name, func.count(Request.id).label("requests_count")
+        )
+        .join(Request, Request.company_id == Company.id)
+        .group_by(Company.id, Company.name)
+        .order_by(func.count(Request.id).desc())
+        .limit(limit)
+        .all()
+    )
+    top_by_vehicles = (
+        db.query(
+            Company.id, Company.name, func.count(Vehicle.id).label("vehicles_count")
+        )
+        .join(Vehicle, Vehicle.company_id == Company.id)
+        .group_by(Company.id, Company.name)
+        .order_by(func.count(Vehicle.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "top_by_requests": [
+            {"id": c.id, "name": c.name, "count": c.requests_count}
+            for c in top_by_requests
+        ],
+        "top_by_vehicles": [
+            {"id": c.id, "name": c.name, "count": c.vehicles_count}
+            for c in top_by_vehicles
+        ],
+    }
+
+
+@router.get("/user-activity")
+def get_user_activity(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """User activity metrics (DAU/WAU/MAU)."""
+    _check_platform_owner(current_user)
+    now = datetime.now(UTC)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    new_today = (
+        db.query(func.count(User.id)).filter(User.created_at >= today_start).scalar()
+        or 0
+    )
+    new_this_week = (
+        db.query(func.count(User.id))
+        .filter(User.created_at >= now - timedelta(days=7))
+        .scalar()
+        or 0
+    )
+    return {
+        "new_today": new_today,
+        "new_this_week": new_this_week,
+    }

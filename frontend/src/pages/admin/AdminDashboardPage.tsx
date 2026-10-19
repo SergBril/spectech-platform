@@ -4,7 +4,7 @@ import {
 } from 'recharts';
 import Layout from '../../components/Layout';
 import { showToast } from '../../utils/toast';
-import { adminApi, PlatformStats, ProviderRequest } from '../../api/admin';
+import { adminApi, PlatformStats, ProviderRequest, ReviewsStats, FinanceStats, TopCompanies, UserActivity } from '../../api/admin';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -28,9 +28,24 @@ const StatCard: React.FC<{ title: string; value: number; newValue: number; icon:
   </div>
 );
 
+const SimpleStatCard: React.FC<{ title: string; value: string | number; icon: string; subtitle?: string }> = ({ title, value, icon, subtitle }) => (
+  <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+    <div className="flex items-center justify-between mb-2">
+      <span className="text-2xl">{icon}</span>
+    </div>
+    <div className="text-3xl font-bold text-gray-900">{value}</div>
+    <div className="text-sm text-gray-500 mt-1">{title}</div>
+    {subtitle && <div className="text-xs text-gray-400 mt-0.5">{subtitle}</div>}
+  </div>
+);
+
 export const AdminDashboardPage: React.FC = () => {
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [providerRequests, setProviderRequests] = useState<ProviderRequest[]>([]);
+  const [reviewsStats, setReviewsStats] = useState<ReviewsStats | null>(null);
+  const [financeStats, setFinanceStats] = useState<FinanceStats | null>(null);
+  const [topCompanies, setTopCompanies] = useState<TopCompanies | null>(null);
+  const [userActivity, setUserActivity] = useState<UserActivity | null>(null);
   const [loading, setLoading] = useState(true);
   const [periodDays, setPeriodDays] = useState(30);
 
@@ -43,17 +58,25 @@ export const AdminDashboardPage: React.FC = () => {
       setLoading(true);
       const now = new Date();
       const from = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
-      const [statsData, prData] = await Promise.all([
+      const [statsData, prData, reviewsData, financeData, topCompaniesData, userActivityData] = await Promise.all([
         adminApi.getStats(from.toISOString(), now.toISOString()),
         adminApi.getProviderRequests(),
+        adminApi.getReviewsStats(),
+        adminApi.getFinanceStats(from.toISOString(), now.toISOString()),
+        adminApi.getTopCompanies(10),
+        adminApi.getUserActivity(),
       ]);
       setStats(statsData);
       setProviderRequests(prData.requests);
+      setReviewsStats(reviewsData);
+      setFinanceStats(financeData);
+      setTopCompanies(topCompaniesData);
+      setUserActivity(userActivityData);
     } catch (err: any) {
       if (err?.response?.status === 403) {
         showToast.error('Доступ запрещён. Требуются права администратора.');
       } else {
-        showToast.error('Ошибка загрузки статистики');
+        showToast.error('Ошибка загрузки статистики: ' + (err as Error).message);
       }
     } finally {
       setLoading(false);
@@ -74,6 +97,15 @@ export const AdminDashboardPage: React.FC = () => {
         { name: 'Компании', total: stats.totals.companies, new: stats.new_in_period.companies },
         { name: 'Техника', total: stats.totals.vehicles, new: stats.new_in_period.vehicles },
         { name: 'Заявки', total: stats.totals.requests, new: stats.new_in_period.requests },
+      ]
+    : [];
+
+  const ratingData = reviewsStats
+    ? [
+        { name: 'Общий', value: reviewsStats.avg_rating },
+        { name: 'Качество', value: reviewsStats.avg_quality },
+        { name: 'Пунктуальность', value: reviewsStats.avg_punctuality },
+        { name: 'Коммуникация', value: reviewsStats.avg_communication },
       ]
     : [];
 
@@ -116,6 +148,52 @@ export const AdminDashboardPage: React.FC = () => {
               <StatCard title="Заявок" value={stats.totals.requests} newValue={stats.new_in_period.requests} icon="📋" />
             </div>
 
+            {/* Finance Section */}
+            {financeStats && (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-5 border border-green-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">💰 Финансовая сводка</h3>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <SimpleStatCard title="Счетов" value={financeStats.total_invoices} icon="📄" />
+                  <SimpleStatCard title="Выручка" value={`${financeStats.total_revenue.toLocaleString('ru-RU')} ₽`} icon="💵" />
+                  <SimpleStatCard title="Не оплачено" value={`${financeStats.unpaid_amount.toLocaleString('ru-RU')} ₽`} icon="⏳" />
+                  <SimpleStatCard title="Платежей" value={financeStats.total_payments} icon="💳" />
+                </div>
+              </div>
+            )}
+
+            {/* Reviews Section */}
+            {reviewsStats && (
+              <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">⭐ Отзывы и рейтинги</h3>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                  <SimpleStatCard title="Всего отзывов" value={reviewsStats.total_reviews} icon="💬" />
+                  <SimpleStatCard title="Одобрено" value={reviewsStats.approved_reviews} icon="✅" />
+                  <SimpleStatCard title="На модерации" value={reviewsStats.pending_reviews} icon="⏳" />
+                  <SimpleStatCard title="Средний рейтинг" value={`${reviewsStats.avg_rating}/5`} icon="⭐" />
+                </div>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={ratingData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis domain={[0, 5]} tick={{ fontSize: 12 }} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* User Activity */}
+            {userActivity && (
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">👥 Активность пользователей</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <SimpleStatCard title="Новых сегодня" value={userActivity.new_today} icon="🆕" />
+                  <SimpleStatCard title="Новых за неделю" value={userActivity.new_this_week} icon="📈" />
+                </div>
+              </div>
+            )}
+
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Bar Chart */}
@@ -136,7 +214,7 @@ export const AdminDashboardPage: React.FC = () => {
 
               {/* Pie Charts */}
               <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">🚗 Техника по статусам</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">🚜 Техника по статусам</h3>
                 {vehicleStatusData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
@@ -153,6 +231,41 @@ export const AdminDashboardPage: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {/* Top Companies */}
+            {topCompanies && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">🏆 Топ компаний по заявкам</h3>
+                  <div className="space-y-2">
+                    {topCompanies.top_by_requests.map((company, i) => (
+                      <div key={company.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-500">#{i + 1}</span>
+                          <span className="text-sm font-medium text-gray-900">{company.name}</span>
+                        </div>
+                        <span className="text-sm text-blue-600 font-semibold">{company.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">🚜 Топ компаний по технике</h3>
+                  <div className="space-y-2">
+                    {topCompanies.top_by_vehicles.map((company, i) => (
+                      <div key={company.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-500">#{i + 1}</span>
+                          <span className="text-sm font-medium text-gray-900">{company.name}</span>
+                        </div>
+                        <span className="text-sm text-green-600 font-semibold">{company.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Requests Status Chart */}
             <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
