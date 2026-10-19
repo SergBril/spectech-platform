@@ -13,7 +13,11 @@ from typing import Any
 
 import httpx
 
-from app.services.gps_providers.base import GpsPointData, GpsProviderAdapter
+from app.services.gps_providers.base import (
+    GpsPointData,
+    GpsProviderAdapter,
+    create_retry_client,
+)
 
 logger = logging.getLogger("spectech.gps.wialon")
 
@@ -111,7 +115,7 @@ class WialonAdapter(GpsProviderAdapter):
 
     async def _fetch_positions(self) -> list[GpsPointData]:
         """Запрашивает последние позиции всех юнитов через messages/load_last."""
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with create_retry_client(timeout=30) as client:
             # Шаг 1: Получаем список всех юнитов
             units_data = await self._api_call(
                 client,
@@ -192,7 +196,7 @@ class WialonAdapter(GpsProviderAdapter):
         self, date_from: datetime, date_to: datetime, limit: int = 1000
     ) -> list[GpsPointData]:
         """Получает трек за период."""
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with create_retry_client(timeout=30) as client:
             units_data = await self._api_call(
                 client,
                 "core/search_items",
@@ -261,7 +265,7 @@ class WialonAdapter(GpsProviderAdapter):
 
     async def test_connection(self) -> bool:
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with create_retry_client(timeout=15) as client:
                 token = await self._ensure_token(client)
                 return bool(token)
         except Exception as e:

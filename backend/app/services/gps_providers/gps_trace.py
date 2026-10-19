@@ -4,9 +4,11 @@ import logging
 from datetime import datetime
 from typing import Any
 
-import httpx
-
-from app.services.gps_providers.base import GpsPointData, GpsProviderAdapter
+from app.services.gps_providers.base import (
+    GpsPointData,
+    GpsProviderAdapter,
+    create_retry_client,
+)
 
 logger = logging.getLogger("spectech.gps.gps_trace")
 
@@ -26,7 +28,7 @@ class GpsTraceAdapter(GpsProviderAdapter):
 
     async def get_last_position(self) -> GpsPointData | None:
         unit_id = self.config["unit_id"]
-        async with httpx.AsyncClient() as client:
+        async with create_retry_client() as client:
             resp = await client.get(
                 f"{self.api_url}/api/v2/units/{unit_id}/position",
                 headers=self._headers(),
@@ -39,7 +41,7 @@ class GpsTraceAdapter(GpsProviderAdapter):
         self, date_from: datetime, date_to: datetime, limit: int = 1000
     ) -> list[GpsPointData]:
         unit_id = self.config["unit_id"]
-        async with httpx.AsyncClient() as client:
+        async with create_retry_client() as client:
             resp = await client.get(
                 f"{self.api_url}/api/v2/units/{unit_id}/messages",
                 headers=self._headers(),
@@ -56,7 +58,7 @@ class GpsTraceAdapter(GpsProviderAdapter):
 
     async def test_connection(self) -> bool:
         try:
-            async with httpx.AsyncClient() as client:
+            async with create_retry_client() as client:
                 resp = await client.get(
                     f"{self.api_url}/api/v2/units", headers=self._headers()
                 )

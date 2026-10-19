@@ -4,9 +4,11 @@ import logging
 from datetime import datetime
 from typing import Any
 
-import httpx
-
-from app.services.gps_providers.base import GpsPointData, GpsProviderAdapter
+from app.services.gps_providers.base import (
+    GpsPointData,
+    GpsProviderAdapter,
+    create_retry_client,
+)
 
 logger = logging.getLogger("spectech.gps.gdemoi")
 
@@ -29,7 +31,7 @@ class GdeMoiAdapter(GpsProviderAdapter):
 
     async def get_last_position(self) -> GpsPointData | None:
         device_id = self.config["device_id"]
-        async with httpx.AsyncClient() as client:
+        async with create_retry_client() as client:
             resp = await client.get(
                 f"{self.api_url}/v1/devices/{device_id}/last-position",
                 headers=self._headers(),
@@ -44,7 +46,7 @@ class GdeMoiAdapter(GpsProviderAdapter):
         self, date_from: datetime, date_to: datetime, limit: int = 1000
     ) -> list[GpsPointData]:
         device_id = self.config["device_id"]
-        async with httpx.AsyncClient() as client:
+        async with create_retry_client() as client:
             resp = await client.get(
                 f"{self.api_url}/v1/devices/{device_id}/track",
                 headers=self._headers(),
@@ -61,7 +63,7 @@ class GdeMoiAdapter(GpsProviderAdapter):
 
     async def test_connection(self) -> bool:
         try:
-            async with httpx.AsyncClient() as client:
+            async with create_retry_client() as client:
                 resp = await client.get(
                     f"{self.api_url}/v1/devices",
                     headers=self._headers(),
