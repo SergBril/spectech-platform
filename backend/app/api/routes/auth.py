@@ -1,7 +1,8 @@
-import logging
+﻿import logging
 
 logger = logging.getLogger("spectech.auth")
 import secrets
+from datetime import UTC
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -9,7 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.models.auth import User
-from app.schemas.auth import TokenResponse, UserLogin, UserRead, UserRegister
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+    UserLogin,
+    UserRead,
+    UserRegister,
+)
 from app.services.auth_service import (
     authenticate_user,
     create_access_token,
@@ -111,3 +119,87 @@ def get_telegram_status(
         "linked": current_user.telegram_id is not None,
         "telegram_id": current_user.telegram_id,
     }
+
+
+@router.post("/forgot-password")
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """Отправить письмо со ссылкой для сброса пароля."""
+    import hashlib
+    import secrets
+    from datetime import datetime, timedelta
+
+    from app.core.config import settings
+    from app.services.email_service import EmailService
+
+    user = db.query(User).filter(User.email == payload.email).first()
+
+    if not user:
+        return {
+            "message": "Если email зарегистрирован, вы получите письмо со ссылкой для сброса"
+        }
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires_at = datetime.now(UTC) + timedelta(hours=1)
+
+    user.reset_token_hash = token_hash
+    user.reset_token_expires_at = expires_at
+    db.commit()
+
+    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
+
+    try:
+        email_service = EmailService()
+        email_service.send_email(
+            to_email=user.email,
+            subject="Сброс пароля — СпецТехника Про",
+            template_name="reset_password.html",
+            context={
+                "full_name": user.full_name,
+                "email": user.email,
+                "reset_url": reset_url,
+            },
+        )
+        print(f"✅ Reset email sent to {user.email}")
+    except Exception as e:
+        print(f"⚠️ Failed to send reset email: {e}")
+
+    return {
+        "message": "Если email зарегистрирован, вы получите письмо со ссылкой для сброса"
+    }
+
+
+@router.post("/reset-password")
+def reset_password(
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """Установить новый пароль по токену."""
+    import hashlib
+    from datetime import datetime
+
+    from app.services.auth_service import hash_password
+
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    user = db.query(User).filter(User.reset_token_hash == token_hash).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=400, detail="Недействительный или истёкший токен"
+        )
+
+    if not user.reset_token_expires_at or user.reset_token_expires_at < datetime.now(
+        UTC
+    ):
+        raise HTTPException(status_code=400, detail="Срок действия токена истёк")
+
+    user.password_hash = hash_password(payload.new_password)
+    user.reset_token_hash = None
+    user.reset_token_expires_at = None
+    user.failed_login_attempts = 0
+    db.commit()
+
+    return {"message": "Пароль успешно изменён"}

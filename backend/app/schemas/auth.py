@@ -117,3 +117,18 @@ class UserRead(BaseModel):
     created_at: datetime = Field(..., description="Дата создания")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Запрос на сброс пароля."""
+
+    email: EmailStr = Field(..., description="Email пользователя")
+
+
+class ResetPasswordRequest(BaseModel):
+    """Запрос на установку нового пароля."""
+
+    token: str = Field(..., min_length=32, description="Reset token из email")
+    new_password: str = Field(
+        ..., min_length=8, max_length=128, description="Новый пароль"
+    )

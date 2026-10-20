@@ -1,4 +1,4 @@
-"""Email service для отправки уведомлений через SMTP."""
+﻿"""Email service для отправки уведомлений через SMTP."""
 
 import logging
 import smtplib
@@ -107,7 +107,7 @@ class EmailService:
                 rendered_html = html_body
 
             email_log = EmailLog(
-                company_id=1,
+                company_id=context.get("company_id") if context else None,
                 to_email=to_email,
                 subject=subject,
                 html_body=rendered_html,
