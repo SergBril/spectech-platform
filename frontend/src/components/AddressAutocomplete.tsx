@@ -27,11 +27,8 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const DADATA_TOKEN = import.meta.env.VITE_DADATA_TOKEN;
-  const DADATA_API_URL = 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address';
-
   useEffect(() => {
-    if (value.length < 3) {
+    if (!value || value.length < 3) {
       setSuggestions([]);
       return;
     }
@@ -43,29 +40,25 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     timeoutRef.current = setTimeout(async () => {
       setIsLoading(true);
       try {
-        console.log('[AddressAutocomplete] Fetching suggestions for:', value);
-        const response = await fetch(DADATA_API_URL, {
+        console.log('[AddressAutocomplete] Fetching for:', value);
+        
+        const response = await fetch('/api/v1/addresses/suggest', {
           method: 'POST',
-          mode: 'cors',
           headers: {
             'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': Token ,
           },
           body: JSON.stringify({
             query: value,
-            count: 5,
-            from_bound: { value: 'city' },
-            to_bound: { value: 'house' },
+            count: 7,
           }),
         });
 
         if (!response.ok) {
-          throw new Error(HTTP );
+          throw new Error('HTTP ' + response.status);
         }
 
         const data = await response.json();
-        console.log('[AddressAutocomplete] Response:', data);
+        console.log('[AddressAutocomplete] Got', data.suggestions?.length, 'suggestions');
         setSuggestions(data.suggestions || []);
         setShowSuggestions(true);
       } catch (error) {
@@ -81,7 +74,7 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [value, DADATA_TOKEN]);
+  }, [value]);
 
   const handleSelect = (suggestion: AddressSuggestion) => {
     onChange(suggestion.unrestricted_value);

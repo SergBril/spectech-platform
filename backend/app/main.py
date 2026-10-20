@@ -1,4 +1,4 @@
-"""Главный файл приложения FastAPI."""
+﻿"""Главный файл приложения FastAPI."""
 
 from dotenv import load_dotenv
 
@@ -67,6 +67,7 @@ from app.api.routes import (
     map as map_routes,
 )
 from app.api.routes import websocket as ws_routes
+from app.api.routes import addresses
 from app.core.config import settings
 from app.core.exception_handlers import (
     general_exception_handler,
@@ -214,6 +215,7 @@ app.add_middleware(RequestLoggingMiddleware)
 app.include_router(debug.router, prefix="/api/v1", tags=["debug"])
 
 app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
+app.include_router(addresses.router, prefix="/api/v1")
 app.include_router(categories.router, prefix="/api/v1/categories", tags=["catalog"])
 app.include_router(
     vehicles.router, prefix="/api/v1", tags=["🚜 Vehicles (Спецтехника)"]

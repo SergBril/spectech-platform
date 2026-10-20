@@ -74,6 +74,7 @@ class Settings(BaseSettings):
 
     # Application URLs
     FRONTEND_URL: str = Field(default="http://localhost:8080", alias="FRONTEND_URL")
+    DADATA_TOKEN: str = Field(default="", alias="DADATA_TOKEN", description="DaData API token")
 
     # MinIO (S3) Storage Settings
     MINIO_ENDPOINT: str = "http://localhost:9000"
