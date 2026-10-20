@@ -41,7 +41,7 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
       setIsLoading(true);
       try {
         console.log('[AddressAutocomplete] Fetching for:', value);
-        
+
         const response = await fetch('/api/v1/addresses/suggest', {
           method: 'POST',
           headers: {
