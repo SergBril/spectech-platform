@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -51,7 +51,8 @@ export default function LoginPage() {
         >
           Войти в систему
         </button>
-      </form>
+
+
     </div>
   );
 }

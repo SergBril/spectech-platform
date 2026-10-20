@@ -40,6 +40,8 @@ import {
 // ╨Ы╤С╨│╨║╨╕╨╡ ╤Б╤В╤А╨░╨╜╨╕╤Ж╤Л тАФ ╨╖╨░╨│╤А╤Г╨╢╨░╤О╤В╤Б╤П ╤Б╤А╨░╨╖╤Г
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 import './index.css';
 
@@ -68,6 +70,8 @@ const AppRoutes = () => {
       <Routes>
         <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
         <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
+        <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+        <Route path="/reset-password" element={<GuestRoute><ResetPasswordPage /></GuestRoute>} />
         <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
         <Route path="/drivers" element={<ProtectedRoute><DriversPage /></ProtectedRoute>} />
