@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import type {
   Request,
   RequestCreate,
@@ -10,6 +10,7 @@ import type {
 } from '../api/requests';
 import apiClient from '../api/client';
 import { requestsApi } from '../api/requests';
+import AddressAutocomplete from './AddressAutocomplete';
 import { getCatalogTree, getSubcategoryAttributes, addCustomOption, type CategoryTree, type AttributeDefinition } from '../api/catalog';
 
 interface Contractor {
