@@ -1,4 +1,4 @@
-import {
+﻿import {
   createContext,
   useCallback,
   useContext,
@@ -81,9 +81,18 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     fetchCompanies();
   }, [fetchCompanies, isAuthenticated]);
 
-  const setCurrentCompanyId = useCallback((id: number) => {
+  const setCurrentCompanyId = useCallback(async (id: number) => {
     setCurrentCompanyIdState(id);
     localStorage.setItem(STORAGE_KEY, String(id));
+
+    // Обновляем активную компанию на сервере
+    try {
+      await apiClient.post('/me/active-company', { company_id: id });
+      console.log('Active company updated on server:', id);
+    } catch (error) {
+      console.error('Failed to update active company:', error);
+    }
+
     window.location.reload();
   }, []);
 

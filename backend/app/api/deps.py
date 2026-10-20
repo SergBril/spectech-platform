@@ -1,4 +1,4 @@
-from fastapi import Depends, Header, HTTPException, status
+﻿from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -144,6 +144,11 @@ def get_current_user_optional(
 def get_user_company_ids(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> list[int]:
+    """Возвращает список company_id для фильтрации данных.
+
+    Для обычных пользователей: только активная компания (user.company_id).
+    Для superuser: все активные компании.
+    """
     from app.models.user_company import UserCompany
 
     if user.is_superuser:
@@ -152,7 +157,12 @@ def get_user_company_ids(
         return list(
             db.scalars(select(Company.id).where(Company.is_active == True)).all()
         )
-    # Collect company IDs from both UserCompany table AND user.company_id field
+
+    # Обычный пользователь — только активная компания
+    if user.company_id:
+        return [user.company_id]
+
+    # Fallback: если company_id не установлен, возвращаем все доступные
     ids = set(
         db.scalars(
             select(UserCompany.company_id).where(
@@ -160,6 +170,4 @@ def get_user_company_ids(
             )
         ).all()
     )
-    if user.company_id:
-        ids.add(user.company_id)
     return list(ids)
