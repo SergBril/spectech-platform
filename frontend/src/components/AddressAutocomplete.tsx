@@ -43,8 +43,10 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     timeoutRef.current = setTimeout(async () => {
       setIsLoading(true);
       try {
+        console.log('[AddressAutocomplete] Fetching suggestions for:', value);
         const response = await fetch(DADATA_API_URL, {
           method: 'POST',
+          mode: 'cors',
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -58,11 +60,16 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
           }),
         });
 
+        if (!response.ok) {
+          throw new Error(HTTP );
+        }
+
         const data = await response.json();
+        console.log('[AddressAutocomplete] Response:', data);
         setSuggestions(data.suggestions || []);
         setShowSuggestions(true);
       } catch (error) {
-        console.error('DaData API error:', error);
+        console.error('[AddressAutocomplete] Error:', error);
         setSuggestions([]);
       } finally {
         setIsLoading(false);
@@ -94,7 +101,7 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
       />
 
       {showSuggestions && suggestions.length > 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
           {suggestions.map((suggestion, index) => (
             <div
               key={index}
