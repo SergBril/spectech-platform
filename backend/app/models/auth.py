@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -72,6 +72,14 @@ class User(Base):
         unique=True,
         index=True,
         comment="Одноразовый код для привязки Telegram",
+    )
+
+    # Password reset
+    reset_token_hash: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="Hashed token для сброса пароля"
+    )
+    reset_token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="Время истечения reset токена"
     )
 
 

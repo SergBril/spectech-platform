@@ -1,4 +1,4 @@
-"""Модели для email-шаблонов и логирования отправок."""
+﻿"""Модели для email-шаблонов и логирования отправок."""
 
 from datetime import datetime
 from enum import Enum as PyEnum
