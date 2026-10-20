@@ -1,9 +1,9 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 
 test.describe('Dashboard', () => {
   test('should load dashboard page', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     // Wait for content to render
     await page.waitForTimeout(1000);
     await expect(page).toHaveURL(/\/$/);
@@ -13,7 +13,7 @@ test.describe('Dashboard', () => {
 
   test('should have sidebar navigation', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     const hasNav = await page.locator('nav, aside, [class*="sidebar"], [class*="Sidebar"]').first().isVisible();
     expect(hasNav).toBeTruthy();
@@ -21,7 +21,7 @@ test.describe('Dashboard', () => {
 
   test('should navigate to vehicles', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     const vehiclesLink = page.locator('a[href*="vehicles"], [href*="vehicles"]').first();
     if (await vehiclesLink.isVisible()) {
