@@ -1,4 +1,4 @@
-"""Маршруты для работы с адресами через DaData API."""
+﻿"""Маршруты для работы с адресами через DaData API."""
 
 import logging
 from typing import Any
@@ -29,10 +29,8 @@ async def suggest_addresses(request: AddressSuggestRequest) -> dict[str, Any]:
 
     Используется для обхода CORS ограничений браузера.
     """
-    if not settings.DADATA_TOKEN:
-        raise HTTPException(
-            status_code=500, detail="DaData token is not configured"
-        )
+    if not settings.DADATA_API_KEY:
+        raise HTTPException(status_code=500, detail="DaData API key is not configured")
 
     if len(request.query) < 3:
         return {"suggestions": []}
@@ -44,7 +42,7 @@ async def suggest_addresses(request: AddressSuggestRequest) -> dict[str, Any]:
                 headers={
                     "Content-Type": "application/json",
                     "Accept": "application/json",
-                    "Authorization": f"Token {settings.DADATA_TOKEN}",
+                    "Authorization": f"Token {settings.DADATA_API_KEY}",
                 },
                 json={
                     "query": request.query,
@@ -57,6 +55,4 @@ async def suggest_addresses(request: AddressSuggestRequest) -> dict[str, Any]:
             return response.json()
         except httpx.HTTPError as e:
             logger.error(f"DaData API error: {e}")
-            raise HTTPException(
-                status_code=502, detail=f"DaData API error: {str(e)}"
-            )
+            raise HTTPException(status_code=502, detail=f"DaData API error: {str(e)}")

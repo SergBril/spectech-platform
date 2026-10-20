@@ -7,7 +7,7 @@ $addressesAdded = $false
 
 for ($i = 0; $i -lt $lines.Count; $i++) {
     $line = $lines[$i]
-    
+
     # Пропускаем дубликаты импорта addresses
     if ($line -match '^\s*from app\.api\.routes import addresses\s*$') {
         if (-not $addressesAdded) {
@@ -17,12 +17,12 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
         }
         continue
     }
-    
+
     # Если строка внутри блока импорта и содержит addresses - пропускаем
     if ($line -match '^\s*addresses,?\s*$') {
         continue
     }
-    
+
     $newLines += $line
 }
 
@@ -40,7 +40,7 @@ if (-not $hasAddressesImport) {
     $finalLines = @()
     for ($i = 0; $i -lt $newLines.Count; $i++) {
         $finalLines += $newLines[$i]
-        
+
         # Добавляем после последнего блока from app.api.routes import
         if ($newLines[$i] -match '^\)$' -and $i -gt 0) {
             # Проверяем был ли это блок импорта routes

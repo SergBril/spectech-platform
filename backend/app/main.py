@@ -19,6 +19,7 @@ from sqlalchemy.exc import (
 
 from app.api.routes import (
     acts,
+    addresses,
     admin,
     analytics,
     auth,
@@ -67,7 +68,6 @@ from app.api.routes import (
     map as map_routes,
 )
 from app.api.routes import websocket as ws_routes
-from app.api.routes import addresses
 from app.core.config import settings
 from app.core.exception_handlers import (
     general_exception_handler,
