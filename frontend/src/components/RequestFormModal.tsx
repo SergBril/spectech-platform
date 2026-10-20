@@ -523,13 +523,10 @@ export const RequestFormModal: React.FC<Props> = ({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Адрес объекта *</label>
-              <input
-                type="text"
+              <AddressAutocomplete
                 value={objectAddress}
-                onChange={(e) => setObjectAddress(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                onChange={setObjectAddress}
                 placeholder="Например: Москва, Красная площадь"
-                required
               />
             </div>
 
