@@ -1,4 +1,6 @@
-﻿import React, { Suspense, lazy } from 'react';
+﻿import './lib/sentry'; // Sentry must be imported FIRST
+
+import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -6,6 +8,7 @@ import { CompanyProvider } from './contexts/CompanyContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { Toaster } from 'react-hot-toast';
 import PageLoader from './components/PageLoader';
+import { Sentry } from './lib/sentry';
 
 // Lazy-loaded pages
 import {
@@ -34,7 +37,7 @@ import {
   VehicleDetailPage,
 } from './pages';
 
-// Лёгкие страницы — загружаются сразу
+// ╨Ы╤С╨│╨║╨╕╨╡ ╤Б╤В╤А╨░╨╜╨╕╤Ж╤Л тАФ ╨╖╨░╨│╤А╤Г╨╢╨░╤О╤В╤Б╤П ╤Б╤А╨░╨╖╤Г
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 
@@ -91,14 +94,14 @@ const AppRoutes = () => {
         <Route path="/salaries" element={<ProtectedRoute><SalariesPage /></ProtectedRoute>} />
         <Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
         <Route path="/bank-statements" element={<ProtectedRoute><BankStatementsPage /></ProtectedRoute>} />
-        {/* Driver PWA routes (без ProtectedRoute — своя авторизация) */}
+        {/* Driver PWA routes (╨▒╨╡╨╖ ProtectedRoute тАФ ╤Б╨▓╨╛╤П ╨░╨▓╤В╨╛╤А╨╕╨╖╨░╤Ж╨╕╤П) */}
         <Route path="/driver/login" element={<DriverLoginPage />} />
         <Route path="/driver/dashboard" element={<DriverDashboardPage />} />
         <Route path="/driver" element={<Navigate to="/driver/dashboard" replace />} />
         <Route path="/driver/shift-report/:taskId" element={<ShiftReportPage />} />
         <Route path="/admin/dashboard" element={<ProtectedRoute><AdminDashboardPage /></ProtectedRoute>} />
         <Route path="/admin/gps" element={<ProtectedRoute><GpsAdminPage /></ProtectedRoute>} />
-        {/* Catch-all — должен быть последним */}
+        {/* Catch-all тАФ ╨┤╨╛╨╗╨╢╨╡╨╜ ╨▒╤Л╤В╤М ╨┐╨╛╤Б╨╗╨╡╨┤╨╜╨╕╨╝ */}
         <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
     </Suspense>
@@ -107,33 +110,43 @@ const AppRoutes = () => {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: '#363636',
-            color: '#fff',
-            borderRadius: '8px',
-          },
-          success: {
-            duration: 3000,
-            iconTheme: { primary: '#10B981', secondary: '#fff' },
-          },
-          error: {
-            duration: 5000,
-            iconTheme: { primary: '#EF4444', secondary: '#fff' },
-          },
-        }}
-      />
-      <AuthProvider>
-        <CompanyProvider>
-          <WebSocketProvider>
-            <AppRoutes />
-          </WebSocketProvider>
-        </CompanyProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <Sentry.ErrorBoundary
+      fallback={({ error }) => (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <h2>Что-то пошло не так</h2>
+          <p>Произошла ошибка. Пожалуйста, обновите страницу.</p>
+          <button onClick={() => window.location.reload()}>Обновить</button>
+        </div>
+      )}
+    >
+      <BrowserRouter>
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+              borderRadius: '8px',
+            },
+            success: {
+              duration: 3000,
+              iconTheme: { primary: '#10B981', secondary: '#fff' },
+            },
+            error: {
+              duration: 5000,
+              iconTheme: { primary: '#EF4444', secondary: '#fff' },
+            },
+          }}
+        />
+        <AuthProvider>
+          <CompanyProvider>
+            <WebSocketProvider>
+              <AppRoutes />
+            </WebSocketProvider>
+          </CompanyProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </Sentry.ErrorBoundary>
   </React.StrictMode>
 );
