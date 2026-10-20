@@ -1,6 +1,6 @@
 ﻿import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('admin@spectech.dev');
@@ -14,7 +14,7 @@ export default function LoginPage() {
     setError('');
     try {
       await login(email, password);
-      navigate('/'); // Перенаправление на дашборд после успеха
+      navigate('/');
     } catch (err: any) {
       setError('Неверный email или пароль');
       console.error(err);
@@ -52,7 +52,18 @@ export default function LoginPage() {
           Войти в систему
         </button>
 
-
+        <p className="mt-4 text-center text-sm text-gray-600">
+          Нет аккаунта?{' '}
+          <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
+            Зарегистрироваться
+          </Link>
+        </p>
+        <p className="mt-2 text-center text-sm text-gray-600">
+          <Link to="/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">
+            Забыли пароль?
+          </Link>
+        </p>
+      </form>
     </div>
   );
 }
