@@ -17,6 +17,8 @@ interface Vehicle {
   owner_company_name: string;
   description?: string;
   photos: string[] | null;
+  marketplace_commission_agreed?: boolean;
+  marketplace_commission_rate?: number;
 }
 
 interface Company {

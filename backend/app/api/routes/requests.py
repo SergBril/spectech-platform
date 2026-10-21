@@ -288,6 +288,19 @@ async def assign_request(
             detail=f"Vehicle '{vehicle.name}' has status '{vehicle.status}' — assignment not allowed",
         )
 
+    # ── Проверка согласия на комиссию маркетплейса ─────────────────────
+    is_marketplace = getattr(request, "source_channel", None) == "marketplace"
+    commission_agreed = getattr(vehicle, "marketplace_commission_agreed", False)
+    if is_marketplace and not commission_agreed:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Техника '{vehicle.name}' не может быть назначена на заказ из маркетплейса. "
+                "Собственник не дал согласие на комиссию 10%. "
+                "Для участия в маркетплейсе необходимо дать согласие в карточке техники."
+            ),
+        )
+
     # ── Определяем период назначения ───────────────────────────────────
     planned_start = payload.planned_start or request.planned_start
     planned_end = payload.planned_end or request.planned_end
