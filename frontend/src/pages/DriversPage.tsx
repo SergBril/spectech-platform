@@ -15,6 +15,7 @@ const ALL_COLS = [
   { key: 'machinist_type', label: 'Тип корочки', def: 140 },
   { key: 'machinist_expiry', label: 'Корочки до', def: 100 },
   { key: 'medical_expiry', label: 'Медосмотр до', def: 110 },
+  { key: 'safety_expiry', label: 'Охрана труда до', def: 120 },
   { key: 'date_of_birth', label: 'Дата рожд.', def: 100 },
   { key: 'user_id', label: '📱 Приложение', def: 90 },
 ];
@@ -100,13 +101,17 @@ export const DriversPage: React.FC = () => {
 
   const isExpired = (d: string | null) => d ? new Date(d).getTime() < Date.now() : false;
   const hasExpiredDocs = (drv: any) =>
-    isExpired(drv.license_expiry_date) || isExpired(drv.machinist_certificate_expiry) || isExpired(drv.medical_cert_expiry);
+    isExpired(drv.license_expiry_date) || isExpired(drv.machinist_certificate_expiry) || isExpired(drv.medical_cert_expiry) || isExpired(drv.safety_training_expiry);
 
   const filteredDrivers = showExpiredOnly
     ? drivers.filter(hasExpiredDocs)
     : drivers;
 
   const expiredCount = drivers.filter(hasExpiredDocs).length;
+  const expiredLicense = drivers.filter(d => isExpired(d.license_expiry_date)).length;
+  const expiredMachinist = drivers.filter(d => isExpired(d.machinist_certificate_expiry)).length;
+  const expiredMedical = drivers.filter(d => isExpired(d.medical_cert_expiry)).length;
+  const expiredSafety = drivers.filter(d => isExpired(d.safety_training_expiry)).length;
 
   return (
     <Layout>
@@ -117,6 +122,9 @@ export const DriversPage: React.FC = () => {
             {expiredCount > 0 && (
               <span className="bg-red-100 text-red-700 px-3 py-1.5 rounded-full text-xs font-semibold animate-pulse">
                 ⚠️ {expiredCount} с просроченными документами
+              {expiredCount > 0 && <span className="text-xs ml-2 text-gray-500">
+                (ВУ: {expiredLicense}, Корочки: {expiredMachinist}, Мед: {expiredMedical}, Охрана: {expiredSafety})
+              </span>}
               </span>
             )}
             <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
@@ -189,6 +197,7 @@ export const DriversPage: React.FC = () => {
                       {isVis('machinist_type') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{drv.machinist_certificate_type || '—'}</td>}
                       {isVis('machinist_expiry') && <td className={`px-4 py-4 whitespace-nowrap text-sm ${getExpiryColor(drv.machinist_certificate_expiry)}`}>{fmtDate(drv.machinist_certificate_expiry)}</td>}
                       {isVis('medical_expiry') && <td className={`px-4 py-4 whitespace-nowrap text-sm ${getExpiryColor(drv.medical_cert_expiry)}`}>{fmtDate(drv.medical_cert_expiry)}</td>}
+                      {isVis('safety_expiry') && <td className={`px-4 py-4 whitespace-nowrap text-sm ${getExpiryColor(drv.safety_training_expiry)}`}>{fmtDate(drv.safety_training_expiry)}</td>}
                       {isVis('date_of_birth') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{fmtDate(drv.date_of_birth)}</td>}
                       {isVis('user_id') && <td className="px-4 py-4 whitespace-nowrap text-sm">
                         {drv.user_id ? <span className="text-green-600 font-medium">✅</span> : <span className="text-orange-400">—</span>}
