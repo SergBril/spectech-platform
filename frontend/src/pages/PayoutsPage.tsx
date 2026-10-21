@@ -75,7 +75,7 @@ export const PayoutsPage: React.FC = () => {
   const totalCommission = payouts.reduce((s, p) => s + Number(p.platform_commission), 0);
 
   return (
-    <Layout title="💰 Выплаты">
+    <Layout>
       <div className="space-y-6">
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -168,7 +168,7 @@ export const PayoutsPage: React.FC = () => {
                           <button onClick={() => handleApprove(p.id)}
                             className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs hover:bg-indigo-200">✓ Одобрить</button>
                         )}
-                        {(p.status === 'approved' || p.status === 'sent') && (
+                        {(p.status === 'sent' || p.status === 'sent') && (
                           <button onClick={() => handlePay(p.id)}
                             className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200">💳 Оплатить</button>
                         )}
