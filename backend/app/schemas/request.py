@@ -19,6 +19,7 @@ class RequestCreate(BaseModel):
     source_channel: str = "phone"
     priority: str = "normal"
     comment: str | None = None
+    requirements: dict | None = None
 
 
 class RequestUpdate(BaseModel):
