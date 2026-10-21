@@ -26,14 +26,14 @@ export const MaintenanceAnalyticsPage: React.FC = () => {
     try {
       const token = localStorage.getItem('access_token');
       const companyId = localStorage.getItem('spectech_current_company_id');
-      const response = await apiClient.get("/vehicles?limit=100");
+      const response = await fetch(`http://localhost:8000/api/v1/vehicles?limit=100`, {
         headers: {
           Authorization: `Bearer ${token}`,
           'X-Company-Id': companyId || '',
         },
       });
       if (response.ok) {
-        const data = response.data;
+        const data = await response.json();
         setVehicles(data.items || data);
         if (data.items?.length > 0) setSelectedVehicleId(data.items[0].id);
       }
