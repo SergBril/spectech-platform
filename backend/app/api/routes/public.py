@@ -116,6 +116,8 @@ def _build_vehicle_response(
         photos=_normalize_photos(getattr(v, "photos", None)),
         owner_company_id=v.company_id or 0,
         owner_company_name=company_name,
+        marketplace_commission_agreed=bool(getattr(v, "marketplace_commission_agreed", False)),
+        marketplace_commission_rate=_to_float(getattr(v, "marketplace_commission_rate", None)),
     )
 
 

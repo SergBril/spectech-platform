@@ -179,8 +179,10 @@ async def create_request(
                 detail=f"Vehicle category {payload.vehicle_category_id} not found",
             )
 
+    # Exclude None values to avoid overriding DB defaults
+    data = payload.model_dump(exclude_none=True)
     request = Request(
-        **payload.model_dump(),
+        **data,
         company_id=company_id,
         created_by=current_user.id,
     )
