@@ -141,6 +141,7 @@ export const PayoutsPage: React.FC = () => {
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Net</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Статус</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Источник</th>
+                  <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Оплата</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Действия</th>
                 </tr>
               </thead>
@@ -169,6 +170,17 @@ export const PayoutsPage: React.FC = () => {
                         <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">🏪 Маркетплейс</span>
                       ) : (
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">📋 Прямой</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      {((p as any).calculation_details?.payment_terms_days || 7) > 7 ? (
+                        <span className="px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs font-medium">
+                          ⏰ {(p as any).calculation_details?.payment_terms_days} дн.
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
+                          ✅ 7 дн.
+                        </span>
                       )}
                     </td>
                       <td className="px-4 py-3 text-sm space-x-1">

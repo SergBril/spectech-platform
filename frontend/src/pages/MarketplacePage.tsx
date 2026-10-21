@@ -23,6 +23,11 @@ interface MarketplaceRequest {
 
 const MarketplacePage: React.FC = () => {
   const [requests, setRequests] = useState<MarketplaceRequest[]>([]);
+  const [respondingId, setRespondingId] = useState<number | null>(null);
+  const [myVehicles, setMyVehicles] = useState<any[]>([]);
+  const [showVehicleModal, setShowVehicleModal] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<MarketplaceRequest | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [filterCategory, setFilterCategory] = useState<string>('all');
 
@@ -48,6 +53,47 @@ const MarketplacePage: React.FC = () => {
   const formatDate = (iso: string | null) => {
     if (!iso) return '—';
     return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const handleRespond = async (req: MarketplaceRequest) => {
+    setSelectedRequest(req);
+    setRespondingId(req.id);
+    try {
+      const res = await apiClient.get('/vehicles', { params: { limit: 50 } });
+      const vehicles = Array.isArray(res.data) ? res.data : res.data?.items || [];
+      // Filter only marketplace-agreed vehicles matching category
+      const eligible = vehicles.filter((v: any) => 
+        v.marketplace_commission_agreed && 
+        (!req.vehicle_category_id || v.category_id === req.vehicle_category_id)
+      );
+      setMyVehicles(eligible);
+      setSelectedVehicleId(eligible.length === 1 ? eligible[0].id : null);
+      setShowVehicleModal(true);
+    } catch (err) {
+      console.error('Failed to load vehicles:', err);
+      alert('Ошибка загрузки техники');
+    } finally {
+      setRespondingId(null);
+    }
+  };
+
+  const submitResponse = async () => {
+    if (!selectedRequest || !selectedVehicleId) return;
+    setRespondingId(selectedRequest.id);
+    try {
+      const res = await apiClient.post(`/public/marketplace/requests/${selectedRequest.id}/respond`, {
+        vehicle_id: selectedVehicleId,
+      });
+      alert(res.data.message || '✅ Отклик отправлен!');
+      setShowVehicleModal(false);
+      setSelectedRequest(null);
+      setSelectedVehicleId(null);
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || 'Ошибка отправки отклика';
+      alert('❌ ' + msg);
+    } finally {
+      setRespondingId(null);
+    }
   };
 
   return (
@@ -143,8 +189,12 @@ const MarketplacePage: React.FC = () => {
                     </div>
                   )}
 
-                  <button className="w-full mt-2 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm font-medium">
-                    Откликнуться
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleRespond(req); }}
+                    disabled={respondingId === req.id}
+                    className="w-full mt-2 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {respondingId === req.id ? '⏳ Отправка...' : '✋ Откликнуться'}
                   </button>
                 </div>
               </div>
@@ -152,6 +202,68 @@ const MarketplacePage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Vehicle Selection Modal */}
+      {showVehicleModal && selectedRequest && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-900">✋ Отклик на заявку</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                {selectedRequest.vehicle_category_name} — {selectedRequest.work_type}
+              </p>
+              <p className="text-sm text-gray-500">📍 {selectedRequest.object_address}</p>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Выберите технику для отклика:
+              </label>
+              
+              {myVehicles.length === 0 ? (
+                <div className="text-center py-8 bg-yellow-50 rounded-lg">
+                  <p className="text-yellow-800 font-medium">⚠️ Нет подходящей техники</p>
+                  <p className="text-sm text-yellow-600 mt-1">
+                    Убедитесь, что у вас есть техника категории «{selectedRequest.vehicle_category_name}» 
+                    с согласием на комиссию маркетплейса.
+                  </p>
+                </div>
+              ) : (
+                myVehicles.map((v: any) => (
+                  <label key={v.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                    selectedVehicleId === v.id 
+                      ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' 
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                  }`}>
+                    <input type="radio" name="responseVehicle" value={v.id}
+                      checked={selectedVehicleId === v.id}
+                      onChange={() => setSelectedVehicleId(v.id)}
+                      className="accent-blue-600" />
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">{v.name}</div>
+                      <div className="text-xs text-gray-500">
+                        Статус: {v.status} | Комиссия: {v.marketplace_commission_rate || 10}%
+                      </div>
+                    </div>
+                  </label>
+                ))
+              )}
+            </div>
+
+            <div className="p-6 border-t flex gap-3 justify-end">
+              <button onClick={() => { setShowVehicleModal(false); setSelectedRequest(null); }}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                Отмена
+              </button>
+              <button onClick={submitResponse}
+                disabled={!selectedVehicleId || respondingId !== null}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium">
+                {respondingId ? '⏳ Отправка...' : '✅ Подтвердить отклик'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };

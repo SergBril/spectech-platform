@@ -10,14 +10,16 @@
 import logging
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.api.deps import get_current_user, get_current_company_id
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
+from app.models.auth import User
 
 logger = logging.getLogger("spectech.public")
 
@@ -734,6 +736,114 @@ def list_marketplace_requests(
         })
 
     return result
+
+
+@router.post("/marketplace/requests/{request_id}/respond", status_code=201)
+def respond_to_marketplace_request(
+    request_id: int,
+    vehicle_id: int = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    🌐 Откликнуться на заявку маркетплейса.
+
+    Исполнитель указывает свою технику для выполнения заказа.
+    Владелец заявки получает уведомление об отклике.
+    """
+    from app.models.dispatch import RequestAssignment, RequestStatusLog
+    from app.services.notification_service import create_notification
+    import asyncio
+
+    # Проверяем заявку
+    request = db.get(Request, request_id)
+    if not request or request.source_channel != "marketplace":
+        raise HTTPException(status_code=404, detail="Marketplace request not found")
+
+    if request.status not in ("new", "processing"):
+        raise HTTPException(status_code=409, detail=f"Request is {request.status} — cannot respond")
+
+    # Нельзя откликнуться на свою заявку
+    if request.company_id == company_id:
+        raise HTTPException(status_code=403, detail="Cannot respond to your own request")
+
+    # Проверяем технику
+    vehicle = db.get(Vehicle, vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Vehicle not found or does not belong to your company")
+
+    if vehicle.status in ("maintenance", "repair", "decommissioned"):
+        raise HTTPException(status_code=409, detail=f"Vehicle '{vehicle.name}' is not available")
+
+    # Проверяем согласие на комиссию
+    if not getattr(vehicle, "marketplace_commission_agreed", False):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Vehicle '{vehicle.name}' requires marketplace commission agreement"
+        )
+
+    # Создаём отклик (RequestAssignment со статусом pending)
+    existing = db.execute(
+        select(RequestAssignment).where(
+            RequestAssignment.request_id == request_id,
+            RequestAssignment.vehicle_id == vehicle_id,
+        )
+    ).scalar_one_or_none()
+
+    if existing:
+        raise HTTPException(status_code=409, detail="Already responded with this vehicle")
+
+    assignment = RequestAssignment(
+        request_id=request_id,
+        vehicle_id=vehicle_id,
+        assigned_by=current_user.id,
+        status="pending_approval",
+    )
+    db.add(assignment)
+    db.flush()
+
+    # Логируем
+    db.add(RequestStatusLog(
+        request_id=request_id,
+        from_status=request.status,
+        to_status="has_responses",
+        changed_by_user_id=current_user.id,
+        comment=f"Отклик от {current_user.full_name or current_user.email} ({vehicle.name})",
+    ))
+
+    db.commit()
+
+    # Уведомляем владельца заявки
+    try:
+        mp_mode = getattr(request, "marketplace_mode", "client")
+        mode_label = "📋 Диспетчер" if mp_mode == "owner_dispatcher" else "🏪 Заказчик"
+        payment_days = getattr(request, "payment_terms_days", 7) or 7
+
+        asyncio.get_event_loop().run_until_complete(
+            create_notification(
+                db=db,
+                user_id=request.created_by,
+                title="🔔 Новый отклик на заявку",
+                body=(
+                    f"{mode_label} | Техника «{vehicle.name}» откликнулась на вашу заявку.\n"
+                    f"Адрес: {request.object_address}\n"
+                    f"Оплата: {payment_days} дн."
+                ),
+                channel="in_app",
+            )
+        )
+    except Exception:
+        pass  # Не блокируем если уведомление не отправилось
+
+    return {
+        "id": assignment.id,
+        "request_id": request_id,
+        "vehicle_id": vehicle_id,
+        "vehicle_name": vehicle.name,
+        "status": "pending_approval",
+        "message": "Отклик успешно отправлен! Владелец заявки уведомлён.",
+    }
 
 
 @router.post("/companies/{company_id}/marketplace-reviews", status_code=201)
