@@ -132,7 +132,6 @@ def list_drivers(
         .where(
             Contractor.company_id == company_id,
             Contractor.is_active == True,
-            Employee.user_id.isnot(None),
         )
     )
     if search:
