@@ -260,9 +260,9 @@ export const VehiclesPage: React.FC = () => {
           </div>
         ) : (
           <div className="bg-white shadow rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-[1400px] w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+            <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
+            <table className="min-w-[1400px] w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                   <tr>
                     {isVis('id') && <ThCell colKey="id" label="ID" def={60} />}
                     {isVis('name') && <ThCell colKey="name" label="Название" def={180} />}

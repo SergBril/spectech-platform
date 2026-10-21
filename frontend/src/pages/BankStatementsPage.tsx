@@ -177,9 +177,9 @@ export const BankStatementsPage: React.FC = () => {
                   onAction={() => fileInputRef.current?.click()}
                 />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
+            <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Файл</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Период</th>
@@ -235,9 +235,9 @@ export const BankStatementsPage: React.FC = () => {
                   description="Нет непривязанных входящих платежей. Загрузите новую выписку или проверьте позже."
                 />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
+            <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сумма</th>
