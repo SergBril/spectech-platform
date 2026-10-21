@@ -15,7 +15,7 @@ export const ContractorsPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [taxFilter, setTaxFilter] = useState<string>('all');
-  
+
   const [showForm, setShowForm] = useState(false);
   const [editingContract, setEditingContract] = useState<Contractor | null>(null);
 
@@ -227,9 +227,9 @@ export const ContractorsPage: React.FC = () => {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
+            <table className="w-full">
+            <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Название

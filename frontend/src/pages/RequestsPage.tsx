@@ -471,9 +471,9 @@ export const RequestsPage: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
             <table className="min-w-[1200px] w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                 <tr>
                   {isVis("id") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("id", 60)}>№<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "id", 60)} /></th>)}
                   {isVis("work_type") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("work_type", 150)}>Тип работы<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "work_type", 150)} /></th>)}
@@ -486,7 +486,7 @@ export const RequestsPage: React.FC = () => {
                   {isVis("priority") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("priority", 100)}>Приоритет<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "priority", 100)} /></th>)}
                   {isVis("amount") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("amount", 100)}>Сумма<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "amount", 100)} /></th>)}
                   {(canEdit || canDelete) && (
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase" style={{minWidth:"80px"}}>Действия</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase" style={{minWidth:"80px"}} className="sticky right-0 bg-gray-50 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]">Действия</th>
                   )}
                 </tr>
               </thead>
@@ -548,7 +548,7 @@ export const RequestsPage: React.FC = () => {
                     </td>
                     )}
                     {(canEdit || canDelete) && (
-                      <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2 sticky right-0 bg-white shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]" onClick={(e) => e.stopPropagation()}>
                         {canEdit && (
                           <button
                             onClick={(e) => handleEdit(e, req)}

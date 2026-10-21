@@ -164,9 +164,9 @@ export const DriversPage: React.FC = () => {
           ) : drivers.length === 0 ? (
             <div className="p-12 text-center text-gray-500">Водители не найдены</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-[1400px] w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+            <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
+            <table className="min-w-[1400px] w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                   <tr>
                     {ALL_COLS.map(col => isVis(col.key) && (
                       <th key={col.key} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt(col.key, col.def)}>

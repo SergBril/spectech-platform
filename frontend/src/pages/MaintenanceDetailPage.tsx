@@ -282,9 +282,9 @@ export const MaintenanceDetailPage: React.FC = () => {
           </div>
 
           {order.parts && order.parts.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Название</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Артикул</th>
@@ -325,9 +325,9 @@ export const MaintenanceDetailPage: React.FC = () => {
           </div>
 
           {order.works && order.works.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Вид работы</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Описание</th>
