@@ -187,6 +187,7 @@ export const EmailTemplatesPage: React.FC = () => {
         {/* Tab: Шаблоны */}
         {activeTab === 'templates' && (
           <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -275,12 +276,14 @@ export const EmailTemplatesPage: React.FC = () => {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
         {/* Tab: История */}
         {activeTab === 'logs' && (
           <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -343,6 +346,7 @@ export const EmailTemplatesPage: React.FC = () => {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>
