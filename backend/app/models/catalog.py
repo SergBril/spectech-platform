@@ -231,6 +231,16 @@ class Vehicle(Base):
         nullable=True,
         comment="Provider-specific config: {api_key, unit_id, device_id, login, password, api_url}",
     )
+    marketplace_commission_agreed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        comment="Согласие собственника на комиссию маркетплейса",
+    )
+    marketplace_commission_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        default=Decimal("10.00"),
+        comment="Ставка комиссии маркетплейса (%)",
+    )
 
     # === 🆕 НОВОЕ: Значения динамических атрибутов ===
     attribute_values: Mapped[list["EquipmentAttributeValue"]] = relationship(

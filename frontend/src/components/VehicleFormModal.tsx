@@ -67,6 +67,8 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({ vehicle, onC
         // GPS-провайдер
         gps_provider: gpsProvider?.provider || null,
         gps_provider_config: gpsProvider?.config || null,
+        marketplace_commission_agreed: (document.getElementById('commission-agreed') as HTMLInputElement)?.checked || false,
+        marketplace_commission_rate: 10.00,
       };
 
       if (isEdit && vehicle) {
@@ -276,6 +278,32 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({ vehicle, onC
             >
               Отмена
             </button>
+            {/* Marketplace Commission Agreement */}
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">⚠️</span>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-amber-900 mb-1">Комиссия маркетплейса</h4>
+                  <p className="text-sm text-amber-800 mb-2">
+                    Выставляя стоимость техники, вы даёте согласие на комиссию <b>10%</b> от стоимости заказа 
+                    в случаях, когда заказ поступает через маркетплейс платформы. 
+                    Комиссия не взимается за прямые заказы.
+                  </p>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      id="commission-agreed"
+                      defaultChecked={(vehicle as any)?.marketplace_commission_agreed || false}
+                      className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="text-sm font-medium text-amber-900">
+                      Я согласен с условиями комиссии маркетплейса (10%)
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={isLoading}
