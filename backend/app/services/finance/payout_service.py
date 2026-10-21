@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.models.catalog import Vehicle
 from app.models.finance import DocumentStatus, Payout
 from app.models.shift import ShiftTask
+from app.models.dispatch import Request
 from app.models.telematics import ShiftDataReconciliation
 
 logger = logging.getLogger("spectech.payout_service")
@@ -128,11 +129,25 @@ class PayoutService:
                     "owner_rate": owner_rate,
                     "total_moto_hours": Decimal("0"),
                     "shifts_count": 0,
+                    "is_marketplace": False,
+                    "commission_agreed": False,
+                    "commission_rate": Decimal("0"),
                 }
 
             moto_hours = Decimal(str(rec.final_moto_hours or 0))
             payout_data[key]["total_moto_hours"] += moto_hours
             payout_data[key]["shifts_count"] += 1
+
+            # Проверяем источник заказа через request_id
+            request = db.get(Request, shift_task.request_id) if shift_task.request_id else None
+            is_marketplace = request and getattr(request, "source_channel", None) == "marketplace"
+            commission_agreed = getattr(vehicle, "marketplace_commission_agreed", False)
+            vehicle_commission_rate = getattr(vehicle, "marketplace_commission_rate", Decimal("10.00"))
+
+            if is_marketplace and commission_agreed:
+                payout_data[key]["is_marketplace"] = True
+                payout_data[key]["commission_agreed"] = True
+                payout_data[key]["commission_rate"] = Decimal(str(vehicle_commission_rate))
 
         # 3. Создаём Payout документы
         created_payouts = []
@@ -142,7 +157,11 @@ class PayoutService:
 
         for (owner_id, vehicle_id), data in payout_data.items():
             gross = data["total_moto_hours"] * data["owner_rate"]
-            commission = (gross * commission_rate / 100).quantize(Decimal("0.01"))
+            # Комиссия применяется только для marketplace-заказов с согласием собственника
+            effective_commission_rate = Decimal("0")
+            if data.get("is_marketplace") and data.get("commission_agreed"):
+                effective_commission_rate = data.get("commission_rate", commission_rate)
+            commission = (gross * effective_commission_rate / 100).quantize(Decimal("0.01"))
             net = gross - commission
 
             # Генерируем номер документа
