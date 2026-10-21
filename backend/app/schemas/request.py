@@ -60,6 +60,7 @@ class RequestRead(BaseModel):
     source_channel: str
     priority: str
     comment: str | None = None
+    requirements: dict | None = None
     created_at: datetime
 
     # 🆕 Enrichment поля (заполняются в роутере)

@@ -14,7 +14,8 @@ from app.api.deps import (
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
-from app.models.dispatch import Request, RequestAssignment, RequestStatusLog
+from app.models.dispatch import Request
+from app.services.marketplace.vehicle_matcher import vehicle_matcher
 from app.models.shift import ShiftTaskStatus
 from app.schemas.request import RequestAssign, RequestCreate, RequestRead, RequestUpdate
 
@@ -762,3 +763,19 @@ def export_requests_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=requests.xlsx"},
     )
+
+
+@router.get("/{request_id}/matching-vehicles")
+async def get_matching_vehicles(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Подобрать совместимую технику для заказа."""
+    request = db.get(Request, request_id)
+    if not request or request.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    matches = vehicle_matcher.find_matching_vehicles(db, request_id, company_id)
+    return {"request_id": request_id, "total_matches": len(matches), "vehicles": matches}
