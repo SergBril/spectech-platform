@@ -21,6 +21,7 @@ const menuItems: MenuItem[] = [
   { label: 'Карта', icon: '🗺️', path: '/map', group: 'Телематика' },
   { label: 'GPS', icon: '📡', path: '/admin/gps', group: 'Телематика' },
   { label: 'Маркетплейс', icon: '🎯', path: '/marketplace', group: 'Бизнес' },
+  { label: 'Мои отклики', icon: '✋', path: '/my-responses', group: 'Бизнес' },
   { label: 'Мои публикации', icon: '🏪', path: '/my-listings', group: 'Бизнес' },
   { label: 'Контрагенты', icon: '👥', path: '/contractors', group: 'Бизнес' },
 
