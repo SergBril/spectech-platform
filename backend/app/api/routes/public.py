@@ -58,6 +58,8 @@ class PublicVehicleRead(BaseModel):
     photos: list[str] | None = None
     owner_company_id: int
     owner_company_name: str | None = None
+    marketplace_commission_agreed: bool = False
+    marketplace_commission_rate: float | None = None
 
     model_config = {"from_attributes": True}
 
