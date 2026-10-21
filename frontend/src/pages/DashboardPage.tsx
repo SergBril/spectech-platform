@@ -40,7 +40,19 @@ export const DashboardPage: React.FC = () => {
 
       if (vehiclesData.status === 'fulfilled') setVehicles(vehiclesData.value);
       if (requestsData.status === 'fulfilled') setRequests(requestsData.value);
-      if (financeRes.status === 'fulfilled') setFinanceData(financeRes.value);
+      if (financeRes.status === 'fulfilled') {
+        const fd = financeRes.value as any;
+        // Map API response to frontend expected format
+        const mapped: any = {
+          ...fd,
+          total_revenue: fd.revenue?.total ?? fd.total_revenue ?? 0,
+          total_paid: fd.revenue?.paid ?? fd.total_paid ?? 0,
+          outstanding: fd.revenue?.outstanding ?? fd.outstanding ?? 0,
+          invoices_count: fd.metrics?.invoices_count ?? fd.invoices_count ?? 0,
+          acts_count: fd.metrics?.acts_count ?? fd.acts_count ?? 0,
+        };
+        setFinanceData(mapped);
+      }
 
       // Load GPS stats
       try {
@@ -54,10 +66,10 @@ export const DashboardPage: React.FC = () => {
         setUsersCount(Array.isArray(usersRes.data) ? usersRes.data.length : 0);
       } catch { /* ignore */ }
 
-      // Load drivers count (contractors with type=employee)
+      // Load drivers count from /drivers endpoint
       try {
-        const driversRes = await apiClient.get('/contractors', { params: { type: 'employee', limit: 1000 } });
-        setDriversCount(Array.isArray(driversRes.data) ? driversRes.data.length : 0);
+        const driversRes = await apiClient.get('/drivers', { params: { limit: 1 } });
+        setDriversCount(driversRes.data?.total ?? (Array.isArray(driversRes.data) ? driversRes.data.length : 0));
       } catch { /* ignore */ }
     } catch (err) {
       console.error('Failed to load dashboard:', err);
