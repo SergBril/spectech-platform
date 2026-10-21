@@ -74,7 +74,11 @@ class Settings(BaseSettings):
 
     # Application URLs
     FRONTEND_URL: str = Field(default="http://localhost:8080", alias="FRONTEND_URL")
-    DADATA_API_KEY: str = Field(default="", alias="DADATA_API_KEY", description="DaData API key (for suggestions)")
+    DADATA_API_KEY: str = Field(
+        default="",
+        alias="DADATA_API_KEY",
+        description="DaData API key (for suggestions)",
+    )
     DADATA_TOKEN: str = Field(
         default="", alias="DADATA_TOKEN", description="DaData API token"
     )

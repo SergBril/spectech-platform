@@ -282,6 +282,7 @@ export const MaintenanceDetailPage: React.FC = () => {
           </div>
 
           {order.parts && order.parts.length > 0 ? (
+            <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -306,6 +307,7 @@ export const MaintenanceDetailPage: React.FC = () => {
                 ))}
               </tbody>
             </table>
+            </div>
           ) : (
             <div className="text-gray-500 text-center py-4">Запчасти не добавлены</div>
           )}
@@ -323,6 +325,7 @@ export const MaintenanceDetailPage: React.FC = () => {
           </div>
 
           {order.works && order.works.length > 0 ? (
+            <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -345,6 +348,7 @@ export const MaintenanceDetailPage: React.FC = () => {
                 ))}
               </tbody>
             </table>
+            </div>
           ) : (
             <div className="text-gray-500 text-center py-4">Работы не добавлены</div>
           )}

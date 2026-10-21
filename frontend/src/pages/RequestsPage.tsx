@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { requestsApi, type Request, type RequestStatus } from '../api/requests';
@@ -84,6 +84,8 @@ export const RequestsPage: React.FC = () => {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [sortBy, setSortBy] = useState('created_at');
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [categories, setCategories] = useState<{id:number;name:string}[]>([]);
   const [vehicles, setVehicles] = useState<{id:number;name:string}[]>([]);
@@ -160,7 +162,7 @@ export const RequestsPage: React.FC = () => {
     const params: any = {};
     if (filterStatus !== 'all') params.status = filterStatus;
     if (filterPriority !== 'all') params.priority = filterPriority;
-    if (searchQuery) params.search = searchQuery;
+    if (debouncedSearch) params.search = debouncedSearch;
     if (filterCategory !== 'all') params.vehicle_category_id = parseInt(filterCategory);
     if (filterVehicleId !== 'all') params.assigned_vehicle_id = parseInt(filterVehicleId);
     if (filterDateFrom) params.date_from = filterDateFrom;
@@ -170,13 +172,22 @@ export const RequestsPage: React.FC = () => {
     return params;
   };
 
-  const loadRequests = async () => {
+  // Debounce поиска - ждем 300мс после ввода
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const loadRequests = async (showSkeleton = false) => {
+    if (showSkeleton) setLoading(true);
     try {
       setLoading(true);
       const params: any = { limit: 200, sort_by: sortBy, sort_order: sortOrder };
       if (filterStatus !== 'all') params.status = filterStatus;
       if (filterPriority !== 'all') params.priority = filterPriority;
-      if (searchQuery) params.search = searchQuery;
+      if (debouncedSearch) params.search = debouncedSearch;
       if (filterCategory !== 'all') params.vehicle_category_id = parseInt(filterCategory);
       if (filterVehicleId !== 'all') params.assigned_vehicle_id = parseInt(filterVehicleId);
       if (filterDateFrom) params.date_from = filterDateFrom;
@@ -201,8 +212,9 @@ export const RequestsPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadRequests();
-  }, [filterStatus, filterPriority, searchQuery, filterCategory, filterVehicleId, filterDateFrom, filterDateTo, sortBy, sortOrder]);
+    loadRequests(!isInitialLoading ? false : true);
+    if (isInitialLoading) setIsInitialLoading(false);
+  }, [filterStatus, filterPriority, debouncedSearch, filterCategory, filterVehicleId, filterDateFrom, filterDateTo, sortBy, sortOrder]);
 
   const filteredRequests = useMemo(() => {
     return requests.filter((req) => {
@@ -278,7 +290,7 @@ export const RequestsPage: React.FC = () => {
     return counts;
   }, [requests]);
 
-  if (loading) {
+  if (isInitialLoading && loading) {
     return (
       <Layout>
         <div className="px-4 py-6 sm:px-0">
@@ -460,7 +472,7 @@ export const RequestsPage: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-            <table className="min-w-[1600px] w-full divide-y divide-gray-200">
+            <table className="min-w-[1200px] w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   {isVis("id") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("id", 60)}>№<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "id", 60)} /></th>)}
