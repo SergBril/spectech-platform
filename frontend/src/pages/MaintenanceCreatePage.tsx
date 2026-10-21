@@ -66,15 +66,10 @@ export const MaintenanceCreatePage: React.FC = () => {
       const token = localStorage.getItem('access_token');
       const companyId = localStorage.getItem('spectech_current_company_id');
 
-      const response = await fetch('/api/v1/vehicles?limit=100', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'X-Company-Id': companyId || '',
-        },
-      });
+      const response = await apiClient.get('/vehicles?limit=100');
 
       if (response.ok) {
-        const data = await response.json();
+        const data = response.data;
         setVehicles(data.items || data);
       } else {
         toast.error('Не удалось загрузить список техники');
