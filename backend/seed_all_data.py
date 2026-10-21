@@ -144,19 +144,26 @@ for i in range(10):
     parts_cost = round(random.uniform(1000, 50000), 2)
     labor_cost = round(random.uniform(2000, 30000), 2)
 
+    # Create realistic parts and works lists
+    maint_parts = [
+        {"name": "Масло моторное", "quantity": random.randint(5, 20), "unit_price": round(random.uniform(300, 800), 2)},
+        {"name": "Фильтр масляный", "quantity": random.randint(1, 3), "unit_price": round(random.uniform(500, 2000), 2)},
+        {"name": "Фильтр воздушный", "quantity": random.randint(1, 2), "unit_price": round(random.uniform(800, 3000), 2)},
+    ]
+    maint_works = [
+        {"work_type": "Замена масла", "labor_hours": round(random.uniform(1, 4), 1), "hourly_rate": round(random.uniform(1000, 3000), 2)},
+        {"work_type": "Диагностика", "labor_hours": round(random.uniform(0.5, 2), 1), "hourly_rate": round(random.uniform(1500, 4000), 2)},
+    ]
+
     payload = {
         "vehicle_id": vid,
-        "company_id": user_company_id,
         "order_type": random.choice(order_types),
         "priority": random.choice(priorities_m),
         "title": titles[i % len(titles)],
         "description": f"Наряд-заказ на ТО техники #{i+1}",
         "planned_hours": round(random.uniform(1, 16), 1),
-        "parts_cost": parts_cost,
-        "labor_cost": labor_cost,
-        "total_cost": round(parts_cost + labor_cost, 2),
-        "engine_hours_at_start": eng_hours,
-        "created_by_id": 1,
+        "parts": maint_parts,
+        "works": maint_works,
     }
 
     status = random.choice(statuses_m)

@@ -116,16 +116,30 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
     try:
         company_id = getattr(current_user, "company_id", None)
 
+        # Extract amounts from payload (support direct creation with amounts)
+        subtotal = _get_field(payload, "subtotal") or Decimal("0.00")
+        vat_rate = _get_field(payload, "vat_rate", Decimal("20.00"))
+        vat_amount = _get_field(payload, "vat_amount") or (
+            (subtotal * vat_rate / Decimal("100")).quantize(Decimal("0.01")) if subtotal else Decimal("0.00")
+        )
+        total = _get_field(payload, "total") or (subtotal + vat_amount)
+        paid_amount = _get_field(payload, "paid_amount") or Decimal("0.00")
+        status_val = _get_field(payload, "status") or DocumentStatus.draft.value
+
         invoice = Invoice(
             document_number=generate_document_number(db, "INV"),
             request_id=_get_field(payload, "request_id"),
             client_id=_get_field(payload, "client_id"),
             company_id=company_id,
+            subtotal=subtotal,
+            vat_amount=vat_amount,
+            vat_rate=vat_rate,
+            total=total,
+            paid_amount=paid_amount,
             invoice_date=_get_field(payload, "invoice_date") or datetime.now(),
             due_date=_get_field(payload, "due_date"),
-            vat_rate=_get_field(payload, "vat_rate", Decimal("20.00")),
             comment=_get_field(payload, "comment", ""),
-            status=DocumentStatus.draft,
+            status=status_val,
             created_by=current_user.id,
             tax_system=_get_field(payload, "tax_system", "osno"),
             is_vat_included=_get_field(payload, "is_vat_included", True),
