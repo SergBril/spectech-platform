@@ -28,6 +28,7 @@ import {
   FuelAnalyticsPage,
   ReconciliationPage,
   InvoicesPage,
+  PayoutsPage,
   EmailTemplatesPage,
   EmailLogsPage,
   CompanySettingsPage,
@@ -84,6 +85,7 @@ const AppRoutes = () => {
         <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
         <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
         <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
+        <Route path="/payouts" element={<ProtectedRoute><PayoutsPage /></ProtectedRoute>} />
         <Route path="/email-templates" element={<ProtectedRoute><EmailTemplatesPage /></ProtectedRoute>} />
         <Route path="/email-logs" element={<ProtectedRoute><EmailLogsPage /></ProtectedRoute>} />
         <Route path="/requests/:id" element={<ProtectedRoute><RequestDetailPage /></ProtectedRoute>} />

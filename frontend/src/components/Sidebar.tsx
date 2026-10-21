@@ -28,12 +28,8 @@ const menuItems: MenuItem[] = [
   { label: 'Сверки', icon: '📊', path: '/reconciliation', group: 'Эксплуатация' },
 
   { label: 'Финансы', icon: '💰', path: '/finance', group: 'Финансы' },
-  { label: 'Счета'
-    },
-    {
-      path: '/payouts',
-      icon: '💰',
-      label: 'Выплаты', icon: '📄', path: '/invoices', group: 'Финансы' },
+  { label: 'Счета', icon: '📄', path: '/invoices', group: 'Финансы' },
+  { label: 'Выплаты', icon: '💰', path: '/payouts', group: 'Финансы' },
   { label: 'Банковские выписки', icon: '🏦', path: '/bank-statements', group: 'Финансы' },
   { label: 'Зарплаты', icon: '💰', path: '/salaries', group: 'Финансы' },
 

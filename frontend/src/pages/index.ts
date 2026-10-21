@@ -23,3 +23,5 @@ export { default as ActCreatePage } from './ActCreatePage';
 export { default as VehicleDetailPage } from './VehicleDetailPage';
 export { default as ForgotPasswordPage } from './ForgotPasswordPage';
 export { default as ResetPasswordPage } from './ResetPasswordPage';
+
+export { default as PayoutsPage } from './PayoutsPage';
