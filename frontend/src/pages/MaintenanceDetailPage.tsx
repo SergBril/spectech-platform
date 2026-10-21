@@ -126,7 +126,7 @@ export const MaintenanceDetailPage: React.FC = () => {
               onClick={() => {
                 const token = localStorage.getItem('access_token');
                 window.open(
-                  `http://localhost:8000/api/v1/maintenance/orders/${order.id}/pdf?token=${token}`,
+                  `/api/v1/maintenance/orders/${order.id}/pdf?token=${token}`,
                   '_blank'
                 );
               }}
@@ -141,7 +141,7 @@ export const MaintenanceDetailPage: React.FC = () => {
                   onClick={() => {
                     const token = localStorage.getItem('access_token');
                     window.open(
-                      `http://localhost:8000/api/v1/maintenance/orders/${order.id}/act/pdf?token=${token}`,
+                      `/api/v1/maintenance/orders/${order.id}/act/pdf?token=${token}`,
                       '_blank'
                     );
                   }}
@@ -155,7 +155,7 @@ export const MaintenanceDetailPage: React.FC = () => {
                     if (!window.confirm('Отправить акт выполненных работ клиенту по email?')) return;
                     try {
                       const response = await fetch(
-                        `http://localhost:8000/api/v1/maintenance/orders/${order.id}/send-act`,
+                        `/api/v1/maintenance/orders/${order.id}/send-act`,
                         {
                           method: 'POST',
                           headers: {
