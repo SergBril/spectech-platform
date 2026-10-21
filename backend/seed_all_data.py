@@ -10,9 +10,17 @@ r = requests.post(f"{BASE}/auth/login", json={"email": "admin@spectech.dev", "pa
 token = r.json()["access_token"]
 h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
+# Get current user company_id
+me = requests.get(f"{BASE}/me", headers=h).json()
+user_company_id = me.get("company_id", 4)
+print(f"User company_id: {user_company_id}")
+
 # Get existing data
 vehicles = requests.get(f"{BASE}/vehicles?limit=20", headers=h).json()
-v_list = vehicles if isinstance(vehicles, list) else vehicles.get("items", [])
+v_all = vehicles if isinstance(vehicles, list) else vehicles.get("items", [])
+# Filter vehicles by user's company
+v_list = [v for v in v_all if v.get("company_id") == user_company_id]
+print(f"Vehicles (all): {len(v_all)}, (own company): {len(v_list)}")
 
 contractors = requests.get(f"{BASE}/contractors?limit=20", headers=h).json()
 c_list = contractors if isinstance(contractors, list) else contractors.get("items", [])
@@ -22,7 +30,7 @@ req_data = requests.get(f"{BASE}/requests?limit=50", headers=h).json()
 req_list = req_data if isinstance(req_data, list) else req_data.get("items", [])
 req_ids = [r["id"] for r in req_list]
 
-print(f"Vehicles: {len(v_list)}, Contractors: {len(c_ids)}, Requests: {len(req_ids)}")
+print(f"Contractors: {len(c_ids)}, Requests: {len(req_ids)}")
 
 created = {"drivers": 0, "invoices": 0, "maintenance": 0, "fuel": 0}
 errors = {"drivers": 0, "invoices": 0, "maintenance": 0, "fuel": 0}
@@ -43,7 +51,7 @@ driver_names = [
 ]
 
 phones_used = set()
-for i, name in enumerate(driver_names):
+for name in driver_names:
     phone = f"+79{random.randint(10,99)}{random.randint(1000000,9999999)}"
     while phone in phones_used:
         phone = f"+79{random.randint(10,99)}{random.randint(1000000,9999999)}"
@@ -59,7 +67,6 @@ for i, name in enumerate(driver_names):
     except Exception:
         errors["drivers"] += 1
 
-# Re-fetch driver contractor_ids
 dr = requests.get(f"{BASE}/drivers?limit=50", headers=h).json()
 d_list = dr.get("items", []) if isinstance(dr, dict) else dr
 driver_contractor_ids = list({d["contractor_id"] for d in d_list})
@@ -67,7 +74,7 @@ print(f"  Created: {created['drivers']}, Errors: {errors['drivers']}")
 
 
 # =============================================
-# 2. INVOICES (15 штук) — request_id required
+# 2. INVOICES (15 штук)
 # =============================================
 print("\n=== Creating Invoices ===")
 statuses_inv = ["draft", "sent", "paid", "overdue", "cancelled"]
@@ -80,26 +87,15 @@ for i in range(15):
     vat_amount = round(subtotal * vat_rate / 100, 2)
     total = round(subtotal + vat_amount, 2)
 
-    # request_id is REQUIRED — always provide one
     rid = random.choice(req_ids) if req_ids else None
     if not rid:
-        print("  Skipping invoices: no request IDs available")
         break
-
-    # Use company_id from the request's vehicle or default to 4
-    req_obj = next((r for r in req_list if r["id"] == rid), None)
-    comp_id = 4  # default
-    if req_obj and req_obj.get("assigned_vehicle_id"):
-        vid = req_obj["assigned_vehicle_id"]
-        veh = next((v for v in v_list if v["id"] == vid), None)
-        if veh:
-            comp_id = veh.get("company_id", 4)
 
     payload = {
         "document_number": f"INV-{datetime.now().year}-{i+1:04d}",
         "request_id": rid,
         "client_id": random.choice(c_ids),
-        "company_id": comp_id,
+        "company_id": user_company_id,
         "subtotal": subtotal,
         "vat_amount": vat_amount,
         "vat_rate": vat_rate,
@@ -128,7 +124,7 @@ print(f"  Created: {created['invoices']}, Errors: {errors['invoices']}")
 
 
 # =============================================
-# 3. MAINTENANCE ORDERS (10 штук) — use vehicle's company_id
+# 3. MAINTENANCE ORDERS (10 штук) — only own vehicles
 # =============================================
 print("\n=== Creating Maintenance Orders ===")
 order_types = ["scheduled", "repair", "diagnostic", "inspection"]
@@ -144,14 +140,13 @@ titles = [
 for i in range(10):
     vehicle = random.choice(v_list)
     vid = vehicle["id"]
-    comp_id = vehicle.get("company_id", 4)
     eng_hours = float(vehicle.get("engine_hours", 100))
     parts_cost = round(random.uniform(1000, 50000), 2)
     labor_cost = round(random.uniform(2000, 30000), 2)
 
     payload = {
         "vehicle_id": vid,
-        "company_id": comp_id,
+        "company_id": user_company_id,
         "order_type": random.choice(order_types),
         "priority": random.choice(priorities_m),
         "title": titles[i % len(titles)],
@@ -187,13 +182,12 @@ print(f"  Created: {created['maintenance']}, Errors: {errors['maintenance']}")
 
 
 # =============================================
-# 4. FUEL TRANSACTIONS (30 штук) — use vehicle's company_id
+# 4. FUEL TRANSACTIONS (30 штук) — only own vehicles
 # =============================================
 print("\n=== Creating Fuel Transactions ===")
 for i in range(30):
     vehicle = random.choice(v_list)
     vid = vehicle["id"]
-    comp_id = vehicle.get("company_id", 4)
     vol = round(random.uniform(10, 200), 1)
     price = round(random.uniform(45, 65), 2)
     occurred = datetime.now() - timedelta(days=random.randint(0, 90), hours=random.randint(0, 23))
@@ -208,7 +202,7 @@ for i in range(30):
         "fuel_level_after": round(random.uniform(20, 95), 1),
         "odometer": round(random.uniform(10000, 200000), 0),
         "detected_automatically": False,
-        "company_id": comp_id,
+        "company_id": user_company_id,
         "occurred_at": occurred.isoformat(),
         "comment": f"Заправка #{i+1}",
     }
