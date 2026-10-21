@@ -19,6 +19,7 @@ export const DashboardPage: React.FC = () => {
   const [requests, setRequests] = useState<Request[]>([]);
   const [financeData, setFinanceData] = useState<PaymentsDashboard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [gpsStats, setGpsStats] = useState<{ total_points: number; vehicles_with_data: number; latest_point: string | null } | null>(null);
   const [usersCount, setUsersCount] = useState<number>(0);
   const [driversCount, setDriversCount] = useState<number>(0);
@@ -62,6 +63,7 @@ export const DashboardPage: React.FC = () => {
       console.error('Failed to load dashboard:', err);
     } finally {
       setLoading(false);
+      setIsInitialLoading(false);
     }
   };
 
@@ -72,7 +74,7 @@ export const DashboardPage: React.FC = () => {
     (r) => r.status === 'new' || r.status === 'processing'
   ).length;
 
-  if (loading) {
+  if (isInitialLoading && loading) {
     return (
       <Layout>
         <div className="space-y-8">

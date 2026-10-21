@@ -175,7 +175,7 @@ export const ReconciliationPage: React.FC = () => {
 
   return (
     <Layout>
-      
+
      <div className="px-4 py-6 sm:px-0">
        {/* Заголовок */}
        <div className="flex justify-between items-center mb-6">
@@ -311,9 +311,9 @@ export const ReconciliationPage: React.FC = () => {
              <p>Сверок пока нет</p>
            </div>
          ) : (
-           <div className="overflow-x-auto">
-             <table className="min-w-full divide-y divide-gray-200">
-               <thead className="bg-gray-50">
+           <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
+            <table className="min-w-full divide-y divide-gray-200">
+               <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                  <tr>
                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Смена</th>

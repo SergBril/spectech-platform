@@ -61,6 +61,7 @@ export const FinancePage: React.FC = () => {
   const [acts, setActs] = useState<Act[]>([]);
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'invoices' | 'acts' | 'payouts'>('invoices');
 
@@ -166,6 +167,7 @@ export const FinancePage: React.FC = () => {
       setError('Не удалось загрузить финансовые данные');
     } finally {
       setLoading(false);
+      setIsInitialLoading(false);
     }
   };
 
@@ -433,7 +435,7 @@ export const FinancePage: React.FC = () => {
     );
   }
 
-  if (loading) {
+  if (isInitialLoading && loading) {
     return (
       <Layout>
         <div className="px-4 py-6 sm:px-0">
@@ -632,9 +634,9 @@ export const FinancePage: React.FC = () => {
                     onAction={() => { setEditingInvoice(null); setIsInvoiceFormOpen(true); }}
                  />
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                  <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
+            <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
@@ -725,9 +727,9 @@ export const FinancePage: React.FC = () => {
                     onAction={() => { setEditingAct(null); setIsActFormOpen(true); }}
                   />
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                  <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
+            <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
@@ -826,9 +828,9 @@ export const FinancePage: React.FC = () => {
                     onAction={() => setIsPayoutBatchModalOpen(true)}
                   />
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                  <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
+            <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>

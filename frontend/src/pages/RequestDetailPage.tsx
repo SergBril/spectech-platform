@@ -69,6 +69,7 @@ export const RequestDetailPage: React.FC = () => {
   const [acts, setActs] = useState<Act[]>([]);
   const [history, setHistory] = useState<StatusLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [filesRefreshTrigger, setFilesRefreshTrigger] = useState(0);
@@ -103,6 +104,7 @@ export const RequestDetailPage: React.FC = () => {
       setError('Не удалось загрузить заявку');
     } finally {
       setLoading(false);
+      setIsInitialLoading(false);
     }
   };
 
@@ -205,10 +207,10 @@ export const RequestDetailPage: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (isInitialLoading && loading) {
     return (
       <Layout>
-      
+
        <div className="px-4 py-6 sm:px-0 space-y-6">
          <RequestHeaderSkeleton />
          <div className="bg-white rounded-lg shadow p-6 animate-pulse"><TableSkeleton rows={3} columns={7} /></div>
@@ -238,7 +240,7 @@ export const RequestDetailPage: React.FC = () => {
 
   return (
     <Layout>
-      
+
      <div className="px-4 py-6 sm:px-0 space-y-6">
        {/* === ШАПКА ЗАЯВКИ === */}
        <div className="bg-white rounded-lg shadow p-6">
@@ -335,9 +337,9 @@ export const RequestDetailPage: React.FC = () => {
              <p>К этой заявке ещё не привязаны счета</p>
            </div>
          ) : (
-           <div className="overflow-x-auto">
-             <table className="min-w-full divide-y divide-gray-200">
-               <thead className="bg-gray-50">
+           <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
+            <table className="min-w-full divide-y divide-gray-200">
+               <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                  <tr>
                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">№</th>
                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
@@ -410,9 +412,9 @@ export const RequestDetailPage: React.FC = () => {
              <p>К этой заявке ещё не привязаны акты</p>
            </div>
          ) : (
-           <div className="overflow-x-auto">
-             <table className="min-w-full divide-y divide-gray-200">
-               <thead className="bg-gray-50">
+           <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-gray-200 rounded">
+            <table className="min-w-full divide-y divide-gray-200">
+               <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                  <tr>
                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">№</th>
                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
