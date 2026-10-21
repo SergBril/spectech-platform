@@ -165,7 +165,20 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
             db.add(item)
 
         db.flush()
-        calculate_invoice_totals(invoice)
+
+        # Only recalculate totals from items if amounts were NOT provided directly
+        has_direct_amounts = (
+            _get_field(payload, "subtotal") is not None
+            or _get_field(payload, "total") is not None
+        )
+        if not has_direct_amounts and items:
+            calculate_invoice_totals(invoice)
+        elif not has_direct_amounts and not items:
+            # No items and no direct amounts — ensure zeros
+            invoice.subtotal = Decimal("0.00")
+            invoice.vat_amount = Decimal("0.00")
+            invoice.total = Decimal("0.00")
+
         db.commit()
         db.refresh(invoice)
         logger.info(
