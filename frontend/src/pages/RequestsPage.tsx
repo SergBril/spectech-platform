@@ -555,8 +555,8 @@ export const RequestsPage: React.FC = () => {
                   {isVis("status") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("status", 120)}>Статус<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "status", 120)} /></th>)}
                   {isVis("priority") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("priority", 100)}>Приоритет<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "priority", 100)} /></th>)}
                   {isVis("amount") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("amount", 100)}>Сумма<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "amount", 100)} /></th>)}
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Маркетплейс</th>
                   {(canEdit || canDelete) && (
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Маркетплейс</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase sticky right-0 bg-gray-50 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]" style={{minWidth:"80px"}}>Действия</th>
                   )}
                 </tr>
