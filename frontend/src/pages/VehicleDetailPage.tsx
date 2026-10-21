@@ -237,6 +237,29 @@ export const VehicleDetailPage: React.FC = () => {
                     <p className="text-gray-600">
                       {vehicle.category_name} • {vehicle.year} год
                     </p>
+
+                    {/* Marketplace Commission Banner */}
+                    {!vehicle.marketplace_commission_agreed ? (
+                      <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+                        <span className="text-lg">⚠️</span>
+                        <div>
+                          <p className="text-sm font-semibold text-amber-900">Не участвует в маркетплейсе</p>
+                          <p className="text-xs text-amber-800 mt-0.5">
+                            Собственник не дал согласие на комиссию. Техника недоступна для заказов из маркетплейса.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 flex items-start gap-2">
+                        <span className="text-lg">✅</span>
+                        <div>
+                          <p className="text-sm font-semibold text-green-900">Участвует в маркетплейсе</p>
+                          <p className="text-xs text-green-800 mt-0.5">
+                            Комиссия платформы: {vehicle.marketplace_commission_rate || 10}% от marketplace-заказов.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   {getStatusBadge(vehicle.status)}
                 </div>
