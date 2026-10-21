@@ -259,7 +259,8 @@ def list_drivers(
 
     # Сортируем: свободные сначала
     result.sort(key=lambda x: (x["is_assigned"], x["full_name"]))
-    return result[:limit]
+    total = len(result)
+    return {"items": result[:limit], "total": total}
 
 
 @router.get(
