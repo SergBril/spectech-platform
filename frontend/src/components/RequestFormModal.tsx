@@ -113,6 +113,9 @@ export const RequestFormModal: React.FC<Props> = ({
 
   // Назначение: свой водитель или маркетплейс
   const [assignmentMode, setAssignmentMode] = useState<'own' | 'marketplace'>('own');
+  const [marketplaceMode, setMarketplaceMode] = useState<'client' | 'owner_dispatcher'>('client');
+  const [paymentTermsDays, setPaymentTermsDays] = useState<number>(7);
+  const [showExtendedPaymentWarning, setShowExtendedPaymentWarning] = useState(false);
   const [drivers, setDrivers] = useState<{id: number; name: string}[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState<number | null>(null);
   const [loadingDrivers, setLoadingDrivers] = useState(false);
@@ -266,7 +269,9 @@ export const RequestFormModal: React.FC<Props> = ({
         planned_start: new Date(plannedStart).toISOString(),
         planned_end: new Date(plannedEnd).toISOString(),
         rate_type: rateType,
-        source_channel: sourceChannel,
+        source_channel: assignmentMode === 'marketplace' ? 'marketplace' : sourceChannel,
+        marketplace_mode: assignmentMode === 'marketplace' ? marketplaceMode : undefined,
+        payment_terms_days: assignmentMode === 'marketplace' ? paymentTermsDays : undefined,
         priority: priority,
         comment: comment.trim() || undefined,
         client_id: selectedClientId,
@@ -502,9 +507,73 @@ export const RequestFormModal: React.FC<Props> = ({
                   </select>
                 )}
                 {assignmentMode === 'marketplace' && (
-                  <p className="text-sm text-green-700 bg-green-50 p-3 rounded">
-                    📢 Заявка будет опубликована в маркетплейсе. Компании-партнёры с подходящей техникой смогут откликнуться.
-                  </p>
+                  <div className="space-y-3 bg-green-50 p-4 rounded border border-green-200">
+                    <p className="text-sm text-green-700 font-medium">
+                      📢 Заявка будет опубликована в маркетплейсе
+                    </p>
+
+                    {/* Режим маркетплейса */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Режим размещения *</label>
+                      <div className="flex gap-3">
+                        <label className={`flex-1 flex items-center gap-2 p-3 rounded border cursor-pointer transition-colors ${
+                          marketplaceMode === 'client' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:bg-gray-50'
+                        }`}>
+                          <input type="radio" name="mpMode" value="client"
+                            checked={marketplaceMode === 'client'}
+                            onChange={() => setMarketplaceMode('client')}
+                            className="accent-purple-600" />
+                          <div>
+                            <div className="text-sm font-medium">🏪 Я заказчик</div>
+                            <div className="text-xs text-gray-500">Плачу 100%, исполнитель получает 90%</div>
+                          </div>
+                        </label>
+                        <label className={`flex-1 flex items-center gap-2 p-3 rounded border cursor-pointer transition-colors ${
+                          marketplaceMode === 'owner_dispatcher' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 hover:bg-gray-50'
+                        }`}>
+                          <input type="radio" name="mpMode" value="owner_dispatcher"
+                            checked={marketplaceMode === 'owner_dispatcher'}
+                            onChange={() => setMarketplaceMode('owner_dispatcher')}
+                            className="accent-orange-600" />
+                          <div>
+                            <div className="text-sm font-medium">📋 Я диспетчер</div>
+                            <div className="text-xs text-gray-500">Получаю 10% диспетчерских</div>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Срок оплаты */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Срок оплаты (дней) *</label>
+                      <div className="flex items-center gap-3">
+                        <input type="number" min={1} max={90}
+                          value={paymentTermsDays}
+                          onChange={(e) => {
+                            const v = Number(e.target.value) || 7;
+                            setPaymentTermsDays(v);
+                            setShowExtendedPaymentWarning(v > 7);
+                          }}
+                          className="w-24 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                        <span className="text-sm text-gray-500">Стандарт: 7 дней</span>
+                      </div>
+                      {paymentTermsDays > 7 && (
+                        <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded animate-pulse">
+                          <div className="flex items-start gap-2">
+                            <span className="text-red-600 text-lg">⚠️</span>
+                            <div>
+                              <p className="text-sm font-medium text-red-800">Увеличенный срок оплаты: {paymentTermsDays} дн.</p>
+                              <p className="text-xs text-red-600 mt-1">
+                                Исполнители увидят предупреждение об изменённых условиях оплаты.
+                                Это может снизить количество откликов на заявку.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
