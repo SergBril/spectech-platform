@@ -37,7 +37,14 @@ class InvoiceCreate(BaseModel):
     comment: str | None = None
     items: list[InvoiceItemCreate] = []
 
-    # 🆕 Поля для НДС (без дубликатов!)
+    # Прямое указание сумм (для API/seed; если не указаны — вычисляются из items)
+    subtotal: Decimal | None = Field(default=None, ge=0, decimal_places=2)
+    vat_amount: Decimal | None = Field(default=None, ge=0, decimal_places=2)
+    total: Decimal | None = Field(default=None, ge=0, decimal_places=2)
+    paid_amount: Decimal | None = Field(default=None, ge=0, decimal_places=2)
+    status: str | None = Field(default=None, description="draft, sent, paid, overdue, cancelled")
+
+    # Поля для НДС
     tax_system: str = Field(
         default=TaxSystem.OSNO.value,
         description="Система налогообложения (osno, usn_6, usn_15, patent, npd)",
