@@ -7,15 +7,24 @@ export default defineConfig({
     port: 3000,
     host: true,
     proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
-        secure: false,
-      },
       '/api/v1/ws': {
         target: 'http://127.0.0.1:8000',
         ws: true,
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', () => {});
+          proxy.on('proxyReqWs', (_req, _socket) => {
+            // Suppress ECONNABORTED/ECONNRESET during backend restarts
+          });
+        },
+      },
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy) => {
+          proxy.on('error', () => {});
+        },
       },
     },
   },

@@ -156,9 +156,11 @@ const MarketplacePage: React.FC = () => {
                       }`}>
                         {req.marketplace_mode === 'owner_dispatcher' ? '📋 Диспетчер' : '🏪 Заказчик'}
                       </span>
-                      <h3 className="font-semibold text-gray-900">
-                        {req.vehicle_category_name || 'Техника'} — {req.work_type || 'Работы'}
-                      </h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-semibold text-gray-900">
+                          {req.vehicle_category_name || 'Техника'} — {req.work_type || 'Работы'}
+                        </h3>
+                      </div>
                     </div>
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                       req.priority === 'urgent' ? 'bg-red-100 text-red-800' :
