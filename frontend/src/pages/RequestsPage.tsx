@@ -153,6 +153,9 @@ export const RequestsPage: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<Request | null>(null);
+  const [matchingRequestId, setMatchingRequestId] = useState<number | null>(null);
+  const [matchingResults, setMatchingResults] = useState<any[]>([]);
+  const [matchingLoading, setMatchingLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Request | null>(null);
 
   const canCreate = hasPermission('requests', 'create');
@@ -249,6 +252,22 @@ export const RequestsPage: React.FC = () => {
     setDeleteTarget(request);
   };
 
+  
+  const handleMatchVehicles = async (e: React.MouseEvent, requestId: number) => {
+    e.stopPropagation();
+    setMatchingLoading(true);
+    setMatchingRequestId(requestId);
+    try {
+      const res = await apiClient.get(`/requests/${requestId}/matching-vehicles`);
+      setMatchingResults(res.data.vehicles || []);
+    } catch (err) {
+      console.error('Match error:', err);
+      setMatchingResults([]);
+    } finally {
+      setMatchingLoading(false);
+    }
+  };
+
   const handleRowClick = (request: Request) => {
     navigate(`/requests/${request.id}`);
   };
@@ -309,7 +328,58 @@ export const RequestsPage: React.FC = () => {
             <TableSkeleton rows={8} columns={8} />
           </div>
         </div>
-      </Layout>
+      
+      {/* Matching Vehicles Modal */}
+      {matchingRequestId !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setMatchingRequestId(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">🔍 Подбор техники для заявки #{matchingRequestId}</h3>
+                <button onClick={() => setMatchingRequestId(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+              </div>
+              {matchingLoading ? (
+                <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+              ) : matchingResults.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p className="text-lg mb-2">😔 Нет подходящей техники</p>
+                  <p className="text-sm">Проверьте требования заявки или добавьте технику с нужными характеристиками</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600 mb-3">Найдено {matchingResults.length} совместимых единиц техники:</p>
+                  {matchingResults.map((v: any) => (
+                    <div key={v.vehicle_id} className="border rounded-lg p-4 hover:bg-blue-50 transition-colors">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">{v.vehicle_name}</h4>
+                          <p className="text-sm text-gray-500 mt-1">
+                            Score: <span className={`font-medium ${v.match_score >= 70 ? 'text-green-600' : v.match_score >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{v.match_score}/100</span>
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          {v.hourly_rate && <p className="text-sm font-medium text-blue-600">{v.hourly_rate} ₽/час</p>}
+                          {v.shift_rate && <p className="text-sm text-gray-500">{v.shift_rate} ₽/смена</p>}
+                        </div>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {v.matched_attributes?.map((a: string) => (
+                          <span key={a} className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">✅ {a}</span>
+                        ))}
+                        {v.missing_attributes?.map((a: string) => (
+                          <span key={a} className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">⚠️ {a}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+    </Layout>
     );
   }
 
@@ -549,6 +619,15 @@ export const RequestsPage: React.FC = () => {
                     )}
                     {(canEdit || canDelete) && (
                       <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2 sticky right-0 bg-white shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]" onClick={(e) => e.stopPropagation()}>
+                        {canEdit && !req.assigned_vehicle_id && (
+                          <button
+                            onClick={(e) => handleMatchVehicles(e, req.id)}
+                            className="text-emerald-600 hover:text-emerald-900"
+                            title="Подобрать технику"
+                          >
+                            🔍
+                          </button>
+                        )}
                         {canEdit && (
                           <button
                             onClick={(e) => handleEdit(e, req)}
