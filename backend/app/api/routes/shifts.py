@@ -87,7 +87,11 @@ def list_shift_reports(
     company_id: int = Depends(get_current_company_id),
 ):
     """Список сменных отчётов (только своей компании)."""
-    stmt = select(ShiftReport).where(ShiftReport.company_id.in_(company_ids))
+    stmt = (
+        select(ShiftReport)
+        .join(ShiftTask, ShiftReport.shift_task_id == ShiftTask.id)
+        .where(ShiftTask.company_id == company_id)
+    )
     if shift_task_id:
         stmt = stmt.where(ShiftReport.shift_task_id == shift_task_id)
     stmt = stmt.order_by(ShiftReport.created_at.desc()).limit(limit)
