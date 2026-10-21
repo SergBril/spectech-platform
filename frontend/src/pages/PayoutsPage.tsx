@@ -140,6 +140,7 @@ export const PayoutsPage: React.FC = () => {
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Комиссия</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Net</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Статус</th>
+                  <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Источник</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Действия</th>
                 </tr>
               </thead>
@@ -163,6 +164,13 @@ export const PayoutsPage: React.FC = () => {
                       <td className="px-4 py-3 text-sm text-orange-600">{formatMoney(p.platform_commission)}</td>
                       <td className="px-4 py-3 text-sm font-bold text-emerald-600">{formatMoney(p.net_amount)}</td>
                       <td className="px-4 py-3 text-sm">{statusBadge(p.status)}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      {(payout as any).source_channel === 'marketplace' ? (
+                        <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">🏪 Маркетплейс</span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">📋 Прямой</span>
+                      )}
+                    </td>
                       <td className="px-4 py-3 text-sm space-x-1">
                         {p.status === 'draft' && (
                           <button onClick={() => handleApprove(p.id)}

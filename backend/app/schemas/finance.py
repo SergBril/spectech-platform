@@ -175,6 +175,7 @@ class PayoutRead(BaseModel):
     status: str
     calculation_details: dict | None = None
     comment: str | None = None
+    source_channel: str | None = None
     created_at: datetime
     updated_at: datetime
 
