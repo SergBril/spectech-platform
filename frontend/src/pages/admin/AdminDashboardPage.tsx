@@ -63,8 +63,8 @@ export const AdminDashboardPage: React.FC = () => {
         adminApi.getProviderRequests(),
         adminApi.getReviewsStats(),
         adminApi.getFinanceStats(from.toISOString(), now.toISOString()),
-        Promise.resolve({ companies: [] }),
-        Promise.resolve({ activity: [] }),
+        Promise.resolve(null as TopCompanies | null),
+        Promise.resolve(null as UserActivity | null),
       ]);
       setStats(statsData);
       setProviderRequests(prData.requests);
