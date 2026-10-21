@@ -23,6 +23,7 @@ export const DashboardPage: React.FC = () => {
   const [gpsStats, setGpsStats] = useState<{ total_points: number; vehicles_with_data: number; latest_point: string | null } | null>(null);
   const [usersCount, setUsersCount] = useState<number>(0);
   const [driversCount, setDriversCount] = useState<number>(0);
+  const [mpStats, setMpStats] = useState<any>(null);
   const [period, setPeriod] = useState<{ from: string; to: string }>({ from: '', to: '' });
 
   useEffect(() => {
@@ -70,6 +71,12 @@ export const DashboardPage: React.FC = () => {
       try {
         const driversRes = await apiClient.get('/drivers', { params: { limit: 1 } });
         setDriversCount(driversRes.data?.total ?? (Array.isArray(driversRes.data) ? driversRes.data.length : 0));
+      } catch { /* ignore */ }
+
+      // Load marketplace stats
+      try {
+        const mpRes = await apiClient.get('/public/marketplace/stats');
+        setMpStats(mpRes.data);
       } catch { /* ignore */ }
     } catch (err) {
       console.error('Failed to load dashboard:', err);
@@ -253,6 +260,44 @@ export const DashboardPage: React.FC = () => {
                 </div>
                 <span className="text-3xl">⚠️</span>
               </div>
+            </div>
+
+            {/* Маркетплейс */}
+            <div className="bg-white rounded-xl shadow-sm border p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">🌐 Маркетплейс</h3>
+                <a href="/marketplace" className="text-sm text-blue-600 hover:underline">Перейти →</a>
+              </div>
+              {mpStats ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-purple-50 rounded-lg">
+                    <p className="text-xs text-gray-500">Активных заявок</p>
+                    <p className="text-2xl font-bold text-purple-700">{mpStats.active_requests}</p>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-lg">
+                    <p className="text-xs text-gray-500">Назначено</p>
+                    <p className="text-2xl font-bold text-green-700">{mpStats.assigned_requests}</p>
+                  </div>
+                  <div className="p-3 bg-orange-50 rounded-lg">
+                    <p className="text-xs text-gray-500">Ожидает одобрения</p>
+                    <p className="text-2xl font-bold text-orange-700">{mpStats.pending_responses}</p>
+                  </div>
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <p className="text-xs text-gray-500">Ср. срок оплаты</p>
+                    <p className="text-2xl font-bold text-blue-700">{mpStats.avg_payment_days} дн.</p>
+                  </div>
+                  <div className="col-span-2 flex gap-2 mt-2">
+                    <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
+                      🏪 Заказчики: {mpStats.client_requests}
+                    </span>
+                    <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs font-medium">
+                      📋 Диспетчеры: {mpStats.dispatcher_requests}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-400 text-sm">Загрузка...</div>
+              )}
             </div>
           </div>
         </div>
