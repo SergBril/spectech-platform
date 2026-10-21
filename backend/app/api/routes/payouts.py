@@ -81,7 +81,18 @@ def list_payouts(
         stmt = stmt.where(Payout.owner_id == owner_id)
 
     stmt = stmt.order_by(Payout.created_at.desc()).offset(offset).limit(limit)
-    return db.scalars(stmt).all()
+    payouts = db.scalars(stmt).all()
+
+    # Enrich with source_channel from linked request
+    result = []
+    for p in payouts:
+        data = PayoutRead.model_validate(p)
+        if p.request_id:
+            req = db.get(Request, p.request_id)
+            if req:
+                data.source_channel = getattr(req, "source_channel", None)
+        result.append(data)
+    return result
 
 
 @router.post("", response_model=PayoutRead, status_code=201)
