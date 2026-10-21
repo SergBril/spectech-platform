@@ -168,7 +168,7 @@ export const PayoutsPage: React.FC = () => {
                           <button onClick={() => handleApprove(p.id)}
                             className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs hover:bg-indigo-200">✓ Одобрить</button>
                         )}
-                        {(p.status === 'sent' || p.status === 'sent') && (
+                        {((p.status as string) === 'sent' || (p.status as string) === 'sent') && (
                           <button onClick={() => handlePay(p.id)}
                             className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200">💳 Оплатить</button>
                         )}
