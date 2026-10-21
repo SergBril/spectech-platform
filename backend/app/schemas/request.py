@@ -20,6 +20,8 @@ class RequestCreate(BaseModel):
     priority: str = "normal"
     comment: str | None = None
     requirements: dict | None = None
+    marketplace_mode: str | None = None
+    payment_terms_days: int | None = 7
 
 
 class RequestUpdate(BaseModel):
@@ -62,6 +64,8 @@ class RequestRead(BaseModel):
     priority: str
     comment: str | None = None
     requirements: dict | None = None
+    marketplace_mode: str | None = None
+    payment_terms_days: int | None = None
     created_at: datetime
 
     # 🆕 Enrichment поля (заполняются в роутере)

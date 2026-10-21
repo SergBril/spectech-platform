@@ -556,6 +556,7 @@ export const RequestsPage: React.FC = () => {
                   {isVis("priority") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("priority", 100)}>Приоритет<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "priority", 100)} /></th>)}
                   {isVis("amount") && (<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap relative group select-none" style={colSt("amount", 100)}>Сумма<div className="absolute right-0 top-0 bottom-0 w-[3px] cursor-col-resize bg-gray-200 hover:bg-blue-500 transition-colors" onMouseDown={(e) => onMouseDownResize(e, "amount", 100)} /></th>)}
                   {(canEdit || canDelete) && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Маркетплейс</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase sticky right-0 bg-gray-50 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]" style={{minWidth:"80px"}}>Действия</th>
                   )}
                 </tr>
@@ -617,6 +618,31 @@ export const RequestsPage: React.FC = () => {
                       {formatMoney(req.estimated_amount)}
                     </td>
                     )}
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      {(req as any).source_channel === 'marketplace' ? (
+                        <div className="flex flex-col gap-1">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            (req as any).marketplace_mode === 'owner_dispatcher' 
+                              ? 'bg-orange-100 text-orange-800' 
+                              : 'bg-purple-100 text-purple-800'
+                          }`}>
+                            {(req as any).marketplace_mode === 'owner_dispatcher' ? '📋 Диспетчер' : '🏪 Заказчик'}
+                          </span>
+                          {(req as any).payment_terms_days > 7 && (
+                            <span className="px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs font-medium animate-pulse">
+                              ⏰ Оплата: {(req as any).payment_terms_days} дн.
+                            </span>
+                          )}
+                          {((req as any).payment_terms_days || 7) <= 7 && (
+                            <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
+                              ✅ 7 дней
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </td>
                     {(canEdit || canDelete) && (
                       <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2 sticky right-0 bg-white shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]" onClick={(e) => e.stopPropagation()}>
                         {canEdit && !req.assigned_vehicle_id && (

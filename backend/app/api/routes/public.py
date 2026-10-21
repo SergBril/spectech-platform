@@ -677,6 +677,65 @@ class PublicCompanyReviewCreate(BaseModel):
     reviewer_contractor_id: int | None = None
 
 
+@router.get("/marketplace/requests", summary="🌐 Заявки маркетплейса")
+def list_marketplace_requests(
+    category_id: int | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """
+    🌐 Публичный список заявок в маркетплейсе.
+
+    Возвращает только опубликованные заявки из маркетплейса с условиями оплаты.
+    Исполнители видят: требования, срок оплаты, режим (заказчик/диспетчер).
+    """
+    stmt = (
+        select(Request)
+        .where(Request.source_channel == "marketplace")
+        .where(Request.is_published == True)
+        .where(Request.status.in_(["new", "processing"]))
+    )
+
+    if category_id:
+        stmt = stmt.where(Request.vehicle_category_id == category_id)
+
+    stmt = stmt.order_by(Request.created_at.desc()).offset(offset).limit(limit)
+    requests_list = db.scalars(stmt).all()
+
+    result = []
+    for req in requests_list:
+        cat_name = None
+        if req.vehicle_category_id:
+            from app.models.catalog import Category
+            cat = db.get(Category, req.vehicle_category_id)
+            cat_name = cat.name if cat else None
+
+        payment_days = getattr(req, "payment_terms_days", 7) or 7
+        is_extended = payment_days > 7
+
+        result.append({
+            "id": req.id,
+            "vehicle_category_id": req.vehicle_category_id,
+            "vehicle_category_name": cat_name,
+            "work_type": req.work_type,
+            "object_address": req.object_address,
+            "planned_start": req.planned_start.isoformat() if req.planned_start else None,
+            "planned_end": req.planned_end.isoformat() if req.planned_end else None,
+            "shift_duration_hours": float(req.shift_duration_hours) if req.shift_duration_hours else None,
+            "client_rate": float(req.client_rate) if req.client_rate else None,
+            "rate_type": req.rate_type,
+            "marketplace_mode": getattr(req, "marketplace_mode", "client"),
+            "payment_terms_days": payment_days,
+            "is_extended_payment": is_extended,
+            "requirements": getattr(req, "requirements", None),
+            "priority": req.priority,
+            "created_at": req.created_at.isoformat() if req.created_at else None,
+        })
+
+    return result
+
+
 @router.post("/companies/{company_id}/marketplace-reviews", status_code=201)
 def create_company_review(
     company_id: int,
