@@ -24,6 +24,7 @@ const ALL_COLS = [
   { key: 'year', label: 'Год', def: 70 },
   { key: 'driver', label: 'Водитель', def: 180 },
   { key: 'status', label: 'Статус', def: 100 },
+  { key: 'marketplace', label: 'Маркетплейс', def: 120 },
 ];
 
 export const VehiclesPage: React.FC = () => {
@@ -273,6 +274,7 @@ export const VehiclesPage: React.FC = () => {
                     {isVis('year') && <ThCell colKey="year" label="Год" def={70} />}
                     {isVis('driver') && <ThCell colKey="driver" label="Водитель" def={180} />}
                     {isVis('status') && <ThCell colKey="status" label="Статус" def={100} />}
+                    {isVis('marketplace') && <ThCell colKey="marketplace" label="Маркетплейс" def={120} />}
                     {(canEditVehicle || canDeleteVehicle) && (
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase" style={{ minWidth: '120px' }}>Действия</th>
                     )}
@@ -331,6 +333,15 @@ export const VehiclesPage: React.FC = () => {
                           <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(vehicle.status)}`}>
                             {getStatusLabel(vehicle.status)}
                           </span>
+                        </td>
+                      )}
+                      {isVis('marketplace') && (
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          {(vehicle as any).marketplace_commission_agreed ? (
+                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">✅ Активен</span>
+                          ) : (
+                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-500" title="Техника не участвует в маркетплейсе">❌ Не активен</span>
+                          )}
                         </td>
                       )}
                       {(canEditVehicle || canDeleteVehicle) && (
