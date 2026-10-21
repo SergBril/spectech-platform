@@ -78,6 +78,7 @@ export const RequestsPage: React.FC = () => {
 
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [filterMarketplaceMode, setFilterMarketplaceMode] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterVehicleId, setFilterVehicleId] = useState<string>('all');
@@ -223,6 +224,12 @@ export const RequestsPage: React.FC = () => {
     return requests.filter((req) => {
       if (filterStatus !== 'all' && req.status !== filterStatus) return false;
       if (filterPriority !== 'all' && req.priority !== filterPriority) return false;
+      if (filterMarketplaceMode !== 'all') {
+        const mode = (req as any).marketplace_mode;
+        if (filterMarketplaceMode === 'marketplace' && (req as any).source_channel !== 'marketplace') return false;
+        if (filterMarketplaceMode === 'client' && mode !== 'client') return false;
+        if (filterMarketplaceMode === 'owner_dispatcher' && mode !== 'owner_dispatcher') return false;
+      }
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const matchesSearch =
@@ -234,7 +241,7 @@ export const RequestsPage: React.FC = () => {
       }
       return true;
     });
-  }, [requests, filterStatus, filterPriority, searchQuery]);
+  }, [requests, filterStatus, filterPriority, filterMarketplaceMode, searchQuery]);
 
   const handleCreate = () => {
     setEditingRequest(null);
