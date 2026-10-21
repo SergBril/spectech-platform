@@ -846,6 +846,42 @@ def respond_to_marketplace_request(
     }
 
 
+@router.get("/marketplace/my-responses", summary="🔐 Мои отклики")
+def list_my_responses(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Список откликов текущей компании на заявки маркетплейса."""
+    from app.models.dispatch import RequestAssignment
+
+    assignments = db.execute(
+        select(RequestAssignment)
+        .join(Request, RequestAssignment.request_id == Request.id)
+        .join(Vehicle, RequestAssignment.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .order_by(RequestAssignment.created_at.desc())
+    ).scalars().all()
+
+    result = []
+    for a in assignments:
+        req = db.get(Request, a.request_id)
+        vehicle = db.get(Vehicle, a.vehicle_id)
+        result.append({
+            "id": a.id,
+            "request_id": a.request_id,
+            "vehicle_id": a.vehicle_id,
+            "vehicle_name": vehicle.name if vehicle else "N/A",
+            "status": a.status,
+            "request_address": req.object_address if req else None,
+            "request_work_type": req.work_type if req else None,
+            "request_category": req.vehicle_category_id if req else None,
+            "created_at": a.created_at.isoformat() if hasattr(a, "created_at") and a.created_at else None,
+        })
+
+    return result
+
+
 @router.post("/companies/{company_id}/marketplace-reviews", status_code=201)
 def create_company_review(
     company_id: int,

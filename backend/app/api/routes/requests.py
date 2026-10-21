@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -474,6 +474,141 @@ async def assign_request(
             status_code=500,
             detail=f"Ошибка при назначении техники: {str(e)}",
         )
+
+
+
+@router.post("/{request_id}/responses/{assignment_id}/approve", status_code=200)
+async def approve_response(
+    request_id: int,
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Одобрить отклик исполнителя на заявку маркетплейса."""
+    from app.models.dispatch import RequestAssignment, RequestStatusLog
+    from app.models.shift import ShiftTask, ShiftTaskStatus
+    from app.services.notification_service import create_notification
+
+    # Проверяем заявку
+    request = db.get(Request, request_id)
+    if not request or request.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    # Проверяем отклик
+    assignment = db.get(RequestAssignment, assignment_id)
+    if not assignment or assignment.request_id != request_id:
+        raise HTTPException(status_code=404, detail="Response not found")
+
+    if assignment.status != "pending_approval":
+        raise HTTPException(status_code=409, detail=f"Response already {assignment.status}")
+
+    vehicle = db.get(Vehicle, assignment.vehicle_id)
+
+    # Обновляем статус отклика
+    assignment.status = "approved"
+    assignment.assigned_by = current_user.id
+
+    # Отклоняем другие отклики
+    other_responses = db.execute(
+        select(RequestAssignment).where(
+            RequestAssignment.request_id == request_id,
+            RequestAssignment.id != assignment_id,
+            RequestAssignment.status == "pending_approval",
+        )
+    ).scalars().all()
+    for resp in other_responses:
+        resp.status = "rejected"
+
+    # Создаём ShiftTask автоматически
+    shift_task = ShiftTask(
+        request_id=request_id,
+        vehicle_id=assignment.vehicle_id,
+        driver_id=getattr(vehicle, "current_driver_id", None),
+        shift_date=request.planned_start.date() if request.planned_start else None,
+        planned_start=request.planned_start,
+        planned_end=request.planned_end,
+        status=ShiftTaskStatus.planned if hasattr(ShiftTaskStatus, "planned") else "planned",
+        created_by=current_user.id,
+    )
+    db.add(shift_task)
+
+    # Логируем
+    db.add(RequestStatusLog(
+        request_id=request_id,
+        from_status=request.status,
+        to_status="assigned",
+        changed_by_user_id=current_user.id,
+        comment=f"Одобрен отклик: {vehicle.name if vehicle else 'N/A'}",
+    ))
+
+    request.status = "assigned"
+    db.commit()
+
+    # Уведомляем исполнителя
+    try:
+        await create_notification(
+            db=db,
+            user_id=assignment.assigned_by,
+            title="✅ Ваш отклик одобрен!",
+            body=f"Заявка #{request_id} подтверждена. Техника: {vehicle.name if vehicle else 'N/A'}. Создана смена.",
+            channel="in_app",
+        )
+    except Exception:
+        pass
+
+    return {"message": "Отклик одобрен, смена создана", "shift_task_id": shift_task.id}
+
+
+@router.post("/{request_id}/responses/{assignment_id}/reject", status_code=200)
+async def reject_response(
+    request_id: int,
+    assignment_id: int,
+    reason: str = Body(default="", embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Отклонить отклик исполнителя."""
+    from app.models.dispatch import RequestAssignment, RequestStatusLog
+    from app.services.notification_service import create_notification
+
+    request = db.get(Request, request_id)
+    if not request or request.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    assignment = db.get(RequestAssignment, assignment_id)
+    if not assignment or assignment.request_id != request_id:
+        raise HTTPException(status_code=404, detail="Response not found")
+
+    if assignment.status != "pending_approval":
+        raise HTTPException(status_code=409, detail=f"Response already {assignment.status}")
+
+    assignment.status = "rejected"
+
+    db.add(RequestStatusLog(
+        request_id=request_id,
+        from_status=request.status,
+        to_status=request.status,
+        changed_by_user_id=current_user.id,
+        comment=f"Отклик отклонён: {reason or 'Без причины'}",
+    ))
+    db.commit()
+
+    # Уведомляем исполнителя
+    try:
+        await create_notification(
+            db=db,
+            user_id=assignment.assigned_by,
+            title="❌ Ваш отклик отклонён",
+            body=f"Заявка #{request_id}: {reason or 'Владелец выбрал другого исполнителя'}",
+            channel="in_app",
+        )
+    except Exception:
+        pass
+
+    return {"message": "Отклик отклонён"}
+
 
 
 @router.patch("/{request_id}", response_model=RequestRead)
