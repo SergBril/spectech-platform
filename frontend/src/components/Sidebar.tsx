@@ -8,6 +8,7 @@ interface MenuItem {
   icon: string;
   path: string;
   group?: string;
+  ownerOnly?: boolean;
 }
 
 const PLATFORM_OWNER_EMAIL = 'admin@spectech.dev';

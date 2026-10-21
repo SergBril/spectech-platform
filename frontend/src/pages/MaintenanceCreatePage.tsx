@@ -68,7 +68,7 @@ export const MaintenanceCreatePage: React.FC = () => {
 
       const response = await apiClient.get('/vehicles?limit=100');
 
-      if (response.ok) {
+      if (response.status >= 200 && response.status < 300) {
         const data = response.data;
         setVehicles(data.items || data);
       } else {
