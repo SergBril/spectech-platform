@@ -116,6 +116,17 @@ class Request(Base):
         nullable=True,
         comment="Требования к технике: {min_tonnage, min_boom_length, chassis_type, ...}",
     )
+    marketplace_mode: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+        comment="Режим маркетплейса: client (заказчик) или owner_dispatcher (собственник-диспетчер)",
+    )
+    payment_terms_days: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        default=7,
+        comment="Срок оплаты в днях (стандарт 7, если больше — предупреждение)",
+    )
 
     # === МАРКЕТПЛЕЙС: отклики на заявку ===
     marketplace_offers = relationship(
