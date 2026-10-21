@@ -611,6 +611,63 @@ async def reject_response(
 
 
 
+
+@router.get("/{request_id}/timeline", summary="📜 История статусов заявки")
+def get_request_timeline(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Возвращает историю изменений статуса заявки."""
+    from app.models.dispatch import RequestStatusLog
+
+    request = db.get(Request, request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    # Доступ: владелец заявки или исполнитель с откликом
+    has_access = request.company_id == company_id
+    if not has_access:
+        from app.models.dispatch import RequestAssignment
+        resp = db.execute(
+            select(RequestAssignment).join(Vehicle).where(
+                RequestAssignment.request_id == request_id,
+                Vehicle.company_id == company_id,
+            )
+        ).scalar_one_or_none()
+        has_access = resp is not None
+
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    logs = db.execute(
+        select(RequestStatusLog)
+        .where(RequestStatusLog.request_id == request_id)
+        .order_by(RequestStatusLog.created_at.desc())
+    ).scalars().all()
+
+    result = []
+    for log in logs:
+        user_name = ""
+        if log.changed_by_user_id:
+            from app.models.auth import User as UserModel
+            user = db.get(UserModel, log.changed_by_user_id)
+            user_name = user.full_name or user.email if user else f"User#{log.changed_by_user_id}"
+
+        result.append({
+            "id": log.id,
+            "from_status": log.from_status,
+            "to_status": log.to_status,
+            "comment": log.comment,
+            "changed_by": user_name,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        })
+
+    return result
+
+
+
 @router.patch("/{request_id}", response_model=RequestRead)
 async def update_request(
     request_id: int,

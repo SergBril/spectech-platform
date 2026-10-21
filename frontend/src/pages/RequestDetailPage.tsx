@@ -65,6 +65,7 @@ export const RequestDetailPage: React.FC = () => {
   const { user, logout, hasPermission } = useAuth();
 
   const [request, setRequest] = useState<Request | null>(null);
+  const [timeline, setTimeline] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [acts, setActs] = useState<Act[]>([]);
   const [history, setHistory] = useState<StatusLogEntry[]>([]);
@@ -104,6 +105,11 @@ export const RequestDetailPage: React.FC = () => {
       setError('Не удалось загрузить заявку');
     } finally {
       setLoading(false);
+      // Load timeline
+      try {
+        const tlRes = await apiClient.get(`/requests/${id}/timeline`);
+        setTimeline(Array.isArray(tlRes.data) ? tlRes.data : []);
+      } catch { /* ignore */ }
       setIsInitialLoading(false);
     }
   };
