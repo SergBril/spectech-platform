@@ -26,7 +26,7 @@ export const MaintenanceAnalyticsPage: React.FC = () => {
     try {
       const token = localStorage.getItem('access_token');
       const companyId = localStorage.getItem('spectech_current_company_id');
-      const response = await fetch(`/api/v1/vehicles?limit=100`, {
+      const response = await apiClient.get("/vehicles?limit=100");
         headers: {
           Authorization: `Bearer ${token}`,
           'X-Company-Id': companyId || '',

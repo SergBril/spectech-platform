@@ -234,11 +234,8 @@ export const FinancePage: React.FC = () => {
         blob = await financeApi.downloadActPdf(id);
       } else if (type === 'payout') {
         const token = localStorage.getItem('access_token');
-        const response = await fetch(`/api/v1/finance/payouts/${id}/pdf`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!response.ok) throw new Error('Failed to download payout PDF');
-        blob = await response.blob();
+        const response = await apiClient.get(`/finance/payouts/${id}/pdf`, { responseType: 'blob' });
+        blob = response.data;
       } else {
         return;
       }
@@ -399,12 +396,9 @@ export const FinancePage: React.FC = () => {
     if (periodDates.from) params.set('date_from', periodDates.from);
     if (periodDates.to) params.set('date_to', periodDates.to);
 
-    fetch(`/api/v1/finance/payouts/csv?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    apiClient.get(`/finance/payouts/csv?${params.toString()}`, { responseType: 'blob' })
       .then((res) => {
-        if (!res.ok) throw new Error('Failed to export CSV');
-        return res.blob();
+        return res.data;
       })
       .then((blob) => {
         const url = window.URL.createObjectURL(blob);
@@ -893,14 +887,7 @@ export const FinancePage: React.FC = () => {
                 if (!confirm(`Отправить уведомление о выплате ${p.document_number} собственнику?`)) return;
                 try {
                   const token = localStorage.getItem('access_token');
-                  const res = await fetch(`/api/v1/finance/payouts/${p.id}/send-email`, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${token}` },
-                  });
-                  if (!res.ok) {
-                    const err = await res.json();
-                    throw new Error(err.detail || 'Ошибка отправки');
-                  }
+                  await apiClient.post(`/finance/payouts/${p.id}/send-email`);
                   showToast.success('📧 Уведомление отправлено собственнику');
                 } catch (err: any) {
                   showToast.error('Ошибка: ' + err.message);
