@@ -16,6 +16,7 @@ import {
   FinancePage,
   CompanyProfilePage,
   MarketplacePage,
+  MyResponsesPage,
   VehiclesPage,
   DriversPage,
   RequestsPage,
