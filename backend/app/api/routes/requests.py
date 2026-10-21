@@ -293,6 +293,20 @@ async def assign_request(
     is_marketplace = getattr(request, "source_channel", None) == "marketplace"
     commission_agreed = getattr(vehicle, "marketplace_commission_agreed", False)
     if is_marketplace and not commission_agreed:
+        # Уведомляем собственника о попытке назначения без согласия
+        try:
+            await create_notification(
+                db=db,
+                user_id=current_user.id,
+                title="⚠️ Назначение отклонено",
+                body=(
+                    f"Техника «{vehicle.name}» не может быть назначена на заказ из маркетплейса. "
+                    "Необходимо дать согласие на комиссию 10% в карточке техники."
+                ),
+                channel="in_app",
+            )
+        except Exception:
+            pass  # Не блокируем основной поток если уведомление не отправилось
         raise HTTPException(
             status_code=403,
             detail=(

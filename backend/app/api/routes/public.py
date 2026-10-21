@@ -276,6 +276,9 @@ def list_public_vehicles(
             .where(Company.is_active == True)
         )
 
+        # В маркетплейсе показываем только технику с согласием на комиссию
+        stmt = stmt.where(Vehicle.marketplace_commission_agreed == True)
+
         if category_id:
             stmt = stmt.where(Vehicle.category_id == category_id)
         if company_id:
