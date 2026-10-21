@@ -57,7 +57,7 @@ def create_shift_task(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Создать сменное задание (для своей компании)."""
-    task = ShiftTask(**payload.model_dump(), company_id=company_id)
+    task = ShiftTask(**payload.model_dump(), company_id=company_ids[0] if company_ids else None)
     db.add(task)
     db.commit()
     db.refresh(task)
