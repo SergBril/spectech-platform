@@ -148,6 +148,12 @@ class PayoutService:
                 payout_data[key]["is_marketplace"] = True
                 payout_data[key]["commission_agreed"] = True
                 payout_data[key]["commission_rate"] = Decimal(str(vehicle_commission_rate))
+                # Сохраняем режим маркетплейса из заявки
+                mp_mode = getattr(request, "marketplace_mode", "client") if request else "client"
+                payout_data[key]["marketplace_mode"] = mp_mode
+                # Для owner_dispatcher: компания-диспетчер = company_id заявки
+                if mp_mode == "owner_dispatcher" and request:
+                    payout_data[key]["dispatcher_company_id"] = request.company_id
 
         # 3. Создаём Payout документы
         created_payouts = []
@@ -186,7 +192,9 @@ class PayoutService:
                     "moto_hours": float(data["total_moto_hours"]),
                     "owner_rate": float(data["owner_rate"]),
                     "shifts_count": data["shifts_count"],
-                    "commission_rate": float(commission_rate),
+                    "commission_rate": float(effective_commission_rate),
+                    "marketplace_mode": data.get("marketplace_mode", "direct"),
+                    "is_marketplace": data.get("is_marketplace", False),
                 },
                 created_by=created_by,
             )
@@ -209,6 +217,7 @@ class PayoutService:
                     "net_amount": float(net),
                     "moto_hours": float(data["total_moto_hours"]),
                     "shifts_count": data["shifts_count"],
+                    "marketplace_mode": data.get("marketplace_mode", "direct"),
                 }
             )
 
