@@ -11,6 +11,7 @@ import { FileUploadButton } from '../components/FileUploadButton';
 import { FileList } from '../components/FileList';
 import type { FileUploadResponse } from '../api/files';
 import Layout from '../components/Layout';
+import apiClient from '../api/client';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   new: { label: 'Новая', color: 'bg-blue-100 text-blue-800', icon: '🆕' },
