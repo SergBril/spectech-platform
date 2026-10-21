@@ -15,6 +15,7 @@ import PayoutBatchModal from '../components/PayoutBatchModal';
 import FinancialCharts from '../components/FinancialCharts';
 import { financeApi as financeApiV2, type FinanceDashboardV2 } from '../api/finance';
 import EmptyState from '../components/EmptyState';
+import apiClient from '../api/client';
 
 const INVOICE_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
