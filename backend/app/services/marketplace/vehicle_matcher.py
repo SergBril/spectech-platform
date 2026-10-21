@@ -31,6 +31,23 @@ class VehicleMatcherService:
         34: [],    # Тралы → отдельная категория, НЕ самосвалы
     }
 
+    # Кросс-категорийные подсказки: техника из этих категорий может подойти
+    # даже если не является прямым совпадением (семантическая совместимость)
+    CROSS_CATEGORY_SUGGESTIONS = {
+        # Экскаваторы колёсные → могут подойти погрузчики и экскаваторы-погрузчики
+        9: [6, 11],   # → Погрузчики, Экскаваторы-погрузчики
+        # Мини-экскаваторы → мини-погрузчики
+        10: [14],     # → Мини-погрузчики
+        # Экскаваторы-погрузчики → экскаваторы и погрузчики
+        11: [2, 6],   # → Экскаваторы, Погрузчики
+        # Фронтальные погрузчики → экскаваторы-погрузчики
+        13: [11],     # → Экскаваторы-погрузчики
+        # Автокраны → манипуляторы (для лёгких грузов)
+        20: [21],     # → Манипуляторы (КМУ)
+        # Самосвалы → тралы (для негабарита)
+        33: [34],     # → Тралы
+    }
+
     def find_matching_vehicles(
         self, db: Session, request_id: int, company_id: int | None = None,
     ) -> list[dict]:
@@ -45,8 +62,14 @@ class VehicleMatcherService:
             compatible_vehicle_cats = self.REQUEST_SUBCAT_TO_VEHICLE_CATS.get(
                 request.vehicle_category_id, []
             )
-            if compatible_vehicle_cats:
-                query = query.filter(Vehicle.category_id.in_(compatible_vehicle_cats))
+            # Добавляем кросс-категорийные подсказки
+            cross_suggestions = self.CROSS_CATEGORY_SUGGESTIONS.get(
+                request.vehicle_category_id, []
+            )
+            # Объединяем прямые совпадения и кросс-категорийные подсказки
+            all_cats = list(set(compatible_vehicle_cats + cross_suggestions))
+            if all_cats:
+                query = query.filter(Vehicle.category_id.in_(all_cats))
             else:
                 # Если маппинг не найден — пробуем точное совпадение + родительскую
                 cat = db.get(Category, request.vehicle_category_id)
@@ -76,6 +99,7 @@ class VehicleMatcherService:
                 "vehicle_id": v.id,
                 "vehicle_name": v.name,
                 "category_id": v.category_id,
+                "is_cross_suggestion": v.category_id in cross_suggestions and v.category_id not in compatible_vehicle_cats,
                 "status": v.status,
                 "hourly_rate": float(v.hourly_rate) if v.hourly_rate else None,
                 "shift_rate": float(v.shift_rate) if v.shift_rate else None,

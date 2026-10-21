@@ -846,6 +846,170 @@ def respond_to_marketplace_request(
     }
 
 
+@router.get("/marketplace/stats", summary="📊 Статистика маркетплейса")
+def marketplace_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Статистика маркетплейса для дашборда."""
+    from sqlalchemy import func
+
+    total_requests = db.execute(
+        select(func.count()).select_from(Request).where(Request.source_channel == "marketplace")
+    ).scalar() or 0
+
+    active_requests = db.execute(
+        select(func.count()).select_from(Request).where(
+            Request.source_channel == "marketplace",
+            Request.status.in_(["new", "processing", "has_responses"]),
+        )
+    ).scalar() or 0
+
+    assigned_requests = db.execute(
+        select(func.count()).select_from(Request).where(
+            Request.source_channel == "marketplace",
+            Request.status == "assigned",
+        )
+    ).scalar() or 0
+
+    # По режимам
+    client_count = db.execute(
+        select(func.count()).select_from(Request).where(
+            Request.source_channel == "marketplace",
+            Request.marketplace_mode == "client",
+        )
+    ).scalar() or 0
+
+    dispatcher_count = db.execute(
+        select(func.count()).select_from(Request).where(
+            Request.source_channel == "marketplace",
+            Request.marketplace_mode == "owner_dispatcher",
+        )
+    ).scalar() or 0
+
+    # Средний срок оплаты
+    avg_payment = db.execute(
+        select(func.avg(Request.payment_terms_days)).where(
+            Request.source_channel == "marketplace",
+            Request.payment_terms_days.isnot(None),
+        )
+    ).scalar()
+
+    # Отклики
+    from app.models.dispatch import RequestAssignment
+    total_responses = db.execute(
+        select(func.count()).select_from(RequestAssignment)
+    ).scalar() or 0
+
+    pending_responses = db.execute(
+        select(func.count()).select_from(RequestAssignment).where(
+            RequestAssignment.status == "pending_approval"
+        )
+    ).scalar() or 0
+
+    return {
+        "total_requests": total_requests,
+        "active_requests": active_requests,
+        "assigned_requests": assigned_requests,
+        "client_requests": client_count,
+        "dispatcher_requests": dispatcher_count,
+        "avg_payment_days": round(float(avg_payment), 1) if avg_payment else 7.0,
+        "total_responses": total_responses,
+        "pending_responses": pending_responses,
+    }
+
+
+@router.get("/marketplace/requests/export", summary="📥 Экспорт заявок маркетплейса")
+def export_marketplace_requests(
+    category_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Экспорт заявок маркетплейса в Excel."""
+    import io
+    from datetime import datetime
+    from fastapi.responses import StreamingResponse
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+
+    stmt = (
+        select(Request)
+        .where(Request.source_channel == "marketplace")
+        .where(Request.is_published == True)
+        .order_by(Request.created_at.desc())
+    )
+    if category_id:
+        stmt = stmt.where(Request.vehicle_category_id == category_id)
+
+    requests_list = db.scalars(stmt).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Заявки маркетплейса"
+
+    # Header style
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+
+    headers = ["ID", "Категория", "Тип работы", "Адрес", "Период", "Ставка", "Режим", "Оплата (дн.)", "Приоритет", "Статус", "Дата создания"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    # Data rows
+    for row_idx, req in enumerate(requests_list, 2):
+        cat_name = ""
+        if req.vehicle_category_id:
+            cat = db.get(Category, req.vehicle_category_id)
+            cat_name = cat.name if cat else str(req.vehicle_category_id)
+
+        period = ""
+        if req.planned_start and req.planned_end:
+            period = f"{req.planned_start.strftime('%d.%m.%Y')} — {req.planned_end.strftime('%d.%m.%Y')}"
+
+        rate = f"{float(req.client_rate)} ₽/{('час' if req.rate_type == 'hourly' else 'смена')}" if req.client_rate else ""
+        mode = "🏪 Заказчик" if getattr(req, "marketplace_mode", "client") == "client" else "📋 Диспетчер"
+        payment_days = getattr(req, "payment_terms_days", 7) or 7
+
+        ws.cell(row=row_idx, column=1, value=req.id)
+        ws.cell(row=row_idx, column=2, value=cat_name)
+        ws.cell(row=row_idx, column=3, value=req.work_type or "")
+        ws.cell(row=row_idx, column=4, value=req.object_address or "")
+        ws.cell(row=row_idx, column=5, value=period)
+        ws.cell(row=row_idx, column=6, value=rate)
+        ws.cell(row=row_idx, column=7, value=mode)
+        ws.cell(row=row_idx, column=8, value=payment_days)
+        ws.cell(row=row_idx, column=9, value=req.priority or "normal")
+        ws.cell(row=row_idx, column=10, value=req.status or "")
+        ws.cell(row=row_idx, column=11, value=req.created_at.strftime("%d.%m.%Y %H:%M") if req.created_at else "")
+
+        # Highlight extended payment
+        if payment_days > 7:
+            ws.cell(row=row_idx, column=8).fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+
+    # Auto-width columns
+    for col_cells in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 40)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"marketplace_requests_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/marketplace/my-responses", summary="🔐 Мои отклики")
 def list_my_responses(
     db: Session = Depends(get_db),
