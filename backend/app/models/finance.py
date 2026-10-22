@@ -30,6 +30,7 @@ class DocumentStatus(str, Enum):
     partially_paid = "partially_paid"
     overdue = "overdue"
     cancelled = "cancelled"
+    rejected = "rejected"
 
 
 class PaymentMethod(str, Enum):
