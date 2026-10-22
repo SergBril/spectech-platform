@@ -1041,3 +1041,265 @@ def get_utilization_stats(
         },
         "vehicles": sorted(vehicle_stats, key=lambda x: x["utilization_pct"], reverse=True),
     }
+
+
+@router.get("/stats/utilization/export", summary="📥 Экспорт утилизации в Excel")
+def export_utilization_excel(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт статистики утилизации техники в Excel."""
+    import io
+    from datetime import date as date_type
+    from fastapi.responses import StreamingResponse
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+    total_days = (d_to - d_from).days + 1
+
+    vehicles = db.execute(select(Vehicle).where(Vehicle.company_id == company_id)).scalars().all()
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+        .where(ShiftTask.status.notin_(["cancelled"]))
+    ).scalars().all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Утилизация"
+
+    header_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+
+    headers = ["Техника", "Активные дни", "Всего дней", "Утилизация %", "Смен", "Часов"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    row_idx = 2
+    total_shifts = 0
+    total_hours = 0
+    util_sum = 0
+
+    for v in sorted(vehicles, key=lambda x: x.name):
+        v_tasks = [t for t in tasks if t.vehicle_id == v.id]
+        active_days = len(set(t.shift_date for t in v_tasks))
+        util_pct = round((active_days / total_days) * 100, 1) if total_days > 0 else 0
+        hours = sum(max(0, (t.planned_end - t.planned_start).total_seconds() / 3600) for t in v_tasks if t.planned_start and t.planned_end)
+
+        ws.cell(row=row_idx, column=1, value=v.name)
+        ws.cell(row=row_idx, column=2, value=active_days)
+        ws.cell(row=row_idx, column=3, value=total_days)
+        ws.cell(row=row_idx, column=4, value=util_pct)
+        ws.cell(row=row_idx, column=5, value=len(v_tasks))
+        ws.cell(row=row_idx, column=6, value=round(hours, 1))
+
+        # Color code utilization
+        if util_pct >= 80:
+            ws.cell(row=row_idx, column=4).fill = PatternFill(start_color="C6EFCE", fill_type="solid")
+        elif util_pct >= 50:
+            ws.cell(row=row_idx, column=4).fill = PatternFill(start_color="FFEB9C", fill_type="solid")
+        else:
+            ws.cell(row=row_idx, column=4).fill = PatternFill(start_color="FFC7CE", fill_type="solid")
+
+        total_shifts += len(v_tasks)
+        total_hours += hours
+        util_sum += util_pct
+        row_idx += 1
+
+    # Totals
+    avg_util = round(util_sum / len(vehicles), 1) if vehicles else 0
+    ws.cell(row=row_idx, column=1, value="ИТОГО").font = Font(bold=True)
+    ws.cell(row=row_idx, column=4, value=avg_util).font = Font(bold=True)
+    ws.cell(row=row_idx, column=5, value=total_shifts).font = Font(bold=True)
+    ws.cell(row=row_idx, column=6, value=round(total_hours, 1)).font = Font(bold=True)
+
+    for col_cells in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 30)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"utilization_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.post("/tasks/{task_id}/create-request", summary="📋 Создать заявку из смены")
+async def create_request_from_shift(
+    task_id: int,
+    work_type: str = Body(default="earthworks"),
+    object_address: str = Body(default=""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Автоматически создать заявку маркетплейса на основе запланированной смены."""
+    from app.models.dispatch import Request, RequestAssignment
+    from decimal import Decimal
+
+    task = db.get(ShiftTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Shift task not found")
+
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Create request from shift data
+    request = Request(
+        company_id=company_id,
+        created_by=current_user.id,
+        work_type=work_type,
+        object_address=object_address or f"Смена {task.shift_date}",
+        planned_start=task.planned_start,
+        planned_end=task.planned_end,
+        vehicle_category_id=vehicle.category_id if hasattr(vehicle, 'category_id') else None,
+        status="has_responses",
+        source_channel="internal",
+    )
+    db.add(request)
+    db.flush()
+
+    # Auto-assign the shift vehicle
+    assignment = RequestAssignment(
+        request_id=request.id,
+        vehicle_id=task.vehicle_id,
+        assigned_by=current_user.id,
+        status="approved",
+    )
+    db.add(assignment)
+    request.status = "assigned"
+
+    # Link shift to request
+    task.request_id = request.id
+
+    db.commit()
+    db.refresh(request)
+
+    # Notify via WS
+    try:
+        from app.services.websocket_manager import manager
+        await manager.broadcast_to_company(company_id, {
+            "type": "request_created_from_shift",
+            "request_id": request.id,
+            "shift_task_id": task_id,
+        })
+    except Exception:
+        pass
+
+    return {"message": "Заявка создана из смены", "request_id": request.id}
+
+
+@router.get("/dashboard/daily-summary", summary="📋 Сводка дня диспетчера")
+def get_daily_summary(
+    target_date: str | None = Query(default=None, description="Дата YYYY-MM-DD, по умолчанию сегодня"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Сводка для диспетчера: смены сегодня, статусы, проблемы, предстоящие задачи."""
+    from datetime import date as date_type, timedelta
+    from sqlalchemy import func
+
+    today = date_type.fromisoformat(target_date) if target_date else date_type.today()
+    tomorrow = today + timedelta(days=1)
+
+    # Today's shifts
+    today_shifts = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date == today)
+    ).scalars().all()
+
+    # Tomorrow's shifts (upcoming)
+    tomorrow_shifts = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date == tomorrow)
+    ).scalars().all()
+
+    # Status breakdown
+    status_counts = {}
+    for s in today_shifts:
+        st = s.status if hasattr(s, 'status') else 'unknown'
+        status_counts[st] = status_counts.get(st, 0) + 1
+
+    # Vehicles without shifts today (potential idle)
+    all_vehicles = db.execute(select(Vehicle).where(Vehicle.company_id == company_id)).scalars().all()
+    busy_vehicle_ids = set(s.vehicle_id for s in today_shifts)
+    idle_vehicles = [v for v in all_vehicles if v.id not in busy_vehicle_ids]
+
+    # Pending marketplace requests
+    from app.models.dispatch import Request
+    pending_requests = db.execute(
+        select(func.count(Request.id))
+        .where(Request.company_id == company_id)
+        .where(Request.status.in_(["new", "processing", "has_responses"]))
+    ).scalar() or 0
+
+    # Build response
+    shift_details = []
+    for s in today_shifts:
+        vehicle = db.get(Vehicle, s.vehicle_id)
+        driver_name = ""
+        if s.driver_id:
+            from app.models.contractor import DriverProfile, Employee
+            profile = db.get(DriverProfile, s.driver_id)
+            if profile:
+                emp = db.get(Employee, profile.employee_contractor_id)
+                driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
+
+        shift_details.append({
+            "id": s.id,
+            "vehicle_name": vehicle.name if vehicle else "",
+            "driver_name": driver_name,
+            "status": s.status,
+            "start": s.planned_start.strftime("%H:%M") if s.planned_start else "",
+            "end": s.planned_end.strftime("%H:%M") if s.planned_end else "",
+        })
+
+    upcoming_details = []
+    for s in tomorrow_shifts[:10]:
+        vehicle = db.get(Vehicle, s.vehicle_id)
+        upcoming_details.append({
+            "vehicle_name": vehicle.name if vehicle else "",
+            "start": s.planned_start.strftime("%H:%M") if s.planned_start else "",
+        })
+
+    return {
+        "date": str(today),
+        "today": {
+            "total_shifts": len(today_shifts),
+            "status_breakdown": status_counts,
+            "shifts": shift_details,
+            "idle_vehicles_count": len(idle_vehicles),
+            "idle_vehicle_names": [v.name for v in idle_vehicles[:10]],
+        },
+        "tomorrow": {
+            "total_shifts": len(tomorrow_shifts),
+            "upcoming": upcoming_details,
+        },
+        "alerts": {
+            "pending_requests": pending_requests,
+            "idle_vehicles": len(idle_vehicles),
+        },
+    }

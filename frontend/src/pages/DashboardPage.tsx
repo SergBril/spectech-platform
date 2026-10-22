@@ -7,6 +7,7 @@ import { financeApi, type PaymentsDashboard } from '../api/finance';
 import apiClient from '../api/client';
 import { RevenueChart, StatusPieChart, TopRequestsChart, Sparkline } from '../components/AnalyticsCharts';
 import { MetricCardSkeleton, ChartSkeleton } from '../components/Skeleton';
+import DispatcherDashboard from '../components/DispatcherDashboard';
 import Layout from '../components/Layout';
 import DashboardWidgets from '../components/DashboardWidgets';
 import EmptyState from '../components/EmptyState';
@@ -96,6 +97,7 @@ export const DashboardPage: React.FC = () => {
   if (isInitialLoading && loading) {
     return (
       <Layout>
+      <div className="mb-6"><DispatcherDashboard /></div>
         <div className="space-y-8">
           <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-lg p-6 animate-pulse">
             <div className="w-64 h-8 bg-blue-400 rounded mb-2 opacity-50" />
