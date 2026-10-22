@@ -216,18 +216,19 @@ const MarketplacePage: React.FC = () => {
             ))}
           </div>
 
-          {/* Pagination */}
-          {totalCount > pageSize && (
-            <div className="flex justify-center items-center gap-4 mt-6">
-              <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-                className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-50">← Назад</button>
-              <span className="text-sm text-gray-600">
-                Стр. {page + 1} из {Math.ceil(totalCount / pageSize)} ({totalCount} заявок)
-              </span>
-              <button onClick={() => setPage(page + 1)} disabled={(page + 1) * pageSize >= totalCount}
-                className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-50">Вперёд →</button>
-            </div>
-          )}
+        )}
+
+        {/* Pagination */}
+        {totalCount > pageSize && (
+          <div className="flex justify-center items-center gap-4 mt-6">
+            <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+              className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-50">← Назад</button>
+            <span className="text-sm text-gray-600">
+              Стр. {page + 1} из {Math.ceil(totalCount / pageSize)} ({totalCount} заявок)
+            </span>
+            <button onClick={() => setPage(page + 1)} disabled={(page + 1) * pageSize >= totalCount}
+              className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-50">Вперёд →</button>
+          </div>
         )}
       </div>
 
