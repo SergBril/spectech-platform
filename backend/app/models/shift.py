@@ -173,3 +173,16 @@ class ShiftTemplateExclusion(Base):
     reason: Mapped[str | None] = mapped_column(String(200), nullable=True)  # holiday, vacation, sick, etc.
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+
+
+class ShiftAuditLog(Base):
+    __tablename__ = "shift_audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shift_task_id: Mapped[int] = mapped_column(ForeignKey("shift_tasks.id"), nullable=False)
+    action: Mapped[str] = mapped_column(String(50), nullable=False)  # created, updated, deleted, driver_assigned, etc.
+    field_changed: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    old_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    new_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    changed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))

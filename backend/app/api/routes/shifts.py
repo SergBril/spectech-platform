@@ -158,6 +158,28 @@ async def update_shift_task(
     db.commit()
     db.refresh(task)
 
+    # Audit log
+    try:
+        from app.models.shift import ShiftAuditLog
+        for change in changes:
+            parts = change.split(": ", 1)
+            field = parts[0] if len(parts) > 1 else "unknown"
+            values = parts[1] if len(parts) > 1 else change
+            old_val, new_val = None, None
+            if " → " in values:
+                old_val, new_val = values.split(" → ", 1)
+            db.add(ShiftAuditLog(
+                shift_task_id=task_id,
+                action="updated",
+                field_changed=field,
+                old_value=old_val,
+                new_value=new_val,
+                changed_by_user_id=current_user.id,
+            ))
+        db.commit()
+    except Exception:
+        pass  # Не блокируем если аудит не записался
+
     # Уведомление водителю о назначении/изменении смены
     notify_driver = driver_id if driver_id is not None else task.driver_id
     if notify_driver and changes:
@@ -1210,6 +1232,8 @@ async def create_request_from_shift(
 @router.get("/dashboard/daily-summary", summary="📋 Сводка дня диспетчера")
 def get_daily_summary(
     target_date: str | None = Query(default=None, description="Дата YYYY-MM-DD, по умолчанию сегодня"),
+    vehicle_category_id: int | None = Query(default=None, description="Фильтр по категории техники"),
+    driver_id: int | None = Query(default=None, description="Фильтр по водителю"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
@@ -1221,13 +1245,18 @@ def get_daily_summary(
     today = date_type.fromisoformat(target_date) if target_date else date_type.today()
     tomorrow = today + timedelta(days=1)
 
-    # Today's shifts
-    today_shifts = db.execute(
+    # Today's shifts (with optional filters)
+    today_stmt = (
         select(ShiftTask)
         .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
         .where(Vehicle.company_id == company_id)
         .where(ShiftTask.shift_date == today)
-    ).scalars().all()
+    )
+    if vehicle_category_id:
+        today_stmt = today_stmt.where(Vehicle.category_id == vehicle_category_id)
+    if driver_id:
+        today_stmt = today_stmt.where(ShiftTask.driver_id == driver_id)
+    today_shifts = db.execute(today_stmt).scalars().all()
 
     # Tomorrow's shifts (upcoming)
     tomorrow_shifts = db.execute(
@@ -1303,3 +1332,132 @@ def get_daily_summary(
             "idle_vehicles": len(idle_vehicles),
         },
     }
+
+
+@router.post("/tasks/{task_id}/auto-assign-driver", summary="👤 Авто-назначение водителя")
+def auto_assign_driver(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Автоматически назначить лучшего доступного водителя на смену по квалификации и загрузке."""
+    from datetime import date as date_type
+    from app.models.contractor import DriverProfile, Employee
+
+    task = db.get(ShiftTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Shift task not found")
+
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if task.driver_id:
+        raise HTTPException(status_code=409, detail="Driver already assigned")
+
+    # Get all active driver profiles for this company
+    drivers = db.execute(
+        select(DriverProfile)
+        .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
+        .where(Employee.company_id == company_id)
+    ).scalars().all()
+
+    best_driver = None
+    best_score = -1
+
+    for profile in drivers:
+        # Check if driver is already busy on this date
+        busy = db.execute(
+            select(ShiftTask).where(
+                ShiftTask.driver_id == profile.employee_contractor_id,
+                ShiftTask.shift_date == task.shift_date,
+                ShiftTask.status.notin_(["cancelled"]),
+            )
+        ).scalar_one_or_none()
+        if busy:
+            continue
+
+        # Score based on: license category match, fewer shifts this week
+        score = 0
+
+        # License category bonus
+        vehicle_cat = getattr(vehicle, 'category', '') or ''
+        driver_license = getattr(profile, 'license_category', '') or ''
+        if vehicle_cat and driver_license and vehicle_cat.upper() in driver_license.upper():
+            score += 10
+
+        # Fewer shifts this week = higher availability score
+        week_start = task.shift_date - __import__('datetime').timedelta(days=task.shift_date.weekday())
+        week_end = week_start + __import__('datetime').timedelta(days=6)
+        week_shifts = db.execute(
+            select(func.count(ShiftTask.id)).where(
+                ShiftTask.driver_id == profile.employee_contractor_id,
+                ShiftTask.shift_date >= week_start,
+                ShiftTask.shift_date <= week_end,
+                ShiftTask.status.notin_(["cancelled"]),
+            )
+        ).scalar() or 0
+        score += max(0, 7 - week_shifts)  # Less loaded = better
+
+        if score > best_score:
+            best_score = score
+            best_driver = profile
+
+    if not best_driver:
+        raise HTTPException(status_code=404, detail="No available drivers found")
+
+    task.driver_id = best_driver.employee_contractor_id
+    db.commit()
+
+    emp = db.get(Employee, best_driver.employee_contractor_id)
+    driver_name = f"{emp.first_name} {emp.last_name}" if emp else f"Driver#{best_driver.employee_contractor_id}"
+
+    return {
+        "message": f"Водитель {driver_name} назначен",
+        "driver_id": best_driver.employee_contractor_id,
+        "driver_name": driver_name,
+        "score": best_score,
+    }
+
+
+@router.get("/tasks/{task_id}/audit-log", summary="📜 История изменений смены")
+def get_shift_audit_log(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """История изменений конкретной смены."""
+    from app.models.shift import ShiftAuditLog
+
+    task = db.get(ShiftTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Shift task not found")
+
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    logs = db.execute(
+        select(ShiftAuditLog)
+        .where(ShiftAuditLog.shift_task_id == task_id)
+        .order_by(ShiftAuditLog.created_at.desc())
+    ).scalars().all()
+
+    result = []
+    for log in logs:
+        user_name = ""
+        if log.changed_by_user_id:
+            u = db.get(User, log.changed_by_user_id)
+            user_name = u.email if u else ""
+        result.append({
+            "id": log.id,
+            "action": log.action,
+            "field": log.field_changed,
+            "old_value": log.old_value,
+            "new_value": log.new_value,
+            "changed_by": user_name,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        })
+    return result

@@ -4,13 +4,15 @@ import apiClient from '../api/client';
 const DispatcherDashboard: React.FC = () => {
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [filterCategory, setFilterCategory] = useState<number | ''>('');
+  const [filterDriver, setFilterDriver] = useState<number | ''>('');
 
   useEffect(() => {
-    apiClient.get('/shifts/dashboard/daily-summary')
+    apiClient.get('/shifts/dashboard/daily-summary', { params: { ...(filterCategory ? { vehicle_category_id: filterCategory } : {}), ...(filterDriver ? { driver_id: filterDriver } : {}) } })
       .then(res => setSummary(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [filterCategory, filterDriver]);
 
   if (loading) return <div className="animate-pulse h-32 bg-gray-100 rounded-xl"></div>;
   if (!summary) return null;
@@ -23,7 +25,14 @@ const DispatcherDashboard: React.FC = () => {
   return (
     <div className="bg-white rounded-xl shadow-sm border p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-900">📋 Сводка на {new Date(summary.date).toLocaleDateString('ru-RU')}</h2>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h2 className="text-lg font-bold text-gray-900">📋 Сводка на {new Date(summary.date).toLocaleDateString('ru-RU')}</h2>
+          <select value={filterCategory} onChange={e => setFilterCategory(e.target.value ? Number(e.target.value) : '')}
+            className="px-2 py-1 border rounded text-xs"><option value="">Все категории</option>
+            {[1,2,3,4,5].map(id => <option key={id} value={id}>Категория {id}</option>)}</select>
+          <input type="number" placeholder="ID водителя" value={filterDriver} onChange={e => setFilterDriver(e.target.value ? Number(e.target.value) : '')}
+            className="px-2 py-1 border rounded text-xs w-28" />
+        </div>
         <span className="text-xs text-gray-400">Автообновление</span>
       </div>
 
