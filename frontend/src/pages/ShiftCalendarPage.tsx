@@ -141,6 +141,17 @@ const ShiftCalendarPage: React.FC = () => {
     setDraggedShift(shiftId);
   };
 
+  const createRequestFromShift = async (taskId: number) => {
+    const address = prompt('Адрес объекта для заявки:', '');
+    if (address === null) return;
+    try {
+      const res = await apiClient.post(`/shifts/tasks/${taskId}/create-request`, {
+        work_type: 'earthworks', object_address: address || '',
+      });
+      alert(`Заявка #${res.data.request_id} создана`);
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
   const handleDrop = async (targetDate: string) => {
     if (!draggedShift) return;
     try {
