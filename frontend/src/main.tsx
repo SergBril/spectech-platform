@@ -23,6 +23,7 @@ import {
   DriverKPIPage,
   DriverAppPage,
   FuelDashboardPage,
+  ChecklistConfigsPage,
   VehiclesPage,
   DriversPage,
   RequestsPage,
@@ -96,6 +97,7 @@ const AppRoutes = () => {
         <Route path="/driver-kpi" element={<ProtectedRoute><DriverKPIPage /></ProtectedRoute>} />
         <Route path="/driver-app" element={<DriverAppPage />} />
         <Route path="/fuel-dashboard" element={<ProtectedRoute><FuelDashboardPage /></ProtectedRoute>} />
+        <Route path="/checklist-configs" element={<ProtectedRoute><ChecklistConfigsPage /></ProtectedRoute>} />
         <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
         <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
         <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />

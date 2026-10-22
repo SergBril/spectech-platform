@@ -2979,3 +2979,20 @@ def get_fuel_dashboard(
         "anomalies": anomalies[:20],
         "top_consumers": top_consumers,
     }
+
+
+@router.post("/fuel-cards/sync", summary="🔄 Синхронизация с топливными картами")
+async def sync_fuel_card_transactions(
+    date_from: str = Body(...),
+    date_to: str = Body(...),
+    card_numbers: list[str] = Body(default=[]),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Синхронизировать транзакции с топливных карт в записи расхода."""
+    from app.services.fuel_card_service import fuel_card_service
+
+    transactions = await fuel_card_service.fetch_transactions(date_from, date_to, card_numbers or None)
+    result = await fuel_card_service.sync_to_shift_entries(db, company_id, transactions)
+    return {"message": "Синхронизация завершена", **result}
