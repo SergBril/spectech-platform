@@ -7,6 +7,9 @@ const UserRolesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [selectedRole, setSelectedRole] = useState('');
+  const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
+  const [bulkRole, setBulkRole] = useState('');
+  const [csvFile, setCsvFile] = useState<File | null>(null);
 
   const roles = [
     { value: 'admin', label: '👑 Админ', color: 'bg-purple-100 text-purple-700' },
@@ -15,6 +18,35 @@ const UserRolesPage: React.FC = () => {
     { value: 'accountant', label: '💰 Бухгалтер', color: 'bg-orange-100 text-orange-700' },
     { value: 'viewer', label: '👁️ Наблюдатель', color: 'bg-gray-100 text-gray-700' },
   ];
+
+  const toggleUser = (id: number) => {
+    const next = new Set(selectedUsers);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedUsers(next);
+  };
+
+  const bulkChangeRole = async () => {
+    if (!bulkRole || selectedUsers.size === 0) return;
+    try {
+      const res = await apiClient.put('/shifts/users/bulk-role', { user_ids: Array.from(selectedUsers), role: bulkRole });
+      alert(`✅ Обновлено ${res.data.updated} пользователей`);
+      setSelectedUsers(new Set());
+      loadUsers();
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
+  const importCsv = async () => {
+    if (!csvFile) return;
+    const formData = new FormData();
+    formData.append('file', csvFile);
+    formData.append('default_role', 'viewer');
+    try {
+      const res = await apiClient.post('/shifts/users/import-csv', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      alert(`✅ Создано: ${res.data.created}, Пропущено: ${res.data.skipped}`);
+      setCsvFile(null);
+      loadUsers();
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
 
   const loadUsers = async () => {
     try {
@@ -62,7 +94,8 @@ const UserRolesPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {users.map((u: any) => (
-                  <tr key={u.id} className="hover:bg-gray-50">
+                  <tr key={u.id} className={`hover:bg-gray-50 ${selectedUsers.has(u.id) ? 'bg-indigo-50' : ''}`}>
+                    <td className="px-4 py-3 text-center"><input type="checkbox" checked={selectedUsers.has(u.id)} onChange={() => toggleUser(u.id)} /></td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
                       {u.full_name || '—'}
                       {u.is_superuser && <span className="ml-1 text-xs text-purple-500">★</span>}

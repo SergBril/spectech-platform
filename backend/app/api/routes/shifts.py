@@ -4827,3 +4827,144 @@ def get_max_bind_link(
     bot_username = getattr(settings, "MAX_BOT_USERNAME", "spectech_bot")
     link = "https://max.ru/" + bot_username + "?start=" + current_user.telegram_link_code
     return {"link": link, "bot_username": bot_username}
+
+
+@router.get("/profile/max-status", summary="MAX bind status")
+def get_max_bind_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Проверить статус привязки MAX."""
+    return {
+        "bound": bool(current_user.max_chat_id),
+        "max_chat_id": current_user.max_chat_id,
+    }
+
+
+@router.post("/profile/unbind-max", summary="Unbind MAX")
+def unbind_max(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Отвязать MAX от аккаунта."""
+    from app.services.audit_service import log_action
+    current_user.max_chat_id = None
+    db.commit()
+    log_action(db, current_user.id, "update", "max_unbind", current_user.id)
+    return {"message": "MAX отвязан"}
+
+
+@router.post("/max/test-webhook", summary="Test MAX webhook")
+async def test_max_webhook(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Отправить тестовое сообщение через MAX текущему пользователю."""
+    from app.services.max_messenger_service import max_messenger_service
+
+    if not current_user.max_chat_id:
+        raise HTTPException(status_code=400, detail="MAX not bound. Use /max/bind-link first.")
+
+    result = await max_messenger_service.send_message(
+        current_user.max_chat_id,
+        "Test notification from Spectech platform. Webhook is working!"
+    )
+    return {"result": result}
+
+
+@router.post("/users/bulk-role", summary="Bulk role change")
+def bulk_change_roles(
+    user_ids: list[int] = Body(...),
+    role: str = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Массовая смена роли для нескольких пользователей (admin only)."""
+    from app.services.rbac_service import RBACMiddleware, Role
+    from app.services.audit_service import log_action
+
+    RBACMiddleware.require(current_user, "users:manage_roles")
+
+    valid_roles = [r.value for r in Role]
+    if role not in valid_roles:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Valid: {valid_roles}")
+
+    updated = 0
+    for uid in user_ids:
+        user = db.get(User, uid)
+        if user and user.id != current_user.id:
+            old_role = getattr(user, "role", "viewer")
+            user.role = role
+            updated += 1
+            log_action(db, current_user.id, "update", "user_role", uid,
+                       details=f"Bulk: {old_role} -> {role}")
+
+    db.commit()
+    return {"updated": updated, "role": role}
+
+
+@router.post("/users/import-csv", summary="Import users from CSV")
+async def import_users_csv(
+    file: UploadFile = File(...),
+    default_role: str = Body(default="viewer"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Импорт пользователей из CSV файла.
+
+    CSV columns: email, full_name, phone, role (optional)
+    """
+    import csv
+    import io
+    import secrets
+    from app.services.rbac_service import Role
+    from app.services.audit_service import log_action
+    from app.models.auth import UserStatus
+
+    RBACMiddleware.require(current_user, "users:manage_roles")
+
+    content_bytes = await file.read()
+    text = content_bytes.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text))
+
+    created = 0
+    skipped = 0
+    errors = []
+
+    valid_roles = [r.value for r in Role]
+
+    for row_num, row in enumerate(reader, 2):
+        email = (row.get("email") or "").strip()
+        if not email:
+            errors.append(f"Row {row_num}: missing email")
+            continue
+
+        existing = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+        if existing:
+            skipped += 1
+            continue
+
+        user_role = (row.get("role") or default_role).strip()
+        if user_role not in valid_roles:
+            user_role = "viewer"
+
+        import hashlib
+        temp_password = secrets.token_urlsafe(16)
+        password_hash = hashlib.sha256(temp_password.encode()).hexdigest()
+
+        new_user = User(
+            email=email,
+            full_name=(row.get("full_name") or "").strip() or email,
+            phone=(row.get("phone") or "").strip() or None,
+            role=user_role,
+            password_hash=password_hash,
+            status=UserStatus.active if hasattr(UserStatus, "active") else "active",
+        )
+        db.add(new_user)
+        created += 1
+
+    db.commit()
+    log_action(db, current_user.id, "create", "user_import", None,
+               details=f"CSV import: {created} created, {skipped} skipped")
+
+    return {"created": created, "skipped": skipped, "errors": errors[:10]}
