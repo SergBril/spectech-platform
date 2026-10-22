@@ -155,7 +155,7 @@ class ShiftTemplate(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), nullable=False)
-    driver_id: Mapped[int | None] = mapped_column(ForeignKey("drivers.id"), nullable=True)
+    driver_id: Mapped[int | None] = mapped_column(ForeignKey("driver_profiles.id"), nullable=True)
     weekday: Mapped[int] = mapped_column(nullable=False)  # 0=Mon..6=Sun
     start_time: Mapped[time | None] = mapped_column(nullable=True)
     end_time: Mapped[time | None] = mapped_column(nullable=True)
