@@ -24,11 +24,86 @@ class FuelCardService:
             logger.info(f"FUEL CARD STUB → fetch {date_from} to {date_to}")
             return []
 
-        # TODO: Реальная интеграция с API провайдера
-        # Пример для Газпромнефть:
-        # resp = await client.get("/api/v2/transactions", params={...})
-        logger.info(f"FUEL CARD API → {self.provider}: {date_from} to {date_to}")
-        return []
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                if self.provider == "gazpromneft":
+                    return await self._fetch_gazpromneft(client, date_from, date_to, card_numbers)
+                elif self.provider == "lukoil":
+                    return await self._fetch_lukoil(client, date_from, date_to, card_numbers)
+                else:
+                    logger.warning(f"Provider {self.provider} not implemented, using stub")
+                    return []
+        except Exception as e:
+            logger.error(f"Fuel card API error ({self.provider}): {e}")
+            return []
+
+    async def _fetch_gazpromneft(self, client: httpx.AsyncClient, date_from: str, date_to: str, card_numbers: list[str] | None) -> list[dict]:
+        """Газпромнефть API v2: GET /api/v2/transactions."""
+        from app.core.config import settings
+        base_url = getattr(settings, "FUEL_CARD_BASE_URL", "https://api.gpnbonus.ru")
+
+        params = {"date_from": date_from, "date_to": date_to, "limit": 1000}
+        if card_numbers:
+            params["card_numbers"] = ",".join(card_numbers)
+
+        resp = await client.get(
+            f"{base_url}/api/v2/transactions",
+            headers={"Authorization": f"Bearer {self.api_key}", "Accept": "application/json"},
+            params=params,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        transactions = []
+        for item in data.get("items", data if isinstance(data, list) else []):
+            transactions.append({
+                "vehicle_plate": item.get("vehicle_reg_number", item.get("plate", "")),
+                "card_number": item.get("card_number", ""),
+                "date": item.get("transaction_date", item.get("date", ""))[:10],
+                "liters": float(item.get("volume", item.get("quantity", 0))),
+                "fuel_type": item.get("fuel_type", "diesel").lower(),
+                "odometer": float(item.get("odometer", 0)) if item.get("odometer") else None,
+                "amount": float(item.get("amount", 0)),
+                "station": item.get("station_name", ""),
+            })
+
+        logger.info(f"GazpromNeft: fetched {len(transactions)} transactions")
+        return transactions
+
+    async def _fetch_lukoil(self, client: httpx.AsyncClient, date_from: str, date_to: str, card_numbers: list[str] | None) -> list[dict]:
+        """Лукойл API: POST /api/v1/reports/fuel-transactions."""
+        from app.core.config import settings
+        base_url = getattr(settings, "FUEL_CARD_BASE_URL", "https://api.lukoil-card.ru")
+
+        payload = {"period_start": date_from, "period_end": date_to}
+        if card_numbers:
+            payload["cards"] = card_numbers
+
+        resp = await client.post(
+            f"{base_url}/api/v1/reports/fuel-transactions",
+            headers={"X-API-Key": self.api_key, "Content-Type": "application/json"},
+            json=payload,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        transactions = []
+        for item in data.get("data", data if isinstance(data, list) else []):
+            transactions.append({
+                "vehicle_plate": item.get("gos_number", ""),
+                "card_number": item.get("card_num", ""),
+                "date": item.get("operation_date", "")[:10],
+                "liters": float(item.get("volume_litres", 0)),
+                "fuel_type": item.get("fuel_code", "diesel"),
+                "odometer": float(item.get("mileage", 0)) if item.get("mileage") else None,
+                "amount": float(item.get("sum_nds", 0)),
+                "station": item.get("azs_name", ""),
+            })
+
+        logger.info(f"Lukoil: fetched {len(transactions)} transactions")
+        return transactions
 
     async def sync_to_shift_entries(self, db: Session, company_id: int, transactions: list[dict]) -> dict:
         """Синхронизировать транзакции с записями расхода топлива по сменам."""
