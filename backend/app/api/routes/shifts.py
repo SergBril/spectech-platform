@@ -1932,3 +1932,205 @@ def export_driver_kpi_excel(
     filename = f"driver_kpi_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.xlsx"
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.post("/devices/register", summary="📱 Зарегистрировать устройство для push-уведомлений")
+def register_device_token(
+    token: str = Body(...),
+    platform: str = Body(default="web"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Зарегистрировать FCM device token для push-уведомлений."""
+    from app.models.notification import DeviceToken
+
+    existing = db.execute(
+        select(DeviceToken).where(
+            DeviceToken.user_id == current_user.id,
+            DeviceToken.token == token,
+        )
+    ).scalar_one_or_none()
+
+    if existing:
+        existing.is_active = True
+        existing.platform = platform
+    else:
+        dt = DeviceToken(user_id=current_user.id, token=token, platform=platform, is_active=True)
+        db.add(dt)
+
+    db.commit()
+    return {"message": "Device registered"}
+
+
+@router.post("/tasks/{task_id}/mobile-report", summary="📱 Отчёт о смене из мобильного приложения")
+async def submit_mobile_shift_report(
+    task_id: int,
+    odometer_start: float | None = Body(default=None),
+    odometer_end: float | None = Body(default=None),
+    notes: str = Body(default=""),
+    photos: list[UploadFile] = File(default=[]),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Отправить отчёт о завершённой смене из мобильного приложения водителя."""
+    import os
+    from datetime import datetime
+
+    task = db.get(ShiftTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Shift task not found")
+
+    # Verify driver owns this shift
+    from app.models.contractor import DriverProfile, Employee
+    profile = db.execute(
+        select(DriverProfile).join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
+        .where(Employee.user_id == current_user.id)
+    ).scalar_one_or_none()
+
+    if not profile or task.driver_id != profile.employee_contractor_id:
+        raise HTTPException(status_code=403, detail="Access denied: not your shift")
+
+    # Save photos
+    photo_paths = []
+    upload_dir = os.path.join("uploads", "shift_reports", str(task_id))
+    os.makedirs(upload_dir, exist_ok=True)
+    for i, photo in enumerate(photos[:5]):  # Max 5 photos
+        ext = os.path.splitext(photo.filename or "photo.jpg")[1]
+        filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{i}{ext}"
+        filepath = os.path.join(upload_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(await photo.read())
+        photo_paths.append(filepath)
+
+    # Update shift status
+    task.status = "completed"
+    if odometer_end and odometer_start:
+        task.odometer_distance = round(odometer_end - odometer_start, 1)
+
+    # Create shift report
+    from app.models.shift import ShiftReport
+    report = ShiftReport(
+        shift_task_id=task_id,
+        submitted_by=current_user.id,
+        odometer_start=odometer_start,
+        odometer_end=odometer_end,
+        notes=notes,
+        photo_paths=",".join(photo_paths) if photo_paths else None,
+        status="submitted",
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+
+    # Notify dispatcher via WS + FCM
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    company_id = vehicle.company_id if vehicle else None
+    if company_id:
+        try:
+            from app.services.websocket_manager import manager
+            await manager.broadcast_to_company(company_id, {
+                "type": "shift_report_submitted",
+                "task_id": task_id,
+                "report_id": report.id,
+                "driver_name": current_user.email,
+            })
+        except Exception:
+            pass
+
+        try:
+            from app.services.fcm_service import fcm_service
+            from app.models.auth import User as UserModel, UserCompany
+            dispatchers = db.execute(
+                select(UserModel.id).join(UserCompany, UserModel.id == UserCompany.user_id)
+                .where(UserCompany.company_id == company_id)
+            ).scalars().all()
+            for uid in dispatchers:
+                await fcm_service.send_to_user(
+                    uid, "📋 Отчёт о смене",
+                    f"Водитель отправил отчёт по смене #{task_id}",
+                    data={"task_id": str(task_id)}, db=db,
+                )
+        except Exception:
+            pass
+
+    return {
+        "message": "Отчёт отправлен",
+        "report_id": report.id,
+        "photos_uploaded": len(photo_paths),
+    }
+
+
+@router.get("/export/1c-acts", summary="🏢 Выгрузка актов для 1С (XML)")
+def export_acts_for_1c(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Выгрузка завершённых смен в формате XML для импорта в 1С:Бухгалтерия."""
+    from datetime import date as date_type
+    from fastapi.responses import Response
+    from xml.etree.ElementTree import Element, SubElement, tostring
+    from app.models.contractor import DriverProfile, Employee
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+        .where(ShiftTask.status == "completed")
+        .order_by(ShiftTask.shift_date)
+    ).scalars().all()
+
+    root = Element("ActsExport")
+    root.set("company_id", str(company_id))
+    root.set("date_from", str(d_from))
+    root.set("date_to", str(d_to))
+    root.set("generated_at", __import__('datetime').datetime.now().isoformat())
+
+    for t in tasks:
+        act = SubElement(root, "Act")
+        SubElement(act, "ActId").text = str(t.id)
+        SubElement(act, "Date").text = str(t.shift_date)
+
+        vehicle = db.get(Vehicle, t.vehicle_id)
+        SubElement(act, "VehicleName").text = vehicle.name if vehicle else ""
+        SubElement(act, "VehicleRegNumber").text = getattr(vehicle, 'plate_number', '') or ''
+
+        driver_name = ""
+        if t.driver_id:
+            profile = db.get(DriverProfile, t.driver_id)
+            if profile:
+                emp = db.get(Employee, profile.employee_contractor_id)
+                driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
+        SubElement(act, "DriverName").text = driver_name
+
+        SubElement(act, "PlannedStart").text = t.planned_start.isoformat() if t.planned_start else ""
+        SubElement(act, "PlannedEnd").text = t.planned_end.isoformat() if t.planned_end else ""
+
+        hours = 0
+        if t.planned_start and t.planned_end:
+            hours = round((t.planned_end - t.planned_start).total_seconds() / 3600, 2)
+        SubElement(act, "HoursWorked").text = str(hours)
+
+        distance = getattr(t, 'odometer_distance', None)
+        SubElement(act, "DistanceKm").text = str(distance) if distance else "0"
+
+        # Financial fields (placeholder for integration)
+        SubElement(act, "HourlyRate").text = "0"
+        SubElement(act, "TotalAmount").text = "0"
+        SubElement(act, "VATRate").text = "20"
+
+    xml_bytes = tostring(root, encoding="unicode", xml_declaration=True).encode("utf-8")
+    filename = f"acts_1c_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.xml"
+
+    return Response(
+        content=xml_bytes,
+        media_type="application/xml; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

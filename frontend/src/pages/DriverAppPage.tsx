@@ -5,6 +5,9 @@ const DriverAppPage: React.FC = () => {
   const [shifts, setShifts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'today' | 'week'>('today');
+  const [reportModal, setReportModal] = useState<number | null>(null);
+  const [reportForm, setReportForm] = useState({ odometer_start: '', odometer_end: '', notes: '' });
+  const [reportPhotos, setReportPhotos] = useState<FileList | null>(null);
 
   const loadShifts = async () => {
     try {
@@ -31,6 +34,27 @@ const DriverAppPage: React.FC = () => {
   const startShift = async (taskId: number) => {
     try {
       await apiClient.post(`/drivers/shifts/${taskId}/start`);
+      loadShifts();
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
+  const submitReport = async () => {
+    if (!reportModal) return;
+    try {
+      const formData = new FormData();
+      if (reportForm.odometer_start) formData.append('odometer_start', reportForm.odometer_start);
+      if (reportForm.odometer_end) formData.append('odometer_end', reportForm.odometer_end);
+      formData.append('notes', reportForm.notes);
+      if (reportPhotos) {
+        for (let i = 0; i < Math.min(reportPhotos.length, 5); i++) {
+          formData.append('photos', reportPhotos[i]);
+        }
+      }
+      await apiClient.post(`/shifts/tasks/${reportModal}/mobile-report`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      alert('✅ Отчёт отправлен!');
+      setReportModal(null);
       loadShifts();
     } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
   };
@@ -82,10 +106,47 @@ const DriverAppPage: React.FC = () => {
                   ▶️ Начать смену
                 </button>
               )}
+              {s.status === 'completed' && !s.report_id && (
+                <button onClick={() => { setReportModal(s.id); setReportForm({ odometer_start: '', odometer_end: '', notes: '' }); setReportPhotos(null); }}
+                  className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                  📋 Отправить отчёт
+                </button>
+              )}
+              {s.report_id && (
+                <div className="text-xs text-green-600 font-medium">✅ Отчёт отправлен</div>
+              )}
             </div>
           ))
         )}
       </div>
+
+      {/* Report Modal */}
+      {reportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-end z-50">
+          <div className="bg-white rounded-t-2xl w-full p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold">📋 Отчёт о смене</h2>
+              <button onClick={() => setReportModal(null)} className="text-gray-400 text-xl">✕</button>
+            </div>
+            <label className="block"><span className="text-xs text-gray-500">Пробег начало (км)</span>
+              <input type="number" step="0.1" value={reportForm.odometer_start} onChange={e => setReportForm({...reportForm, odometer_start: e.target.value})}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm" /></label>
+            <label className="block"><span className="text-xs text-gray-500">Пробег конец (км)</span>
+              <input type="number" step="0.1" value={reportForm.odometer_end} onChange={e => setReportForm({...reportForm, odometer_end: e.target.value})}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm" /></label>
+            <label className="block"><span className="text-xs text-gray-500">Заметки</span>
+              <textarea value={reportForm.notes} onChange={e => setReportForm({...reportForm, notes: e.target.value})}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm" rows={3} /></label>
+            <label className="block"><span className="text-xs text-gray-500">Фото (до 5)</span>
+              <input type="file" multiple accept="image/*" onChange={e => setReportPhotos(e.target.files)}
+                className="w-full mt-1 text-sm" /></label>
+            <button onClick={submitReport}
+              className="w-full py-3 bg-green-600 text-white rounded-xl text-base font-bold hover:bg-green-700">
+              ✅ Отправить отчёт
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
