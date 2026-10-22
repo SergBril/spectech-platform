@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useState, useCallback } from 'react';
 import Layout from '../components/Layout';
 import apiClient from '../api/client';
+import { useWebSocket } from '../contexts/WebSocketContext';
 
 interface ShiftTask {
   id: number;
@@ -30,6 +31,18 @@ const ShiftCalendarPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [draggedShift, setDraggedShift] = useState<number | null>(null);
+
+  // Live updates via WebSocket
+  const wsMessage = useWebSocket();
+  useEffect(() => {
+    if (wsMessage && wsMessage.type === 'shift_updated') {
+      setShifts(prev => prev.map(s =>
+        s.id === wsMessage.task_id
+          ? { ...s, shift_date: wsMessage.shift_date, status: wsMessage.status || s.status }
+          : s
+      ));
+    }
+  }, [wsMessage]);
 
   const getWeekStart = (date: Date) => {
     const d = new Date(date);
@@ -103,6 +116,10 @@ const ShiftCalendarPage: React.FC = () => {
               {new Date(weekDays[6]).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
             </span>
             <button onClick={nextWeek} className="px-3 py-1.5 border rounded-lg hover:bg-gray-50">Неделя →</button>
+            <button onClick={() => window.open(`/api/v1/shifts/calendar/export-pdf?date_from=${weekDays[0]}&date_to=${weekDays[6]}`, '_blank')}
+              className="px-3 py-1.5 bg-gray-800 text-white rounded-lg hover:bg-gray-900 text-sm font-medium flex items-center gap-1">
+              🖨️ Печать PDF
+            </button>
           </div>
         </div>
 
