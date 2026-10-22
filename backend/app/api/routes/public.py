@@ -18,6 +18,8 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.api.deps import get_current_user, get_current_company_id, get_current_user_optional, get_current_company_id_optional
 from app.models.catalog import Category, Vehicle
+from app.models.dispatch import Request as DispatchRequest
+
 from app.models.company import Company
 from app.models.auth import User
 
@@ -697,9 +699,9 @@ def list_marketplace_requests(
     """
     stmt = (
         select(Request)
-        .where(Request.source_channel == "marketplace")
+        .where(DispatchDispatchRequest.source_channel == "marketplace")
         .where(Request.is_published == True)
-        .where(Request.status.in_(["new", "processing"]))
+        .where(DispatchDispatchRequest.status.in_(["new", "processing"]))
     )
 
     if category_id:
@@ -707,21 +709,21 @@ def list_marketplace_requests(
 
     # Исключаем заявки собственной компании (если авторизован)
     if company_id:
-        stmt = stmt.where(Request.company_id != company_id)
+        stmt = stmt.where(DispatchDispatchRequest.company_id != company_id)
 
     # Count total for pagination
-    count_stmt = select(func.count()).select_from(Request).where(
-        Request.source_channel == "marketplace",
+    count_stmt = select(func.count()).select_from(DispatchRequest).where(
+        DispatchDispatchRequest.source_channel == "marketplace",
         Request.is_published == True,
-        Request.status.in_(["new", "processing"]),
+        DispatchDispatchRequest.status.in_(["new", "processing"]),
     )
     if category_id:
         count_stmt = count_stmt.where(Request.vehicle_category_id == category_id)
     if company_id:
-        count_stmt = count_stmt.where(Request.company_id != company_id)
+        count_stmt = count_stmt.where(DispatchDispatchRequest.company_id != company_id)
     total = db.execute(count_stmt).scalar() or 0
 
-    stmt = stmt.order_by(Request.created_at.desc()).offset(offset).limit(limit)
+    stmt = stmt.order_by(DispatchDispatchRequest.created_at.desc()).offset(offset).limit(limit)
     requests_list = db.scalars(stmt).all()
 
     result = []
@@ -776,7 +778,7 @@ async def respond_to_marketplace_request(
     Исполнитель указывает свою технику для выполнения заказа.
     Владелец заявки получает уведомление об отклике.
     """
-    from app.models.dispatch import RequestAssignment, RequestStatusLog
+    from app.models.dispatch import Request as DispatchRequestAssignment, RequestStatusLog
     from app.services.notification_service import create_notification
     import asyncio
 
@@ -900,13 +902,13 @@ def marketplace_payouts_report(
 
     # Get payouts related to marketplace requests
     from app.models.finance import Payout
-    from app.models.dispatch import RequestAssignment
+    from app.models.dispatch import Request as DispatchRequestAssignment
 
     stmt = (
         select(Payout)
         .join(RequestAssignment, Payout.assignment_id == RequestAssignment.id)
         .join(Request, RequestAssignment.request_id == Request.id)
-        .where(Request.source_channel == "marketplace")
+        .where(DispatchDispatchRequest.source_channel == "marketplace")
     )
 
     if date_from:
@@ -1001,34 +1003,34 @@ def marketplace_stats(
     from sqlalchemy import func
 
     total_requests = db.execute(
-        select(func.count()).select_from(Request).where(Request.source_channel == "marketplace")
+        select(func.count()).select_from(DispatchRequest).where(DispatchDispatchRequest.source_channel == "marketplace")
     ).scalar() or 0
 
     active_requests = db.execute(
-        select(func.count()).select_from(Request).where(
-            Request.source_channel == "marketplace",
-            Request.status.in_(["new", "processing", "has_responses"]),
+        select(func.count()).select_from(DispatchRequest).where(
+            DispatchDispatchRequest.source_channel == "marketplace",
+            DispatchDispatchRequest.status.in_(["new", "processing", "has_responses"]),
         )
     ).scalar() or 0
 
     assigned_requests = db.execute(
-        select(func.count()).select_from(Request).where(
-            Request.source_channel == "marketplace",
-            Request.status == "assigned",
+        select(func.count()).select_from(DispatchRequest).where(
+            DispatchDispatchRequest.source_channel == "marketplace",
+            DispatchDispatchRequest.status == "assigned",
         )
     ).scalar() or 0
 
     # По режимам
     client_count = db.execute(
-        select(func.count()).select_from(Request).where(
-            Request.source_channel == "marketplace",
+        select(func.count()).select_from(DispatchRequest).where(
+            DispatchDispatchRequest.source_channel == "marketplace",
             Request.marketplace_mode == "client",
         )
     ).scalar() or 0
 
     dispatcher_count = db.execute(
-        select(func.count()).select_from(Request).where(
-            Request.source_channel == "marketplace",
+        select(func.count()).select_from(DispatchRequest).where(
+            DispatchDispatchRequest.source_channel == "marketplace",
             Request.marketplace_mode == "owner_dispatcher",
         )
     ).scalar() or 0
@@ -1036,13 +1038,13 @@ def marketplace_stats(
     # Средний срок оплаты
     avg_payment = db.execute(
         select(func.avg(Request.payment_terms_days)).where(
-            Request.source_channel == "marketplace",
+            DispatchDispatchRequest.source_channel == "marketplace",
             Request.payment_terms_days.isnot(None),
         )
     ).scalar()
 
     # Отклики
-    from app.models.dispatch import RequestAssignment
+    from app.models.dispatch import Request as DispatchRequestAssignment
     total_responses = db.execute(
         select(func.count()).select_from(RequestAssignment)
     ).scalar() or 0
@@ -1084,9 +1086,9 @@ def export_marketplace_requests(
 
     stmt = (
         select(Request)
-        .where(Request.source_channel == "marketplace")
+        .where(DispatchDispatchRequest.source_channel == "marketplace")
         .where(Request.is_published == True)
-        .order_by(Request.created_at.desc())
+        .order_by(DispatchDispatchRequest.created_at.desc())
     )
     if category_id:
         stmt = stmt.where(Request.vehicle_category_id == category_id)
@@ -1163,7 +1165,7 @@ def list_my_responses(
     company_id: int = Depends(get_current_company_id),
 ):
     """Список откликов текущей компании на заявки маркетплейса."""
-    from app.models.dispatch import RequestAssignment
+    from app.models.dispatch import Request as DispatchRequestAssignment
 
     assignments = db.execute(
         select(RequestAssignment)
