@@ -141,6 +141,24 @@ const ShiftCalendarPage: React.FC = () => {
     setDraggedShift(shiftId);
   };
 
+  const autoAssignDriver = async (taskId: number) => {
+    try {
+      const res = await apiClient.post(`/shifts/tasks/${taskId}/auto-assign-driver`);
+      alert(res.data.message);
+      loadShifts();
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
+  const showAuditLog = async (taskId: number) => {
+    try {
+      const res = await apiClient.get(`/shifts/tasks/${taskId}/audit-log`);
+      const logs = Array.isArray(res.data) ? res.data : [];
+      if (logs.length === 0) { alert('Нет записей в истории'); return; }
+      const text = logs.map((l: any) => `${new Date(l.created_at).toLocaleString('ru-RU')} | ${l.action} | ${l.field}: ${l.old_value || ''} → ${l.new_value || ''} (${l.changed_by})`).join('\n');
+      alert(text);
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
   const createRequestFromShift = async (taskId: number) => {
     const address = prompt('Адрес объекта для заявки:', '');
     if (address === null) return;
@@ -252,10 +270,18 @@ const ShiftCalendarPage: React.FC = () => {
                                 className={`p-2 mb-1 rounded border cursor-grab active:cursor-grabbing text-xs ${STATUS_COLORS[shift.status] || 'bg-gray-100 border-gray-300'}`}>
                                 <div className="font-medium">{shift.driver_name || 'Без водителя'}</div>
                                 <div className="opacity-75">{shift.planned_start ? new Date(shift.planned_start).toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'}) : ''}</div>
-                                {!shift.request_id && shift.status === 'planned' && (
-                                  <button onClick={(e) => { e.stopPropagation(); createRequestFromShift(shift.id); }}
-                                    className="mt-1 w-full px-1 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] hover:bg-blue-100">📋 Заявка</button>
-                                )}
+                                <div className="flex gap-0.5 mt-1 flex-wrap">
+                                  {!shift.driver_id && shift.status === 'planned' && (
+                                    <button onClick={(e) => { e.stopPropagation(); autoAssignDriver(shift.id); }}
+                                      className="px-1 py-0.5 bg-green-50 text-green-700 rounded text-[10px] hover:bg-green-100">👤 Авто</button>
+                                  )}
+                                  {!shift.request_id && shift.status === 'planned' && (
+                                    <button onClick={(e) => { e.stopPropagation(); createRequestFromShift(shift.id); }}
+                                      className="px-1 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] hover:bg-blue-100">📋 Заявка</button>
+                                  )}
+                                  <button onClick={(e) => { e.stopPropagation(); showAuditLog(shift.id); }}
+                                    className="px-1 py-0.5 bg-gray-50 text-gray-600 rounded text-[10px] hover:bg-gray-100">📜</button>
+                                </div>
                               </div>
                             ))}
                           </td>
