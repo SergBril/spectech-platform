@@ -268,3 +268,19 @@ class CompanyCostRates(Base):
     amortization_per_hour: Mapped[float] = mapped_column(default=300.0)
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
+class DocumentArchive(Base):
+    __tablename__ = "document_archive"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    doc_type: Mapped[str] = mapped_column(String(30), nullable=False)  # act, invoice, contract, report
+    doc_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    content_text: Mapped[str | None] = mapped_column(Text, nullable=True)  # For full-text search
+    file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    related_act_id: Mapped[int | None] = mapped_column(ForeignKey("acts.id"), nullable=True)
+    related_shift_id: Mapped[int | None] = mapped_column(ForeignKey("shift_tasks.id"), nullable=True)
+    uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))

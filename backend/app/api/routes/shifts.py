@@ -3749,3 +3749,245 @@ async def verify_act_signature(
 
     result = await digital_signature_service.verify_signature(xml_bytes, act.signature)
     return {"valid": result.get("valid", False), "provider": result.get("provider", ""), "signed_at": act.signed_at.isoformat() if act.signed_at else None}
+
+
+# === Document Archive ===
+
+@router.get("/documents/archive", summary="🗄️ Архив документов")
+def search_document_archive(
+    q: str | None = Query(default=None, description="Полнотекстовый поиск"),
+    doc_type: str | None = Query(default=None),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Поиск по архиву документов с полнотекстовым поиском."""
+    from datetime import date as date_type
+    from sqlalchemy import func, or_
+    from app.models.shift import DocumentArchive
+
+    stmt = select(DocumentArchive).where(DocumentArchive.company_id == company_id)
+
+    if q:
+        search_pattern = f"%{q}%"
+        stmt = stmt.where(
+            or_(
+                DocumentArchive.title.ilike(search_pattern),
+                DocumentArchive.doc_number.ilike(search_pattern),
+                DocumentArchive.content_text.ilike(search_pattern),
+            )
+        )
+    if doc_type:
+        stmt = stmt.where(DocumentArchive.doc_type == doc_type)
+    if date_from:
+        stmt = stmt.where(DocumentArchive.created_at >= date_type.fromisoformat(date_from))
+    if date_to:
+        stmt = stmt.where(DocumentArchive.created_at <= date_type.fromisoformat(date_to))
+
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = db.execute(count_stmt).scalar() or 0
+
+    stmt = stmt.order_by(DocumentArchive.created_at.desc())
+    stmt = stmt.offset((page - 1) * per_page).limit(per_page)
+    docs = db.execute(stmt).scalars().all()
+
+    items = [{
+        "id": d.id, "doc_type": d.doc_type, "doc_number": d.doc_number,
+        "title": d.title, "file_path": d.file_path,
+        "created_at": d.created_at.isoformat() if d.created_at else None,
+        "related_act_id": d.related_act_id,
+    } for d in docs]
+
+    return {"items": items, "total": total, "page": page, "per_page": per_page, "pages": (total + per_page - 1) // per_page if per_page > 0 else 0}
+
+
+@router.post("/documents/archive", summary="📎 Добавить документ в архив")
+async def add_to_archive(
+    title: str = Body(...),
+    doc_type: str = Body(default="report"),
+    doc_number: str = Body(default=""),
+    content_text: str = Body(default=""),
+    related_act_id: int | None = Body(default=None),
+    file: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Загрузить документ в архив."""
+    import os
+    from datetime import datetime
+    from app.models.shift import DocumentArchive
+
+    file_path = None
+    if file:
+        upload_dir = os.path.join("uploads", "archive", str(company_id))
+        os.makedirs(upload_dir, exist_ok=True)
+        ext = os.path.splitext(file.filename or "doc")[1]
+        filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+        filepath = os.path.join(upload_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(await file.read())
+        file_path = filepath
+
+    doc = DocumentArchive(
+        company_id=company_id, doc_type=doc_type, doc_number=doc_number,
+        title=title, content_text=content_text, file_path=file_path,
+        related_act_id=related_act_id, uploaded_by=current_user.id,
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return {"id": doc.id, "message": "Документ добавлен в архив"}
+
+
+@router.post("/documents/archive/auto-index-acts", summary="🔄 Индексировать все акты в архив")
+def auto_index_acts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Автоматически добавить все акты компании в архив документов."""
+    from app.models.shift import DocumentArchive
+
+    acts = db.execute(select(Act).where(Act.company_id == company_id)).scalars().all()
+    indexed = 0
+
+    for act in acts:
+        existing = db.execute(
+            select(DocumentArchive).where(
+                DocumentArchive.company_id == company_id,
+                DocumentArchive.related_act_id == act.id,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            continue
+
+        vehicle = db.get(Vehicle, act.vehicle_id) if act.vehicle_id else None
+        vname = vehicle.name if vehicle else ""
+        content = f"Акт {act.act_number} от {act.act_date}. Техника: {vname}. Часов: {act.hours_worked}. Сумма: {act.total_amount} руб."
+
+        doc = DocumentArchive(
+            company_id=company_id, doc_type="act",
+            doc_number=act.act_number, title=f"Акт {act.act_number} от {act.act_date}",
+            content_text=content, related_act_id=act.id,
+            uploaded_by=current_user.id,
+        )
+        db.add(doc)
+        indexed += 1
+
+    db.commit()
+    return {"indexed": indexed, "message": f"Проиндексировано {indexed} актов"}
+
+
+@router.get("/stats/finance-dashboard", summary="💰 Финансовый дашборд")
+def get_finance_dashboard(
+    year: int = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Финансовый дашборд: выручка (акты), расходы (топливо+зарплата), маржа по месяцам."""
+    from datetime import date as date_type
+    from sqlalchemy import func, extract
+    from app.models.shift import ShiftFuelEntry, CompanyCostRates
+
+    target_year = year or date_type.today().year
+
+    # Revenue: sum of acts by month
+    revenue_by_month = db.execute(
+        select(
+            extract('month', Act.act_date).label('month'),
+            func.coalesce(func.sum(Act.total_amount), 0).label('revenue'),
+        )
+        .where(Act.company_id == company_id)
+        .where(extract('year', Act.act_date) == target_year)
+        .group_by('month')
+        .order_by('month')
+    ).all()
+
+    revenue_map = {int(r.month): float(r.revenue) for r in revenue_by_month}
+
+    # Expenses: fuel + wage + amortization by month
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(extract('year', ShiftTask.shift_date) == target_year)
+        .where(ShiftTask.status.notin_(["cancelled"]))
+    ).scalars().all()
+
+    fuel_entries = db.execute(
+        select(ShiftFuelEntry)
+        .join(ShiftTask, ShiftFuelEntry.shift_task_id == ShiftTask.id)
+        .join(Vehicle, ShiftFuelEntry.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(extract('year', ShiftTask.shift_date) == target_year)
+    ).scalars().all()
+
+    # Load rates
+    company_rates = db.execute(
+        select(CompanyCostRates).where(CompanyCostRates.company_id == company_id)
+    ).scalar_one_or_none()
+    fuel_price = company_rates.fuel_price_per_liter if company_rates else 65.0
+    hourly_wage = company_rates.hourly_wage if company_rates else 500.0
+    amort_rate = company_rates.amortization_per_hour if company_rates else 300.0
+
+    monthly_expenses = {}
+    for t in tasks:
+        m = t.shift_date.month
+        if m not in monthly_expenses:
+            monthly_expenses[m] = {"fuel": 0, "wage": 0, "amort": 0}
+        hours = max(0, (t.planned_end - t.planned_start).total_seconds() / 3600) if t.planned_start and t.planned_end else 0
+        monthly_expenses[m]["wage"] += hours * hourly_wage
+        monthly_expenses[m]["amort"] += hours * amort_rate
+
+    for f_entry in fuel_entries:
+        task = db.get(ShiftTask, f_entry.shift_task_id)
+        if task:
+            m = task.shift_date.month
+            if m not in monthly_expenses:
+                monthly_expenses[m] = {"fuel": 0, "wage": 0, "amort": 0}
+            monthly_expenses[m]["fuel"] += f_entry.quantity_liters * fuel_price
+
+    month_names = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"]
+    months_data = []
+    total_revenue = 0
+    total_expenses = 0
+
+    for m in range(1, 13):
+        rev = revenue_map.get(m, 0)
+        exp_data = monthly_expenses.get(m, {"fuel": 0, "wage": 0, "amort": 0})
+        total_exp = round(exp_data["fuel"] + exp_data["wage"] + exp_data["amort"], 2)
+        margin = round(rev - total_exp, 2)
+        margin_pct = round((margin / rev) * 100, 1) if rev > 0 else 0
+
+        months_data.append({
+            "month": m, "month_name": month_names[m - 1],
+            "revenue": round(rev, 2),
+            "fuel_cost": round(exp_data["fuel"], 2),
+            "wage_cost": round(exp_data["wage"], 2),
+            "amortization_cost": round(exp_data["amort"], 2),
+            "total_expenses": total_exp,
+            "margin": margin,
+            "margin_pct": margin_pct,
+        })
+        total_revenue += rev
+        total_expenses += total_exp
+
+    total_margin = round(total_revenue - total_expenses, 2)
+    total_margin_pct = round((total_margin / total_revenue) * 100, 1) if total_revenue > 0 else 0
+
+    return {
+        "year": target_year,
+        "summary": {
+            "total_revenue": round(total_revenue, 2),
+            "total_expenses": round(total_expenses, 2),
+            "total_margin": total_margin,
+            "total_margin_pct": total_margin_pct,
+        },
+        "months": months_data,
+    }

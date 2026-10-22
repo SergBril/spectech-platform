@@ -270,6 +270,68 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Проверка статусов актов в Diadoc (каждые 4 часа)
+    async def _check_act_statuses():
+        from app.core.db import SessionLocal
+        from sqlalchemy import select
+        from app.models.acts import Act
+        from app.models.auth import UserCompany
+        from app.services.diadoc_service import diadoc_service
+        from app.services.fcm_service import fcm_service
+
+        with SessionLocal() as db:
+            try:
+                acts = db.execute(
+                    select(Act).where(Act.status == "sent_to_edo").where(Act.edo_message_id.isnot(None))
+                ).scalars().all()
+
+                if not acts:
+                    return
+
+                token = await diadoc_service.authenticate()
+                if not token:
+                    logger.warning("Diadoc auth failed during act status check")
+                    return
+
+                updated = 0
+                for act in acts:
+                    result = await diadoc_service.get_document_status(act.edo_message_id, token)
+                    new_status = result.get("status", "")
+
+                    if new_status in ("signed", "rejected") and act.status != new_status:
+                        old_status = act.status
+                        act.status = new_status
+                        updated += 1
+
+                        # Notify dispatchers
+                        company_id = act.company_id
+                        dispatcher_ids = db.execute(
+                            select(UserCompany.user_id).where(UserCompany.company_id == company_id)
+                        ).scalars().all()
+
+                        status_emoji = "✅" if new_status == "signed" else "❌"
+                        msg = f"{status_emoji} Акт {act.act_number} {'подписан' if new_status == 'signed' else 'ОТКЛОНЁН'} контрагентом"
+
+                        for uid in dispatcher_ids:
+                            await fcm_service.send_to_user(uid, "Статус акта", msg, data={"act_id": str(act.id)}, db=db)
+
+                        logger.info("Act %s status changed: %s → %s", act.act_number, old_status, new_status)
+
+                db.commit()
+                if updated > 0:
+                    logger.info("✅ Act status check: %d acts updated", updated)
+            except Exception as e:
+                logger.error("❌ Act status check failed: %s", e)
+                db.rollback()
+
+    scheduler.add_job(
+        _check_act_statuses,
+        trigger=IntervalTrigger(hours=4),
+        id="act_status_check",
+        name="Check Diadoc act statuses",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         "⏰ Scheduler started. Interval: %d min. Jobs: %d",
