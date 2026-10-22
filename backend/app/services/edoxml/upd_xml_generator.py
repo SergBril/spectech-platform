@@ -235,13 +235,13 @@ def generate_upd_xml(act, company, client, request=None, items=None) -> bytes:
     _add_goods_table(doc, items, vat_rate, show_vat)
 
     sv_prod_per = ET.SubElement(doc, "СвПродПер")
-    sv_prod_per.set("СодОпер", "Реализация")
-    sv_prod_per.set("ДатаПер", _fmt_date(act_date))
     sv_per = ET.SubElement(sv_prod_per, "СвПер")
+    sv_per.set("СодОпер", "Реализация")
+    sv_per.set("ДатаПер", _fmt_date(act_date))
     bez_dok = ET.SubElement(sv_per, "БезДокОснПер")
     bez_dok.text = "1"
 
-    _add_signer(root, company)
+    _add_signer(doc, company)
 
     xml_bytes = ET.tostring(root, encoding=ENCODING, xml_declaration=True)
 
