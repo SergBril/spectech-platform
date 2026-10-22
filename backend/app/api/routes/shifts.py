@@ -272,8 +272,8 @@ def export_shift_calendar_ical(
                 emp = db.get(Employee, profile.employee_contractor_id)
                 driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
 
-        dt_start = t.planned_start or __import__('datetime').datetime.combine(t.shift_date, __import__('datetime').time(8, 0))
-        dt_end = t.planned_end or __import__('datetime').datetime.combine(t.shift_date, __import__('datetime').time(17, 0))
+        dt_start = getattr(t, 'planned_start', None) or __import__('datetime').datetime.combine(t.shift_date, __import__('datetime').time(8, 0))
+        dt_end = getattr(t, 'planned_end', None) or __import__('datetime').datetime.combine(t.shift_date, __import__('datetime').time(17, 0))
 
         uid = f"shift-{t.id}@spectech.dev"
         summary = f"{v_name}" + (f" — {driver_name}" if driver_name else "")
@@ -1038,8 +1038,8 @@ def get_utilization_stats(
 
         total_hours = 0
         for t in v_tasks:
-            if t.planned_start and t.planned_end:
-                delta = (t.planned_end - t.planned_start).total_seconds() / 3600
+            if getattr(t, 'planned_start', None) and getattr(t, 'planned_end', None):
+                delta = (getattr(t, 'planned_end', None) - getattr(t, 'planned_start', None)).total_seconds() / 3600
                 total_hours += max(0, delta)
 
         vehicle_stats.append({
@@ -1124,7 +1124,7 @@ def export_utilization_excel(
         v_tasks = [t for t in tasks if t.vehicle_id == v.id]
         active_days = len(set(t.shift_date for t in v_tasks))
         util_pct = round((active_days / total_days) * 100, 1) if total_days > 0 else 0
-        hours = sum(max(0, (t.planned_end - t.planned_start).total_seconds() / 3600) for t in v_tasks if t.planned_start and t.planned_end)
+        hours = sum(max(0, (getattr(t, 'planned_end', None) - getattr(t, 'planned_start', None)).total_seconds() / 3600) for t in v_tasks if getattr(t, 'planned_start', None) and getattr(t, 'planned_end', None))
 
         ws.cell(row=row_idx, column=1, value=v.name)
         ws.cell(row=row_idx, column=2, value=active_days)
@@ -1808,8 +1808,8 @@ def get_driver_kpi(
         utilization_pct = round((active_days / total_days) * 100, 1) if total_days > 0 else 0
 
         total_hours = sum(
-            max(0, (t.planned_end - t.planned_start).total_seconds() / 3600)
-            for t in d_tasks if t.planned_start and t.planned_end
+            max(0, (getattr(t, 'planned_end', None) - getattr(t, 'planned_start', None)).total_seconds() / 3600)
+            for t in d_tasks if getattr(t, 'planned_start', None) and getattr(t, 'planned_end', None)
         )
 
         completed = len([t for t in d_tasks if t.status == "completed"])
@@ -1899,7 +1899,7 @@ def export_driver_kpi_excel(
         d_tasks = [t for t in tasks if t.driver_id == profile.employee_contractor_id]
         active_days = len(set(t.shift_date for t in d_tasks))
         util_pct = round((active_days / total_days) * 100, 1) if total_days > 0 else 0
-        hours = sum(max(0, (t.planned_end - t.planned_start).total_seconds() / 3600) for t in d_tasks if t.planned_start and t.planned_end)
+        hours = sum(max(0, (getattr(t, 'planned_end', None) - getattr(t, 'planned_start', None)).total_seconds() / 3600) for t in d_tasks if getattr(t, 'planned_start', None) and getattr(t, 'planned_end', None))
         completed = len([t for t in d_tasks if t.status == "completed"])
         comp_rate = round((completed / len(d_tasks)) * 100, 1) if d_tasks else 0
         rating = round(util_pct * 0.4 + comp_rate * 0.3 + min(hours / max(total_days, 1), 10) * 3, 1)
@@ -2113,12 +2113,12 @@ def export_acts_for_1c(
                 driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
         SubElement(act, "DriverName").text = driver_name
 
-        SubElement(act, "PlannedStart").text = t.planned_start.isoformat() if t.planned_start else ""
-        SubElement(act, "PlannedEnd").text = t.planned_end.isoformat() if t.planned_end else ""
+        SubElement(act, "PlannedStart").text = getattr(t, 'planned_start', None).isoformat() if getattr(t, 'planned_start', None) else ""
+        SubElement(act, "PlannedEnd").text = getattr(t, 'planned_end', None).isoformat() if getattr(t, 'planned_end', None) else ""
 
         hours = 0
-        if t.planned_start and t.planned_end:
-            hours = round((t.planned_end - t.planned_start).total_seconds() / 3600, 2)
+        if getattr(t, 'planned_start', None) and getattr(t, 'planned_end', None):
+            hours = round((getattr(t, 'planned_end', None) - getattr(t, 'planned_start', None)).total_seconds() / 3600, 2)
         SubElement(act, "HoursWorked").text = str(hours)
 
         distance = getattr(t, 'odometer_distance', None)
@@ -2179,8 +2179,8 @@ def auto_generate_acts(
 
         vehicle = db.get(Vehicle, t.vehicle_id)
         hours = 0
-        if t.planned_start and t.planned_end:
-            hours = round((t.planned_end - t.planned_start).total_seconds() / 3600, 2)
+        if getattr(t, 'planned_start', None) and getattr(t, 'planned_end', None):
+            hours = round((getattr(t, 'planned_end', None) - getattr(t, 'planned_start', None)).total_seconds() / 3600, 2)
 
         distance = getattr(t, 'odometer_distance', None) or 0
 
@@ -3123,8 +3123,8 @@ def get_cost_per_hour_report(
         v_fuel = [f for f in fuel_entries if f.vehicle_id == v.id]
 
         hours = sum(
-            max(0, (t.planned_end - t.planned_start).total_seconds() / 3600)
-            for t in v_tasks if t.planned_start and t.planned_end
+            max(0, (getattr(t, 'planned_end', None) - getattr(t, 'planned_start', None)).total_seconds() / 3600)
+            for t in v_tasks if getattr(t, 'planned_start', None) and getattr(t, 'planned_end', None)
         )
         fuel_liters = sum(f.quantity_liters for f in v_fuel)
 
@@ -3354,8 +3354,8 @@ def get_cost_forecast(
     actual_days = max((today - lookback).days, 1)
 
     total_hours = sum(
-        max(0, (t.planned_end - t.planned_start).total_seconds() / 3600)
-        for t in tasks if t.planned_start and t.planned_end
+        max(0, (getattr(t, 'planned_end', None) - getattr(t, 'planned_start', None)).total_seconds() / 3600)
+        for t in tasks if getattr(t, 'planned_start', None) and getattr(t, 'planned_end', None)
     )
     total_fuel = sum(f.quantity_liters for f in fuel_entries)
 
@@ -3382,8 +3382,8 @@ def get_cost_forecast(
         key = str(t.shift_date)
         if key not in daily_data:
             daily_data[key] = {"date": key, "hours": 0}
-        if t.planned_start and t.planned_end:
-            daily_data[key]["hours"] += max(0, (t.planned_end - t.planned_start).total_seconds() / 3600)
+        if getattr(t, 'planned_start', None) and getattr(t, 'planned_end', None):
+            daily_data[key]["hours"] += max(0, (getattr(t, 'planned_end', None) - getattr(t, 'planned_start', None)).total_seconds() / 3600)
 
     for f_entry in fuel_entries:
         task = db.get(ShiftTask, f_entry.shift_task_id)
@@ -3944,7 +3944,7 @@ def get_finance_dashboard(
         m = t.shift_date.month
         if m not in monthly_expenses:
             monthly_expenses[m] = {"fuel": 0, "wage": 0, "amort": 0}
-        hours = max(0, (t.planned_end - t.planned_start).total_seconds() / 3600) if t.planned_start and t.planned_end else 0
+        hours = max(0, (getattr(t, 'planned_end', None) - getattr(t, 'planned_start', None)).total_seconds() / 3600) if getattr(t, 'planned_start', None) and getattr(t, 'planned_end', None) else 0
         monthly_expenses[m]["wage"] += hours * hourly_wage
         monthly_expenses[m]["amort"] += hours * amort_rate
 
@@ -4415,7 +4415,7 @@ def get_pnl_per_vehicle(
         v_fuel = [f for f in fuel_entries if f.vehicle_id == v.id]
         v_acts = [a for a in acts if a.vehicle_id == v.id]
 
-        hours = sum(max(0, (t.planned_end - t.planned_start).total_seconds() / 3600) for t in v_tasks if t.planned_start and t.planned_end)
+        hours = sum(max(0, (getattr(t, 'planned_end', None) - getattr(t, 'planned_start', None)).total_seconds() / 3600) for t in v_tasks if getattr(t, 'planned_start', None) and getattr(t, 'planned_end', None))
         fuel_liters = sum(f.quantity_liters for f in v_fuel)
         revenue = sum(a.total_amount or 0 for a in v_acts)
         fuel_cost = fuel_liters * fuel_price

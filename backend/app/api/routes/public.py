@@ -698,14 +698,14 @@ def list_marketplace_requests(
     Исполнители видят: требования, срок оплаты, режим (заказчик/диспетчер).
     """
     stmt = (
-        select(Request)
+        select(DispatchRequest)
         .where(DispatchRequest.source_channel == "marketplace")
-        .where(Request.is_published == True)
+        .where(DispatchRequest.is_published == True)
         .where(DispatchRequest.status.in_(["new", "processing"]))
     )
 
     if category_id:
-        stmt = stmt.where(Request.vehicle_category_id == category_id)
+        stmt = stmt.where(DispatchRequest.vehicle_category_id == category_id)
 
     # Исключаем заявки собственной компании (если авторизован)
     if company_id:
@@ -714,11 +714,11 @@ def list_marketplace_requests(
     # Count total for pagination
     count_stmt = select(func.count()).select_from(DispatchRequest).where(
         DispatchRequest.source_channel == "marketplace",
-        Request.is_published == True,
+        DispatchRequest.is_published == True,
         DispatchRequest.status.in_(["new", "processing"]),
     )
     if category_id:
-        count_stmt = count_stmt.where(Request.vehicle_category_id == category_id)
+        count_stmt = count_stmt.where(DispatchRequest.vehicle_category_id == category_id)
     if company_id:
         count_stmt = count_stmt.where(DispatchRequest.company_id != company_id)
     total = db.execute(count_stmt).scalar() or 0
@@ -907,7 +907,7 @@ def marketplace_payouts_report(
     stmt = (
         select(Payout)
         .join(RequestAssignment, Payout.assignment_id == RequestAssignment.id)
-        .join(Request, RequestAssignment.request_id == Request.id)
+        .join(DispatchRequest, RequestAssignment.request_id == DispatchRequest.id)
         .where(DispatchRequest.source_channel == "marketplace")
     )
 
@@ -1024,22 +1024,22 @@ def marketplace_stats(
     client_count = db.execute(
         select(func.count()).select_from(DispatchRequest).where(
             DispatchRequest.source_channel == "marketplace",
-            Request.marketplace_mode == "client",
+            DispatchRequest.marketplace_mode == "client",
         )
     ).scalar() or 0
 
     dispatcher_count = db.execute(
         select(func.count()).select_from(DispatchRequest).where(
             DispatchRequest.source_channel == "marketplace",
-            Request.marketplace_mode == "owner_dispatcher",
+            DispatchRequest.marketplace_mode == "owner_dispatcher",
         )
     ).scalar() or 0
 
     # Средний срок оплаты
     avg_payment = db.execute(
-        select(func.avg(Request.payment_terms_days)).where(
+        select(func.avg(DispatchRequest.payment_terms_days)).where(
             DispatchRequest.source_channel == "marketplace",
-            Request.payment_terms_days.isnot(None),
+            DispatchRequest.payment_terms_days.isnot(None),
         )
     ).scalar()
 
@@ -1085,13 +1085,13 @@ def export_marketplace_requests(
         raise HTTPException(status_code=500, detail="openpyxl not installed")
 
     stmt = (
-        select(Request)
+        select(DispatchRequest)
         .where(DispatchRequest.source_channel == "marketplace")
-        .where(Request.is_published == True)
+        .where(DispatchRequest.is_published == True)
         .order_by(DispatchRequest.created_at.desc())
     )
     if category_id:
-        stmt = stmt.where(Request.vehicle_category_id == category_id)
+        stmt = stmt.where(DispatchRequest.vehicle_category_id == category_id)
 
     requests_list = db.scalars(stmt).all()
 
@@ -1169,7 +1169,7 @@ def list_my_responses(
 
     assignments = db.execute(
         select(RequestAssignment)
-        .join(Request, RequestAssignment.request_id == Request.id)
+        .join(DispatchRequest, RequestAssignment.request_id == DispatchRequest.id)
         .join(Vehicle, RequestAssignment.vehicle_id == Vehicle.id)
         .where(Vehicle.company_id == company_id)
         .order_by(RequestAssignment.created_at.desc())
