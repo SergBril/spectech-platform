@@ -11,6 +11,7 @@ export { default as DriverAppPage } from './DriverAppPage';
 export { default as FuelDashboardPage } from './FuelDashboardPage';
 export { default as ChecklistConfigsPage } from './ChecklistConfigsPage';
 export { default as CostPerHourPage } from './CostPerHourPage';
+export { default as ActsPage } from './ActsPage';
 export { default as VehiclesPage } from './VehiclesPage';
 export { default as DriversPage } from './DriversPage';
 export { default as RequestsPage } from './RequestsPage';

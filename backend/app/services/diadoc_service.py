@@ -103,3 +103,42 @@ class DiadocService:
 
 
 diadoc_service = DiadocService()
+
+
+    async def get_document_status(self, message_id: str, token: str) -> dict:
+        """Получить статус документа в Diadoc."""
+        if not self.enabled:
+            return {"status": "stub", "message_id": message_id}
+
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(
+                    f"{self.base_url}/V3/GetMessage",
+                    params={"boxId": self.box_id, "messageId": message_id},
+                    headers={"ddauth_api_client_id": self.api_key, "ddauth_service_token": token},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                # Parse document status from response
+                docs = data.get("Documents", [])
+                if docs:
+                    doc = docs[0]
+                    status_map = {
+                        "WaitingForSenderSignature": "draft",
+                        "WaitingForRecipientSignature": "sent_to_edo",
+                        "WithRecipientSignature": "signed",
+                        "RecipientSignatureRequestRejected": "rejected",
+                        "InvalidDocument": "rejected",
+                    }
+                    raw_status = doc.get("DocflowStatus", {}).get("PrimaryStatus", "unknown")
+                    return {
+                        "status": status_map.get(raw_status, raw_status),
+                        "message_id": message_id,
+                        "raw_status": raw_status,
+                        "timestamp": doc.get("Timestamp", ""),
+                    }
+                return {"status": "unknown", "message_id": message_id}
+        except Exception as e:
+            logger.error(f"❌ Diadoc status check failed: {e}")
+            return {"status": "error", "message_id": message_id, "error": str(e)}
