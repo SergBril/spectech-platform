@@ -28,6 +28,7 @@ import {
   ActsPage,
   FinanceDashboardPage,
   DocumentArchivePage,
+  ReceivablesPage,
   VehiclesPage,
   DriversPage,
   RequestsPage,
@@ -106,6 +107,7 @@ const AppRoutes = () => {
         <Route path="/acts" element={<ProtectedRoute><ActsPage /></ProtectedRoute>} />
         <Route path="/finance" element={<ProtectedRoute><FinanceDashboardPage /></ProtectedRoute>} />
         <Route path="/documents" element={<ProtectedRoute><DocumentArchivePage /></ProtectedRoute>} />
+        <Route path="/receivables" element={<ProtectedRoute><ReceivablesPage /></ProtectedRoute>} />
         <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
         <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
         <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
