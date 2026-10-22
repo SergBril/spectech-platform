@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.api.deps import get_current_user, get_current_company_id, get_current_user_optional, get_current_company_id_optional
 from app.models.catalog import Category, Vehicle
-from app.models.dispatch import Request as DispatchRequest
+from app.models.dispatch import Request as DispatchRequest, RequestAssignment
 
 from app.models.company import Company
 from app.models.auth import User
@@ -778,7 +778,7 @@ async def respond_to_marketplace_request(
     Исполнитель указывает свою технику для выполнения заказа.
     Владелец заявки получает уведомление об отклике.
     """
-    from app.models.dispatch import Request as DispatchRequestAssignment, RequestStatusLog
+    from app.models.dispatch import Request as DispatchRequest, RequestAssignmentAssignment, RequestStatusLog
     from app.services.notification_service import create_notification
     import asyncio
 
@@ -902,7 +902,7 @@ def marketplace_payouts_report(
 
     # Get payouts related to marketplace requests
     from app.models.finance import Payout
-    from app.models.dispatch import Request as DispatchRequestAssignment
+    from app.models.dispatch import Request as DispatchRequest, RequestAssignmentAssignment
 
     stmt = (
         select(Payout)
@@ -1044,7 +1044,7 @@ def marketplace_stats(
     ).scalar()
 
     # Отклики
-    from app.models.dispatch import Request as DispatchRequestAssignment
+    from app.models.dispatch import Request as DispatchRequest, RequestAssignmentAssignment
     total_responses = db.execute(
         select(func.count()).select_from(RequestAssignment)
     ).scalar() or 0
@@ -1166,7 +1166,7 @@ def list_my_responses(
 ):
     """Список откликов текущей компании на заявки маркетплейса."""
     from app.models.dispatch import RequestAssignment
-    from app.models.dispatch import Request as DispatchRequestAssignment
+    from app.models.dispatch import Request as DispatchRequest, RequestAssignmentAssignment
 
     assignments = db.execute(
     select(RequestAssignment)
