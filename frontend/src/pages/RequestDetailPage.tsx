@@ -67,6 +67,10 @@ export const RequestDetailPage: React.FC = () => {
 
   const [request, setRequest] = useState<Request | null>(null);
   const [timeline, setTimeline] = useState<any[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [responses, setResponses] = useState<any[]>([]);
+  const [selectedResponses, setSelectedResponses] = useState<Set<number>>(new Set());
+  const [editForm, setEditForm] = useState<any>({});
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [acts, setActs] = useState<Act[]>([]);
   const [history, setHistory] = useState<StatusLogEntry[]>([]);
@@ -214,8 +218,59 @@ export const RequestDetailPage: React.FC = () => {
     }
   };
 
+
+    const handleEdit = () => {
+    if (!request) return;
+    setEditForm({
+      work_type: request.work_type || '',
+      object_address: request.object_address || '',
+      client_rate: request.client_rate || '',
+      payment_terms_days: (request as any).payment_terms_days || 7,
+      priority: request.priority || 'normal',
+    });
+    setIsEditing(true);
+  };
+  const toggleResponseSelect = (aid: number) => {
+    const next = new Set(selectedResponses);
+    next.has(aid) ? next.delete(aid) : next.add(aid);
+    setSelectedResponses(next);
+  };
+  const bulkAction = async (action: 'approve' | 'reject') => {
+    if (selectedResponses.size === 0) return;
+    if (!confirm(`${action === 'approve' ? 'Одобрить' : 'Отклонить'} ${selectedResponses.size} откликов?`)) return;
+    try {
+      const res = await apiClient.post('/requests/bulk-responses', {
+        assignment_ids: Array.from(selectedResponses),
+        action,
+        reason: action === 'reject' ? 'Массовое отклонение' : '',
+      });
+      alert(`Обработано: ${res.data.processed}`);
+      setSelectedResponses(new Set());
+      // Reload
+      const respRes = await apiClient.get(`/requests/${id}/responses`);
+      setResponses(Array.isArray(respRes.data) ? respRes.data : []);
+    } catch (err: any) {
+      alert('Ошибка: ' + (err.response?.data?.detail || ''));
+    }
+  };
+  const saveEdit = async () => {
+    try {
+      await apiClient.put(`/requests/${id}`, editForm);
+      setIsEditing(false);
+      // Reload request data
+      const res = await apiClient.get(`/requests/${id}`);
+      setRequest(res.data);
+    } catch (err: any) {
+      alert('Ошибка: ' + (err.response?.data?.detail || 'Не удалось сохранить'));
+    }
+  };
+
   if (isInitialLoading && loading) {
-    return (
+
+
+
+
+  return (
       <Layout>
 
        <div className="px-4 py-6 sm:px-0 space-y-6">
@@ -271,6 +326,8 @@ export const RequestDetailPage: React.FC = () => {
                <select value={request.status} onChange={(e) => handleStatusChange(e.target.value)} disabled={statusUpdating} className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50">
                  {WORKFLOW.map((w) => (<option key={w.value} value={w.value}>{w.icon} {w.label}</option>))}
                </select>
+
+              {request.status !== "assigned" && <button onClick={handleEdit} className="ml-3 px-3 py-1 text-sm bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200">✏️ Редактировать</button>}
              </div>
            )}
          </div>
