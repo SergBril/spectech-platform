@@ -3991,3 +3991,115 @@ def get_finance_dashboard(
         },
         "months": months_data,
     }
+
+
+@router.get("/stats/finance-dashboard/export", summary="📥 Экспорт финансового отчёта в Excel")
+def export_finance_dashboard_excel(
+    year: int = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт финансового дашборда в Excel."""
+    import io
+    from datetime import date as date_type
+    from fastapi.responses import StreamingResponse
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, numbers
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+
+    # Reuse dashboard logic
+    report = get_finance_dashboard(year, db, current_user, company_id)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Финансы {report['year']}"
+
+    header_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+    green_font = Font(color="006100", bold=True)
+    red_font = Font(color="9C0006", bold=True)
+
+    # Summary section
+    ws.cell(row=1, column=1, value=f"Финансовый отчёт за {report['year']} год").font = Font(bold=True, size=14)
+    summary = report["summary"]
+    ws.cell(row=3, column=1, value="Выручка").font = Font(bold=True)
+    ws.cell(row=3, column=2, value=summary["total_revenue"]).number_format = '#,##0'
+    ws.cell(row=4, column=1, value="Расходы").font = Font(bold=True)
+    ws.cell(row=4, column=2, value=summary["total_expenses"]).number_format = '#,##0'
+    ws.cell(row=5, column=1, value="Маржа").font = Font(bold=True)
+    ws.cell(row=5, column=2, value=summary["total_margin"]).number_format = '#,##0'
+    ws.cell(row=6, column=1, value="Рентабельность").font = Font(bold=True)
+    ws.cell(row=6, column=2, value=summary["total_margin_pct"]).number_format = '0.0"%"'
+
+    # Monthly table
+    headers = ["Месяц", "Выручка", "Топливо", "Зарплата", "Амортизация", "Всего расходов", "Маржа", "Маржа %"]
+    start_row = 8
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=start_row, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    for row_idx, m in enumerate(report["months"], start_row + 1):
+        ws.cell(row=row_idx, column=1, value=m["month_name"])
+        ws.cell(row=row_idx, column=2, value=m["revenue"]).number_format = '#,##0'
+        ws.cell(row=row_idx, column=3, value=m["fuel_cost"]).number_format = '#,##0'
+        ws.cell(row=row_idx, column=4, value=m["wage_cost"]).number_format = '#,##0'
+        ws.cell(row=row_idx, column=5, value=m["amortization_cost"]).number_format = '#,##0'
+        ws.cell(row=row_idx, column=6, value=m["total_expenses"]).number_format = '#,##0'
+        margin_cell = ws.cell(row=row_idx, column=7, value=m["margin"])
+        margin_cell.number_format = '#,##0'
+        margin_cell.font = green_font if m["margin"] >= 0 else red_font
+        ws.cell(row=row_idx, column=8, value=m["margin_pct"]).number_format = '0.0"%"'
+
+    for col_cells in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 20)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"finance_{report['year']}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# === Bank Integration ===
+
+@router.post("/bank/import", summary="🏦 Импорт платёжек из файла (1С XML / CSV)")
+async def import_bank_payments(
+    file: UploadFile = File(...),
+    format: str = Body(default="auto"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Импортировать платёжные поручения из файла 1С или банк-клиента."""
+    from app.services.bank_integration_service import bank_integration_service
+
+    content = await file.read()
+    filename = file.filename or ""
+
+    # Auto-detect format
+    if format == "auto":
+        if filename.endswith(".xml") or content[:5] == b"<?xml" or b"<FileExchange" in content or "<ФайлОбмен" in content.decode("utf-8-sig", errors="ignore"):
+            format = "1c_xml"
+        elif filename.endswith(".csv") or filename.endswith(".txt"):
+            format = "csv"
+        else:
+            format = "1c_xml"  # Default
+
+    if format == "1c_xml":
+        payments = bank_integration_service.parse_1c_xml(content.decode("utf-8-sig"))
+    elif format == "csv":
+        payments = bank_integration_service.parse_csv(content.decode("utf-8-sig"))
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
+
+    result = bank_integration_service.sync_payments_to_db(db, company_id, payments)
+    return {"message": f"Импортировано {result['created']} платежей", **result}

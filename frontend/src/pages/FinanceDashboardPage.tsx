@@ -21,7 +21,11 @@ const FinanceDashboardPage: React.FC = () => {
     <Layout>
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">💰 Финансовый дашборд</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-gray-900">💰 Финансовый дашборд</h1>
+            <button onClick={() => window.open(`/api/v1/shifts/stats/finance-dashboard/export?year=${year}`, '_blank')}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium">📥 Excel</button>
+          </div>
           <select value={year} onChange={e => setYear(Number(e.target.value))}
             className="px-3 py-2 border rounded-lg text-sm">
             {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
