@@ -76,7 +76,11 @@ const UserRolesPage: React.FC = () => {
   return (
     <Layout>
       <div className="p-6 space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900">🔑 Управление ролями</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">🔑 Управление ролями</h1>
+          <button onClick={() => window.open('/api/v1/shifts/users/export-csv', '_blank')}
+            className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">📥 CSV</button>
+        </div>
 
         {loading ? (
           <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div>
