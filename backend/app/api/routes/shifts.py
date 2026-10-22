@@ -3482,3 +3482,119 @@ async def list_diadoc_counterparties(
 
     counterparties = await diadoc_service.get_counterparties(token)
     return counterparties
+
+
+@router.get("/diadoc/document-status/{message_id}", summary="📋 Статус документа в Diadoc")
+async def get_diadoc_document_status(
+    message_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Проверить статус документа в Diadoc по message_id."""
+    from app.services.diadoc_service import diadoc_service
+
+    token = await diadoc_service.authenticate()
+    if not token:
+        raise HTTPException(status_code=503, detail="Diadoc authentication failed")
+
+    result = await diadoc_service.get_document_status(message_id, token)
+    return result
+
+
+@router.post("/diadoc/refresh-statuses", summary="🔄 Обновить статусы всех отправленных актов")
+async def refresh_all_diadoc_statuses(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Массово обновить статусы всех актов, отправленных через Diadoc."""
+    from app.services.diadoc_service import diadoc_service
+
+    acts = db.execute(
+        select(Act).where(
+            Act.company_id == company_id,
+            Act.edo_message_id.isnot(None),
+            Act.status.in_(["sent_to_edo"]),
+        )
+    ).scalars().all()
+
+    if not acts:
+        return {"updated": 0, "message": "Нет актов для обновления"}
+
+    token = await diadoc_service.authenticate()
+    if not token:
+        raise HTTPException(status_code=503, detail="Diadoc authentication failed")
+
+    updated = 0
+    for act in acts:
+        result = await diadoc_service.get_document_status(act.edo_message_id, token)
+        new_status = result.get("status", "")
+        if new_status in ("signed", "rejected") and act.status != new_status:
+            act.status = new_status
+            updated += 1
+
+    db.commit()
+    return {"updated": updated, "total_checked": len(acts)}
+
+
+@router.post("/diadoc/bulk-send", summary="📨 Массовая рассылка актов через Diadoc")
+async def bulk_send_acts_via_diadoc(
+    act_ids: list[int] = Body(...),
+    counterparty_box_id: str = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Массово отправить несколько актов одному контрагенту через Diadoc."""
+    from app.services.diadoc_service import diadoc_service
+    from xml.etree.ElementTree import Element, SubElement, tostring
+    import base64
+
+    token = await diadoc_service.authenticate()
+    if not token:
+        raise HTTPException(status_code=503, detail="Diadoc authentication failed")
+
+    sent = 0
+    errors = 0
+
+    for act_id in act_ids:
+        act = db.get(Act, act_id)
+        if not act or act.company_id != company_id:
+            errors += 1
+            continue
+        if act.status != "draft":
+            errors += 1
+            continue
+
+        # Generate XML
+        root = Element("UniversalTransferDocument")
+        root.set("Function", "СЧФДОП")
+        root.set("Date", str(act.act_date))
+        root.set("Number", act.act_number or f"ACT-{act.id}")
+
+        seller = SubElement(root, "Seller")
+        SubElement(seller, "Name").text = ""
+        buyer = SubElement(root, "Buyer")
+        SubElement(buyer, "BoxId").text = counterparty_box_id
+
+        item = SubElement(root, "Item")
+        SubElement(item, "Name").text = f"Услуги спецтехники ({act.act_date})"
+        SubElement(item, "Quantity").text = str(act.hours_worked or 0)
+        SubElement(item, "Price").text = str(act.hourly_rate or 0)
+        SubElement(item, "Total").text = str(act.total_amount or 0)
+        SubElement(item, "VATRate").text = "20%"
+        SubElement(item, "VATAmount").text = str(act.vat_amount or 0)
+
+        xml_bytes = tostring(root, encoding="unicode", xml_declaration=True).encode("utf-8")
+
+        result = await diadoc_service.send_act(xml_bytes, counterparty_box_id, token)
+        if result.get("status") in ("sent", "sent_stub"):
+            act.status = "sent_to_edo"
+            act.edo_message_id = result.get("message_id")
+            sent += 1
+        else:
+            errors += 1
+
+    db.commit()
+    return {"sent": sent, "errors": errors, "total": len(act_ids)}
