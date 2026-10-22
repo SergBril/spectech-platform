@@ -77,6 +77,14 @@ export const PayoutsPage: React.FC = () => {
   return (
     <Layout>
       <div className="space-y-6">
+        {/* Marketplace Report Export */}
+        <div className="flex justify-end">
+          <button onClick={() => window.open("/api/v1/public/marketplace/payouts-report", "_blank")}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium flex items-center gap-2">
+            📊 Отчёт по маркетплейсу
+          </button>
+        </div>
+
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-500">
