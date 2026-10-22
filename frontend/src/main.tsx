@@ -26,6 +26,7 @@ import {
   ChecklistConfigsPage,
   CostPerHourPage,
   ActsPage,
+  FinanceDashboardPage,
   VehiclesPage,
   DriversPage,
   RequestsPage,
@@ -102,6 +103,7 @@ const AppRoutes = () => {
         <Route path="/checklist-configs" element={<ProtectedRoute><ChecklistConfigsPage /></ProtectedRoute>} />
         <Route path="/cost-per-hour" element={<ProtectedRoute><CostPerHourPage /></ProtectedRoute>} />
         <Route path="/acts" element={<ProtectedRoute><ActsPage /></ProtectedRoute>} />
+        <Route path="/finance" element={<ProtectedRoute><FinanceDashboardPage /></ProtectedRoute>} />
         <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
         <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
         <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
