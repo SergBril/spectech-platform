@@ -122,6 +122,77 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Проверка аномалий расхода топлива (ежедневно в 08:00)
+    async def _check_fuel_anomalies():
+        from datetime import date as date_type, timedelta
+        from sqlalchemy import select, func
+        from app.core.db import SessionLocal
+        from app.models.shift import ShiftFuelEntry, ShiftTask
+        from app.models.vehicle import Vehicle
+        from app.models.auth import UserCompany
+        from app.services.alert_service import send_alert_email, send_telegram_alert
+
+        yesterday = date_type.today() - timedelta(days=1)
+        week_ago = yesterday - timedelta(days=7)
+
+        with SessionLocal() as db:
+            try:
+                company_ids = db.execute(select(UserCompany.company_id).distinct()).scalars().all()
+                for cid in company_ids:
+                    entries = db.execute(
+                        select(ShiftFuelEntry, Vehicle.name)
+                        .join(ShiftTask, ShiftFuelEntry.shift_task_id == ShiftTask.id)
+                        .join(Vehicle, ShiftFuelEntry.vehicle_id == Vehicle.id)
+                        .where(Vehicle.company_id == cid)
+                        .where(ShiftTask.shift_date >= week_ago)
+                        .where(ShiftTask.shift_date <= yesterday)
+                    ).all()
+
+                    if len(entries) < 5:
+                        continue
+
+                    # Group by vehicle
+                    by_vehicle = {}
+                    for entry, vname in entries:
+                        vid = entry.vehicle_id
+                        if vid not in by_vehicle:
+                            by_vehicle[vid] = {"name": vname, "values": []}
+                        by_vehicle[vid]["values"].append(entry.quantity_liters)
+
+                    anomalies = []
+                    for vid, stats in by_vehicle.items():
+                        vals = stats["values"]
+                        if len(vals) < 3:
+                            continue
+                        mean_val = sum(vals) / len(vals)
+                        variance = sum((v - mean_val) ** 2 for v in vals) / len(vals)
+                        stddev = variance ** 0.5
+                        threshold = mean_val + 2 * stddev
+
+                        for v in vals:
+                            if v > threshold and stddev > 0:
+                                anomalies.append(f"{stats['name']}: {v:.1f}л (норма {mean_val:.1f}л, +{((v-mean_val)/mean_val)*100:.0f}%)")
+
+                    if anomalies:
+                        msg = f"⛽ Аномалии расхода за неделю:\n" + "\n".join(anomalies[:10])
+                        await send_alert_email(cid, "Аномалии расхода топлива", msg, db)
+                        await send_telegram_alert(cid, msg)
+                        logger.info("Fuel anomaly alert sent to company %d: %d anomalies", cid, len(anomalies))
+
+                db.commit()
+                logger.info("✅ Fuel anomaly check completed")
+            except Exception as e:
+                logger.error("❌ Fuel anomaly check failed: %s", e)
+                db.rollback()
+
+    scheduler.add_job(
+        _check_fuel_anomalies,
+        trigger=CronTrigger(hour=8, minute=0),
+        id="daily_fuel_anomaly_check",
+        name="Daily fuel anomaly detection",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         "⏰ Scheduler started. Interval: %d min. Jobs: %d",
