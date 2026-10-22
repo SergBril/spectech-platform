@@ -778,7 +778,6 @@ async def respond_to_marketplace_request(
     Исполнитель указывает свою технику для выполнения заказа.
     Владелец заявки получает уведомление об отклике.
     """
-    from app.models.dispatch import Request as DispatchRequest, RequestAssignmentAssignment, RequestStatusLog
     from app.services.notification_service import create_notification
     import asyncio
 
