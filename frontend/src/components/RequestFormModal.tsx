@@ -250,6 +250,37 @@ export const RequestFormModal: React.FC<Props> = ({
       setError('Введите адрес объекта');
       return;
     }
+
+    // Marketplace-specific validation
+    if (assignmentMode === 'marketplace') {
+      if (!plannedStart) {
+        setError('Укажите дату начала работ для заявки в маркетплейсе');
+        return;
+      }
+      if (!plannedEnd) {
+        setError('Укажите дату окончания работ для заявки в маркетплейсе');
+        return;
+      }
+      const start = new Date(plannedStart);
+      const end = new Date(plannedEnd);
+      if (end <= start) {
+        setError('Дата окончания должна быть позже даты начала');
+        return;
+      }
+      if (paymentTermsDays < 1 || paymentTermsDays > 90) {
+        setError('Срок оплаты должен быть от 1 до 90 дней');
+        return;
+      }
+      if (!clientRate || clientRate <= 0) {
+        setError('Укажите ставку клиента для заявки в маркетплейсе');
+        return;
+      }
+    }
+
+    if (false) { // placeholder to keep original structure
+      setError('Введите адрес объекта');
+      return;
+    }
     if (!plannedStart || !plannedEnd) {
       setError('Укажите даты начала и окончания');
       return;

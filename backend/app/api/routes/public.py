@@ -685,6 +685,8 @@ def list_marketplace_requests(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+    company_id: int | None = Depends(get_current_company_id_optional),
 ):
     """
     🌐 Публичный список заявок в маркетплейсе.
@@ -701,6 +703,22 @@ def list_marketplace_requests(
 
     if category_id:
         stmt = stmt.where(Request.vehicle_category_id == category_id)
+
+    # Исключаем заявки собственной компании (если авторизован)
+    if company_id:
+        stmt = stmt.where(Request.company_id != company_id)
+
+    # Count total for pagination
+    count_stmt = select(func.count()).select_from(Request).where(
+        Request.source_channel == "marketplace",
+        Request.is_published == True,
+        Request.status.in_(["new", "processing"]),
+    )
+    if category_id:
+        count_stmt = count_stmt.where(Request.vehicle_category_id == category_id)
+    if company_id:
+        count_stmt = count_stmt.where(Request.company_id != company_id)
+    total = db.execute(count_stmt).scalar() or 0
 
     stmt = stmt.order_by(Request.created_at.desc()).offset(offset).limit(limit)
     requests_list = db.scalars(stmt).all()
@@ -735,7 +753,12 @@ def list_marketplace_requests(
             "created_at": req.created_at.isoformat() if req.created_at else None,
         })
 
-    return result
+    return {
+        "items": result,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.post("/marketplace/requests/{request_id}/respond", status_code=201)

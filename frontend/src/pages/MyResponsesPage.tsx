@@ -22,6 +22,8 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 const MyResponsesPage: React.FC = () => {
   const [responses, setResponses] = useState<ResponseItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const pageSize = 20;
 
   useEffect(() => { loadResponses(); }, []);
 
@@ -55,7 +57,7 @@ const MyResponsesPage: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
               </tr></thead>
               <tbody className="divide-y divide-gray-200">
-                {responses.map((r) => {
+                {responses.slice(page * pageSize, (page + 1) * pageSize).map((r) => {
                   const cfg = statusConfig[r.status] || { label: r.status, color: 'bg-gray-100 text-gray-800' };
                   return (<tr key={r.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-blue-600">#{r.request_id}</td>
@@ -68,6 +70,17 @@ const MyResponsesPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {responses.length > pageSize && (
+            <div className="flex justify-center items-center gap-4 mt-6">
+              <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+                className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-50">← Назад</button>
+              <span className="text-sm text-gray-600">Стр. {page + 1}</span>
+              <button onClick={() => setPage(page + 1)} disabled={responses.length <= (page + 1) * pageSize}
+                className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-50">Вперёд →</button>
+            </div>
+          )}
         )}
       </div>
     </Layout>
