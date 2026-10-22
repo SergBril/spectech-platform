@@ -7,6 +7,7 @@ export { default as ShiftCalendarPage } from './ShiftCalendarPage';
 export { default as UtilizationPage } from './UtilizationPage';
 export { default as AutoAssignRulesPage } from './AutoAssignRulesPage';
 export { default as DriverKPIPage } from './DriverKPIPage';
+export { default as DriverAppPage } from './DriverAppPage';
 export { default as VehiclesPage } from './VehiclesPage';
 export { default as DriversPage } from './DriversPage';
 export { default as RequestsPage } from './RequestsPage';
