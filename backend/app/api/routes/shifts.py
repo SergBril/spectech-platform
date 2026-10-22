@@ -4710,7 +4710,7 @@ def list_audit_logs(
 
 # === User Role Management ===
 
-@router.get("/users/roles", summary="👥 Список пользователей с ролями")
+@router.get("/users/roles", summary="👥 Список пользователей с ролями", tags=["RBAC"])
 def list_users_with_roles(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -4728,7 +4728,7 @@ def list_users_with_roles(
     } for u in users]
 
 
-@router.put("/users/{user_id}/role", summary="🔑 Назначить роль пользователю")
+@router.put("/users/{user_id}/role", summary="🔑 Назначить роль пользователю", tags=["RBAC"])
 def assign_user_role(
     user_id: int,
     role: str = Body(..., embed=True),
@@ -4757,26 +4757,29 @@ def assign_user_role(
                details=f"Role changed: {old_role} → {role}")
 
     # Send notifications about role change
-    # Send notifications using templates
+    # Send notifications using templates (respect user preferences)
+    from app.services.notification_prefs_helper import should_notify
+
     try:
-        from app.services.notification_template_service import render_template
-        email_tmpl = render_template(db, "role_change", "email", name=target.full_name or target.email, old_role=old_role, new_role=role)
-        if email_tmpl and target.email:
-            from app.services.email_service import send_email
-            send_email(target.email, email_tmpl["subject"], email_tmpl["body"])
+        if should_notify(db, user_id, "role_change", "email"):
+            from app.services.notification_template_service import render_template
+            email_tmpl = render_template(db, "role_change", "email", name=target.full_name or target.email, old_role=old_role, new_role=role)
+            if email_tmpl and target.email:
+                from app.services.email_service import send_email
+                send_email(target.email, email_tmpl["subject"], email_tmpl["body"])
     except Exception:
         pass
 
-    # MAX notification via template
     try:
-        from app.services.notification_template_service import render_template
-        from app.services.max_messenger_service import max_messenger_service
-        import asyncio
-        max_tmpl = render_template(db, "role_change", "max", old_role=old_role, new_role=role)
-        if max_tmpl:
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(max_messenger_service.notify_user(db, user_id, max_tmpl["subject"], max_tmpl["body"]))
-            loop.close()
+        if should_notify(db, user_id, "role_change", "max"):
+            from app.services.notification_template_service import render_template
+            from app.services.max_messenger_service import max_messenger_service
+            import asyncio
+            max_tmpl = render_template(db, "role_change", "max", old_role=old_role, new_role=role)
+            if max_tmpl:
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(max_messenger_service.notify_user(db, user_id, max_tmpl["subject"], max_tmpl["body"]))
+                loop.close()
     except Exception:
         pass
 
@@ -4785,7 +4788,7 @@ def assign_user_role(
 
 # === MAX Messenger Integration ===
 
-@router.post("/max/webhook", summary="MAX Webhook")
+@router.post("/max/webhook", summary="MAX Webhook", tags=["MAX"])
 async def max_webhook(request: Request, db: Session = Depends(get_db)):
     """Обработка входящих событий от MAX Bot API."""
     body = await request.json()
@@ -4830,7 +4833,7 @@ async def max_webhook(request: Request, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
-@router.get("/max/bind-link", summary="MAX bind link")
+@router.get("/max/bind-link", summary="MAX bind link", tags=["MAX"])
 def get_max_bind_link(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -4846,7 +4849,7 @@ def get_max_bind_link(
     return {"link": link, "bot_username": bot_username}
 
 
-@router.get("/profile/max-status", summary="MAX bind status")
+@router.get("/profile/max-status", summary="MAX bind status", tags=["Profile"])
 def get_max_bind_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -4858,7 +4861,7 @@ def get_max_bind_status(
     }
 
 
-@router.post("/profile/unbind-max", summary="Unbind MAX")
+@router.post("/profile/unbind-max", summary="Unbind MAX", tags=["Profile"])
 def unbind_max(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -4871,7 +4874,7 @@ def unbind_max(
     return {"message": "MAX отвязан"}
 
 
-@router.post("/max/test-webhook", summary="Test MAX webhook")
+@router.post("/max/test-webhook", summary="Test MAX webhook", tags=["MAX"])
 async def test_max_webhook(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -4889,7 +4892,7 @@ async def test_max_webhook(
     return {"result": result}
 
 
-@router.post("/users/bulk-role", summary="Bulk role change")
+@router.post("/users/bulk-role", summary="Bulk role change", tags=["RBAC"])
 def bulk_change_roles(
     user_ids: list[int] = Body(...),
     role: str = Body(...),
@@ -4920,7 +4923,7 @@ def bulk_change_roles(
     return {"updated": updated, "role": role}
 
 
-@router.post("/users/import-csv", summary="Import users from CSV")
+@router.post("/users/import-csv", summary="Import users from CSV", tags=["RBAC"])
 async def import_users_csv(
     file: UploadFile = File(...),
     default_role: str = Body(default="viewer"),
@@ -4987,7 +4990,7 @@ async def import_users_csv(
     return {"created": created, "skipped": skipped, "errors": errors[:10]}
 
 
-@router.get("/profile/me", summary="My profile")
+@router.get("/profile/me", summary="My profile", tags=["Profile"])
 def get_my_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -5009,7 +5012,7 @@ def get_my_profile(
     }
 
 
-@router.put("/profile/me", summary="Update my profile")
+@router.put("/profile/me", summary="Update my profile", tags=["Profile"])
 def update_my_profile(
     full_name: str | None = Body(default=None),
     phone: str | None = Body(default=None),
@@ -5034,7 +5037,7 @@ def update_my_profile(
 
 # === Notification Templates ===
 
-@router.get("/notification-templates", summary="Notification templates list")
+@router.get("/notification-templates", summary="Notification templates list", tags=["Notifications"])
 def list_notification_templates(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -5045,7 +5048,7 @@ def list_notification_templates(
     return [{"id": t.id, "code": t.code, "channel": t.channel, "subject": t.subject, "body": t.body, "is_active": t.is_active} for t in tmpls]
 
 
-@router.put("/notification-templates/{tmpl_id}", summary="Update template")
+@router.put("/notification-templates/{tmpl_id}", summary="Update template", tags=["Notifications"])
 def update_notification_template(
     tmpl_id: int,
     subject: str | None = Body(default=None),
@@ -5072,7 +5075,7 @@ def update_notification_template(
     return {"message": "Template updated"}
 
 
-@router.post("/notification-templates/init-defaults", summary="Init default templates")
+@router.post("/notification-templates/init-defaults", summary="Init default templates", tags=["Notifications"])
 def init_defaults(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -5085,7 +5088,7 @@ def init_defaults(
     return {"created": created}
 
 
-@router.get("/users/export-csv", summary="Export users CSV")
+@router.get("/users/export-csv", summary="Export users CSV", tags=["RBAC"])
 def export_users_csv(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -5107,7 +5110,7 @@ def export_users_csv(
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="users.csv"'})
 
 
-@router.get("/audit-logs/role-history/{user_id}", summary="Role change history")
+@router.get("/audit-logs/role-history/{user_id}", summary="Role change history", tags=["Audit"])
 def get_role_history(
     user_id: int,
     db: Session = Depends(get_db),
@@ -5126,7 +5129,7 @@ def get_role_history(
 
 # === User Notification Preferences ===
 
-@router.get("/profile/notification-settings", summary="My notification settings")
+@router.get("/profile/notification-settings", summary="My notification settings", tags=["Notifications"])
 def get_notification_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -5147,7 +5150,7 @@ def get_notification_settings(
     }
 
 
-@router.put("/profile/notification-settings", summary="Update notification settings")
+@router.put("/profile/notification-settings", summary="Update notification settings", tags=["Notifications"])
 def update_notification_settings(
     notify_role_change_max: bool | None = Body(default=None),
     notify_role_change_email: bool | None = Body(default=None),
@@ -5175,7 +5178,7 @@ def update_notification_settings(
     return {"message": "Notification settings updated"}
 
 
-@router.get("/stats/recent-actions", summary="Recent actions widget")
+@router.get("/stats/recent-actions", summary="Recent actions widget", tags=["Dashboard"])
 def get_recent_actions(
     limit: int = Query(default=10, ge=1, le=50),
     db: Session = Depends(get_db),

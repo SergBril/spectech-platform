@@ -381,7 +381,11 @@ def start_scheduler() -> None:
                     # Also notify via MAX
                     try:
                         from app.services.max_messenger_service import max_messenger_service
-                        await max_messenger_service.notify_company_dispatchers(db, cid, "💸 Просроченные платежи", msg)
+                        from app.services.notification_prefs_helper import should_notify
+                        # Only notify dispatchers who have overdue notifications enabled
+                        for uid in dispatcher_ids:
+                            if should_notify(db, uid, "overdue", "max"):
+                                await max_messenger_service.notify_user(db, uid, "Просроченные платежи", msg)
                     except Exception as max_err:
                         logger.warning("MAX overdue notification failed: %s", max_err)
 

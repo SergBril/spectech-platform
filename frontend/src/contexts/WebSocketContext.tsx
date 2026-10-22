@@ -44,6 +44,7 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
 
     ws.onopen = () => {
       console.log('✅ WebSocket connected');
+reconnectAttemptRef.current = 0;
       setConnected(true);
     };
 
