@@ -22,6 +22,7 @@ import {
   AutoAssignRulesPage,
   DriverKPIPage,
   DriverAppPage,
+  FuelDashboardPage,
   VehiclesPage,
   DriversPage,
   RequestsPage,
@@ -94,6 +95,7 @@ const AppRoutes = () => {
         <Route path="/auto-assign-rules" element={<ProtectedRoute><AutoAssignRulesPage /></ProtectedRoute>} />
         <Route path="/driver-kpi" element={<ProtectedRoute><DriverKPIPage /></ProtectedRoute>} />
         <Route path="/driver-app" element={<DriverAppPage />} />
+        <Route path="/fuel-dashboard" element={<ProtectedRoute><FuelDashboardPage /></ProtectedRoute>} />
         <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
         <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
         <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
