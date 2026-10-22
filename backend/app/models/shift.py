@@ -243,3 +243,16 @@ class PreShiftChecklist(Base):
     photo_paths: Mapped[str | None] = mapped_column(Text, nullable=True)
     has_issues: Mapped[bool] = mapped_column(default=False)
     submitted_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class VehicleChecklistConfig(Base):
+    __tablename__ = "vehicle_checklist_configs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    vehicle_category_id: Mapped[int | None] = mapped_column(nullable=True)  # NULL = default for all
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    items_json: Mapped[str] = mapped_column(Text, nullable=False)  # JSON array of {key, label, required}
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))

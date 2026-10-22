@@ -2597,18 +2597,46 @@ def get_pre_shift_checklist(
     if not vehicle or vehicle.company_id != company_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Default checklist items
-    default_items = [
-        {"key": "tires", "label": "Состояние шин", "required": True},
-        {"key": "lights", "label": "Работа фар и сигналов", "required": True},
-        {"key": "brakes", "label": "Тормозная система", "required": True},
-        {"key": "fluids", "label": "Уровень жидкостей (масло, ОЖ)", "required": True},
-        {"key": "hydraulics", "label": "Гидравлическая система", "required": False},
-        {"key": "body", "label": "Кузов / навесное оборудование", "required": False},
-        {"key": "docs", "label": "Документы в кабине", "required": True},
-        {"key": "fire_ext", "label": "Огнетушитель / аптечка", "required": True},
-        {"key": "cleanliness", "label": "Чистота кабины", "required": False},
-    ]
+    # Load checklist config for this vehicle category
+    import json
+    from app.models.shift import VehicleChecklistConfig
+
+    vehicle_category_id = getattr(vehicle, 'category_id', None)
+    config = None
+    if vehicle_category_id:
+        config = db.execute(
+            select(VehicleChecklistConfig)
+            .where(VehicleChecklistConfig.company_id == company_id)
+            .where(VehicleChecklistConfig.vehicle_category_id == vehicle_category_id)
+            .where(VehicleChecklistConfig.is_active == True)
+        ).scalar_one_or_none()
+
+    if not config:
+        # Fallback to company default (vehicle_category_id IS NULL)
+        config = db.execute(
+            select(VehicleChecklistConfig)
+            .where(VehicleChecklistConfig.company_id == company_id)
+            .where(VehicleChecklistConfig.vehicle_category_id.is_(None))
+            .where(VehicleChecklistConfig.is_active == True)
+        ).scalar_one_or_none()
+
+    if config:
+        try:
+            default_items = json.loads(config.items_json)
+        except Exception:
+            default_items = []
+    else:
+        default_items = [
+            {"key": "tires", "label": "Состояние шин", "required": True},
+            {"key": "lights", "label": "Работа фар и сигналов", "required": True},
+            {"key": "brakes", "label": "Тормозная система", "required": True},
+            {"key": "fluids", "label": "Уровень жидкостей (масло, ОЖ)", "required": True},
+            {"key": "hydraulics", "label": "Гидравлическая система", "required": False},
+            {"key": "body", "label": "Кузов / навесное оборудование", "required": False},
+            {"key": "docs", "label": "Документы в кабине", "required": True},
+            {"key": "fire_ext", "label": "Огнетушитель / аптечка", "required": True},
+            {"key": "cleanliness", "label": "Чистота кабины", "required": False},
+        ]
 
     # Check if already submitted
     existing = db.execute(
@@ -2701,4 +2729,253 @@ async def submit_pre_shift_checklist(
         "message": "Чеклист отправлен" + (" ⚠️ Есть замечания!" if has_issues else " ✅ Техника принята"),
         "has_issues": has_issues,
         "photos_uploaded": len(photo_paths),
+    }
+
+
+@router.get("/stats/fuel-consumption/export", summary="📥 Экспорт расхода топлива в Excel")
+def export_fuel_consumption_excel(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    vehicle_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт записей расхода топлива в Excel."""
+    import io
+    from datetime import date as date_type
+    from fastapi.responses import StreamingResponse
+    from app.models.shift import ShiftFuelEntry
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+
+    stmt = (
+        select(ShiftFuelEntry, ShiftTask.shift_date, Vehicle.name.label("vehicle_name"))
+        .join(ShiftTask, ShiftFuelEntry.shift_task_id == ShiftTask.id)
+        .join(Vehicle, ShiftFuelEntry.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+    )
+    if vehicle_id:
+        stmt = stmt.where(ShiftFuelEntry.vehicle_id == vehicle_id)
+    stmt = stmt.order_by(ShiftTask.shift_date.desc())
+
+    rows = db.execute(stmt).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Расход топлива"
+
+    header_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+
+    headers = ["Дата", "Техника", "Тип топлива", "Литры", "Пробег (км)", "Моточасы", "Заметки"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    total_liters = 0
+    for row_idx, (entry, shift_date, vname) in enumerate(rows, 2):
+        ws.cell(row=row_idx, column=1, value=str(shift_date))
+        ws.cell(row=row_idx, column=2, value=vname or "")
+        ws.cell(row=row_idx, column=3, value=entry.fuel_type or "diesel")
+        ws.cell(row=row_idx, column=4, value=entry.quantity_liters)
+        ws.cell(row=row_idx, column=5, value=entry.odometer_reading or "")
+        ws.cell(row=row_idx, column=6, value=entry.engine_hours or "")
+        ws.cell(row=row_idx, column=7, value=entry.notes or "")
+        total_liters += entry.quantity_liters
+
+    # Totals row
+    last_row = len(rows) + 2
+    ws.cell(row=last_row, column=1, value="ИТОГО").font = Font(bold=True)
+    ws.cell(row=last_row, column=4, value=round(total_liters, 2)).font = Font(bold=True)
+
+    for col_cells in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 30)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"fuel_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# === Checklist Configs ===
+
+@router.get("/checklist-configs", summary="⚙️ Конфигурации чеклистов")
+def list_checklist_configs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Список конфигураций чеклистов по типам техники."""
+    from app.models.shift import VehicleChecklistConfig
+    import json
+
+    configs = db.execute(
+        select(VehicleChecklistConfig)
+        .where(VehicleChecklistConfig.company_id == company_id)
+        .order_by(VehicleChecklistConfig.vehicle_category_id.nulls_first())
+    ).scalars().all()
+
+    return [{
+        "id": c.id, "name": c.name,
+        "vehicle_category_id": c.vehicle_category_id,
+        "items": json.loads(c.items_json) if c.items_json else [],
+        "is_active": c.is_active,
+    } for c in configs]
+
+
+@router.post("/checklist-configs", summary="➕ Создать конфигурацию чеклиста", status_code=201)
+def create_checklist_config(
+    name: str = Body(...),
+    vehicle_category_id: int | None = Body(default=None),
+    items: list[dict] = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Создать конфигурацию чеклиста для типа техники."""
+    from app.models.shift import VehicleChecklistConfig
+    import json
+
+    config = VehicleChecklistConfig(
+        company_id=company_id, name=name,
+        vehicle_category_id=vehicle_category_id,
+        items_json=json.dumps(items),
+        is_active=True, created_by=current_user.id,
+    )
+    db.add(config)
+    db.commit()
+    db.refresh(config)
+    return {"id": config.id, "message": "Конфигурация создана"}
+
+
+@router.delete("/checklist-configs/{config_id}", summary="🗑️ Удалить конфигурацию чеклиста")
+def delete_checklist_config(
+    config_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Удалить конфигурацию чеклиста."""
+    from app.models.shift import VehicleChecklistConfig
+
+    config = db.get(VehicleChecklistConfig, config_id)
+    if not config or config.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Config not found")
+
+    db.delete(config)
+    db.commit()
+    return {"message": "Конфигурация удалена"}
+
+
+@router.get("/stats/fuel-dashboard", summary="📊 Дашборд расхода топлива")
+def get_fuel_dashboard(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Дашборд расхода топлива: тренды, аномалии, топ потребителей."""
+    from datetime import date as date_type, timedelta
+    from sqlalchemy import func, extract
+    from app.models.shift import ShiftFuelEntry
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+
+    entries = db.execute(
+        select(ShiftFuelEntry, ShiftTask.shift_date, Vehicle.name.label("vehicle_name"), Vehicle.id.label("vid"))
+        .join(ShiftTask, ShiftFuelEntry.shift_task_id == ShiftTask.id)
+        .join(Vehicle, ShiftFuelEntry.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+        .order_by(ShiftTask.shift_date)
+    ).all()
+
+    if not entries:
+        return {"period": {"from": str(d_from), "to": str(d_to)}, "daily_trend": [], "anomalies": [], "top_consumers": [], "summary": {}}
+
+    # Daily trend
+    daily = {}
+    for entry, sdate, vname, vid in entries:
+        key = str(sdate)
+        if key not in daily:
+            daily[key] = {"date": key, "liters": 0, "entries": 0}
+        daily[key]["liters"] += entry.quantity_liters
+        daily[key]["entries"] += 1
+
+    daily_trend = sorted(daily.values(), key=lambda x: x["date"])
+
+    # Per-vehicle totals
+    vehicle_totals = {}
+    for entry, sdate, vname, vid in entries:
+        if vid not in vehicle_totals:
+            vehicle_totals[vid] = {"vehicle_name": vname, "total_liters": 0, "entries": 0, "values": []}
+        vehicle_totals[vid]["total_liters"] += entry.quantity_liters
+        vehicle_totals[vid]["entries"] += 1
+        vehicle_totals[vid]["values"].append(entry.quantity_liters)
+
+    # Anomaly detection: values > mean + 2*stddev per vehicle
+    anomalies = []
+    for vid, stats in vehicle_totals.items():
+        vals = stats["values"]
+        if len(vals) < 3:
+            continue
+        mean_val = sum(vals) / len(vals)
+        variance = sum((v - mean_val) ** 2 for v in vals) / len(vals)
+        stddev = variance ** 0.5
+        threshold = mean_val + 2 * stddev
+
+        for entry, sdate, vname, evid in entries:
+            if evid == vid and entry.quantity_liters > threshold and stddev > 0:
+                anomalies.append({
+                    "vehicle_name": vname,
+                    "date": str(sdate),
+                    "liters": entry.quantity_liters,
+                    "mean": round(mean_val, 2),
+                    "threshold": round(threshold, 2),
+                    "deviation_pct": round(((entry.quantity_liters - mean_val) / mean_val) * 100, 1),
+                })
+
+    anomalies.sort(key=lambda x: x["deviation_pct"], reverse=True)
+
+    # Top consumers
+    top_consumers = sorted(
+        [{"vehicle_id": vid, "vehicle_name": s["vehicle_name"], "total_liters": round(s["total_liters"], 2), "entries": s["entries"]}
+         for vid, s in vehicle_totals.items()],
+        key=lambda x: x["total_liters"], reverse=True
+    )[:10]
+
+    total_liters = sum(s["total_liters"] for s in vehicle_totals.values())
+    avg_daily = round(total_liters / max(len(daily_trend), 1), 2)
+
+    return {
+        "period": {"from": str(d_from), "to": str(d_to)},
+        "summary": {
+            "total_liters": round(total_liters, 2),
+            "avg_daily_liters": avg_daily,
+            "total_entries": len(entries),
+            "vehicles_count": len(vehicle_totals),
+            "anomalies_count": len(anomalies),
+        },
+        "daily_trend": daily_trend,
+        "anomalies": anomalies[:20],
+        "top_consumers": top_consumers,
     }
