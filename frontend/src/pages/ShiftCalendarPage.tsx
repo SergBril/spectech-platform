@@ -241,6 +241,10 @@ const ShiftCalendarPage: React.FC = () => {
                                 className={`p-2 mb-1 rounded border cursor-grab active:cursor-grabbing text-xs ${STATUS_COLORS[shift.status] || 'bg-gray-100 border-gray-300'}`}>
                                 <div className="font-medium">{shift.driver_name || 'Без водителя'}</div>
                                 <div className="opacity-75">{shift.planned_start ? new Date(shift.planned_start).toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'}) : ''}</div>
+                                {!shift.request_id && shift.status === 'planned' && (
+                                  <button onClick={(e) => { e.stopPropagation(); createRequestFromShift(shift.id); }}
+                                    className="mt-1 w-full px-1 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] hover:bg-blue-100">📋 Заявка</button>
+                                )}
                               </div>
                             ))}
                           </td>
