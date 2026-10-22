@@ -1,7 +1,7 @@
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -280,6 +280,27 @@ async def sign_act(
                         user_email=client.contact_email,
                         user_name=client.name or "Клиент",
                     )
+
+                # Template-based notifications with user prefs
+                try:
+                    from app.services.notification_prefs_helper import should_notify
+                    from app.services.notification_template_service import render_template
+                    from app.services.max_messenger_service import max_messenger_service
+                    act_num = act.document_number or str(act.id)
+                    if current_user and should_notify(db, current_user.id, "act_signed", "max"):
+                        tmpl = render_template(db, "act_signed", "max", act_number=act_num)
+                        if tmpl:
+                            import asyncio
+                            loop = asyncio.new_event_loop()
+                            loop.run_until_complete(max_messenger_service.notify_user(db, current_user.id, tmpl["subject"], tmpl["body"]))
+                            loop.close()
+                    if current_user and should_notify(db, current_user.id, "act_signed", "email") and current_user.email:
+                        tmpl = render_template(db, "act_signed", "email", act_number=act_num)
+                        if tmpl:
+                            from app.services.email_service import send_email
+                            send_email(current_user.email, tmpl["subject"], tmpl["body"])
+                except Exception:
+                    pass
                     logger.info(f"📧 Client email sent: {success}")
             except Exception as email_err:
                 logger.error(f"❌ Client email failed: {email_err}")
@@ -323,6 +344,59 @@ async def sign_act(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
+
+
+
+@router.post("/{act_id}/reject", summary="Reject act", tags=["Finance"])
+def reject_act(
+    act_id: int,
+    reason: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Отклонить акт с указанием причины."""
+    from app.models.finance import Act, DocumentStatus
+    from app.services.audit_service import log_action
+
+    act = db.get(Act, act_id)
+    if not act:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    if act.status == DocumentStatus.rejected:
+        raise HTTPException(status_code=409, detail="Act already rejected")
+
+    act.status = DocumentStatus.rejected
+    db.commit()
+
+    log_action(db, current_user.id, "reject", "act", act_id,
+               details=f"Act {act.document_number} rejected: {reason}")
+
+    # Send rejection notifications
+    try:
+        from app.services.notification_prefs_helper import should_notify
+        from app.services.notification_template_service import render_template
+        from app.services.max_messenger_service import max_messenger_service
+        act_num = act.document_number or str(act.id)
+
+        # Notify executor via MAX
+        if current_user and should_notify(db, current_user.id, "act_rejected", "max"):
+            tmpl = render_template(db, "act_rejected", "max", act_number=act_num)
+            if tmpl:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(max_messenger_service.notify_user(db, current_user.id, tmpl["subject"], tmpl["body"]))
+                loop.close()
+
+        # Notify executor via email
+        if current_user and should_notify(db, current_user.id, "act_rejected", "email") and current_user.email:
+            tmpl = render_template(db, "act_rejected", "email", act_number=act_num)
+            if tmpl:
+                from app.services.email_service import send_email
+                send_email(current_user.email, tmpl["subject"], tmpl["body"])
+    except Exception:
+        pass
+
+    return {"message": f"Act {act.document_number} rejected", "reason": reason}
 
 @router.delete("/{act_id}", status_code=204)
 def delete_act(
