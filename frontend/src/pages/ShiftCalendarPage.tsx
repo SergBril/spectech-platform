@@ -149,6 +149,15 @@ const ShiftCalendarPage: React.FC = () => {
     } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
   };
 
+  const bulkAutoAssign = async () => {
+    if (!confirm(`Авто-назначить водителей на все пустые смены с ${weekDays[0]} по ${weekDays[6]}?`)) return;
+    try {
+      const res = await apiClient.post('/shifts/tasks/bulk-auto-assign', { date_from: weekDays[0], date_to: weekDays[6] });
+      alert(`Назначено: ${res.data.assigned}, пропущено: ${res.data.skipped}`);
+      loadShifts();
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
   const showAuditLog = async (taskId: number) => {
     try {
       const res = await apiClient.get(`/shifts/tasks/${taskId}/audit-log`);
@@ -230,6 +239,10 @@ const ShiftCalendarPage: React.FC = () => {
             <button onClick={() => { setShowTemplateModal(true); loadTemplates(); }}
               className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium flex items-center gap-1">
               ⚙️ Управление
+            </button>
+            <button onClick={() => window.open('/api/v1/shifts/audit-log/export', '_blank')}
+              className="px-3 py-1.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm font-medium flex items-center gap-1">
+              📥 Журнал Excel
             </button>
           </div>
         </div>

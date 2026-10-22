@@ -1461,3 +1461,238 @@ def get_shift_audit_log(
             "created_at": log.created_at.isoformat() if log.created_at else None,
         })
     return result
+
+
+@router.post("/tasks/bulk-auto-assign", summary="👥 Массовое авто-назначение водителей")
+def bulk_auto_assign_drivers(
+    date_from: str = Body(...),
+    date_to: str = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Автоматически назначить водителей на все смены без водителя в указанном периоде."""
+    from datetime import date as date_type, timedelta
+    from app.models.contractor import DriverProfile, Employee
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+
+    # Get unassigned shifts
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+        .where(ShiftTask.driver_id.is_(None))
+        .where(ShiftTask.status.notin_(["cancelled"]))
+        .order_by(ShiftTask.shift_date)
+    ).scalars().all()
+
+    if not tasks:
+        return {"assigned": 0, "skipped": 0, "message": "Нет смен без водителя"}
+
+    # Get all active drivers
+    drivers = db.execute(
+        select(DriverProfile)
+        .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
+        .where(Employee.company_id == company_id)
+    ).scalars().all()
+
+    assigned = 0
+    skipped = 0
+
+    for task in tasks:
+        vehicle = db.get(Vehicle, task.vehicle_id)
+        best_driver = None
+        best_score = -1
+
+        for profile in drivers:
+            # Check availability on this date
+            busy = db.execute(
+                select(ShiftTask).where(
+                    ShiftTask.driver_id == profile.employee_contractor_id,
+                    ShiftTask.shift_date == task.shift_date,
+                    ShiftTask.status.notin_(["cancelled"]),
+                )
+            ).scalar_one_or_none()
+            if busy:
+                continue
+
+            score = 0
+            vehicle_cat = getattr(vehicle, 'category', '') or ''
+            driver_license = getattr(profile, 'license_category', '') or ''
+            if vehicle_cat and driver_license and vehicle_cat.upper() in driver_license.upper():
+                score += 10
+
+            week_start = task.shift_date - timedelta(days=task.shift_date.weekday())
+            week_end = week_start + timedelta(days=6)
+            week_shifts = db.execute(
+                select(func.count(ShiftTask.id)).where(
+                    ShiftTask.driver_id == profile.employee_contractor_id,
+                    ShiftTask.shift_date >= week_start,
+                    ShiftTask.shift_date <= week_end,
+                    ShiftTask.status.notin_(["cancelled"]),
+                )
+            ).scalar() or 0
+            score += max(0, 7 - week_shifts)
+
+            if score > best_score:
+                best_score = score
+                best_driver = profile
+
+        if best_driver:
+            task.driver_id = best_driver.employee_contractor_id
+            assigned += 1
+        else:
+            skipped += 1
+
+    db.commit()
+    return {"assigned": assigned, "skipped": skipped, "total": len(tasks)}
+
+
+@router.get("/audit-log/export", summary="📥 Экспорт журнала изменений в Excel")
+def export_audit_log_excel(
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    shift_task_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт журнала изменений смен в Excel."""
+    import io
+    from datetime import date as date_type
+    from fastapi.responses import StreamingResponse
+    from app.models.shift import ShiftAuditLog
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+
+    stmt = (
+        select(ShiftAuditLog)
+        .join(ShiftTask, ShiftAuditLog.shift_task_id == ShiftTask.id)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+    )
+    if shift_task_id:
+        stmt = stmt.where(ShiftAuditLog.shift_task_id == shift_task_id)
+    if date_from:
+        stmt = stmt.where(ShiftAuditLog.created_at >= date_type.fromisoformat(date_from))
+    if date_to:
+        stmt = stmt.where(ShiftAuditLog.created_at <= date_type.fromisoformat(date_to))
+    stmt = stmt.order_by(ShiftAuditLog.created_at.desc())
+
+    logs = db.execute(stmt).scalars().all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Журнал изменений"
+
+    header_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+
+    headers = ["Дата/Время", "Смена ID", "Действие", "Поле", "Старое значение", "Новое значение", "Пользователь"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    for row_idx, log in enumerate(logs, 2):
+        user_name = ""
+        if log.changed_by_user_id:
+            u = db.get(User, log.changed_by_user_id)
+            user_name = u.email if u else ""
+        ws.cell(row=row_idx, column=1, value=log.created_at.strftime("%d.%m.%Y %H:%M") if log.created_at else "")
+        ws.cell(row=row_idx, column=2, value=log.shift_task_id)
+        ws.cell(row=row_idx, column=3, value=log.action)
+        ws.cell(row=row_idx, column=4, value=log.field_changed or "")
+        ws.cell(row=row_idx, column=5, value=log.old_value or "")
+        ws.cell(row=row_idx, column=6, value=log.new_value or "")
+        ws.cell(row=row_idx, column=7, value=user_name)
+
+    for col_cells in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 35)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"shift_audit_log_{__import__('datetime').datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# === Auto-Assign Rules ===
+
+@router.get("/auto-assign/rules", summary="⚙️ Правила авто-назначения")
+def list_auto_assign_rules(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Список правил авто-назначения водителей."""
+    from app.models.shift import AutoAssignRule
+    import json
+
+    rules = db.execute(
+        select(AutoAssignRule)
+        .where(AutoAssignRule.company_id == company_id)
+        .order_by(AutoAssignRule.priority.desc())
+    ).scalars().all()
+
+    return [{
+        "id": r.id, "name": r.name, "priority": r.priority,
+        "rule_type": r.rule_type, "config": json.loads(r.config_json) if r.config_json else {},
+        "is_active": r.is_active,
+    } for r in rules]
+
+
+@router.post("/auto-assign/rules", summary="➕ Создать правило авто-назначения", status_code=201)
+def create_auto_assign_rule(
+    name: str = Body(...),
+    rule_type: str = Body(...),
+    priority: int = Body(default=0),
+    config: dict = Body(default={}),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Создать правило авто-назначения. Типы: priority_driver, blacklist, category_match."""
+    from app.models.shift import AutoAssignRule
+    import json
+
+    rule = AutoAssignRule(
+        company_id=company_id, name=name, rule_type=rule_type,
+        priority=priority, config_json=json.dumps(config),
+        is_active=True, created_by=current_user.id,
+    )
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return {"id": rule.id, "message": "Правило создано"}
+
+
+@router.delete("/auto-assign/rules/{rule_id}", summary="🗑️ Удалить правило")
+def delete_auto_assign_rule(
+    rule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Удалить правило авто-назначения."""
+    from app.models.shift import AutoAssignRule
+
+    rule = db.get(AutoAssignRule, rule_id)
+    if not rule or rule.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    db.delete(rule)
+    db.commit()
+    return {"message": "Правило удалено"}
