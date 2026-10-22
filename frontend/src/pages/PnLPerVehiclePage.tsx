@@ -22,7 +22,11 @@ const PnLPerVehiclePage: React.FC = () => {
     <Layout>
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">📊 Прибыльность по технике</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-gray-900">📊 Прибыльность по технике</h1>
+            <button onClick={() => window.open(`/api/v1/shifts/stats/pnl-per-vehicle/export?date_from=${dateFrom}&date_to=${dateTo}`, '_blank')}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium">📥 Excel</button>
+          </div>
           <div className="flex gap-3 items-center">
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />
             <span className="text-gray-400">—</span>

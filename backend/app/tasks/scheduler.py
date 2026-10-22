@@ -388,6 +388,66 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Авто-разнесение платежей (ежедневно в 10:00)
+    async def _auto_match_payments():
+        from app.core.db import SessionLocal
+        from sqlalchemy import select
+        from app.models.bank import BankTransaction
+        from app.models.acts import Act
+        from app.models.auth import UserCompany
+
+        with SessionLocal() as db:
+            try:
+                company_ids = db.execute(select(UserCompany.company_id).distinct()).scalars().all()
+                total_matched = 0
+
+                for cid in company_ids:
+                    payments = db.execute(
+                        select(BankTransaction).where(
+                            BankTransaction.company_id == cid,
+                            BankTransaction.matched_act_id.is_(None),
+                            BankTransaction.status == "processed",
+                        )
+                    ).scalars().all()
+
+                    unpaid_acts = db.execute(
+                        select(Act).where(
+                            Act.company_id == cid,
+                            Act.status.in_(["draft", "sent_to_edo", "signed"]),
+                        )
+                    ).scalars().all()
+
+                    for payment in payments:
+                        for act in unpaid_acts:
+                            remaining = (act.total_amount or 0) - (act.paid_amount or 0)
+                            if remaining <= 0:
+                                continue
+                            amount_match = abs(payment.amount - remaining) < max(remaining * 0.01, 1)
+                            inn_match = bool(payment.payer_inn and act.counterparty_inn and payment.payer_inn == act.counterparty_inn)
+                            purpose_match = bool(payment.purpose and act.act_number and act.act_number.replace("-", "") in payment.purpose.replace("-", "").replace(" ", ""))
+
+                            if amount_match and (inn_match or purpose_match or not act.counterparty_inn):
+                                payment.matched_act_id = act.id
+                                act.paid_amount = (act.paid_amount or 0) + payment.amount
+                                act.payment_status = "paid" if act.paid_amount >= act.total_amount else "partial"
+                                total_matched += 1
+                                break
+
+                db.commit()
+                if total_matched > 0:
+                    logger.info("✅ Auto-match: %d payments matched", total_matched)
+            except Exception as e:
+                logger.error("❌ Auto-match failed: %s", e)
+                db.rollback()
+
+    scheduler.add_job(
+        _auto_match_payments,
+        trigger=CronTrigger(hour=10, minute=0),
+        id="daily_auto_match_payments",
+        name="Daily auto-match payments to acts",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         "⏰ Scheduler started. Interval: %d min. Jobs: %d",

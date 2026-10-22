@@ -31,6 +31,7 @@ import {
   ReceivablesPage,
   BankTransactionsPage,
   PnLPerVehiclePage,
+  PlatformOverviewPage,
   VehiclesPage,
   DriversPage,
   RequestsPage,
@@ -112,6 +113,7 @@ const AppRoutes = () => {
         <Route path="/receivables" element={<ProtectedRoute><ReceivablesPage /></ProtectedRoute>} />
         <Route path="/bank-transactions" element={<ProtectedRoute><BankTransactionsPage /></ProtectedRoute>} />
         <Route path="/pnl" element={<ProtectedRoute><PnLPerVehiclePage /></ProtectedRoute>} />
+        <Route path="/overview" element={<ProtectedRoute><PlatformOverviewPage /></ProtectedRoute>} />
         <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
         <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
         <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
