@@ -261,6 +261,42 @@ export const FinancePage: React.FC = () => {
     }
   };
 
+  const handleDownloadUpdXml = async (act: Act) => {
+    try {
+      const blob = await financeApi.downloadUpdXml(act.id);
+      downloadBlob(blob, `UPD-${act.document_number}.xml`);
+      showToast.success('✅ УПД XML скачан');
+    } catch { showToast.error('❌ Ошибка скачивания XML'); }
+  };
+
+  const handleDownloadSignedZip = async (act: Act) => {
+    try {
+      const blob = await financeApi.downloadSignedUpdZip(act.id);
+      downloadBlob(blob, `UPD-${act.document_number}-signed.zip`);
+      showToast.success('✅ Подписанный УПД (ZIP) скачан');
+    } catch { showToast.error('❌ Ошибка скачивания ZIP'); }
+  };
+
+  const handleSendToDiadoc = async (act: Act) => {
+    if (!confirm(`Отправить УПД ${act.document_number} в Диадок?`)) return;
+    try {
+      const res = await financeApi.sendToDiadoc(act.id);
+      showToast.success(`✅ ${res.message || 'Отправлено в Диадок'}`);
+    } catch (err: any) { showToast.error('❌ ' + (err.response?.data?.detail || 'Ошибка отправки')); }
+  };
+
+  const handleRejectAct = async (act: Act) => {
+    const reason = prompt('Причина отклонения акта:');
+    if (!reason) return;
+    try {
+      await financeApi.rejectAct(act.id, reason);
+      showToast.success('✅ Акт отклонён');
+      // Reload acts
+      const actsRes = await financeApi.getActs({ limit: 200 });
+      setActs(Array.isArray(actsRes) ? actsRes : []);
+    } catch (err: any) { showToast.error('❌ ' + (err.response?.data?.detail || 'Ошибка')); }
+  };
+
   const handleDownloadUpd = async (act: Act) => {
     try {
       const blob = await financeApi.downloadUpdPdf(act.id);
@@ -752,7 +788,13 @@ export const FinancePage: React.FC = () => {
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
                                 <button onClick={() => handleDownloadPdf('act', act.id, act.document_number)} className="text-purple-600 hover:text-purple-900" title="Акт PDF">📄</button>
-                                <button onClick={() => handleDownloadUpd(act)} className="text-green-600 hover:text-green-900 font-semibold" title="УПД">📋УПД</button>
+                                <div className="flex gap-1 flex-wrap">
+                          <button onClick={() => handleDownloadUpd(act)} className="text-green-600 hover:text-green-900 text-xs px-1.5 py-0.5 rounded bg-green-50" title="УПД PDF">📋PDF</button>
+                          <button onClick={() => handleDownloadUpdXml(act)} className="text-blue-600 hover:text-blue-900 text-xs px-1.5 py-0.5 rounded bg-blue-50" title="УПД XML для ЭДО">📄XML</button>
+                          <button onClick={() => handleDownloadSignedZip(act)} className="text-indigo-600 hover:text-indigo-900 text-xs px-1.5 py-0.5 rounded bg-indigo-50" title="Подписанный ZIP">🔏ZIP</button>
+                          <button onClick={() => handleSendToDiadoc(act)} className="text-purple-600 hover:text-purple-900 text-xs px-1.5 py-0.5 rounded bg-purple-50" title="Отправить в Диадок">📤ЭДО</button>
+                          <button onClick={() => handleRejectAct(act)} className="text-red-600 hover:text-red-900 text-xs px-1.5 py-0.5 rounded bg-red-50" title="Отклонить акт">❌</button>
+                        </div>
                                 <button onClick={() => handleDownloadTorg12(act)} className="text-purple-600 hover:text-purple-900" title="ТОРГ-12">📦Т-12</button>
                                 {act.tax_system === 'osno' && parseFloat(act.vat_rate || '0') > 0 && (
                                   <button onClick={() => handleDownloadInvoiceFacture(act)} className="text-orange-600 hover:text-orange-900" title="Счёт-фактура">🧾</button>

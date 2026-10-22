@@ -185,6 +185,39 @@ export const RequestDetailPage: React.FC = () => {
   };
 
   // 🆕 Скачать УПД
+  const handleDownloadUpdXml = async (act: Act) => {
+    try {
+      const blob = await financeApi.downloadUpdXml(act.id);
+      downloadBlob(blob, `UPD-${act.document_number}.xml`);
+      showToast.success('✅ УПД XML скачан');
+    } catch { showToast.error('❌ Ошибка XML'); }
+  };
+
+  const handleDownloadSignedZip = async (act: Act) => {
+    try {
+      const blob = await financeApi.downloadSignedUpdZip(act.id);
+      downloadBlob(blob, `UPD-${act.document_number}-signed.zip`);
+      showToast.success('✅ Подписанный ZIP скачан');
+    } catch { showToast.error('❌ Ошибка ZIP'); }
+  };
+
+  const handleSendToDiadoc = async (act: Act) => {
+    if (!confirm(`Отправить УПД ${act.document_number} в Диадок?`)) return;
+    try {
+      const res = await financeApi.sendToDiadoc(act.id);
+      showToast.success(`✅ ${res.message || 'Отправлено'}`);
+    } catch (err: any) { showToast.error('❌ ' + (err.response?.data?.detail || '')); }
+  };
+
+  const handleRejectAct = async (act: Act) => {
+    const reason = prompt('Причина отклонения:');
+    if (!reason) return;
+    try {
+      await financeApi.rejectAct(act.id, reason);
+      showToast.success('✅ Акт отклонён');
+    } catch (err: any) { showToast.error('❌ ' + (err.response?.data?.detail || '')); }
+  };
+
   const handleDownloadUpd = async (act: Act) => {
     try {
       const blob = await financeApi.downloadUpdPdf(act.id);

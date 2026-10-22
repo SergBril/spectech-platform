@@ -506,4 +506,36 @@ export const financeApi = {
     const res = await apiClient.post(`/salaries/${recordId}/approve`);
     return res.data;
   },
+
+  // === UPD XML & EDO ===
+  downloadUpdXml: async (actId: number): Promise<Blob> => {
+    const response = await apiClient.get(`/acts/${actId}/xml`, { responseType: 'blob' });
+    return response.data;
+  },
+
+  downloadSignedUpdZip: async (actId: number): Promise<Blob> => {
+    const response = await apiClient.get(`/acts/${actId}/signed-xml`, { responseType: 'blob' });
+    return response.data;
+  },
+
+  downloadUpdSignature: async (actId: number): Promise<Blob> => {
+    const response = await apiClient.get(`/acts/${actId}/signature`, { responseType: 'blob' });
+    return response.data;
+  },
+
+  verifyUpdSignature: async (actId: number): Promise<{ valid: boolean; xml_size: number; sig_size: number }> => {
+    const response = await apiClient.post(`/acts/${actId}/verify-signature`);
+    return response.data;
+  },
+
+  sendToDiadoc: async (actId: number): Promise<{ status: string; message: string }> => {
+    const response = await apiClient.post(`/acts/${actId}/send-to-diadoc`);
+    return response.data;
+  },
+
+  rejectAct: async (actId: number, reason: string): Promise<{ message: string }> => {
+    const response = await apiClient.post(`/acts/${actId}/reject`, { reason });
+    return response.data;
+  },
+
 };
