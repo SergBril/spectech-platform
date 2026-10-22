@@ -3,6 +3,7 @@ export { default as FinancePage } from './FinancePage';
 export { default as CompanyProfilePage } from './CompanyProfilePage';
 export { default as MarketplacePage } from './MarketplacePage';
 export { default as MyResponsesPage } from './MyResponsesPage';
+export { default as ShiftCalendarPage } from './ShiftCalendarPage';
 export { default as VehiclesPage } from './VehiclesPage';
 export { default as DriversPage } from './DriversPage';
 export { default as RequestsPage } from './RequestsPage';

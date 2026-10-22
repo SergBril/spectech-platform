@@ -30,18 +30,20 @@ const MarketplacePage: React.FC = () => {
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterCrossCategory, setFilterCrossCategory] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(0);
   const pageSize = 12;
 
   useEffect(() => {
     loadRequests();
-  }, [filterCategory, page]);
+  }, [filterCategory, filterCrossCategory, page]);
 
   const loadRequests = async () => {
     setLoading(true);
     try {
       const params: any = { limit: pageSize, offset: page * pageSize };
+      if (filterCrossCategory) params.cross_category = true;
       if (filterCategory !== 'all') params.category_id = parseInt(filterCategory);
       const res = await apiClient.get('/public/marketplace/requests', { params });
       const data = res.data;
@@ -112,6 +114,14 @@ const MarketplacePage: React.FC = () => {
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center gap-2"
             >
               📥 Экспорт Excel
+            </button>
+            <button
+              onClick={() => { setFilterCrossCategory(!filterCrossCategory); setPage(0); }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                filterCrossCategory ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              🔀 Кросс-категории {filterCrossCategory && '(вкл)'}
             </button>
             <select
             value={filterCategory}

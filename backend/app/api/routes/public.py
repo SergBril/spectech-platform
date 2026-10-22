@@ -682,6 +682,7 @@ class PublicCompanyReviewCreate(BaseModel):
 @router.get("/marketplace/requests", summary="🌐 Заявки маркетплейса")
 def list_marketplace_requests(
     category_id: int | None = None,
+    cross_category: bool | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -875,6 +876,120 @@ async def respond_to_marketplace_request(
         "status": "pending_approval",
         "message": "Отклик успешно отправлен! Владелец заявки уведомлён.",
     }
+
+
+@router.get("/marketplace/payouts-report", summary="📊 Отчёт по выплатам маркетплейса")
+def marketplace_payouts_report(
+    date_from: str | None = None,
+    date_to: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт отчёта по выплатам маркетплейса в Excel."""
+    import io
+    from datetime import datetime, date
+    from fastapi.responses import StreamingResponse
+    from sqlalchemy import func
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, numbers
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+
+    # Get payouts related to marketplace requests
+    from app.models.finance import Payout
+    from app.models.dispatch import RequestAssignment
+
+    stmt = (
+        select(Payout)
+        .join(RequestAssignment, Payout.assignment_id == RequestAssignment.id)
+        .join(Request, RequestAssignment.request_id == Request.id)
+        .where(Request.source_channel == "marketplace")
+    )
+
+    if date_from:
+        stmt = stmt.where(Payout.period_start >= date.fromisoformat(date_from))
+    if date_to:
+        stmt = stmt.where(Payout.period_end <= date.fromisoformat(date_to))
+
+    stmt = stmt.order_by(Payout.period_start.desc())
+    payouts = db.scalars(stmt).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Выплаты маркетплейса"
+
+    header_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+
+    headers = ["ID", "Период", "Заявка", "Техника", "Исполнитель", "Сумма", "Комиссия (10%)", "К выплате", "Статус", "Дата"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    total_amount = 0
+    total_commission = 0
+    total_net = 0
+
+    for row_idx, p in enumerate(payouts, 2):
+        assignment = db.get(RequestAssignment, p.assignment_id) if hasattr(p, "assignment_id") and p.assignment_id else None
+        request = db.get(Request, assignment.request_id) if assignment else None
+        vehicle = db.get(Vehicle, assignment.vehicle_id) if assignment else None
+
+        amount = float(p.amount) if p.amount else 0
+        commission = round(amount * 0.1, 2)
+        net = round(amount - commission, 2)
+        total_amount += amount
+        total_commission += commission
+        total_net += net
+
+        period = ""
+        if p.period_start and p.period_end:
+            period = f"{p.period_start.strftime('%d.%m')} — {p.period_end.strftime('%d.%m')}"
+
+        ws.cell(row=row_idx, column=1, value=p.id)
+        ws.cell(row=row_idx, column=2, value=period)
+        ws.cell(row=row_idx, column=3, value=f"#{request.id}" if request else "")
+        ws.cell(row=row_idx, column=4, value=vehicle.name if vehicle else "")
+        ws.cell(row=row_idx, column=5, value=getattr(p, "performer_company_name", ""))
+        ws.cell(row=row_idx, column=6, value=amount)
+        ws.cell(row=row_idx, column=7, value=commission)
+        ws.cell(row=row_idx, column=8, value=net)
+        ws.cell(row=row_idx, column=9, value=p.status if hasattr(p, "status") else "")
+        ws.cell(row=row_idx, column=10, value=p.created_at.strftime("%d.%m.%Y") if hasattr(p, "created_at") and p.created_at else "")
+
+        ws.cell(row=row_idx, column=6).number_format = '#,##0.00 ₽'
+        ws.cell(row=row_idx, column=7).number_format = '#,##0.00 ₽'
+        ws.cell(row=row_idx, column=8).number_format = '#,##0.00 ₽'
+
+    # Totals row
+    total_row = len(payouts) + 2
+    ws.cell(row=total_row, column=5, value="ИТОГО").font = Font(bold=True)
+    ws.cell(row=total_row, column=6, value=total_amount).font = Font(bold=True)
+    ws.cell(row=total_row, column=6).number_format = '#,##0.00 ₽'
+    ws.cell(row=total_row, column=7, value=total_commission).font = Font(bold=True)
+    ws.cell(row=total_row, column=7).number_format = '#,##0.00 ₽'
+    ws.cell(row=total_row, column=8, value=total_net).font = Font(bold=True)
+    ws.cell(row=total_row, column=8).number_format = '#,##0.00 ₽'
+
+    for col_cells in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 35)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"marketplace_payouts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/marketplace/stats", summary="📊 Статистика маркетплейса")
