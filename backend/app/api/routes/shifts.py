@@ -4659,3 +4659,50 @@ def get_platform_overview(
         "shifts_today": shifts_today,
         "date": str(today),
     }
+
+
+# === Audit Log ===
+
+@router.get("/audit-logs", summary="📋 Журнал действий пользователей")
+def list_audit_logs(
+    user_id: int | None = Query(default=None),
+    action: str | None = Query(default=None),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Журнал аудита действий (только для admin)."""
+    from app.services.rbac_service import RBACMiddleware
+    from app.models.auth import AuditLog
+    from sqlalchemy import func
+
+    RBACMiddleware.require(current_user, "audit:read")
+
+    stmt = select(AuditLog)
+    if user_id:
+        stmt = stmt.where(AuditLog.user_id == user_id)
+    if action:
+        stmt = stmt.where(AuditLog.action == action)
+    if date_from:
+        stmt = stmt.where(AuditLog.created_at >= date_from)
+    if date_to:
+        stmt = stmt.where(AuditLog.created_at <= date_to)
+
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = db.execute(count_stmt).scalar() or 0
+
+    stmt = stmt.order_by(AuditLog.created_at.desc())
+    stmt = stmt.offset((page - 1) * per_page).limit(per_page)
+    logs = db.execute(stmt).scalars().all()
+
+    items = [{
+        "id": l.id, "user_id": l.user_id, "action": l.action,
+        "resource_type": l.resource_type, "resource_id": l.resource_id,
+        "details": l.details, "ip_address": l.ip_address,
+        "created_at": l.created_at.isoformat() if l.created_at else None,
+    } for l in logs]
+
+    return {"items": items, "total": total, "page": page, "per_page": per_page}
