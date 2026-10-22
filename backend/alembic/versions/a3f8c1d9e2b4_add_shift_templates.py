@@ -25,7 +25,7 @@ def upgrade():
         sa.Column('created_by', sa.Integer(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(['vehicle_id'], ['vehicles.id']),
-        sa.ForeignKeyConstraint(['driver_id'], ['driver_profiles.id']),
+        sa.ForeignKeyConstraint(['driver_id'], ['driver_profiles.employee_contractor_id']),
         sa.ForeignKeyConstraint(['created_by'], ['users.id']),
         sa.PrimaryKeyConstraint('id'),
     )
