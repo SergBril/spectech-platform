@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, Body
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -76,6 +76,202 @@ def get_shift_task(
     if not task or task.company_id != company_id:
         raise HTTPException(status_code=404, detail="Shift task not found")
     return task
+
+
+
+@router.put("/tasks/{task_id}", summary="✏️ Обновить смену")
+async def update_shift_task(
+    task_id: int,
+    shift_date: str | None = Body(default=None),
+    planned_start: str | None = Body(default=None),
+    planned_end: str | None = Body(default=None),
+    driver_id: int | None = Body(default=None),
+    status: str | None = Body(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Обновить смену (дата, водитель, статус). Используется для drag-and-drop."""
+    from datetime import datetime, date as date_type
+
+    task = db.get(ShiftTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Shift task not found")
+
+    # Проверка доступа: владелец техники или диспетчер
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    if vehicle and vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    changes = []
+    if shift_date is not None:
+        old_date = task.shift_date
+        task.shift_date = date_type.fromisoformat(shift_date)
+        changes.append(f"date: {old_date} → {shift_date}")
+    if planned_start is not None:
+        task.planned_start = datetime.fromisoformat(planned_start)
+    if planned_end is not None:
+        task.planned_end = datetime.fromisoformat(planned_end)
+    if driver_id is not None:
+        task.driver_id = driver_id
+    if status is not None:
+        old_status = task.status
+        task.status = status
+        changes.append(f"status: {old_status} → {status}")
+
+    db.commit()
+    db.refresh(task)
+
+    # WS broadcast для live-обновления календаря
+    try:
+        from app.services.websocket_manager import manager
+        await manager.broadcast_to_company(company_id, {
+            "type": "shift_updated",
+            "task_id": task_id,
+            "shift_date": str(task.shift_date),
+            "vehicle_id": task.vehicle_id,
+            "driver_id": task.driver_id,
+            "status": task.status,
+        })
+    except Exception:
+        pass
+
+    return {"message": "Смена обновлена", "id": task_id, "changes": changes}
+
+
+@router.get("/calendar/export-pdf", summary="🖨️ PDF календаря смен")
+def export_shift_calendar_pdf(
+    date_from: str = Query(..., description="Начало периода YYYY-MM-DD"),
+    date_to: str = Query(..., description="Конец периода YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт календаря смен в PDF для печати."""
+    from datetime import date as date_type, timedelta
+    from fastapi.responses import StreamingResponse
+    import io
+
+    try:
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib import colors
+        from reportlab.lib.units import mm
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    except ImportError:
+        # Fallback: generate simple HTML-based PDF alternative
+        # For now return Excel if reportlab not available
+        raise HTTPException(status_code=500, detail="reportlab not installed. Install: pip install reportlab")
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+
+    # Get shifts
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+        .order_by(ShiftTask.shift_date, Vehicle.name)
+    ).scalars().all()
+
+    # Build calendar grid
+    days = []
+    d = d_from
+    while d <= d_to:
+        days.append(d)
+        d += timedelta(days=1)
+
+    # Get unique vehicles
+    vehicle_ids = list(set(t.vehicle_id for t in tasks))
+    vehicles_map = {}
+    for vid in vehicle_ids:
+        v = db.get(Vehicle, vid)
+        if v:
+            vehicles_map[vid] = v.name
+
+    # Status colors
+    status_colors = {
+        "planned": colors.lightblue,
+        "confirmed": colors.lightgreen,
+        "in_progress": colors.lightcyan,
+        "completed": colors.palegreen,
+        "cancelled": colors.mistyrose,
+    }
+
+    # Build table data
+    header = ["Техника"] + [d.strftime("%d.%m\n%a") for d in days]
+    data = [header]
+
+    for vid, vname in sorted(vehicles_map.items(), key=lambda x: x[1]):
+        row = [vname]
+        for day in days:
+            day_tasks = [t for t in tasks if t.vehicle_id == vid and t.shift_date == day]
+            if day_tasks:
+                t = day_tasks[0]
+                driver_name = ""
+                if t.driver_id:
+                    from app.models.driver import Driver
+                    driver = db.get(Driver, t.driver_id)
+                    driver_name = driver.full_name if driver else ""
+                cell_text = f"{driver_name}\n{t.status}"
+                row.append(cell_text)
+            else:
+                row.append("")
+        data.append(row)
+
+    # Generate PDF
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                           leftMargin=10*mm, rightMargin=10*mm,
+                           topMargin=15*mm, bottomMargin=10*mm)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, alignment=1)
+
+    elements = []
+    elements.append(Paragraph(f"Планирование смен: {d_from.strftime('%d.%m')} — {d_to.strftime('%d.%m.%Y')}", title_style))
+    elements.append(Spacer(1, 10*mm))
+
+    col_widths = [35*mm] + [(277*mm - 35*mm) / len(days)] * len(days)
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+
+    style_cmds = [
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2F5496')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, 1), (0, -1), colors.HexColor('#F3F4F6')),
+        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+    ]
+
+    # Color-code status cells
+    for row_idx in range(1, len(data)):
+        for col_idx in range(1, len(data[row_idx])):
+            cell_val = str(data[row_idx][col_idx])
+            for status, color in status_colors.items():
+                if status in cell_val:
+                    style_cmds.append(('BACKGROUND', (col_idx, row_idx), (col_idx, row_idx), color))
+                    break
+
+    table.setStyle(TableStyle(style_cmds))
+    elements.append(table)
+
+    doc.build(elements)
+    buf.seek(0)
+
+    filename = f"shift_calendar_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.pdf"
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
 
 
 @router.get("/reports", response_model=list[ShiftReportRead])
