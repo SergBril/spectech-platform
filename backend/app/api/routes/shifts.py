@@ -2996,3 +2996,248 @@ async def sync_fuel_card_transactions(
     transactions = await fuel_card_service.fetch_transactions(date_from, date_to, card_numbers or None)
     result = await fuel_card_service.sync_to_shift_entries(db, company_id, transactions)
     return {"message": "Синхронизация завершена", **result}
+
+
+@router.post("/fuel-cards/qr-scan", summary="📷 Запись топлива по QR-коду АЗС")
+def record_fuel_by_qr(
+    qr_data: str = Body(...),
+    shift_task_id: int = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Записать расход топлива по отсканированному QR-коду с чека АЗС.
+    
+    QR формат: FUEL|<plate>|<liters>|<fuel_type>|<odometer>|<datetime>
+    Или JSON: {"plate":"...","liters":...,"fuel_type":"...","odometer":...}
+    """
+    import json
+    from datetime import datetime
+    from app.models.shift import ShiftFuelEntry
+
+    task = db.get(ShiftTask, shift_task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Shift task not found")
+
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Parse QR data
+    parsed = {}
+    try:
+        if qr_data.startswith("{"):
+            parsed = json.loads(qr_data)
+        elif "|" in qr_data:
+            parts = qr_data.split("|")
+            if parts[0].upper() == "FUEL" and len(parts) >= 4:
+                parsed = {
+                    "plate": parts[1],
+                    "liters": float(parts[2]),
+                    "fuel_type": parts[3].lower() if len(parts) > 3 else "diesel",
+                    "odometer": float(parts[4]) if len(parts) > 4 and parts[4] else None,
+                }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot parse QR data: {e}")
+
+    if not parsed.get("liters"):
+        raise HTTPException(status_code=400, detail="QR must contain liters value")
+
+    entry = ShiftFuelEntry(
+        shift_task_id=shift_task_id,
+        vehicle_id=task.vehicle_id,
+        fuel_type=parsed.get("fuel_type", "diesel"),
+        quantity_liters=float(parsed["liters"]),
+        odometer_reading=float(parsed["odometer"]) if parsed.get("odometer") else None,
+        notes=f"QR scan: {qr_data[:100]}",
+        recorded_by=current_user.id,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+
+    # Calculate consumption
+    consumption = None
+    distance = getattr(task, 'odometer_distance', None)
+    if distance and distance > 0:
+        consumption = round(float(parsed["liters"]) / distance * 100, 2)
+
+    return {
+        "id": entry.id,
+        "message": f"⛽ Записано {parsed['liters']} л ({parsed.get('fuel_type', 'diesel')})",
+        "consumption_per_100km": consumption,
+    }
+
+
+@router.get("/stats/cost-per-hour", summary="💰 Себестоимость моточаса")
+def get_cost_per_hour_report(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Отчёт себестоимости моточаса: топливо + зарплата водителя + амортизация."""
+    from datetime import date as date_type
+    from sqlalchemy import func
+    from app.models.shift import ShiftFuelEntry
+    from app.models.contractor import DriverProfile, Employee
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+
+    vehicles = db.execute(select(Vehicle).where(Vehicle.company_id == company_id)).scalars().all()
+
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+        .where(ShiftTask.status.notin_(["cancelled"]))
+    ).scalars().all()
+
+    fuel_entries = db.execute(
+        select(ShiftFuelEntry)
+        .join(ShiftTask, ShiftFuelEntry.shift_task_id == ShiftTask.id)
+        .join(Vehicle, ShiftFuelEntry.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+    ).scalars().all()
+
+    # Default rates (can be configured per vehicle/driver later)
+    DEFAULT_FUEL_PRICE = 65.0  # ₽/литр дизеля
+    DEFAULT_HOURLY_WAGE = 500.0  # ₽/час водитель
+    DEFAULT_AMORTIZATION = 300.0  # ₽/час амортизация
+
+    result = []
+    total_cost = 0
+    total_hours = 0
+
+    for v in vehicles:
+        v_tasks = [t for t in tasks if t.vehicle_id == v.id]
+        v_fuel = [f for f in fuel_entries if f.vehicle_id == v.id]
+
+        hours = sum(
+            max(0, (t.planned_end - t.planned_start).total_seconds() / 3600)
+            for t in v_tasks if t.planned_start and t.planned_end
+        )
+        fuel_liters = sum(f.quantity_liters for f in v_fuel)
+
+        fuel_cost = fuel_liters * DEFAULT_FUEL_PRICE
+        wage_cost = hours * DEFAULT_HOURLY_WAGE
+        amort_cost = hours * DEFAULT_AMORTIZATION
+        total = fuel_cost + wage_cost + amort_cost
+        cost_per_hour = round(total / hours, 2) if hours > 0 else 0
+
+        driver_name = ""
+        if v_tasks:
+            first_driver = next((t.driver_id for t in v_tasks if t.driver_id), None)
+            if first_driver:
+                emp = db.get(Employee, first_driver)
+                driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
+
+        result.append({
+            "vehicle_id": v.id,
+            "vehicle_name": v.name,
+            "driver_name": driver_name,
+            "hours": round(hours, 1),
+            "fuel_liters": round(fuel_liters, 2),
+            "fuel_cost": round(fuel_cost, 2),
+            "wage_cost": round(wage_cost, 2),
+            "amortization_cost": round(amort_cost, 2),
+            "total_cost": round(total, 2),
+            "cost_per_hour": cost_per_hour,
+        })
+
+        total_cost += total
+        total_hours += hours
+
+    result.sort(key=lambda x: x["cost_per_hour"], reverse=True)
+
+    avg_cost_per_hour = round(total_cost / total_hours, 2) if total_hours > 0 else 0
+
+    return {
+        "period": {"from": str(d_from), "to": str(d_to)},
+        "rates": {"fuel_price": DEFAULT_FUEL_PRICE, "hourly_wage": DEFAULT_HOURLY_WAGE, "amortization": DEFAULT_AMORTIZATION},
+        "summary": {
+            "total_cost": round(total_cost, 2),
+            "total_hours": round(total_hours, 1),
+            "avg_cost_per_hour": avg_cost_per_hour,
+            "vehicles_count": len([r for r in result if r["hours"] > 0]),
+        },
+        "vehicles": result,
+    }
+
+
+@router.get("/stats/cost-per-hour/export", summary="📥 Экспорт себестоимости в Excel")
+def export_cost_per_hour_excel(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт отчёта себестоимости моточаса в Excel."""
+    import io
+    from datetime import date as date_type
+    from fastapi.responses import StreamingResponse
+    from app.models.shift import ShiftFuelEntry
+    from app.models.contractor import Employee
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+
+    # Reuse same logic as get_cost_per_hour_report
+    report_data = get_cost_per_hour_report(date_from, date_to, db, current_user, company_id)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Себестоимость моточаса"
+
+    header_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+
+    headers = ["Техника", "Водитель", "Часов", "Топливо (л)", "Топливо (₽)", "Зарплата (₽)", "Амортизация (₽)", "Итого (₽)", "₽/час"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    for row_idx, v in enumerate(report_data["vehicles"], 2):
+        ws.cell(row=row_idx, column=1, value=v["vehicle_name"])
+        ws.cell(row=row_idx, column=2, value=v["driver_name"])
+        ws.cell(row=row_idx, column=3, value=v["hours"])
+        ws.cell(row=row_idx, column=4, value=v["fuel_liters"])
+        ws.cell(row=row_idx, column=5, value=v["fuel_cost"])
+        ws.cell(row=row_idx, column=6, value=v["wage_cost"])
+        ws.cell(row=row_idx, column=7, value=v["amortization_cost"])
+        ws.cell(row=row_idx, column=8, value=v["total_cost"])
+        ws.cell(row=row_idx, column=9, value=v["cost_per_hour"])
+
+    # Totals
+    last_row = len(report_data["vehicles"]) + 2
+    ws.cell(row=last_row, column=1, value="ИТОГО").font = Font(bold=True)
+    ws.cell(row=last_row, column=3, value=report_data["summary"]["total_hours"]).font = Font(bold=True)
+    ws.cell(row=last_row, column=8, value=report_data["summary"]["total_cost"]).font = Font(bold=True)
+    ws.cell(row=last_row, column=9, value=report_data["summary"]["avg_cost_per_hour"]).font = Font(bold=True)
+
+    for col_cells in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 25)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"cost_per_hour_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})

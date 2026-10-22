@@ -13,6 +13,8 @@ const DriverAppPage: React.FC = () => {
   const [chatText, setChatText] = useState('');
   const [fuelModal, setFuelModal] = useState<number | null>(null);
   const [fuelForm, setFuelForm] = useState({ quantity_liters: '', odometer_reading: '', engine_hours: '' });
+  const [qrModal, setQrModal] = useState<number | null>(null);
+  const [qrInput, setQrInput] = useState('');
   const [checklistModal, setChecklistModal] = useState<number | null>(null);
   const [checklistItems, setChecklistItems] = useState<any[]>([]);
   const [checklistNotes, setChecklistNotes] = useState('');
@@ -60,6 +62,16 @@ const DriverAppPage: React.FC = () => {
       await apiClient.post(`/shifts/tasks/${chatModal}/messages`, { text: chatText });
       setChatText('');
       loadMessages(chatModal);
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
+  const submitQrFuel = async () => {
+    if (!qrModal || !qrInput.trim()) return;
+    try {
+      const res = await apiClient.post('/shifts/fuel-cards/qr-scan', { qr_data: qrInput, shift_task_id: qrModal });
+      alert(res.data.message + (res.data.consumption_per_100km ? `\nРасход: ${res.data.consumption_per_100km} л/100км` : ''));
+      setQrModal(null);
+      setQrInput('');
     } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
   };
 
@@ -182,6 +194,10 @@ const DriverAppPage: React.FC = () => {
                   className="flex-1 py-2 bg-orange-100 text-orange-700 rounded-lg text-xs font-medium hover:bg-orange-200">
                   ⛽ Топливо
                 </button>
+                <button onClick={() => { setQrModal(s.id); setQrInput(''); }}
+                  className="flex-1 py-2 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-medium hover:bg-yellow-200">
+                  📷 QR
+                </button>
                 <button onClick={() => loadMessages(s.id)}
                   className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200">
                   💬 Чат
@@ -200,6 +216,26 @@ const DriverAppPage: React.FC = () => {
           ))
         )}
       </div>
+
+      {/* QR Scan Modal */}
+      {qrModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-end z-50">
+          <div className="bg-white rounded-t-2xl w-full p-6 space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold">📷 Сканировать QR АЗС</h2>
+              <button onClick={() => setQrModal(null)} className="text-gray-400 text-xl">✕</button>
+            </div>
+            <p className="text-xs text-gray-500">Отсканируйте QR-код с чека АЗС или введите данные вручную</p>
+            <textarea value={qrInput} onChange={e => setQrInput(e.target.value)}
+              placeholder='FUEL|А123БВ77|45.5|diesel|125000 или JSON'
+              className="w-full px-3 py-2 border rounded-lg text-sm font-mono" rows={3} />
+            <button onClick={submitQrFuel} disabled={!qrInput.trim()}
+              className="w-full py-3 bg-yellow-600 text-white rounded-xl text-base font-bold hover:bg-yellow-700 disabled:opacity-50">
+              ✅ Записать топливо
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Fuel Entry Modal */}
       {fuelModal && (

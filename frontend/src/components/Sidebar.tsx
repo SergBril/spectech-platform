@@ -28,6 +28,7 @@ const menuItems: MenuItem[] = [
   { label: 'KPI Водителей', icon: '🏆', path: '/driver-kpi', group: 'Бизнес' },
   { label: 'Расход топлива', icon: '⛽', path: '/fuel-dashboard', group: 'Бизнес' },
   { label: 'Чеклисты техники', icon: '✅', path: '/checklist-configs', group: 'Бизнес' },
+  { label: 'Себестоимость моточаса', icon: '💰', path: '/cost-per-hour', group: 'Бизнес' },
   { label: 'Мои публикации', icon: '🏪', path: '/my-listings', group: 'Бизнес' },
   { label: 'Контрагенты', icon: '👥', path: '/contractors', group: 'Бизнес' },
 
