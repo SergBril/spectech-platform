@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
 
@@ -148,3 +148,17 @@ class ShiftReport(Base):
     client_signed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class ShiftTemplate(Base):
+    __tablename__ = "shift_templates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), nullable=False)
+    driver_id: Mapped[int | None] = mapped_column(ForeignKey("drivers.id"), nullable=True)
+    weekday: Mapped[int] = mapped_column(nullable=False)  # 0=Mon..6=Sun
+    start_time: Mapped[time | None] = mapped_column(nullable=True)
+    end_time: Mapped[time | None] = mapped_column(nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
