@@ -14,6 +14,7 @@ const WebSocketContext = createContext<WebSocketContextType | undefined>(undefin
 
 export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectAttemptRef = useRef(0);
   const [connected, setConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<any | null>(null);
   const subscribersRef = useRef<Map<string, Set<(data: any) => void>>>(new Map());

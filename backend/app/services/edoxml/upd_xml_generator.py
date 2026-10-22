@@ -1,12 +1,9 @@
 """
-Генератор XML УПД по формату ФНС 5.03 (версия 5.03, ред. приказа ФНС от 20.01.2025 № ЕД-7-26/970@).
+Генератор XML УПД по формату ФНС 5.03 (приказ ЕД-7-26/970@ в ред. ЕД-7-26/1032@).
 
-Формат: КНД 1115133 (ФайлОбмИнФХЖ4)
-XSD: ON_NSCHFDOP_POW_5_03.xsd
-
-Документ соответствует:
-- Письмо ФНС от 21.10.2013 № ММВ-20-3/96@
-- Постановление Правительства РФ от 26.12.2011 № 1137 (в ред. от 23.01.2026 № 26)
+XSD: ON_NSCHFDOP_POW_5_03.xsd (действует с 01.01.2026)
+КНД: 1115131
+Кодировка: windows-1251
 """
 
 import datetime
@@ -20,263 +17,264 @@ from lxml import etree
 logger = logging.getLogger("spectech.edoxml")
 
 SCHEMAS_DIR = Path(__file__).parent / "schemas"
-XSD_FILE = SCHEMAS_DIR / "upd_schema.xsd"
-
-# Кодировка ФНС
+XSD_FILE = SCHEMAS_DIR / "ON_NSCHFDOP_POW_5_03.xsd"
 ENCODING = "windows-1251"
 
 
-def _generate_id_file(sender_id: str, receiver_id: str) -> str:
-    """
-    Генерация ИдФайл по формуле ФНС:
-    ИдПол_ИдОтп_ГГГГММДД_NNNNN
-
-    Где NNNNN — случайный номер или хеш.
-    """
+def _generate_id_file(sender_inn: str, receiver_inn: str) -> str:
     now = datetime.datetime.now()
     date_part = now.strftime("%Y%m%d")
     hash_part = hashlib.md5(
-        f"{sender_id}{receiver_id}{now.isoformat()}".encode()
-    ).hexdigest()[:5]
-    return f"{receiver_id}_{sender_id}_{date_part}_{hash_part}"
+        f"{sender_inn}{receiver_inn}{now.isoformat()}".encode()
+    ).hexdigest()[:5].upper()
+    return f"{receiver_inn}_{sender_inn}_{date_part}_{hash_part}"
 
 
-def _fmt_date(date: datetime.date) -> str:
-    """Формат даты для XML ФНС: ДД.ММ.ГГГГ"""
-    return date.strftime("%d.%m.%Y")
+def _fmt_date(d: datetime.date) -> str:
+    return d.strftime("%d.%m.%Y")
 
 
-def _fmt_datetime(dt: datetime.datetime) -> str:
-    """Формат даты+время для XML ФНС: ДД.ММ.ГГГГ ЧЧ:ММ:СС"""
-    return dt.strftime("%d.%m.%Y %H:%M:%S")
+def _fmt_time(dt: datetime.datetime) -> str:
+    return dt.strftime("%H.%M.%S")
 
 
 def _fmt_money(value: float) -> str:
-    """Формат денежной суммы для ФНС: 62900.01 (с точкой, без пробелов)"""
     return f"{value:.2f}"
 
 
-def _build_upd_root():
-    """Создаёт корневой элемент Файл с необходимыми атрибутами."""
-    root = ET.Element("Файл")
-    root.set("ВерсФорм", "5.03")
-    root.set("ВерсПрог", "spectech-platform/1.0")
-    return root
+def _parse_address(addr_str: str) -> dict:
+    result = {"КодРегион": "77", "НаимРегион": "г Москва"}
+    if not addr_str:
+        return result
+    parts = addr_str.split(",")
+    for part in parts:
+        part = part.strip()
+        if part[:2].isdigit():
+            result["КодРегион"] = part[:2]
+        elif any(kw in part.lower() for kw in ["москв", "санкт", "новосиб", "екатерин"]):
+            result["НаимРегион"] = part
+        elif any(kw in part.lower() for kw in ["ул", "пр", "пер", "пл", "шоссе"]):
+            result["Улица"] = part
+        elif part.replace(" ", "").replace("-", "").isdigit():
+            if "Дом" not in result:
+                result["Дом"] = part
+            else:
+                result["Кварт"] = part
+        elif len(part) == 6 and part.isdigit():
+            result["Индекс"] = part
+    return result
 
 
-def _add_svf_section(root: ET.Element, act, company, client) -> ET.Element:
-    """
-    Добавляет секцию Документ (счёт-фактура + передаточный документ).
-    """
-    doc = ET.SubElement(root, "Документ")
-    doc.set("КНД", "1115133")
-    doc.set("ДатаИнфПр", _fmt_date(act.act_date))
-    doc.set("НомСчФ", act.document_number or "")
-    doc.set("ДатаСчФ", _fmt_date(act.act_date))
-    doc.set("КодОКВ", "643")  # Российский рубль
-    doc.set("КодОКВ2", "643")
+def _add_participant(parent: ET.Element, tag: str, org, is_seller: bool = True):
+    elem = ET.SubElement(parent, tag)
+    id_sv = ET.SubElement(elem, "ИдСв")
+    sv_yul = ET.SubElement(id_sv, "СвЮЛУч")
+    sv_yul.set("НаимОрг", getattr(org, "name", "") or "Не указано")
+    sv_yul.set("ИННЮЛ", getattr(org, "inn", "") or "0000000000")
+    kpp = getattr(org, "kpp", "") or ""
+    if kpp:
+        sv_yul.set("КПП", kpp)
 
-    # Статус: 1 = СЧФДОП, 2 = только передаточный документ
-    is_schf = getattr(act, "tax_system", "osno") == "osno"
-    doc.set("Функция", "СЧФДОП" if is_schf else "ДОП")
-    doc.set("ПоКурсу", "1")
-    return doc
+    legal_addr = getattr(org, "legal_address", "") or ""
+    addr_data = _parse_address(legal_addr)
+    adr = ET.SubElement(elem, "Адрес")
+    adr_rf = ET.SubElement(adr, "АдрРФ")
+    adr_rf.set("КодРегион", addr_data.get("КодРегион", "77"))
+    adr_rf.set("НаимРегион", addr_data.get("НаимРегион", "г Москва"))
+    if addr_data.get("Улица"):
+        adr_rf.set("Улица", addr_data["Улица"])
+    if addr_data.get("Дом"):
+        adr_rf.set("Дом", addr_data["Дом"])
+    if addr_data.get("Индекс"):
+        adr_rf.set("Индекс", addr_data["Индекс"][:6])
 
-
-def _add_seller_section(doc: ET.Element, company):
-    """Секция СвПрод (сведения о продавце)."""
-    sv_prod = ET.SubElement(doc, "СвПрод")
-    sv_prod.set("ИННЮЛ", getattr(company, "inn", "") or "")
-    sv_prod.set("КПП", getattr(company, "kpp", "") or "")
-    sv_prod.set("НаимОрг", getattr(company, "name", "") or "")
-
-    # Адрес
-    adr = ET.SubElement(sv_prod, "Адрес")
-    adr_text = ET.SubElement(adr, "АдрРФ")
-    legal_addr = getattr(company, "legal_address", "") or ""
-    adr_text.set("Индекс", legal_addr[:6] if legal_addr else "")
-    adr_text.set("Адрес", legal_addr)
-
-
-def _add_buyer_section(doc: ET.Element, client):
-    """Секция СвПокуп (сведения о покупателе)."""
-    sv_buy = ET.SubElement(doc, "СвПокуп")
-    sv_buy.set("ИННЮЛ", getattr(client, "inn", "") or "")
-    sv_buy.set("КПП", getattr(client, "kpp", "") or "")
-    sv_buy.set("НаимОрг", getattr(client, "name", "") or "")
-
-    adr = ET.SubElement(sv_buy, "Адрес")
-    adr_text = ET.SubElement(adr, "АдрРФ")
-    legal_addr = getattr(client, "legal_address", "") or ""
-    adr_text.set("Индекс", legal_addr[:6] if legal_addr else "")
-    adr_text.set("Адрес", legal_addr)
+    bank_account = getattr(org, "bank_account", "") or ""
+    bik = getattr(org, "bik", "") or ""
+    bank_name = getattr(org, "bank_name", "") or ""
+    if bank_account or bik:
+        bank_rekv = ET.SubElement(elem, "БанкРекв")
+        bank_rekv.set("НомерСчета", bank_account)
+        if bik or bank_name:
+            sv_bank = ET.SubElement(bank_rekv, "СвБанк")
+            if bank_name:
+                sv_bank.set("НаимБанк", bank_name)
+            if bik:
+                sv_bank.set("БИК", bik)
 
 
-def _add_goods_section(doc: ET.Element, act, items, vat_rate, show_vat):
-    """Секция СвТов (сведения о товарах/работах/услугах)."""
-    sv_tov = ET.SubElement(doc, "СведТов")
-
+def _add_goods_table(doc: ET.Element, items: list, vat_rate: float, show_vat: bool):
+    tabl = ET.SubElement(doc, "ТаблСчФакт")
     subtotal_total = 0.0
     vat_total = 0.0
     total_total = 0.0
 
+    valid_rates = ["0%", "5%", "7%", "10%", "18%", "20%", "22%",
+                   "9,09%", "16,67%", "18,03%", "5/105", "7/107",
+                   "10/110", "18/118", "20/120", "22/122", "без НДС"]
+
     for idx, item in enumerate(items, start=1):
-        nom = ET.SubElement(sv_tov, "НомТов")
-        nom.set("НомСтр", str(idx))
-        nom.set("НомТовУчПр", str(idx))
+        sved = ET.SubElement(tabl, "СведТов")
+        sved.set("НомСтр", str(idx))
+        sved.set("НаимТов", item.get("description", "Работы/услуги"))
+        sved.set("ОКЕИ_Тов", "796")
+        sved.set("НаимЕдИзм", item.get("unit", "шт"))
+        qty = item["quantity"]
+        sved.set("КолТов", f"{qty:.11f}".rstrip("0").rstrip(".") or "1")
+        sved.set("ЦенаТов", _fmt_money(item["unit_price"]))
+        sved.set("СтТовБезНДС", _fmt_money(item["subtotal"]))
 
-        acc = ET.SubElement(nom, "АкЦиз")
-        acc.set("СумАкциз", "без акциза")
+        if show_vat:
+            rate_str = f"{vat_rate:.0f}%"
+            if rate_str not in valid_rates:
+                rate_str = "20%"
+            sved.set("НалСт", rate_str)
+        else:
+            sved.set("НалСт", "без НДС")
 
-        nal_st = ET.SubElement(nom, "НалСт")
-        nal_st.set("НалСт", f"{vat_rate:.0f}%" if show_vat else "без НДС")
+        sved.set("СтТовУчНал", _fmt_money(item["total"]))
 
-        st_tov = ET.SubElement(nom, "СтТовБезНДС")
-        st_tov.set("СтБезНДС", _fmt_money(item["subtotal"]))
-        st_tov.set("ЦенаТов", _fmt_money(item["unit_price"]))
-        st_tov.set("КолЕд", f"{item['quantity']:.3f}")
-        st_tov.set("НаимЕдИзм", item["unit"])
-        st_tov.set("НаимТов", item["description"])
-        st_tov.set("ОКЕИ", "796" if item["unit"] == "шт" else "")
+        akciz = ET.SubElement(sved, "Акциз")
+        bez_akciz = ET.SubElement(akciz, "БезАкциз")
+        bez_akciz.text = "без акциза"
 
-        sum_nal = ET.SubElement(nom, "СумНал")
-        sum_nal.set("СумНал", _fmt_money(item["vat_amount"]) if show_vat else "0.00")
-
-        st_s_nal = ET.SubElement(nom, "СтТовУчНал")
-        st_s_nal.set("СтУчНал", _fmt_money(item["total"]))
+        sum_nal = ET.SubElement(sved, "СумНал")
+        if show_vat:
+            sn = ET.SubElement(sum_nal, "СумНал")
+            sn.text = _fmt_money(item["vat_amount"])
+        else:
+            bn = ET.SubElement(sum_nal, "БезНДС")
+            bn.text = "без НДС"
 
         subtotal_total += item["subtotal"]
         vat_total += item["vat_amount"]
         total_total += item["total"]
 
-    # Итого
-    itogo = ET.SubElement(sv_tov, "ВсегоОпл")
-    itogo.set("СтБезНДСВс", _fmt_money(subtotal_total))
-    itogo.set("СумНалВс", _fmt_money(vat_total) if show_vat else "0.00")
-    itogo.set("СтУчНалВс", _fmt_money(total_total))
+    vsego = ET.SubElement(tabl, "ВсегоОпл")
+    vsego.set("СтТовБезНДСВсего", _fmt_money(subtotal_total))
+    vsego.set("СтТовУчНалВсего", _fmt_money(total_total))
+    sum_nal_vs = ET.SubElement(vsego, "СумНалВсего")
+    if show_vat:
+        sn_vs = ET.SubElement(sum_nal_vs, "СумНал")
+        sn_vs.text = _fmt_money(vat_total)
+    else:
+        bn_vs = ET.SubElement(sum_nal_vs, "БезНДС")
+        bn_vs.text = "без НДС"
 
 
-def _add_signature_section(root: ET.Element, company):
-    """Секция Подписант (пока без реальной КЭП — placeholder)."""
+def _add_signer(root: ET.Element, company):
     podp = ET.SubElement(root, "Подписант")
-    podp.set("ОблПолн", "0")  # 0 = представитель юрлица
-    podp.set("Статус", "1")  # 1 = работник организации
-
+    podp.set("СпосПодтПолном", "1")
+    podp.set("Должн", getattr(company, "director_position", "Генеральный директор") or "Генеральный директор")
     fio = ET.SubElement(podp, "ФИО")
-    fam = ET.SubElement(fio, "Фамилия")
-    fam.text = "Иванов"
-    name = ET.SubElement(fio, "Имя")
-    name.text = "Иван"
-    otch = ET.SubElement(fio, "Отчество")
-    otch.text = "Иванович"
-
-    dolzh = ET.SubElement(podp, "Должность")
-    dolzh.text = "Генеральный директор"
+    director = getattr(company, "director_name", "") or ""
+    parts = director.split()
+    fio.set("Фамилия", parts[0] if parts else "Иванов")
+    fio.set("Имя", parts[1] if len(parts) > 1 else "Иван")
+    if len(parts) > 2:
+        fio.set("Отчество", " ".join(parts[2:]))
 
 
 def generate_upd_xml(act, company, client, request=None, items=None) -> bytes:
-    """
-    Генерирует XML УПД для электронного документооборота.
+    now = datetime.datetime.now()
+    act_date = getattr(act, "act_date", None) or now.date()
+    if isinstance(act_date, datetime.datetime):
+        act_date = act_date.date()
 
-    Args:
-        act: Акт с реквизитами
-        company: Organization-продавец (Company или Contractor)
-        client: Organization-покупатель (Contractor)
-        request: Заявка (опционально)
-        items: Список позиций (если None — используется одна позиция из act)
+    is_osno = getattr(act, "tax_system", "osno") == "osno"
+    function = "СЧФДОП" if is_osno else "ДОП"
+    vat_rate = float(getattr(act, "vat_rate", 0) or 0)
+    if is_osno and vat_rate <= 0:
+        vat_rate = 20.0
+    show_vat = is_osno
 
-    Returns:
-        bytes: Валидный XML в кодировке windows-1251
-    """
-    # Подготовка позиций
     if not items:
-        vat_rate = float(act.vat_rate or 0)
-        if getattr(act, "tax_system", "osno") == "osno" and vat_rate <= 0:
-            vat_rate = 22.0
-        show_vat = getattr(act, "tax_system", "osno") == "osno"
-        total = float(act.total_amount or 0)
-        if show_vat:
+        total = float(getattr(act, "total_amount", 0) or 0)
+        if show_vat and vat_rate > 0:
             subtotal = total / (1 + vat_rate / 100)
             vat = total - subtotal
         else:
             subtotal, vat = total, 0.0
-
         work = getattr(request, "work_type", None) or "Работы по акту"
-        items = [
-            {
-                "description": work,
-                "unit": "шт",
-                "quantity": 1.0,
-                "unit_price": subtotal,
-                "subtotal": subtotal,
-                "vat_amount": vat,
-                "total": total,
-            }
-        ]
-    else:
-        vat_rate = float(act.vat_rate or 22.0)
-        show_vat = getattr(act, "tax_system", "osno") == "osno"
+        items = [{
+            "description": work, "unit": "шт", "quantity": 1.0,
+            "unit_price": subtotal, "subtotal": subtotal,
+            "vat_amount": vat, "total": total,
+        }]
 
-    # Построение XML
-    root = _build_upd_root()
-    sender_id = getattr(company, "inn", "") or "7700000000"
-    receiver_id = getattr(client, "inn", "") or "7707083893"
-    root.set("ИдФайл", _generate_id_file(sender_id, receiver_id))
-    root.set("ДатаВремя", _fmt_datetime(datetime.datetime.now()))
+    sender_inn = getattr(company, "inn", "") or "0000000000"
+    receiver_inn = getattr(client, "inn", "") or "0000000000"
 
-    # СвУчДокОб (сведения об участниках)
-    sv_uch = ET.SubElement(root, "СвУчДокОб")
-    sv_uch.set("ИдОтпр", f"2AE-{sender_id}-000")
-    sv_uch.set("ИдПол", f"2AE-{receiver_id}-000")
+    root = ET.Element("Файл")
+    root.set("ИдФайл", _generate_id_file(sender_inn, receiver_inn))
+    root.set("ВерсФорм", "5.03")
+    root.set("ВерсПрог", "spectech-platform/1.0")
 
-    # Документ
-    doc = _add_svf_section(root, act, company, client)
+    doc = ET.SubElement(root, "Документ")
+    doc.set("КНД", "1115131")
+    doc.set("Функция", function)
+    doc.set("ДатаИнфПр", _fmt_date(act_date))
+    doc.set("ВремИнфПр", _fmt_time(now))
+    doc.set("НаимДокОпр", "Универсальный передаточный документ")
 
-    # Сведения о продавце/покупателе
-    _add_seller_section(doc, company)
-    _add_buyer_section(doc, client)
+    sv_sf = ET.SubElement(doc, "СвСчФакт")
+    sv_sf.set("НомерДок", getattr(act, "document_number", "") or str(getattr(act, "id", "1")))
+    sv_sf.set("ДатаДок", _fmt_date(act_date))
 
-    # Товары/работы/услуги
-    _add_goods_section(doc, act, items, vat_rate, show_vat)
+    _add_participant(sv_sf, "СвПрод", company, is_seller=True)
 
-    # Подписант
-    _add_signature_section(root, company)
+    gruz_ot = ET.SubElement(sv_sf, "ГрузОт")
+    on_zhe = ET.SubElement(gruz_ot, "ОнЖе")
+    on_zhe.text = "он же"
 
-    # Сериализация
+    _add_participant(sv_sf, "СвПокуп", client, is_seller=False)
+
+    den_izm = ET.SubElement(sv_sf, "ДенИзм")
+    den_izm.set("КодОКВ", "643")
+    den_izm.set("НаимОКВ", "Российский рубль")
+
+    _add_goods_table(doc, items, vat_rate, show_vat)
+
+    sv_prod_per = ET.SubElement(doc, "СвПродПер")
+    sv_prod_per.set("СодОпер", "Реализация")
+    sv_prod_per.set("ДатаПер", _fmt_date(act_date))
+    sv_per = ET.SubElement(sv_prod_per, "СвПер")
+    bez_dok = ET.SubElement(sv_per, "БезДокОснПер")
+    bez_dok.text = "1"
+
+    _add_signer(root, company)
+
     xml_bytes = ET.tostring(root, encoding=ENCODING, xml_declaration=True)
 
-    # Валидация (если XSD доступна)
     if XSD_FILE.exists():
         try:
             with open(XSD_FILE, "rb") as f:
                 schema_doc = etree.parse(f)
-            etree.XMLSchema(schema_doc)  # validate schema itself
-            logger.info("XSD schema loaded for validation")
+            schema = etree.XMLSchema(schema_doc)
+            xml_doc = etree.fromstring(xml_bytes)
+            is_valid = schema.validate(xml_doc)
+            if is_valid:
+                logger.info("UPD XML passed XSD validation")
+            else:
+                errors = [str(e) for e in schema.error_log]
+                logger.warning("UPD XML XSD validation warnings: %s", errors[:5])
         except Exception as e:
             logger.warning("XSD validation skipped: %s", e)
+    else:
+        logger.warning("XSD file not found: %s", XSD_FILE)
 
     logger.info("UPD XML generated: %d bytes", len(xml_bytes))
     return xml_bytes
 
 
 def validate_upd_xml(xml_bytes: bytes) -> tuple[bool, list[str]]:
-    """
-    Валидирует XML УПД по XSD схеме ФНС.
-
-    Returns:
-        (is_valid, list_of_errors)
-    """
     if not XSD_FILE.exists():
-        return False, ["XSD schema file not found"]
-
+        return False, [f"XSD schema not found: {XSD_FILE}"]
     try:
         with open(XSD_FILE, "rb") as f:
             schema_doc = etree.parse(f)
         schema = etree.XMLSchema(schema_doc)
-
         xml_doc = etree.fromstring(xml_bytes)
         is_valid = schema.validate(xml_doc)
-
         if is_valid:
             return True, []
         return False, [str(e) for e in schema.error_log]
