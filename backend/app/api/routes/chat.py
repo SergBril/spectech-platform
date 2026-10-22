@@ -28,7 +28,7 @@ from app.models.chat import (
 )
 from app.services import storage_service
 from app.services.auth_service import decode_access_token
-from app.services.chat_service import chat_service
+from app.services.chat_service import send_chat_message
 from app.services.websocket_manager import manager
 
 logger = logging.getLogger("spectech.chat")
@@ -330,7 +330,7 @@ def send_message_to_chat(
             db, chat.id, current_user.id, ChatParticipantRole.client.value
         )
 
-    message = chat_service.send_message(
+    message = send_chat_message(
         db=db,
         chat_id=chat.id,
         sender_id=current_user.id,
@@ -388,7 +388,7 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
         await manager.connect_chat(websocket, chat_id)
 
         # 5. Системное сообщение о входе
-        system_msg = chat_service.send_system_event(
+        system_msg = send_chat_message_system_event(
             db=db,
             chat_id=chat_id,
             event_type="user_joined",
@@ -418,7 +418,7 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
             msg_type = data.get("type", "message")
 
             if msg_type == "message":
-                message = chat_service.send_message(
+                message = send_chat_message(
                     db=db,
                     chat_id=chat_id,
                     sender_id=user.id,
@@ -460,7 +460,7 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
         manager.disconnect_chat(websocket, chat_id)
         if user:
             try:
-                system_msg = chat_service.send_system_event(
+                system_msg = send_chat_message_system_event(
                     db=db,
                     chat_id=chat_id,
                     event_type="user_left",

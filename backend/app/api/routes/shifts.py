@@ -2134,3 +2134,314 @@ def export_acts_for_1c(
         media_type="application/xml; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/acts/auto-generate", summary="📄 Автогенерация актов из завершённых смен")
+def auto_generate_acts(
+    date_from: str = Body(...),
+    date_to: str = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Автоматически создать акты выполненных работ из завершённых смен за период."""
+    from datetime import date as date_type
+    from app.models.contractor import DriverProfile, Employee
+    from decimal import Decimal
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+
+    # Get completed shifts without linked act
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+        .where(ShiftTask.status == "completed")
+    ).scalars().all()
+
+    created = 0
+    skipped = 0
+
+    for t in tasks:
+        # Check if act already exists for this shift
+        existing_act = db.execute(
+            select(func.count()).select_from(Act).where(Act.shift_task_id == t.id)
+        ).scalar()
+        if existing_act and existing_act > 0:
+            skipped += 1
+            continue
+
+        vehicle = db.get(Vehicle, t.vehicle_id)
+        hours = 0
+        if t.planned_start and t.planned_end:
+            hours = round((t.planned_end - t.planned_start).total_seconds() / 3600, 2)
+
+        distance = getattr(t, 'odometer_distance', None) or 0
+
+        # Default hourly rate (can be configured per vehicle/driver later)
+        hourly_rate = Decimal(str(getattr(vehicle, 'hourly_rate', 0) or 1500))
+        total_amount = hourly_rate * Decimal(str(hours))
+        vat_amount = total_amount * Decimal("0.2")
+
+        driver_name = ""
+        if t.driver_id:
+            profile = db.get(DriverProfile, t.driver_id)
+            if profile:
+                emp = db.get(Employee, profile.employee_contractor_id)
+                driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
+
+        act = Act(
+            company_id=company_id,
+            shift_task_id=t.id,
+            act_number=f"ACT-{t.shift_date.strftime('%Y%m%d')}-{t.id:04d}",
+            act_date=t.shift_date,
+            vehicle_id=t.vehicle_id,
+            driver_name=driver_name,
+            hours_worked=hours,
+            distance_km=float(distance),
+            hourly_rate=float(hourly_rate),
+            total_amount=float(total_amount),
+            vat_amount=float(vat_amount),
+            status="draft",
+            created_by=current_user.id,
+        )
+        db.add(act)
+        created += 1
+
+    db.commit()
+    return {"created": created, "skipped": skipped, "period": f"{d_from} — {d_to}"}
+
+
+@router.post("/geofence-events/process", summary="📍 Обработка события геозоны для смены")
+async def process_geofence_event(
+    vehicle_id: int = Body(...),
+    geofence_id: int = Body(...),
+    event_type: str = Body(...),  # enter / exit
+    timestamp: str = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Обработать вход/выход из геозоны: авто-старт/завершение смены."""
+    from datetime import datetime as dt
+    from app.models.shift import ShiftGeofence
+
+    ts = dt.fromisoformat(timestamp)
+
+    # Find active planned shift for this vehicle today
+    task = db.execute(
+        select(ShiftTask)
+        .where(ShiftTask.vehicle_id == vehicle_id)
+        .where(ShiftTask.shift_date == ts.date())
+        .where(ShiftTask.status.in_(["planned", "confirmed"]))
+    ).scalars().first()
+
+    if not task:
+        return {"message": "No active shift found", "action": "none"}
+
+    vehicle = db.get(Vehicle, vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    action = "none"
+
+    if event_type == "enter":
+        # Auto-start shift on geofence entry
+        sg = ShiftGeofence(
+            shift_task_id=task.id, geofence_id=geofence_id,
+            entered_at=ts, auto_started=True,
+        )
+        db.add(sg)
+        task.status = "in_progress"
+        if not task.actual_start:
+            task.actual_start = ts
+        action = "auto_started"
+
+        # Notify dispatcher
+        try:
+            from app.services.websocket_manager import manager
+            await manager.broadcast_to_company(company_id, {
+                "type": "shift_auto_started",
+                "task_id": task.id,
+                "vehicle_id": vehicle_id,
+                "geofence_id": geofence_id,
+                "timestamp": ts.isoformat(),
+            })
+        except Exception:
+            pass
+
+    elif event_type == "exit":
+        # Auto-complete shift on geofence exit
+        sg = db.execute(
+            select(ShiftGeofence)
+            .where(ShiftGeofence.shift_task_id == task.id)
+            .where(ShiftGeofence.geofence_id == geofence_id)
+            .where(ShiftGeofence.exited_at.is_(None))
+        ).scalars().first()
+
+        if sg:
+            sg.exited_at = ts
+            sg.auto_completed = True
+
+        task.status = "completed"
+        if not task.actual_end:
+            task.actual_end = ts
+        action = "auto_completed"
+
+        try:
+            from app.services.websocket_manager import manager
+            await manager.broadcast_to_company(company_id, {
+                "type": "shift_auto_completed",
+                "task_id": task.id,
+                "vehicle_id": vehicle_id,
+                "geofence_id": geofence_id,
+                "timestamp": ts.isoformat(),
+            })
+        except Exception:
+            pass
+
+    db.commit()
+    return {"message": f"Shift {action}", "task_id": task.id, "action": action}
+
+
+@router.post("/tasks/{task_id}/link-geofence", summary="🔗 Привязать геозону к смене")
+def link_geofence_to_shift(
+    task_id: int,
+    geofence_id: int = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Привязать геозону к смене для автоматического отслеживания."""
+    from app.models.shift import ShiftGeofence
+
+    task = db.get(ShiftTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Shift task not found")
+
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    sg = ShiftGeofence(shift_task_id=task_id, geofence_id=geofence_id)
+    db.add(sg)
+    db.commit()
+    return {"message": "Геозона привязана к смене", "id": sg.id}
+
+
+# === Dispatcher-Driver Chat ===
+
+@router.get("/tasks/{task_id}/messages", summary="💬 Сообщения чата по смене")
+def get_shift_messages(
+    task_id: int,
+    limit: int = Query(default=50),
+    offset: int = Query(default=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Получить сообщения чата между диспетчером и водителем по смене."""
+    from app.models.chat import ChatMessage, ChatRoom
+
+    task = db.get(ShiftTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Shift task not found")
+
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    rooms = db.execute(
+        select(ChatRoom).where(ChatRoom.shift_task_id == task_id)
+    ).scalars().all()
+
+    if not rooms:
+        return []
+
+    room_ids = [r.id for r in rooms]
+    messages = db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.room_id.in_(room_ids))
+        .order_by(ChatMessage.sent_at.desc())
+        .limit(limit)
+        .offset(offset)
+    ).scalars().all()
+
+    result = []
+    for m in reversed(messages):
+        sender = db.get(User, m.sender_id)
+        result.append({
+            "id": m.id,
+            "sender_id": m.sender_id,
+            "sender_name": sender.email if sender else "",
+            "text": m.text,
+            "sent_at": m.sent_at.isoformat() if m.sent_at else None,
+            "is_mine": m.sender_id == current_user.id,
+        })
+    return result
+
+
+@router.post("/tasks/{task_id}/messages", summary="💬 Отправить сообщение водителю/диспетчеру")
+async def send_shift_message(
+    task_id: int,
+    text: str = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Отправить сообщение в чат по смене."""
+    from app.services.chat_service import send_chat_message
+
+    task = db.get(ShiftTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Shift task not found")
+
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Determine recipient: if current user is dispatcher → send to driver, else → send to dispatcher
+    from app.models.contractor import DriverProfile, Employee
+    my_profile = db.execute(
+        select(DriverProfile).join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
+        .where(Employee.user_id == current_user.id)
+    ).scalar_one_or_none()
+
+    if my_profile and task.driver_id == my_profile.employee_contractor_id:
+        # Driver sending to dispatcher (first company user)
+        from app.models.auth import UserCompany
+        dispatcher_id = db.execute(
+            select(UserCompany.user_id).where(UserCompany.company_id == company_id)
+            .where(UserCompany.user_id != current_user.id)
+        ).scalars().first()
+        if not dispatcher_id:
+            raise HTTPException(status_code=404, detail="No dispatcher found")
+        recipient_id = dispatcher_id
+    else:
+        # Dispatcher sending to driver
+        if not task.driver_id:
+            raise HTTPException(status_code=400, detail="No driver assigned to shift")
+        driver_emp = db.get(Employee, task.driver_id)
+        if not driver_emp or not driver_emp.user_id:
+            raise HTTPException(status_code=404, detail="Driver has no user account")
+        recipient_id = driver_emp.user_id
+
+    result = await send_chat_message(db, current_user.id, recipient_id, text, shift_task_id=task_id)
+
+    # WS broadcast
+    try:
+        from app.services.websocket_manager import manager
+        await manager.broadcast_to_company(company_id, {
+            "type": "chat_message",
+            "task_id": task_id,
+            "sender_id": current_user.id,
+            "text": text,
+            "sent_at": result.get("sent_at"),
+        })
+    except Exception:
+        pass
+
+    return result

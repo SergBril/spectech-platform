@@ -37,6 +37,15 @@ const UtilizationPage: React.FC = () => {
             className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium flex items-center gap-2">
             🏢 Выгрузка 1С
           </button>
+          <button onClick={async () => {
+            if (!confirm(`Сгенерировать акты за ${dateFrom} — ${dateTo}?`)) return;
+            try {
+              const res = await apiClient.post('/shifts/acts/auto-generate', { date_from: dateFrom, date_to: dateTo });
+              alert(`Создано актов: ${res.data.created}, пропущено: ${res.data.skipped}`);
+            } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+          }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium flex items-center gap-2">
+            📄 Генерация актов
+          </button>
         </div>
           <div className="flex gap-3 items-center">
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />

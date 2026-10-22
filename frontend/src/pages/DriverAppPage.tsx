@@ -8,6 +8,9 @@ const DriverAppPage: React.FC = () => {
   const [reportModal, setReportModal] = useState<number | null>(null);
   const [reportForm, setReportForm] = useState({ odometer_start: '', odometer_end: '', notes: '' });
   const [reportPhotos, setReportPhotos] = useState<FileList | null>(null);
+  const [chatModal, setChatModal] = useState<number | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [chatText, setChatText] = useState('');
 
   const loadShifts = async () => {
     try {
@@ -35,6 +38,23 @@ const DriverAppPage: React.FC = () => {
     try {
       await apiClient.post(`/drivers/shifts/${taskId}/start`);
       loadShifts();
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
+  const loadMessages = async (taskId: number) => {
+    try {
+      const res = await apiClient.get(`/shifts/tasks/${taskId}/messages`);
+      setMessages(Array.isArray(res.data) ? res.data : []);
+      setChatModal(taskId);
+    } catch {}
+  };
+
+  const sendMessage = async () => {
+    if (!chatModal || !chatText.trim()) return;
+    try {
+      await apiClient.post(`/shifts/tasks/${chatModal}/messages`, { text: chatText });
+      setChatText('');
+      loadMessages(chatModal);
     } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
   };
 
@@ -106,6 +126,10 @@ const DriverAppPage: React.FC = () => {
                   ▶️ Начать смену
                 </button>
               )}
+              <button onClick={() => loadMessages(s.id)}
+                className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 mt-1">
+                💬 Чат с диспетчером
+              </button>
               {s.status === 'completed' && !s.report_id && (
                 <button onClick={() => { setReportModal(s.id); setReportForm({ odometer_start: '', odometer_end: '', notes: '' }); setReportPhotos(null); }}
                   className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
@@ -119,6 +143,39 @@ const DriverAppPage: React.FC = () => {
           ))
         )}
       </div>
+
+      {/* Chat Modal */}
+      {chatModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-end z-50">
+          <div className="bg-white rounded-t-2xl w-full p-4 max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg font-bold">💬 Чат</h2>
+              <button onClick={() => setChatModal(null)} className="text-gray-400 text-xl">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-2 mb-3 min-h-[200px]">
+              {messages.length === 0 ? <p className="text-center text-gray-400 text-sm py-4">Нет сообщений</p> :
+                messages.map((m: any) => (
+                  <div key={m.id} className={`flex ${m.is_mine ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] px-3 py-2 rounded-xl text-sm ${m.is_mine ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'}`}>
+                      <p>{m.text}</p>
+                      <p className={`text-[10px] mt-1 ${m.is_mine ? 'text-blue-200' : 'text-gray-400'}`}>
+                        {m.sent_at ? new Date(m.sent_at).toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'}) : ''}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+            <div className="flex gap-2">
+              <input value={chatText} onChange={e => setChatText(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && sendMessage()}
+                placeholder="Сообщение..." className="flex-1 px-3 py-2 border rounded-lg text-sm" />
+              <button onClick={sendMessage} disabled={!chatText.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">→</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Report Modal */}
       {reportModal && (

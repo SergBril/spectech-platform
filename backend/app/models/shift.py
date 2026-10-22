@@ -202,3 +202,16 @@ class AutoAssignRule(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+
+
+class ShiftGeofence(Base):
+    __tablename__ = "shift_geofences"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shift_task_id: Mapped[int] = mapped_column(ForeignKey("shift_tasks.id"), nullable=False)
+    geofence_id: Mapped[int] = mapped_column(ForeignKey("geofences.id"), nullable=False)
+    entered_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    exited_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    auto_started: Mapped[bool] = mapped_column(default=False)
+    auto_completed: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
