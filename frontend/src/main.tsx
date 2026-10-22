@@ -20,6 +20,7 @@ import {
   ShiftCalendarPage,
   UtilizationPage,
   AutoAssignRulesPage,
+  DriverKPIPage,
   VehiclesPage,
   DriversPage,
   RequestsPage,
@@ -90,6 +91,7 @@ const AppRoutes = () => {
         <Route path="/shift-calendar" element={<ProtectedRoute><ShiftCalendarPage /></ProtectedRoute>} />
         <Route path="/utilization" element={<ProtectedRoute><UtilizationPage /></ProtectedRoute>} />
         <Route path="/auto-assign-rules" element={<ProtectedRoute><AutoAssignRulesPage /></ProtectedRoute>} />
+        <Route path="/driver-kpi" element={<ProtectedRoute><DriverKPIPage /></ProtectedRoute>} />
         <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
         <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
         <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
