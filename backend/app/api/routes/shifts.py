@@ -1833,3 +1833,102 @@ def get_driver_kpi(
         "period": {"from": str(d_from), "to": str(d_to), "days": total_days},
         "drivers": kpi_list,
     }
+
+
+@router.get("/stats/driver-kpi/export", summary="📥 Экспорт KPI водителей в Excel")
+def export_driver_kpi_excel(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт KPI водителей в Excel с рейтингом."""
+    import io
+    from datetime import date as date_type, timedelta
+    from fastapi.responses import StreamingResponse
+    from app.models.contractor import DriverProfile, Employee
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+    total_days = (d_to - d_from).days + 1
+
+    drivers = db.execute(
+        select(DriverProfile)
+        .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
+        .where(Employee.company_id == company_id)
+    ).scalars().all()
+
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+        .where(ShiftTask.status.notin_(["cancelled"]))
+        .where(ShiftTask.driver_id.isnot(None))
+    ).scalars().all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "KPI Водителей"
+
+    header_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+
+    headers = ["#", "Водитель", "Рейтинг", "Смен", "Активные дни", "Утилизация %", "Часов", "Завершение %"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    kpi_rows = []
+    for profile in drivers:
+        emp = db.get(Employee, profile.employee_contractor_id)
+        name = f"{emp.first_name} {emp.last_name}" if emp else f"Driver#{profile.employee_contractor_id}"
+        d_tasks = [t for t in tasks if t.driver_id == profile.employee_contractor_id]
+        active_days = len(set(t.shift_date for t in d_tasks))
+        util_pct = round((active_days / total_days) * 100, 1) if total_days > 0 else 0
+        hours = sum(max(0, (t.planned_end - t.planned_start).total_seconds() / 3600) for t in d_tasks if t.planned_start and t.planned_end)
+        completed = len([t for t in d_tasks if t.status == "completed"])
+        comp_rate = round((completed / len(d_tasks)) * 100, 1) if d_tasks else 0
+        rating = round(util_pct * 0.4 + comp_rate * 0.3 + min(hours / max(total_days, 1), 10) * 3, 1)
+        kpi_rows.append((name, rating, len(d_tasks), active_days, util_pct, round(hours, 1), comp_rate))
+
+    kpi_rows.sort(key=lambda x: x[1], reverse=True)
+
+    green_fill = PatternFill(start_color="C6EFCE", fill_type="solid")
+    yellow_fill = PatternFill(start_color="FFEB9C", fill_type="solid")
+    red_fill = PatternFill(start_color="FFC7CE", fill_type="solid")
+
+    for row_idx, (name, rating, shifts, adays, util, hrs, comp) in enumerate(kpi_rows, 2):
+        ws.cell(row=row_idx, column=1, value=row_idx - 1)
+        ws.cell(row=row_idx, column=2, value=name)
+        ws.cell(row=row_idx, column=3, value=rating)
+        ws.cell(row=row_idx, column=4, value=shifts)
+        ws.cell(row=row_idx, column=5, value=adays)
+        ws.cell(row=row_idx, column=6, value=util)
+        ws.cell(row=row_idx, column=7, value=hrs)
+        ws.cell(row=row_idx, column=8, value=comp)
+
+        fill = green_fill if rating >= 70 else yellow_fill if rating >= 40 else red_fill
+        ws.cell(row=row_idx, column=3).fill = fill
+
+    for col_cells in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 30)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"driver_kpi_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})

@@ -1,17 +1,21 @@
-{
-  "name": "СпецТехника — Водитель",
-  "short_name": "Водитель",
-  "description": "Мобильное приложение для водителей спецтехники",
-  "start_url": "/driver",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#1e40af",
-  "orientation": "portrait",
-  "icons": [
-    {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
-    }
-  ]
+﻿{
+    "icons":  [
+                  {
+                      "type":  "image/png",
+                      "sizes":  "192x192",
+                      "src":  "/icon-192.png"
+                  },
+                  {
+                      "type":  "image/png",
+                      "sizes":  "512x512",
+                      "src":  "/icon-512.png"
+                  }
+              ],
+    "description":  "Мобильное приложение для водителей Spectech",
+    "background_color":  "#ffffff",
+    "theme_color":  "#2563eb",
+    "name":  "Spectech Driver",
+    "start_url":  "/driver-app",
+    "display":  "standalone",
+    "short_name":  "Driver"
 }

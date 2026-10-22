@@ -94,6 +94,34 @@ def start_scheduler() -> None:
         coalesce=True,
     )
 
+    # Проверка простоев и конфликтов расписания (ежедневно в 07:00)
+    async def _check_daily_alerts():
+        from datetime import date as date_type
+        from app.core.db import SessionLocal
+        from app.services.alert_service import check_and_notify_idle_vehicles, check_and_notify_conflicts
+        from app.models.auth import UserCompany
+
+        today = date_type.today()
+        with SessionLocal() as db:
+            try:
+                company_ids = db.execute(select(UserCompany.company_id).distinct()).scalars().all()
+                for cid in company_ids:
+                    await check_and_notify_idle_vehicles(db, cid, today)
+                    await check_and_notify_conflicts(db, cid, today)
+                db.commit()
+                logger.info("✅ Daily alerts check completed for %d companies", len(company_ids))
+            except Exception as e:
+                logger.error("❌ Daily alerts check failed: %s", e)
+                db.rollback()
+
+    scheduler.add_job(
+        _check_daily_alerts,
+        trigger=CronTrigger(hour=7, minute=0),
+        id="daily_alert_check",
+        name="Daily idle & conflict alerts",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         "⏰ Scheduler started. Interval: %d min. Jobs: %d",
