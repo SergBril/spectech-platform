@@ -70,7 +70,7 @@ def _add_participant(parent: ET.Element, tag: str, org, is_seller: bool = True):
     id_sv = ET.SubElement(elem, "ИдСв")
     sv_yul = ET.SubElement(id_sv, "СвЮЛУч")
     sv_yul.set("НаимОрг", getattr(org, "name", "") or "Не указано")
-    sv_yul.set("ИННЮЛ", getattr(org, "inn", "") or "0000000000")
+    sv_yul.set("ИННЮЛ", getattr(org, "inn", "") or "7700000001")
     kpp = getattr(org, "kpp", "") or ""
     if kpp:
         sv_yul.set("КПП", kpp)
@@ -201,8 +201,8 @@ def generate_upd_xml(act, company, client, request=None, items=None) -> bytes:
             "vat_amount": vat, "total": total,
         }]
 
-    sender_inn = getattr(company, "inn", "") or "0000000000"
-    receiver_inn = getattr(client, "inn", "") or "0000000000"
+    sender_inn = getattr(company, "inn", "") or "7700000001"
+    receiver_inn = getattr(client, "inn", "") or "7700000001"
 
     root = ET.Element("Файл")
     root.set("ИдФайл", _generate_id_file(sender_inn, receiver_inn))
