@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, Body
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, Body
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -4706,3 +4706,124 @@ def list_audit_logs(
     } for l in logs]
 
     return {"items": items, "total": total, "page": page, "per_page": per_page}
+
+
+# === User Role Management ===
+
+@router.get("/users/roles", summary="👥 Список пользователей с ролями")
+def list_users_with_roles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Список всех пользователей с их ролями (admin only)."""
+    from app.services.rbac_service import RBACMiddleware
+    RBACMiddleware.require(current_user, "users:manage_roles")
+
+    users = db.execute(select(User)).scalars().all()
+    return [{
+        "id": u.id, "email": u.email, "full_name": u.full_name,
+        "role": getattr(u, 'role', 'viewer'),
+        "is_superuser": u.is_superuser,
+        "status": u.status.value if hasattr(u.status, 'value') else str(u.status),
+    } for u in users]
+
+
+@router.put("/users/{user_id}/role", summary="🔑 Назначить роль пользователю")
+def assign_user_role(
+    user_id: int,
+    role: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Назначить роль пользователю (admin only)."""
+    from app.services.rbac_service import RBACMiddleware, Role
+    from app.services.audit_service import log_action
+
+    RBACMiddleware.require(current_user, "users:manage_roles")
+
+    valid_roles = [r.value for r in Role]
+    if role not in valid_roles:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Valid: {valid_roles}")
+
+    target = db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    old_role = getattr(target, 'role', 'viewer')
+    target.role = role
+    db.commit()
+
+    log_action(db, current_user.id, "update", "user_role", user_id,
+               details=f"Role changed: {old_role} → {role}")
+
+    # Send notifications about role change
+    try:
+        from app.services.rbac_email_service import send_role_change_email
+        send_role_change_email(target, old_role, role, db)
+    except Exception:
+        pass
+
+
+    return {"message": f"Роль пользователя {target.full_name or target.email} изменена: {old_role} → {role}"}
+
+# === MAX Messenger Integration ===
+
+@router.post("/max/webhook", summary="MAX Webhook")
+async def max_webhook(request: Request, db: Session = Depends(get_db)):
+    """Обработка входящих событий от MAX Bot API."""
+    body = await request.json()
+    event_type = body.get("type", "")
+    payload = body.get("payload", {})
+
+    if event_type in ("message", "new_message"):
+        text = ""
+        chat_id = ""
+        if isinstance(payload, dict):
+            text = payload.get("text", "")
+            if not text:
+                content_obj = payload.get("content", {})
+                if isinstance(content_obj, dict):
+                    pl = content_obj.get("payload", {})
+                    if isinstance(pl, dict):
+                        text = pl.get("text", "")
+            chat_id = payload.get("chatId", "")
+            if not chat_id:
+                chat_obj = payload.get("chat", {})
+                if isinstance(chat_obj, dict):
+                    chat_id = chat_obj.get("id", "")
+
+        if "/start" in str(text) and chat_id:
+            parts = str(text).strip().split()
+            if len(parts) >= 2:
+                link_token = parts[1]
+                user = db.execute(
+                    select(User).where(User.telegram_link_code == link_token)
+                ).scalar_one_or_none()
+
+                if user:
+                    user.max_chat_id = str(chat_id)
+                    db.commit()
+                    from app.services.max_messenger_service import max_messenger_service
+                    msg = "Privyazka uspeshna! Vy budete poluchat uvedomleniya kak " + (user.full_name or user.email or "")
+                    await max_messenger_service.send_message(str(chat_id), msg)
+                else:
+                    from app.services.max_messenger_service import max_messenger_service
+                    await max_messenger_service.send_message(str(chat_id), "Nevernyy kod privyazki.")
+
+    return {"ok": True}
+
+
+@router.get("/max/bind-link", summary="MAX bind link")
+def get_max_bind_link(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Генерирует ссылку для привязки MAX бота к аккаунту."""
+    import secrets
+    if not current_user.telegram_link_code:
+        current_user.telegram_link_code = secrets.token_urlsafe(16)
+        db.commit()
+    from app.core.config import settings
+    bot_username = getattr(settings, "MAX_BOT_USERNAME", "spectech_bot")
+    link = "https://max.ru/" + bot_username + "?start=" + current_user.telegram_link_code
+    return {"link": link, "bot_username": bot_username}

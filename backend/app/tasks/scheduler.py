@@ -372,6 +372,13 @@ def start_scheduler() -> None:
                     for uid in dispatcher_ids:
                         await fcm_service.send_to_user(uid, "Просроченные платежи", msg, data={"type": "overdue_alert"}, db=db)
 
+                    # Also notify via MAX
+                    try:
+                        from app.services.max_messenger_service import max_messenger_service
+                        await max_messenger_service.notify_company_dispatchers(db, cid, "💸 Просроченные платежи", msg)
+                    except Exception as max_err:
+                        logger.warning("MAX overdue notification failed: %s", max_err)
+
                     logger.info("Overdue alert sent to company %d: %d acts, %.0f RUB", cid, count, total_overdue)
 
                 db.commit()

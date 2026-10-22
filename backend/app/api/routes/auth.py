@@ -52,6 +52,13 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
     access_token = create_access_token(user)
     refresh_token = create_refresh_token(db, user)
     db.commit()
+    # Audit log login
+    try:
+        from app.services.audit_service import log_action
+        log_action(db, user.id, "login", "user", user.id)
+    except Exception:
+        pass
+
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
