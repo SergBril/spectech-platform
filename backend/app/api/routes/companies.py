@@ -1,10 +1,10 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_permission
+from app.api.deps import get_current_user, require_permission, get_current_company_id
 from app.core.constants import TaxSystem
 from app.core.db import get_db
 from app.models.auth import User
@@ -172,3 +172,68 @@ async def dadata_suggest(
     if response.status_code != 200 or not response.content:
         return {"suggestions": []}
     return response.json()
+
+
+# === EDO Settings ===
+
+@router.get("/edo-settings", summary="EDO settings", tags=["EDO"])
+def get_edo_settings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Получить настройки ЭДО компании."""
+    from app.models.company import Company
+    company = db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Return EDO settings from company model or defaults
+    return {
+        "operator": getattr(company, "edo_operator", "diadoc") or "diadoc",
+        "diadoc_api_key": getattr(company, "diadoc_api_key", "") or "",
+        "diadoc_box_id": getattr(company, "diadoc_box_id", "") or "",
+        "diadoc_use_sandbox": getattr(company, "diadoc_use_sandbox", True),
+        "sbis_token": getattr(company, "sbis_token", "") or "",
+        "sbis_client_id": getattr(company, "sbis_client_id", "") or "",
+        "auto_send_on_sign": getattr(company, "auto_send_on_sign", False),
+        "default_format": getattr(company, "default_format", "upd_5_03") or "upd_5_03",
+    }
+
+
+@router.put("/edo-settings", summary="Update EDO settings", tags=["EDO"])
+def update_edo_settings(
+    operator: str | None = Body(default=None),
+    diadoc_api_key: str | None = Body(default=None),
+    diadoc_box_id: str | None = Body(default=None),
+    diadoc_use_sandbox: bool | None = Body(default=None),
+    sbis_token: str | None = Body(default=None),
+    sbis_client_id: str | None = Body(default=None),
+    auto_send_on_sign: bool | None = Body(default=None),
+    default_format: str | None = Body(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Обновить настройки ЭДО компании."""
+    from app.models.company import Company
+    company = db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    updates = {}
+    if operator is not None: updates["edo_operator"] = operator
+    if diadoc_api_key is not None: updates["diadoc_api_key"] = diadoc_api_key
+    if diadoc_box_id is not None: updates["diadoc_box_id"] = diadoc_box_id
+    if diadoc_use_sandbox is not None: updates["diadoc_use_sandbox"] = diadoc_use_sandbox
+    if sbis_token is not None: updates["sbis_token"] = sbis_token
+    if sbis_client_id is not None: updates["sbis_client_id"] = sbis_client_id
+    if auto_send_on_sign is not None: updates["auto_send_on_sign"] = auto_send_on_sign
+    if default_format is not None: updates["default_format"] = default_format
+    
+    for key, value in updates.items():
+        if hasattr(company, key):
+            setattr(company, key, value)
+    
+    db.commit()
+    return {"message": "EDO settings updated"}

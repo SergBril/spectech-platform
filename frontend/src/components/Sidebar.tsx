@@ -30,6 +30,7 @@ const menuItems: MenuItem[] = [
   { label: 'Управление ролями', icon: '🔑', path: '/user-roles', group: 'Администрирование' },
   { label: 'Шаблоны уведомлений', icon: '📝', path: '/notification-templates', group: 'Администрирование' },
   { label: 'Мои уведомления', icon: '🔔', path: '/notification-settings', group: 'Администрирование' },
+  { label: 'Настройки ЭДО', icon: '📡', path: '/edo-settings', group: 'Администрирование' },
   { label: 'Журнал действий', icon: '📋', path: '/audit-log', group: 'Администрирование' },
   { label: 'Настройка', icon: '🚀', path: '/onboarding', group: 'Администрирование' },
   { label: 'KPI Водителей', icon: '🏆', path: '/driver-kpi', group: 'Бизнес' },
