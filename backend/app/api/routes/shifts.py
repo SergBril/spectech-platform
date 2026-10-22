@@ -4757,9 +4757,26 @@ def assign_user_role(
                details=f"Role changed: {old_role} → {role}")
 
     # Send notifications about role change
+    # Send notifications using templates
     try:
-        from app.services.rbac_email_service import send_role_change_email
-        send_role_change_email(target, old_role, role, db)
+        from app.services.notification_template_service import render_template
+        email_tmpl = render_template(db, "role_change", "email", name=target.full_name or target.email, old_role=old_role, new_role=role)
+        if email_tmpl and target.email:
+            from app.services.email_service import send_email
+            send_email(target.email, email_tmpl["subject"], email_tmpl["body"])
+    except Exception:
+        pass
+
+    # MAX notification via template
+    try:
+        from app.services.notification_template_service import render_template
+        from app.services.max_messenger_service import max_messenger_service
+        import asyncio
+        max_tmpl = render_template(db, "role_change", "max", old_role=old_role, new_role=role)
+        if max_tmpl:
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(max_messenger_service.notify_user(db, user_id, max_tmpl["subject"], max_tmpl["body"]))
+            loop.close()
     except Exception:
         pass
 
