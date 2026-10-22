@@ -2444,4 +2444,261 @@ async def send_shift_message(
     except Exception:
         pass
 
+    # FCM push to recipient
+    try:
+        from app.services.fcm_service import fcm_service
+        sender_name = current_user.email.split("@")[0]
+        preview = text[:50] + ("..." if len(text) > 50 else "")
+        await fcm_service.send_to_user(
+            recipient_id, f"💬 {sender_name}",
+            preview,
+            data={"type": "chat_message", "task_id": str(task_id)},
+            db=db,
+        )
+    except Exception:
+        pass
+
     return result
+
+
+@router.post("/tasks/{task_id}/fuel-entry", summary="⛽ Запись расхода топлива по смене")
+def add_shift_fuel_entry(
+    task_id: int,
+    fuel_type: str = Body(default="diesel"),
+    quantity_liters: float = Body(...),
+    odometer_reading: float | None = Body(default=None),
+    engine_hours: float | None = Body(default=None),
+    notes: str = Body(default=""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Записать расход топлива для конкретной смены."""
+    from app.models.shift import ShiftFuelEntry
+
+    task = db.get(ShiftTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Shift task not found")
+
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    entry = ShiftFuelEntry(
+        shift_task_id=task_id,
+        vehicle_id=task.vehicle_id,
+        fuel_type=fuel_type,
+        quantity_liters=quantity_liters,
+        odometer_reading=odometer_reading,
+        engine_hours=engine_hours,
+        notes=notes,
+        recorded_by=current_user.id,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+
+    # Calculate consumption rate
+    consumption_per_km = None
+    consumption_per_hour = None
+    distance = getattr(task, 'odometer_distance', None)
+    hours = 0
+    if task.planned_start and task.planned_end:
+        hours = (task.planned_end - task.planned_start).total_seconds() / 3600
+
+    if distance and distance > 0:
+        consumption_per_km = round(quantity_liters / distance * 100, 2)  # L/100km
+    if hours > 0:
+        consumption_per_hour = round(quantity_liters / hours, 2)  # L/hour
+
+    return {
+        "id": entry.id,
+        "message": "Запись топлива добавлена",
+        "consumption_per_100km": consumption_per_km,
+        "consumption_per_hour": consumption_per_hour,
+    }
+
+
+@router.get("/stats/fuel-consumption", summary="⛽ Статистика расхода топлива")
+def get_fuel_consumption_stats(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    vehicle_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Статистика расхода топлива по технике за период."""
+    from datetime import date as date_type
+    from sqlalchemy import func
+    from app.models.shift import ShiftFuelEntry
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+
+    stmt = (
+        select(ShiftFuelEntry)
+        .join(ShiftTask, ShiftFuelEntry.shift_task_id == ShiftTask.id)
+        .join(Vehicle, ShiftFuelEntry.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+    )
+    if vehicle_id:
+        stmt = stmt.where(ShiftFuelEntry.vehicle_id == vehicle_id)
+
+    entries = db.execute(stmt).scalars().all()
+
+    # Group by vehicle
+    vehicle_stats = {}
+    for e in entries:
+        vid = e.vehicle_id
+        if vid not in vehicle_stats:
+            v = db.get(Vehicle, vid)
+            vehicle_stats[vid] = {"vehicle_name": v.name if v else "", "total_liters": 0, "entries": 0}
+        vehicle_stats[vid]["total_liters"] += e.quantity_liters
+        vehicle_stats[vid]["entries"] += 1
+
+    result = []
+    for vid, stats in vehicle_stats.items():
+        result.append({
+            "vehicle_id": vid,
+            "vehicle_name": stats["vehicle_name"],
+            "total_liters": round(stats["total_liters"], 2),
+            "entries_count": stats["entries"],
+            "avg_per_entry": round(stats["total_liters"] / stats["entries"], 2) if stats["entries"] > 0 else 0,
+        })
+
+    result.sort(key=lambda x: x["total_liters"], reverse=True)
+
+    total_liters = sum(s["total_liters"] for s in result)
+    return {
+        "period": {"from": str(d_from), "to": str(d_to)},
+        "total_liters": round(total_liters, 2),
+        "vehicles": result,
+    }
+
+
+@router.get("/tasks/{task_id}/pre-shift-checklist", summary="✅ Чеклист приёмки техники")
+def get_pre_shift_checklist(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Получить чеклист приёмки техники перед сменой."""
+    from app.models.shift import PreShiftChecklist
+
+    task = db.get(ShiftTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Shift task not found")
+
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Default checklist items
+    default_items = [
+        {"key": "tires", "label": "Состояние шин", "required": True},
+        {"key": "lights", "label": "Работа фар и сигналов", "required": True},
+        {"key": "brakes", "label": "Тормозная система", "required": True},
+        {"key": "fluids", "label": "Уровень жидкостей (масло, ОЖ)", "required": True},
+        {"key": "hydraulics", "label": "Гидравлическая система", "required": False},
+        {"key": "body", "label": "Кузов / навесное оборудование", "required": False},
+        {"key": "docs", "label": "Документы в кабине", "required": True},
+        {"key": "fire_ext", "label": "Огнетушитель / аптечка", "required": True},
+        {"key": "cleanliness", "label": "Чистота кабины", "required": False},
+    ]
+
+    # Check if already submitted
+    existing = db.execute(
+        select(PreShiftChecklist).where(PreShiftChecklist.shift_task_id == task_id)
+    ).scalar_one_or_none()
+
+    if existing:
+        import json
+        return {
+            "submitted": True,
+            "submitted_at": existing.submitted_at.isoformat() if existing.submitted_at else None,
+            "items": json.loads(existing.checklist_json) if existing.checklist_json else [],
+            "notes": existing.notes,
+            "has_issues": existing.has_issues,
+        }
+
+    return {"submitted": False, "items": default_items}
+
+
+@router.post("/tasks/{task_id}/pre-shift-checklist", summary="✅ Отправить чеклист приёмки")
+async def submit_pre_shift_checklist(
+    task_id: int,
+    items: list[dict] = Body(...),
+    notes: str = Body(default=""),
+    photos: list[UploadFile] = File(default=[]),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Отправить заполненный чеклист приёмки техники."""
+    import os, json
+    from datetime import datetime
+    from app.models.shift import PreShiftChecklist
+
+    task = db.get(ShiftTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Shift task not found")
+
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Save photos
+    photo_paths = []
+    upload_dir = os.path.join("uploads", "checklists", str(task_id))
+    os.makedirs(upload_dir, exist_ok=True)
+    for i, photo in enumerate(photos[:5]):
+        ext = os.path.splitext(photo.filename or "photo.jpg")[1]
+        filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{i}{ext}"
+        filepath = os.path.join(upload_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(await photo.read())
+        photo_paths.append(filepath)
+
+    has_issues = any(not item.get("passed", True) for item in items)
+
+    checklist = PreShiftChecklist(
+        shift_task_id=task_id,
+        submitted_by=current_user.id,
+        checklist_json=json.dumps(items),
+        notes=notes,
+        photo_paths=",".join(photo_paths) if photo_paths else None,
+        has_issues=has_issues,
+        submitted_at=datetime.now(UTC),
+    )
+    db.add(checklist)
+
+    # Auto-confirm shift if checklist passed
+    if not has_issues and task.status == "planned":
+        task.status = "confirmed"
+
+    db.commit()
+    db.refresh(checklist)
+
+    # Notify dispatcher if issues found
+    if has_issues:
+        try:
+            from app.services.websocket_manager import manager
+            await manager.broadcast_to_company(company_id, {
+                "type": "checklist_issues",
+                "task_id": task_id,
+                "vehicle_name": vehicle.name,
+                "issues_count": sum(1 for it in items if not it.get("passed", True)),
+            })
+        except Exception:
+            pass
+
+    return {
+        "id": checklist.id,
+        "message": "Чеклист отправлен" + (" ⚠️ Есть замечания!" if has_issues else " ✅ Техника принята"),
+        "has_issues": has_issues,
+        "photos_uploaded": len(photo_paths),
+    }
