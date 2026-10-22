@@ -50,7 +50,16 @@ const BankTransactionsPage: React.FC = () => {
   return (
     <Layout>
       <div className="p-6 space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900">🏦 Банковские транзакции</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">🏦 Банковские транзакции</h1>
+          <button onClick={() => {
+            const params = new URLSearchParams();
+            if (filters.date_from) params.set('date_from', filters.date_from);
+            if (filters.date_to) params.set('date_to', filters.date_to);
+            if (filters.matched) params.set('matched', filters.matched);
+            window.open(`/api/v1/shifts/bank/transactions/export?${params}`, '_blank');
+          }} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium">📥 Excel</button>
+        </div>
 
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm border p-4 flex gap-3 flex-wrap items-end">

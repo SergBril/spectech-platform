@@ -4433,3 +4433,229 @@ def get_pnl_per_vehicle(
 
     result.sort(key=lambda x: x["margin"], reverse=True)
     return {"period": {"from": str(d_from), "to": str(d_to)}, "vehicles": result}
+
+
+@router.get("/stats/pnl-per-vehicle/export", summary="📥 Экспорт P&L по технике в Excel")
+def export_pnl_excel(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт отчёта прибыльности по технике в Excel."""
+    import io
+    from datetime import date as date_type
+    from fastapi.responses import StreamingResponse
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+
+    report = get_pnl_per_vehicle(date_from, date_to, db, current_user, company_id)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "P&L по технике"
+
+    header_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+    green_font = Font(color="006100", bold=True)
+    red_font = Font(color="9C0006", bold=True)
+
+    headers = ["Техника", "Часов", "Выручка", "Топливо", "Зарплата", "Амортизация", "Расходы", "Маржа", "Маржа %"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    for row_idx, v in enumerate(report["vehicles"], 2):
+        ws.cell(row=row_idx, column=1, value=v["vehicle_name"])
+        ws.cell(row=row_idx, column=2, value=v["hours"])
+        ws.cell(row=row_idx, column=3, value=v["revenue"]).number_format = '#,##0'
+        ws.cell(row=row_idx, column=4, value=v["fuel_cost"]).number_format = '#,##0'
+        ws.cell(row=row_idx, column=5, value=v["wage_cost"]).number_format = '#,##0'
+        ws.cell(row=row_idx, column=6, value=v["amortization_cost"]).number_format = '#,##0'
+        ws.cell(row=row_idx, column=7, value=v["total_expenses"]).number_format = '#,##0'
+        margin_cell = ws.cell(row=row_idx, column=8, value=v["margin"])
+        margin_cell.number_format = '#,##0'
+        margin_cell.font = green_font if v["margin"] >= 0 else red_font
+        ws.cell(row=row_idx, column=9, value=v["margin_pct"]).number_format = '0.0"%"'
+
+    for col_cells in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 22)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+    filename = f"pnl_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/bank/transactions/export", summary="📥 Экспорт транзакций в Excel")
+def export_transactions_excel(
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    matched: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт банковских транзакций в Excel."""
+    import io
+    from fastapi.responses import StreamingResponse
+    from app.models.bank import BankTransaction
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+
+    stmt = select(BankTransaction).where(BankTransaction.company_id == company_id)
+    if date_from:
+        stmt = stmt.where(BankTransaction.doc_date >= date_from)
+    if date_to:
+        stmt = stmt.where(BankTransaction.doc_date <= date_to)
+    if matched == "matched":
+        stmt = stmt.where(BankTransaction.matched_act_id.isnot(None))
+    elif matched == "unmatched":
+        stmt = stmt.where(BankTransaction.matched_act_id.is_(None))
+    stmt = stmt.order_by(BankTransaction.doc_date.desc())
+
+    txns = db.execute(stmt).scalars().all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Банковские операции"
+
+    header_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+
+    headers = ["Дата", "Номер", "Плательщик", "ИНН", "Сумма", "Назначение", "Акт", "Статус"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    total_amount = 0
+    for row_idx, t in enumerate(txns, 2):
+        act = db.get(Act, t.matched_act_id) if t.matched_act_id else None
+        ws.cell(row=row_idx, column=1, value=t.doc_date)
+        ws.cell(row=row_idx, column=2, value=t.doc_number)
+        ws.cell(row=row_idx, column=3, value=t.payer_name or "")
+        ws.cell(row=row_idx, column=4, value=t.payer_inn or "")
+        ws.cell(row=row_idx, column=5, value=t.amount).number_format = '#,##0'
+        ws.cell(row=row_idx, column=6, value=t.purpose or "")
+        ws.cell(row=row_idx, column=7, value=act.act_number if act else "")
+        ws.cell(row=row_idx, column=8, value="Разнесено" if act else "Не разнесено")
+        total_amount += t.amount
+
+    last_row = len(txns) + 2
+    ws.cell(row=last_row, column=1, value="ИТОГО").font = Font(bold=True)
+    ws.cell(row=last_row, column=5, value=round(total_amount, 2)).number_format = '#,##0'
+    ws.cell(row=last_row, column=5).font = Font(bold=True)
+
+    for col_cells in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 30)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = "bank_transactions.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/stats/platform-overview", summary="🏢 Обзор платформы (Admin)")
+def get_platform_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Обзор платформы: пользователи, техника, акты, финансы, активность."""
+    from datetime import date as date_type, timedelta
+    from sqlalchemy import func
+    from app.models.shift import ShiftFuelEntry, DocumentArchive
+    from app.models.bank import BankTransaction
+    from app.models.contractor import DriverProfile, Employee
+
+    today = date_type.today()
+    month_start = today.replace(day=1)
+
+    # Users & drivers
+    users_count = db.execute(select(func.count()).select_from(User)).scalar() or 0
+    drivers_count = db.execute(select(func.count()).select_from(DriverProfile)).scalar() or 0
+
+    # Vehicles
+    vehicles_count = db.execute(select(func.count()).select_from(Vehicle).where(Vehicle.company_id == company_id)).scalar() or 0
+
+    # Acts this month
+    acts_month = db.execute(
+        select(func.count(), func.coalesce(func.sum(Act.total_amount), 0))
+        .where(Act.company_id == company_id)
+        .where(Act.act_date >= month_start)
+    ).one()
+    acts_count = acts_month[0] or 0
+    revenue_month = float(acts_month[1] or 0)
+
+    # Overdue acts
+    overdue_count = db.execute(
+        select(func.count()).select_from(Act)
+        .where(Act.company_id == company_id)
+        .where(Act.status.in_(["draft", "sent_to_edo", "signed"]))
+        .where(Act.act_date <= today - timedelta(days=30))
+    ).scalar() or 0
+
+    # Transactions this month
+    txn_month = db.execute(
+        select(func.count(), func.coalesce(func.sum(BankTransaction.amount), 0))
+        .where(BankTransaction.company_id == company_id)
+        .where(BankTransaction.doc_date >= str(month_start))
+    ).one()
+    txn_count = txn_month[0] or 0
+    txn_amount = float(txn_month[1] or 0)
+
+    # Unmatched transactions
+    unmatched_count = db.execute(
+        select(func.count()).select_from(BankTransaction)
+        .where(BankTransaction.company_id == company_id)
+        .where(BankTransaction.matched_act_id.is_(None))
+    ).scalar() or 0
+
+    # Documents in archive
+    docs_count = db.execute(
+        select(func.count()).select_from(DocumentArchive)
+        .where(DocumentArchive.company_id == company_id)
+    ).scalar() or 0
+
+    # Shifts today
+    shifts_today = db.execute(
+        select(func.count()).select_from(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date == today)
+    ).scalar() or 0
+
+    return {
+        "users": {"total": users_count, "drivers": drivers_count},
+        "vehicles": {"total": vehicles_count},
+        "acts_this_month": {"count": acts_count, "revenue": round(revenue_month, 2)},
+        "overdue_acts": overdue_count,
+        "transactions_this_month": {"count": txn_count, "amount": round(txn_amount, 2)},
+        "unmatched_transactions": unmatched_count,
+        "documents_in_archive": docs_count,
+        "shifts_today": shifts_today,
+        "date": str(today),
+    }
