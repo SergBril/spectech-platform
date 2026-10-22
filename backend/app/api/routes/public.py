@@ -699,9 +699,9 @@ def list_marketplace_requests(
     """
     stmt = (
         select(Request)
-        .where(DispatchDispatchRequest.source_channel == "marketplace")
+        .where(DispatchRequest.source_channel == "marketplace")
         .where(Request.is_published == True)
-        .where(DispatchDispatchRequest.status.in_(["new", "processing"]))
+        .where(DispatchRequest.status.in_(["new", "processing"]))
     )
 
     if category_id:
@@ -709,21 +709,21 @@ def list_marketplace_requests(
 
     # Исключаем заявки собственной компании (если авторизован)
     if company_id:
-        stmt = stmt.where(DispatchDispatchRequest.company_id != company_id)
+        stmt = stmt.where(DispatchRequest.company_id != company_id)
 
     # Count total for pagination
     count_stmt = select(func.count()).select_from(DispatchRequest).where(
-        DispatchDispatchRequest.source_channel == "marketplace",
+        DispatchRequest.source_channel == "marketplace",
         Request.is_published == True,
-        DispatchDispatchRequest.status.in_(["new", "processing"]),
+        DispatchRequest.status.in_(["new", "processing"]),
     )
     if category_id:
         count_stmt = count_stmt.where(Request.vehicle_category_id == category_id)
     if company_id:
-        count_stmt = count_stmt.where(DispatchDispatchRequest.company_id != company_id)
+        count_stmt = count_stmt.where(DispatchRequest.company_id != company_id)
     total = db.execute(count_stmt).scalar() or 0
 
-    stmt = stmt.order_by(DispatchDispatchRequest.created_at.desc()).offset(offset).limit(limit)
+    stmt = stmt.order_by(DispatchRequest.created_at.desc()).offset(offset).limit(limit)
     requests_list = db.scalars(stmt).all()
 
     result = []
@@ -908,7 +908,7 @@ def marketplace_payouts_report(
         select(Payout)
         .join(RequestAssignment, Payout.assignment_id == RequestAssignment.id)
         .join(Request, RequestAssignment.request_id == Request.id)
-        .where(DispatchDispatchRequest.source_channel == "marketplace")
+        .where(DispatchRequest.source_channel == "marketplace")
     )
 
     if date_from:
@@ -1003,34 +1003,34 @@ def marketplace_stats(
     from sqlalchemy import func
 
     total_requests = db.execute(
-        select(func.count()).select_from(DispatchRequest).where(DispatchDispatchRequest.source_channel == "marketplace")
+        select(func.count()).select_from(DispatchRequest).where(DispatchRequest.source_channel == "marketplace")
     ).scalar() or 0
 
     active_requests = db.execute(
         select(func.count()).select_from(DispatchRequest).where(
-            DispatchDispatchRequest.source_channel == "marketplace",
-            DispatchDispatchRequest.status.in_(["new", "processing", "has_responses"]),
+            DispatchRequest.source_channel == "marketplace",
+            DispatchRequest.status.in_(["new", "processing", "has_responses"]),
         )
     ).scalar() or 0
 
     assigned_requests = db.execute(
         select(func.count()).select_from(DispatchRequest).where(
-            DispatchDispatchRequest.source_channel == "marketplace",
-            DispatchDispatchRequest.status == "assigned",
+            DispatchRequest.source_channel == "marketplace",
+            DispatchRequest.status == "assigned",
         )
     ).scalar() or 0
 
     # По режимам
     client_count = db.execute(
         select(func.count()).select_from(DispatchRequest).where(
-            DispatchDispatchRequest.source_channel == "marketplace",
+            DispatchRequest.source_channel == "marketplace",
             Request.marketplace_mode == "client",
         )
     ).scalar() or 0
 
     dispatcher_count = db.execute(
         select(func.count()).select_from(DispatchRequest).where(
-            DispatchDispatchRequest.source_channel == "marketplace",
+            DispatchRequest.source_channel == "marketplace",
             Request.marketplace_mode == "owner_dispatcher",
         )
     ).scalar() or 0
@@ -1038,7 +1038,7 @@ def marketplace_stats(
     # Средний срок оплаты
     avg_payment = db.execute(
         select(func.avg(Request.payment_terms_days)).where(
-            DispatchDispatchRequest.source_channel == "marketplace",
+            DispatchRequest.source_channel == "marketplace",
             Request.payment_terms_days.isnot(None),
         )
     ).scalar()
@@ -1086,9 +1086,9 @@ def export_marketplace_requests(
 
     stmt = (
         select(Request)
-        .where(DispatchDispatchRequest.source_channel == "marketplace")
+        .where(DispatchRequest.source_channel == "marketplace")
         .where(Request.is_published == True)
-        .order_by(DispatchDispatchRequest.created_at.desc())
+        .order_by(DispatchRequest.created_at.desc())
     )
     if category_id:
         stmt = stmt.where(Request.vehicle_category_id == category_id)
