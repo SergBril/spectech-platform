@@ -71,6 +71,19 @@ async def send_alert_email(company_id: int, subject: str, body: str, db: Session
     # TODO: Интеграция с email service (SMTP / SendGrid / SES)
     logger.info(f"EMAIL STUB → company {company_id}: [{subject}] {body}")
 
+    # Send FCM push to company dispatchers
+    try:
+        from app.services.fcm_service import fcm_service
+        from app.models.auth import User, UserCompany
+        dispatcher_ids = db.execute(
+            select(User.id).join(UserCompany, User.id == UserCompany.user_id)
+            .where(UserCompany.company_id == company_id)
+        ).scalars().all()
+        for uid in dispatcher_ids:
+            await fcm_service.send_to_user(uid, subject, body, db=db)
+    except Exception as e:
+        logger.warning(f"FCM dispatch failed: {e}")
+
 
 async def send_telegram_alert(company_id: int, message: str):
     """Stub для отправки Telegram-уведомления."""
