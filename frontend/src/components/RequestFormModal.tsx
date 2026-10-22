@@ -267,11 +267,11 @@ export const RequestFormModal: React.FC<Props> = ({
         setError('Дата окончания должна быть позже даты начала');
         return;
       }
-      if (paymentTermsDays < 1 || paymentTermsDays > 90) {
+      if (Number(paymentTermsDays) < 1 || Number(paymentTermsDays) > 90) {
         setError('Срок оплаты должен быть от 1 до 90 дней');
         return;
       }
-      if (!clientRate || clientRate <= 0) {
+      if (!clientRate || Number(clientRate) <= 0) {
         setError('Укажите ставку клиента для заявки в маркетплейсе');
         return;
       }

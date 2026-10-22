@@ -762,7 +762,7 @@ def list_marketplace_requests(
 
 
 @router.post("/marketplace/requests/{request_id}/respond", status_code=201)
-def respond_to_marketplace_request(
+async def respond_to_marketplace_request(
     request_id: int,
     vehicle_id: int = Body(..., embed=True),
     db: Session = Depends(get_db),
@@ -837,25 +837,33 @@ def respond_to_marketplace_request(
 
     db.commit()
 
-    # Уведомляем владельца заявки
+    # Уведомляем владельца заявки (in-app + WebSocket)
     try:
         mp_mode = getattr(request, "marketplace_mode", "client")
         mode_label = "📋 Диспетчер" if mp_mode == "owner_dispatcher" else "🏪 Заказчик"
         payment_days = getattr(request, "payment_terms_days", 7) or 7
 
-        asyncio.get_event_loop().run_until_complete(
-            create_notification(
-                db=db,
-                user_id=request.created_by,
-                title="🔔 Новый отклик на заявку",
-                body=(
-                    f"{mode_label} | Техника «{vehicle.name}» откликнулась на вашу заявку.\n"
-                    f"Адрес: {request.object_address}\n"
-                    f"Оплата: {payment_days} дн."
-                ),
-                channel="in_app",
-            )
+        await create_notification(
+            db=db,
+            user_id=request.created_by,
+            title="🔔 Новый отклик на заявку",
+            body=(
+                f"{mode_label} | Техника «{vehicle.name}» откликнулась на вашу заявку.\n"
+                f"Адрес: {request.object_address}\n"
+                f"Оплата: {payment_days} дн."
+            ),
+            channel="in_app",
         )
+
+        # WebSocket real-time notification
+        from app.services.websocket_manager import manager
+        await manager.send_to_user(request.created_by, {
+            "type": "marketplace_response",
+            "request_id": request_id,
+            "vehicle_name": vehicle.name,
+            "company_name": current_user.company.name if hasattr(current_user, "company") and current_user.company else "",
+            "mode": mp_mode,
+        })
     except Exception:
         pass  # Не блокируем если уведомление не отправилось
 

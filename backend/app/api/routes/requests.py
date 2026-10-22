@@ -612,6 +612,143 @@ async def reject_response(
 
 
 
+
+@router.get("/{request_id}/responses", summary="📋 Отклики на заявку")
+def list_request_responses(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Список откликов на заявку (для владельца заявки)."""
+    from app.models.dispatch import RequestAssignment
+
+    request = db.get(Request, request_id)
+    if not request or request.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    assignments = db.execute(
+        select(RequestAssignment)
+        .where(RequestAssignment.request_id == request_id)
+        .order_by(RequestAssignment.created_at.desc())
+    ).scalars().all()
+
+    result = []
+    for a in assignments:
+        vehicle = db.get(Vehicle, a.vehicle_id)
+        company_name = ""
+        if vehicle and vehicle.company_id:
+            from app.models.company import Company
+            comp = db.get(Company, vehicle.company_id)
+            company_name = comp.name if comp else ""
+
+        result.append({
+            "id": a.id,
+            "vehicle_id": a.vehicle_id,
+            "vehicle_name": vehicle.name if vehicle else "N/A",
+            "company_name": company_name,
+            "status": a.status,
+            "created_at": a.created_at.isoformat() if hasattr(a, "created_at") and a.created_at else None,
+        })
+
+    return result
+
+
+@router.post("/bulk-responses", summary="📦 Массовое одобрение/отклонение откликов")
+async def bulk_response_action(
+    assignment_ids: list[int] = Body(..., embed=True),
+    action: str = Body(..., embed=True),
+    reason: str = Body(default="", embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Массовое одобрение или отклонение откликов. action: approve | reject"""
+    from app.models.dispatch import RequestAssignment, RequestStatusLog
+    from app.models.shift import ShiftTask, ShiftTaskStatus
+    from app.services.notification_service import create_notification
+    from app.services.websocket_manager import manager
+
+    if action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="action must be 'approve' or 'reject'")
+
+    processed = 0
+    errors = []
+
+    for aid in assignment_ids:
+        assignment = db.get(RequestAssignment, aid)
+        if not assignment:
+            errors.append({"id": aid, "error": "Not found"})
+            continue
+
+        request = db.get(Request, assignment.request_id)
+        if not request or request.company_id != company_id:
+            errors.append({"id": aid, "error": "Access denied"})
+            continue
+
+        if assignment.status != "pending_approval":
+            errors.append({"id": aid, "error": f"Already {assignment.status}"})
+            continue
+
+        if action == "approve":
+            assignment.status = "approved"
+            vehicle = db.get(Vehicle, assignment.vehicle_id)
+
+            # Reject other responses for same request
+            others = db.execute(
+                select(RequestAssignment).where(
+                    RequestAssignment.request_id == assignment.request_id,
+                    RequestAssignment.id != aid,
+                    RequestAssignment.status == "pending_approval",
+                )
+            ).scalars().all()
+            for o in others:
+                o.status = "rejected"
+
+            # Create ShiftTask
+            shift_task = ShiftTask(
+                request_id=assignment.request_id,
+                vehicle_id=assignment.vehicle_id,
+                driver_id=getattr(vehicle, "current_driver_id", None),
+                shift_date=request.planned_start.date() if request.planned_start else None,
+                planned_start=request.planned_start,
+                planned_end=request.planned_end,
+                status=ShiftTaskStatus.planned if hasattr(ShiftTaskStatus, "planned") else "planned",
+                created_by=current_user.id,
+            )
+            db.add(shift_task)
+            request.status = "assigned"
+
+            try:
+                await create_notification(db=db, user_id=assignment.assigned_by,
+                    title="✅ Ваш отклик одобрен!", body=f"Заявка #{request.id} подтверждена.", channel="in_app")
+                await manager.send_to_user(assignment.assigned_by, {"type": "response_approved", "request_id": request.id})
+            except Exception:
+                pass
+
+        else:  # reject
+            assignment.status = "rejected"
+            try:
+                await create_notification(db=db, user_id=assignment.assigned_by,
+                    title="❌ Ваш отклик отклонён", body=f"Заявка #{request.id}: {reason or 'Выбран другой исполнитель'}", channel="in_app")
+                await manager.send_to_user(assignment.assigned_by, {"type": "response_rejected", "request_id": request.id})
+            except Exception:
+                pass
+
+        db.add(RequestStatusLog(
+            request_id=assignment.request_id,
+            from_status=request.status if action == "reject" else "has_responses",
+            to_status=request.status,
+            changed_by_user_id=current_user.id,
+            comment=f"Массовое {action}: отклик #{aid}",
+        ))
+        processed += 1
+
+    db.commit()
+    return {"processed": processed, "errors": errors, "action": action}
+
+
+
 @router.get("/{request_id}/timeline", summary="📜 История статусов заявки")
 def get_request_timeline(
     request_id: int,
@@ -665,6 +802,74 @@ def get_request_timeline(
         })
 
     return result
+
+
+
+
+@router.put("/{request_id}", summary="✏️ Редактировать заявку")
+async def update_request(
+    request_id: int,
+    work_type: str | None = Body(default=None),
+    object_address: str | None = Body(default=None),
+    planned_start: str | None = Body(default=None),
+    planned_end: str | None = Body(default=None),
+    client_rate: float | None = Body(default=None),
+    rate_type: str | None = Body(default=None),
+    payment_terms_days: int | None = Body(default=None),
+    marketplace_mode: str | None = Body(default=None),
+    priority: str | None = Body(default=None),
+    requirements: dict | None = Body(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Редактировать заявку (только владелец, только до назначения)."""
+    from app.models.dispatch import RequestStatusLog
+    from datetime import datetime
+
+    request = db.get(Request, request_id)
+    if not request or request.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    if request.status == "assigned":
+        raise HTTPException(status_code=409, detail="Cannot edit assigned request")
+
+    changes = []
+    if work_type is not None and work_type != request.work_type:
+        changes.append(f"work_type: {request.work_type} → {work_type}")
+        request.work_type = work_type
+    if object_address is not None and object_address != request.object_address:
+        changes.append(f"address: {request.object_address} → {object_address}")
+        request.object_address = object_address
+    if planned_start is not None:
+        request.planned_start = datetime.fromisoformat(planned_start)
+    if planned_end is not None:
+        request.planned_end = datetime.fromisoformat(planned_end)
+    if client_rate is not None:
+        from decimal import Decimal
+        request.client_rate = Decimal(str(client_rate))
+    if rate_type is not None:
+        request.rate_type = rate_type
+    if payment_terms_days is not None:
+        request.payment_terms_days = payment_terms_days
+    if marketplace_mode is not None:
+        request.marketplace_mode = marketplace_mode
+    if priority is not None:
+        request.priority = priority
+    if requirements is not None:
+        request.requirements = requirements
+
+    if changes:
+        db.add(RequestStatusLog(
+            request_id=request_id,
+            from_status=request.status,
+            to_status=request.status,
+            changed_by_user_id=current_user.id,
+            comment=f"Редактирование: {'; '.join(changes)}",
+        ))
+
+    db.commit()
+    return {"message": "Заявка обновлена", "id": request_id}
 
 
 
