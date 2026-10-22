@@ -1334,7 +1334,7 @@ def get_daily_summary(
     }
 
 
-@router.post("/tasks/{task_id}/auto-assign-driver", summary="👤 Авто-назначение водителя")
+@router.post("/tasks/{task_id}/auto-assign-driver", summary="👤 Авто-назначение водителя", tags=["Mobile API"])
 def auto_assign_driver(
     task_id: int,
     db: Session = Depends(get_db),
@@ -1962,7 +1962,7 @@ def register_device_token(
     return {"message": "Device registered"}
 
 
-@router.post("/tasks/{task_id}/mobile-report", summary="📱 Отчёт о смене из мобильного приложения")
+@router.post("/tasks/{task_id}/mobile-report", summary="📱 Отчёт о смене из мобильного приложения", tags=["Mobile API"])
 async def submit_mobile_shift_report(
     task_id: int,
     odometer_start: float | None = Body(default=None),
@@ -2461,7 +2461,7 @@ async def send_shift_message(
     return result
 
 
-@router.post("/tasks/{task_id}/fuel-entry", summary="⛽ Запись расхода топлива по смене")
+@router.post("/tasks/{task_id}/fuel-entry", summary="⛽ Запись расхода топлива по смене", tags=["Mobile API"])
 def add_shift_fuel_entry(
     task_id: int,
     fuel_type: str = Body(default="diesel"),
@@ -2579,7 +2579,7 @@ def get_fuel_consumption_stats(
     }
 
 
-@router.get("/tasks/{task_id}/pre-shift-checklist", summary="✅ Чеклист приёмки техники")
+@router.get("/tasks/{task_id}/pre-shift-checklist", summary="✅ Чеклист приёмки техники", tags=["Mobile API"])
 def get_pre_shift_checklist(
     task_id: int,
     db: Session = Depends(get_db),
@@ -4103,3 +4103,141 @@ async def import_bank_payments(
 
     result = bank_integration_service.sync_payments_to_db(db, company_id, payments)
     return {"message": f"Импортировано {result['created']} платежей", **result}
+
+
+@router.post("/bank/auto-match-payments", summary="🔗 Авто-разнесение платежей по актам")
+def auto_match_payments(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Автоматически сопоставить входящие платежи с неоплаченными актами по ИНН + сумме."""
+    from app.models.bank import BankTransaction
+
+    # Get unmatched incoming payments for this company
+    payments = db.execute(
+        select(BankTransaction).where(
+            BankTransaction.company_id == company_id,
+            BankTransaction.matched_act_id.is_(None),
+            BankTransaction.status == "processed",
+        )
+    ).scalars().all()
+
+    # Get unpaid acts
+    unpaid_acts = db.execute(
+        select(Act).where(
+            Act.company_id == company_id,
+            Act.status.in_(["draft", "sent_to_edo", "signed"]),
+            Act.paid_amount < Act.total_amount,
+        )
+    ).scalars().all()
+
+    matched = 0
+    partial = 0
+
+    for payment in payments:
+        best_act = None
+        for act in unpaid_acts:
+            remaining = (act.total_amount or 0) - (act.paid_amount or 0)
+            if remaining <= 0:
+                continue
+
+            # Match by amount (exact or within 1%)
+            amount_match = abs(payment.amount - remaining) < max(remaining * 0.01, 1)
+
+            # Match by payer INN (if available)
+            inn_match = False
+            if payment.payer_inn and act.counterparty_inn:
+                inn_match = payment.payer_inn == act.counterparty_inn
+
+            # Match by purpose containing act number
+            purpose_match = False
+            if payment.purpose and act.act_number:
+                purpose_match = act.act_number.replace("-", "") in payment.purpose.replace("-", "").replace(" ", "")
+
+            if amount_match and (inn_match or purpose_match or not act.counterparty_inn):
+                best_act = act
+                break
+
+        if best_act:
+            payment.matched_act_id = best_act.id
+            best_act.paid_amount = (best_act.paid_amount or 0) + payment.amount
+            if best_act.paid_amount >= best_act.total_amount:
+                best_act.payment_status = "paid"
+            else:
+                best_act.payment_status = "partial"
+                partial += 1
+            matched += 1
+
+    db.commit()
+    return {"matched": matched, "partial": partial, "total_payments": len(payments)}
+
+
+@router.get("/stats/receivables", summary="💸 Дебиторская задолженность")
+def get_receivables_dashboard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Дашборд дебиторской задолженности: просроченные акты, ageing buckets."""
+    from datetime import date as date_type, timedelta
+
+    today = date_type.today()
+
+    acts = db.execute(
+        select(Act).where(
+            Act.company_id == company_id,
+            Act.status.in_(["draft", "sent_to_edo", "signed"]),
+        )
+    ).scalars().all()
+
+    total_outstanding = 0
+    overdue_amount = 0
+    buckets = {"current": 0, "1_30": 0, "31_60": 0, "61_90": 0, "90_plus": 0}
+    overdue_acts = []
+
+    for act in acts:
+        outstanding = (act.total_amount or 0) - (act.paid_amount or 0)
+        if outstanding <= 0:
+            continue
+
+        total_outstanding += outstanding
+        days_since = (today - act.act_date).days if act.act_date else 0
+
+        if days_since > 30:
+            overdue_amount += outstanding
+            vehicle = db.get(Vehicle, act.vehicle_id) if act.vehicle_id else None
+            overdue_acts.append({
+                "id": act.id,
+                "act_number": act.act_number,
+                "act_date": str(act.act_date),
+                "vehicle_name": vehicle.name if vehicle else "",
+                "counterparty": act.counterparty_name or act.driver_name or "",
+                "outstanding": round(outstanding, 2),
+                "days_overdue": days_since - 30,
+                "status": act.status,
+            })
+
+        if days_since <= 30:
+            buckets["current"] += outstanding
+        elif days_since <= 60:
+            buckets["1_30"] += outstanding
+        elif days_since <= 90:
+            buckets["31_60"] += outstanding
+        elif days_since <= 120:
+            buckets["61_90"] += outstanding
+        else:
+            buckets["90_plus"] += outstanding
+
+    overdue_acts.sort(key=lambda x: x["days_overdue"], reverse=True)
+
+    return {
+        "summary": {
+            "total_outstanding": round(total_outstanding, 2),
+            "overdue_amount": round(overdue_amount, 2),
+            "overdue_count": len(overdue_acts),
+            "on_time_amount": round(total_outstanding - overdue_amount, 2),
+        },
+        "ageing_buckets": {k: round(v, 2) for k, v in buckets.items()},
+        "overdue_acts": overdue_acts[:50],
+    }
