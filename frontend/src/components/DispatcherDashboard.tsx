@@ -44,7 +44,7 @@ const DispatcherDashboard: React.FC = () => {
 
       {/* Status breakdown */}
       <div className="space-y-1">
-        {Object.entries(summary.today.status_breakdown).map(([status, count]) => (
+        {Object.entries(summary.today.status_breakdown as Record<string, number>).map(([status, count]) => (
           <div key={status} className="flex justify-between text-sm">
             <span>{statusLabels[status] || status}</span>
             <span className="font-medium">{count}</span>
