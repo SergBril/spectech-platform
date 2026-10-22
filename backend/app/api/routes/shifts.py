@@ -809,6 +809,18 @@ def apply_shift_templates(
     for tmpl in templates:
         shift_date = start + timedelta(days=tmpl.weekday)
 
+        # Пропуск если дата является исключением для этого шаблона
+        from app.models.shift import ShiftTemplateExclusion
+        is_excluded = db.execute(
+            select(ShiftTemplateExclusion).where(
+                ShiftTemplateExclusion.template_id == tmpl.id,
+                ShiftTemplateExclusion.exclusion_date == shift_date,
+            )
+        ).scalar_one_or_none()
+        if is_excluded:
+            skipped += 1
+            continue
+
         # Пропуск если уже есть смена для этой техники в этот день
         existing = db.execute(
             select(ShiftTask).where(
@@ -843,8 +855,9 @@ def apply_shift_templates(
 # === SMS/Push Notification Service ===
 
 async def send_driver_sms_notification(driver_id: int, message: str, db: Session):
-    """Отправка SMS уведомления водителю (stub для интеграции с провайдером)."""
+    """Отправка SMS уведомления водителю через GreenSMS."""
     from app.models.contractor import DriverProfile
+    from app.services.sms_service import sms_service
     import logging
     logger = logging.getLogger(__name__)
 
@@ -858,10 +871,7 @@ async def send_driver_sms_notification(driver_id: int, message: str, db: Session
         logger.warning(f"No phone for driver profile {driver_id}")
         return False
 
-    # TODO: Интеграция с SMS-провайдером (GreenSMS, SMS.ru, Twilio)
-    # Пример: await greensms.send(phone, message)
-    logger.info(f"SMS STUB → {phone}: {message}")
-    return True
+    return await sms_service.send(phone, message)
 
 
 async def send_driver_push_notification(driver_id: int, title: str, body: str, db: Session):
@@ -873,3 +883,161 @@ async def send_driver_push_notification(driver_id: int, title: str, body: str, d
     # Пример: await fcm.send(device_token, title, body)
     logger.info(f"PUSH STUB → driver {driver_id}: {title} — {body}")
     return True
+
+
+# === Template Exclusions ===
+
+@router.get("/templates/{template_id}/exclusions", summary="📅 Исключения шаблона")
+def list_template_exclusions(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Список исключений (праздники, отпуска) для шаблона."""
+    from app.models.shift import ShiftTemplate, ShiftTemplateExclusion
+
+    template = db.get(ShiftTemplate, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    vehicle = db.get(Vehicle, template.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    exclusions = db.execute(
+        select(ShiftTemplateExclusion)
+        .where(ShiftTemplateExclusion.template_id == template_id)
+        .order_by(ShiftTemplateExclusion.exclusion_date)
+    ).scalars().all()
+
+    return [{"id": e.id, "date": str(e.exclusion_date), "reason": e.reason} for e in exclusions]
+
+
+@router.post("/templates/{template_id}/exclusions", summary="➕ Добавить исключение", status_code=201)
+def create_template_exclusion(
+    template_id: int,
+    exclusion_date: str = Body(...),
+    reason: str = Body(default="holiday"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Добавить исключение (праздник/отпуск) для шаблона смены."""
+    from app.models.shift import ShiftTemplate, ShiftTemplateExclusion
+    from datetime import date as date_type
+
+    template = db.get(ShiftTemplate, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    vehicle = db.get(Vehicle, template.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    exc = ShiftTemplateExclusion(
+        template_id=template_id,
+        exclusion_date=date_type.fromisoformat(exclusion_date),
+        reason=reason,
+        created_by=current_user.id,
+    )
+    db.add(exc)
+    db.commit()
+    db.refresh(exc)
+    return {"id": exc.id, "message": "Исключение добавлено"}
+
+
+@router.delete("/templates/exclusions/{exclusion_id}", summary="🗑️ Удалить исключение")
+def delete_template_exclusion(
+    exclusion_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Удалить исключение из шаблона."""
+    from app.models.shift import ShiftTemplateExclusion, ShiftTemplate
+
+    exc = db.get(ShiftTemplateExclusion, exclusion_id)
+    if not exc:
+        raise HTTPException(status_code=404, detail="Exclusion not found")
+
+    template = db.get(ShiftTemplate, exc.template_id)
+    vehicle = db.get(Vehicle, template.vehicle_id) if template else None
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    db.delete(exc)
+    db.commit()
+    return {"message": "Исключение удалено"}
+
+
+# === Utilization Statistics ===
+
+@router.get("/stats/utilization", summary="📊 Утилизация техники по сменам")
+def get_utilization_stats(
+    date_from: str = Query(..., description="Начало периода YYYY-MM-DD"),
+    date_to: str = Query(..., description="Конец периода YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Статистика использования техники: % дней со сменами, часы работы, простои."""
+    from datetime import date as date_type, timedelta
+    from sqlalchemy import func
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+    total_days = (d_to - d_from).days + 1
+
+    # Get all company vehicles
+    vehicles = db.execute(
+        select(Vehicle).where(Vehicle.company_id == company_id)
+    ).scalars().all()
+
+    # Get shifts in period
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+        .where(ShiftTask.status.notin_(["cancelled"]))
+    ).scalars().all()
+
+    # Per-vehicle stats
+    vehicle_stats = []
+    for v in vehicles:
+        v_tasks = [t for t in tasks if t.vehicle_id == v.id]
+        active_days = len(set(t.shift_date for t in v_tasks))
+        utilization_pct = round((active_days / total_days) * 100, 1) if total_days > 0 else 0
+
+        total_hours = 0
+        for t in v_tasks:
+            if t.planned_start and t.planned_end:
+                delta = (t.planned_end - t.planned_start).total_seconds() / 3600
+                total_hours += max(0, delta)
+
+        vehicle_stats.append({
+            "vehicle_id": v.id,
+            "vehicle_name": v.name,
+            "active_days": active_days,
+            "total_days": total_days,
+            "utilization_pct": utilization_pct,
+            "total_hours": round(total_hours, 1),
+            "shift_count": len(v_tasks),
+        })
+
+    # Summary
+    total_vehicles = len(vehicles)
+    avg_utilization = round(sum(s["utilization_pct"] for s in vehicle_stats) / total_vehicles, 1) if total_vehicles > 0 else 0
+
+    return {
+        "period": {"from": str(d_from), "to": str(d_to), "days": total_days},
+        "summary": {
+            "total_vehicles": total_vehicles,
+            "avg_utilization_pct": avg_utilization,
+            "total_shifts": len(tasks),
+            "total_hours": round(sum(s["total_hours"] for s in vehicle_stats), 1),
+        },
+        "vehicles": sorted(vehicle_stats, key=lambda x: x["utilization_pct"], reverse=True),
+    }

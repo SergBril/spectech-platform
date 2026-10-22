@@ -18,6 +18,7 @@ import {
   MarketplacePage,
   MyResponsesPage,
   ShiftCalendarPage,
+  UtilizationPage,
   VehiclesPage,
   DriversPage,
   RequestsPage,
@@ -86,6 +87,7 @@ const AppRoutes = () => {
         <Route path="/marketplace" element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />
         <Route path="/my-responses" element={<ProtectedRoute><MyResponsesPage /></ProtectedRoute>} />
         <Route path="/shift-calendar" element={<ProtectedRoute><ShiftCalendarPage /></ProtectedRoute>} />
+        <Route path="/utilization" element={<ProtectedRoute><UtilizationPage /></ProtectedRoute>} />
         <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
         <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
         <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />

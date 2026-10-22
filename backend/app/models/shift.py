@@ -162,3 +162,14 @@ class ShiftTemplate(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+
+
+class ShiftTemplateExclusion(Base):
+    __tablename__ = "shift_template_exclusions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("shift_templates.id"), nullable=False)
+    exclusion_date: Mapped[date] = mapped_column(nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(200), nullable=True)  # holiday, vacation, sick, etc.
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
