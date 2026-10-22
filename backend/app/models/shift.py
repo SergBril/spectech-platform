@@ -256,3 +256,15 @@ class VehicleChecklistConfig(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+
+
+class CompanyCostRates(Base):
+    __tablename__ = "company_cost_rates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    fuel_price_per_liter: Mapped[float] = mapped_column(default=65.0)
+    hourly_wage: Mapped[float] = mapped_column(default=500.0)
+    amortization_per_hour: Mapped[float] = mapped_column(default=300.0)
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))

@@ -3241,3 +3241,244 @@ def export_cost_per_hour_excel(
     filename = f"cost_per_hour_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.xlsx"
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# === Cost Rates Configuration ===
+
+@router.get("/cost-rates", summary="💰 Текущие ставки себестоимости")
+def get_cost_rates(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Получить текущие ставки для расчёта себестоимости."""
+    from app.models.shift import CompanyCostRates
+
+    rates = db.execute(
+        select(CompanyCostRates).where(CompanyCostRates.company_id == company_id)
+    ).scalar_one_or_none()
+
+    if not rates:
+        return {"fuel_price_per_liter": 65.0, "hourly_wage": 500.0, "amortization_per_hour": 300.0}
+
+    return {
+        "fuel_price_per_liter": rates.fuel_price_per_liter,
+        "hourly_wage": rates.hourly_wage,
+        "amortization_per_hour": rates.amortization_per_hour,
+        "updated_at": rates.updated_at.isoformat() if rates.updated_at else None,
+    }
+
+
+@router.put("/cost-rates", summary="💰 Обновить ставки себестоимости")
+def update_cost_rates(
+    fuel_price_per_liter: float = Body(...),
+    hourly_wage: float = Body(...),
+    amortization_per_hour: float = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Обновить ставки для расчёта себестоимости моточаса."""
+    from app.models.shift import CompanyCostRates
+
+    rates = db.execute(
+        select(CompanyCostRates).where(CompanyCostRates.company_id == company_id)
+    ).scalar_one_or_none()
+
+    if rates:
+        rates.fuel_price_per_liter = fuel_price_per_liter
+        rates.hourly_wage = hourly_wage
+        rates.amortization_per_hour = amortization_per_hour
+        rates.updated_by = current_user.id
+    else:
+        rates = CompanyCostRates(
+            company_id=company_id,
+            fuel_price_per_liter=fuel_price_per_liter,
+            hourly_wage=hourly_wage,
+            amortization_per_hour=amortization_per_hour,
+            updated_by=current_user.id,
+        )
+        db.add(rates)
+
+    db.commit()
+    return {"message": "Ставки обновлены"}
+
+
+@router.get("/stats/cost-forecast", summary="📈 Прогноз расходов на месяц")
+def get_cost_forecast(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Прогноз расходов на следующий месяц на основе трендов за последние 90 дней."""
+    from datetime import date as date_type, timedelta
+    from sqlalchemy import func
+    from app.models.shift import ShiftFuelEntry, CompanyCostRates
+
+    today = date_type.today()
+    lookback = today - timedelta(days=90)
+    next_month_start = (today.replace(day=1) + timedelta(days=32)).replace(day=1)
+    next_month_end = (next_month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    forecast_days = (next_month_end - next_month_start).days + 1
+
+    # Get last 90 days data
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= lookback)
+        .where(ShiftTask.shift_date <= today)
+        .where(ShiftTask.status.notin_(["cancelled"]))
+    ).scalars().all()
+
+    fuel_entries = db.execute(
+        select(ShiftFuelEntry)
+        .join(ShiftTask, ShiftFuelEntry.shift_task_id == ShiftTask.id)
+        .join(Vehicle, ShiftFuelEntry.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= lookback)
+        .where(ShiftTask.shift_date <= today)
+    ).scalars().all()
+
+    # Load rates
+    company_rates = db.execute(
+        select(CompanyCostRates).where(CompanyCostRates.company_id == company_id)
+    ).scalar_one_or_none()
+    fuel_price = company_rates.fuel_price_per_liter if company_rates else 65.0
+    hourly_wage = company_rates.hourly_wage if company_rates else 500.0
+    amort_rate = company_rates.amortization_per_hour if company_rates else 300.0
+
+    actual_days = max((today - lookback).days, 1)
+
+    total_hours = sum(
+        max(0, (t.planned_end - t.planned_start).total_seconds() / 3600)
+        for t in tasks if t.planned_start and t.planned_end
+    )
+    total_fuel = sum(f.quantity_liters for f in fuel_entries)
+
+    avg_daily_hours = total_hours / actual_days
+    avg_daily_fuel = total_fuel / actual_days
+
+    # Forecast
+    forecast_hours = round(avg_daily_hours * forecast_days, 1)
+    forecast_fuel = round(avg_daily_fuel * forecast_days, 2)
+    forecast_fuel_cost = round(forecast_fuel * fuel_price, 2)
+    forecast_wage_cost = round(forecast_hours * hourly_wage, 2)
+    forecast_amort_cost = round(forecast_hours * amort_rate, 2)
+    forecast_total = round(forecast_fuel_cost + forecast_wage_cost + forecast_amort_cost, 2)
+
+    # Actual totals for comparison
+    actual_fuel_cost = round(total_fuel * fuel_price, 2)
+    actual_wage_cost = round(total_hours * hourly_wage, 2)
+    actual_amort_cost = round(total_hours * amort_rate, 2)
+    actual_total = round(actual_fuel_cost + actual_wage_cost + actual_amort_cost, 2)
+
+    # Daily trend for chart (last 30 days)
+    daily_data = {}
+    for t in tasks:
+        key = str(t.shift_date)
+        if key not in daily_data:
+            daily_data[key] = {"date": key, "hours": 0}
+        if t.planned_start and t.planned_end:
+            daily_data[key]["hours"] += max(0, (t.planned_end - t.planned_start).total_seconds() / 3600)
+
+    for f_entry in fuel_entries:
+        task = db.get(ShiftTask, f_entry.shift_task_id)
+        if task:
+            key = str(task.shift_date)
+            if key in daily_data:
+                daily_data[key].setdefault("fuel", 0)
+                daily_data[key]["fuel"] += f_entry.quantity_liters
+
+    daily_trend = sorted(daily_data.values(), key=lambda x: x["date"])[-30:]
+
+    change_pct = round(((forecast_total / max(actual_total, 1)) * (actual_days / forecast_days) - 1) * 100, 1) if actual_total > 0 else 0
+
+    return {
+        "period": {"lookback_days": 90, "forecast_from": str(next_month_start), "forecast_to": str(next_month_end), "forecast_days": forecast_days},
+        "actual_90d": {
+            "total_cost": actual_total, "total_hours": round(total_hours, 1),
+            "fuel_liters": round(total_fuel, 2), "fuel_cost": actual_fuel_cost,
+            "wage_cost": actual_wage_cost, "amortization_cost": actual_amort_cost,
+        },
+        "forecast": {
+            "total_cost": forecast_total, "total_hours": forecast_hours,
+            "fuel_liters": forecast_fuel, "fuel_cost": forecast_fuel_cost,
+            "wage_cost": forecast_wage_cost, "amortization_cost": forecast_amort_cost,
+            "change_pct": change_pct,
+        },
+        "rates": {"fuel_price": fuel_price, "hourly_wage": hourly_wage, "amortization": amort_rate},
+        "daily_trend": daily_trend,
+    }
+
+
+# === Diadoc / ЭДО Integration ===
+
+@router.post("/diadoc/send-act", summary="📤 Отправить акт через Diadoc")
+async def send_act_via_diadoc(
+    act_id: int = Body(...),
+    counterparty_box_id: str = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Отправить акт выполненных работ контрагенту через Diadoc ЭДО."""
+    from app.services.diadoc_service import diadoc_service
+    from xml.etree.ElementTree import Element, SubElement, tostring
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    # Generate XML for this act
+    root = Element("UniversalTransferDocument")
+    root.set("Function", "СЧФДОП")
+    root.set("Date", str(act.act_date))
+    root.set("Number", act.act_number or f"ACT-{act.id}")
+
+    seller = SubElement(root, "Seller")
+    SubElement(seller, "Name").text = current_user.company.name if hasattr(current_user, 'company') and current_user.company else ""
+
+    buyer = SubElement(root, "Buyer")
+    SubElement(buyer, "BoxId").text = counterparty_box_id
+
+    item = SubElement(root, "Item")
+    SubElement(item, "Name").text = f"Услуги спецтехники ({act.act_date})"
+    SubElement(item, "Quantity").text = str(act.hours_worked or 0)
+    SubElement(item, "Price").text = str(act.hourly_rate or 0)
+    SubElement(item, "Total").text = str(act.total_amount or 0)
+    SubElement(item, "VATRate").text = "20%"
+    SubElement(item, "VATAmount").text = str(act.vat_amount or 0)
+
+    xml_bytes = tostring(root, encoding="unicode", xml_declaration=True).encode("utf-8")
+
+    token = await diadoc_service.authenticate()
+    if not token:
+        raise HTTPException(status_code=503, detail="Diadoc authentication failed")
+
+    result = await diadoc_service.send_act(xml_bytes, counterparty_box_id, token)
+
+    # Update act status
+    if result.get("status") == "sent" or result.get("status") == "sent_stub":
+        act.status = "sent_to_edo"
+        act.edo_message_id = result.get("message_id")
+        db.commit()
+
+    return {"message": f"Акт отправлен через Diadoc", **result}
+
+
+@router.get("/diadoc/counterparties", summary="🏢 Список контрагентов Diadoc")
+async def list_diadoc_counterparties(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Получить список контрагентов из Diadoc для выбора получателя акта."""
+    from app.services.diadoc_service import diadoc_service
+
+    token = await diadoc_service.authenticate()
+    if not token:
+        raise HTTPException(status_code=503, detail="Diadoc authentication failed")
+
+    counterparties = await diadoc_service.get_counterparties(token)
+    return counterparties
