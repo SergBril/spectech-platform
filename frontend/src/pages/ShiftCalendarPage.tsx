@@ -34,6 +34,10 @@ const ShiftCalendarPage: React.FC = () => {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templates, setTemplates] = useState<any[]>([]);
   const [templateForm, setTemplateForm] = useState({ vehicle_id: '', driver_id: '', weekday: 0, start_time: '08:00', end_time: '17:00' });
+  const [exclusions, setExclusions] = useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [exclusionDate, setExclusionDate] = useState('');
+  const [exclusionReason, setExclusionReason] = useState('holiday');
 
   // Live updates via WebSocket
   const { subscribe } = useWebSocket();
@@ -81,6 +85,32 @@ const ShiftCalendarPage: React.FC = () => {
       setShowTemplateModal(false);
       loadTemplates();
       alert('Шаблон создан');
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
+  const loadExclusions = async (templateId: number) => {
+    try {
+      const res = await apiClient.get(`/shifts/templates/${templateId}/exclusions`);
+      setExclusions(Array.isArray(res.data) ? res.data : []);
+      setSelectedTemplateId(templateId);
+    } catch { /* ignore */ }
+  };
+
+  const addExclusion = async () => {
+    if (!selectedTemplateId || !exclusionDate) return;
+    try {
+      await apiClient.post(`/shifts/templates/${selectedTemplateId}/exclusions`, {
+        exclusion_date: exclusionDate, reason: exclusionReason,
+      });
+      setExclusionDate('');
+      loadExclusions(selectedTemplateId);
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
+  const removeExclusion = async (id: number) => {
+    try {
+      await apiClient.delete(`/shifts/templates/exclusions/${id}`);
+      if (selectedTemplateId) loadExclusions(selectedTemplateId);
     } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
   };
 
@@ -246,7 +276,10 @@ const ShiftCalendarPage: React.FC = () => {
                           <span className="text-sm text-gray-500">{t.start_time?.slice(0,5)} — {t.end_time?.slice(0,5)}</span>
                           {t.driver_name && <span className="text-sm text-gray-600">👤 {t.driver_name}</span>}
                         </div>
-                        <button onClick={() => deleteTemplate(t.id)} className="text-red-500 hover:text-red-700 text-sm">🗑️</button>
+                        <div className="flex gap-2">
+                          <button onClick={() => loadExclusions(t.id)} className="text-blue-500 hover:text-blue-700 text-sm">🚫</button>
+                          <button onClick={() => deleteTemplate(t.id)} className="text-red-500 hover:text-red-700 text-sm">🗑️</button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -280,6 +313,38 @@ const ShiftCalendarPage: React.FC = () => {
                   ➕ Добавить шаблон
                 </button>
               </div>
+
+              {/* Exclusions for selected template */}
+              {selectedTemplateId && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">🚫 Исключения (праздники/отпуска)</h3>
+                  <div className="flex gap-2 mb-3">
+                    <input type="date" value={exclusionDate} onChange={e => setExclusionDate(e.target.value)}
+                      className="px-3 py-2 border rounded-lg text-sm" />
+                    <select value={exclusionReason} onChange={e => setExclusionReason(e.target.value)}
+                      className="px-3 py-2 border rounded-lg text-sm">
+                      <option value="holiday">Праздник</option>
+                      <option value="vacation">Отпуск</option>
+                      <option value="sick">Больничный</option>
+                      <option value="maintenance">ТО</option>
+                      <option value="other">Другое</option>
+                    </select>
+                    <button onClick={addExclusion} disabled={!exclusionDate}
+                      className="px-3 py-2 bg-red-600 text-white rounded-lg text-sm disabled:opacity-50">+ Добавить</button>
+                  </div>
+                  {exclusions.length > 0 && (
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {exclusions.map((e: any) => (
+                        <div key={e.id} className="flex items-center justify-between p-2 bg-red-50 rounded border border-red-100 text-sm">
+                          <span>{e.date} — <span className="text-gray-600">{e.reason === 'holiday' ? 'Праздник' : e.reason === 'vacation' ? 'Отпуск' : e.reason === 'sick' ? 'Больничный' : e.reason === 'maintenance' ? 'ТО' : e.reason}</span></span>
+                          <button onClick={() => removeExclusion(e.id)} className="text-red-500 hover:text-red-700">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-400 mt-2">Выберите шаблон выше, чтобы управлять исключениями</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
