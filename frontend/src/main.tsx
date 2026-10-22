@@ -32,6 +32,8 @@ import {
   BankTransactionsPage,
   PnLPerVehiclePage,
   PlatformOverviewPage,
+  NotificationSettingsPage,
+  EdoSettingsPage,
   OnboardingWizardPage,
   AuditLogPage,
   UserRolesPage,
@@ -117,6 +119,8 @@ const AppRoutes = () => {
         <Route path="/bank-transactions" element={<ProtectedRoute><BankTransactionsPage /></ProtectedRoute>} />
         <Route path="/pnl" element={<ProtectedRoute><PnLPerVehiclePage /></ProtectedRoute>} />
         <Route path="/overview" element={<ProtectedRoute><PlatformOverviewPage /></ProtectedRoute>} />
+        <Route path="/edo-settings" element={<ProtectedRoute><EdoSettingsPage /></ProtectedRoute>} />
+        <Route path="/notification-settings" element={<ProtectedRoute><NotificationSettingsPage /></ProtectedRoute>} />
         <Route path="/onboarding" element={<ProtectedRoute><OnboardingWizardPage /></ProtectedRoute>} />
         <Route path="/audit-log" element={<ProtectedRoute><AuditLogPage /></ProtectedRoute>} />
         <Route path="/user-roles" element={<ProtectedRoute><UserRolesPage /></ProtectedRoute>} />

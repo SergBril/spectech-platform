@@ -44,3 +44,6 @@ export { default as ForgotPasswordPage } from './ForgotPasswordPage';
 export { default as ResetPasswordPage } from './ResetPasswordPage';
 
 export { default as PayoutsPage } from './PayoutsPage';
+
+export { default as EdoSettingsPage } from './EdoSettingsPage';
+export { default as NotificationSettingsPage } from './NotificationSettingsPage';

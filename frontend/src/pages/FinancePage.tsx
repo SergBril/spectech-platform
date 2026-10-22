@@ -790,7 +790,13 @@ export const FinancePage: React.FC = () => {
                                 <button onClick={() => handleDownloadPdf('act', act.id, act.document_number)} className="text-purple-600 hover:text-purple-900" title="Акт PDF">📄</button>
                                 <div className="flex gap-1 flex-wrap">
                             <div className="flex gap-1 flex-wrap">
-                              <button onClick={() => handleDownloadUpd(act)} className="text-green-600 hover:text-green-900 text-xs px-1.5 py-0.5 rounded bg-green-50" title="УПД PDF">📋PDF</button>
+                              <div className="flex gap-1 flex-wrap">
+                                <button onClick={() => handleDownloadUpd(act)} className="text-green-600 hover:text-green-900 text-xs px-1.5 py-0.5 rounded bg-green-50" title="УПД PDF">📋PDF</button>
+                                <button onClick={() => handleDownloadUpdXml(act)} className="text-blue-600 hover:text-blue-900 text-xs px-1.5 py-0.5 rounded bg-blue-50" title="XML для ЭДО">📄XML</button>
+                                <button onClick={() => handleDownloadSignedZip(act)} className="text-indigo-600 hover:text-indigo-900 text-xs px-1.5 py-0.5 rounded bg-indigo-50" title="Подписанный ZIP">🔏ZIP</button>
+                                <button onClick={() => handleSendToDiadoc(act)} className="text-purple-600 hover:text-purple-900 text-xs px-1.5 py-0.5 rounded bg-purple-50" title="Диадок">📤ЭДО</button>
+                                <button onClick={() => handleRejectAct(act)} className="text-red-600 hover:text-red-900 text-xs px-1.5 py-0.5 rounded bg-red-50" title="Отклонить">❌</button>
+                              </div>
                               <button onClick={() => handleDownloadUpdXml(act)} className="text-blue-600 hover:text-blue-900 text-xs px-1.5 py-0.5 rounded bg-blue-50" title="XML для ЭДО">📄XML</button>
                               <button onClick={() => handleDownloadSignedZip(act)} className="text-indigo-600 hover:text-indigo-900 text-xs px-1.5 py-0.5 rounded bg-indigo-50" title="Подписанный ZIP">🔏ZIP</button>
                               <button onClick={() => handleSendToDiadoc(act)} className="text-purple-600 hover:text-purple-900 text-xs px-1.5 py-0.5 rounded bg-purple-50" title="Диадок">📤ЭДО</button>
