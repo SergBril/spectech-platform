@@ -74,7 +74,7 @@ const ShiftCalendarPage: React.FC = () => {
       await apiClient.post('/shifts/templates', {
         vehicle_id: parseInt(templateForm.vehicle_id),
         driver_id: templateForm.driver_id ? parseInt(templateForm.driver_id) : null,
-        weekday: parseInt(templateForm.weekday),
+        weekday: templateForm.weekday,
         start_time: templateForm.start_time,
         end_time: templateForm.end_time,
       });
@@ -264,7 +264,7 @@ const ShiftCalendarPage: React.FC = () => {
                     <input type="number" value={templateForm.driver_id} onChange={e => setTemplateForm({...templateForm, driver_id: e.target.value})}
                       className="w-full mt-1 px-3 py-2 border rounded-lg text-sm" placeholder="ID водителя" /></label>
                   <label className="block"><span className="text-xs text-gray-500">День недели</span>
-                    <select value={templateForm.weekday} onChange={e => setTemplateForm({...templateForm, weekday: e.target.value})}
+                    <select value={templateForm.weekday} onChange={e => setTemplateForm({...templateForm, weekday: Number(e.target.value)})}
                       className="w-full mt-1 px-3 py-2 border rounded-lg text-sm">
                       {['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map((d, i) => <option key={i} value={i}>{d}</option>)}
                     </select></label>
