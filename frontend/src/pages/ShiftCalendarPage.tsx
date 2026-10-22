@@ -120,6 +120,16 @@ const ShiftCalendarPage: React.FC = () => {
               className="px-3 py-1.5 bg-gray-800 text-white rounded-lg hover:bg-gray-900 text-sm font-medium flex items-center gap-1">
               🖨️ Печать PDF
             </button>
+            <button onClick={async () => {
+              if (!confirm('Применить шаблоны смен на эту неделю?')) return;
+              try {
+                const res = await apiClient.post('/shifts/templates/apply', { week_start: weekDays[0] });
+                alert(`Создано смен: ${res.data.created}, пропущено: ${res.data.skipped}`);
+                loadShifts();
+              } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+            }} className="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium flex items-center gap-1">
+              🔄 Шаблоны
+            </button>
           </div>
         </div>
 

@@ -103,6 +103,42 @@ async def update_shift_task(
     if vehicle and vehicle.company_id != company_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
+    # Проверка конфликтов
+    target_date = date_type.fromisoformat(shift_date) if shift_date else task.shift_date
+    conflicts = []
+
+    # Конфликт техники: другая смена этой техники в тот же день
+    vehicle_conflict = db.execute(
+        select(ShiftTask).where(
+            ShiftTask.vehicle_id == task.vehicle_id,
+            ShiftTask.shift_date == target_date,
+            ShiftTask.id != task_id,
+            ShiftTask.status.notin_(["cancelled"]),
+        )
+    ).scalar_one_or_none()
+    if vehicle_conflict:
+        v = db.get(Vehicle, task.vehicle_id)
+        conflicts.append(f"Техника «{v.name if v else task.vehicle_id}» уже занята {target_date}")
+
+    # Конфликт водителя: другая смена этого водителя в тот же день
+    check_driver = driver_id if driver_id is not None else task.driver_id
+    if check_driver:
+        driver_conflict = db.execute(
+            select(ShiftTask).where(
+                ShiftTask.driver_id == check_driver,
+                ShiftTask.shift_date == target_date,
+                ShiftTask.id != task_id,
+                ShiftTask.status.notin_(["cancelled"]),
+            )
+        ).scalar_one_or_none()
+        if driver_conflict:
+            from app.models.driver import Driver
+            d = db.get(Driver, check_driver)
+            conflicts.append(f"Водитель «{d.full_name if d else check_driver}» уже назначен {target_date}")
+
+    if conflicts:
+        raise HTTPException(status_code=409, detail={"conflicts": conflicts})
+
     changes = []
     if shift_date is not None:
         old_date = task.shift_date
@@ -121,6 +157,23 @@ async def update_shift_task(
 
     db.commit()
     db.refresh(task)
+
+    # Уведомление водителю о назначении/изменении смены
+    notify_driver = driver_id if driver_id is not None else task.driver_id
+    if notify_driver and changes:
+        try:
+            from app.services.notification_service import create_notification
+            from app.models.driver import Driver
+            drv = db.get(Driver, notify_driver)
+            if drv and drv.user_id:
+                await create_notification(
+                    db=db, user_id=drv.user_id,
+                    title="📅 Изменение смены",
+                    body=f"Ваша смена обновлена: {', '.join(changes)}",
+                    channel="in_app",
+                )
+        except Exception:
+            pass
 
     # WS broadcast для live-обновления календаря
     try:
@@ -553,3 +606,128 @@ def approve_and_sign_shift_report(
     db.commit()
     db.refresh(report)
     return report
+
+
+# === Shift Templates ===
+
+@router.get("/templates", summary="📋 Шаблоны смен")
+def list_shift_templates(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Список шаблонов повторяющихся смен."""
+    from app.models.shift import ShiftTemplate
+
+    templates = db.execute(
+        select(ShiftTemplate)
+        .join(Vehicle, ShiftTemplate.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .order_by(ShiftTemplate.weekday, ShiftTemplate.start_time)
+    ).scalars().all()
+
+    result = []
+    for t in templates:
+        vehicle = db.get(Vehicle, t.vehicle_id)
+        driver = db.get(Driver, t.driver_id) if t.driver_id else None
+        result.append({
+            "id": t.id,
+            "vehicle_id": t.vehicle_id,
+            "vehicle_name": vehicle.name if vehicle else "",
+            "driver_id": t.driver_id,
+            "driver_name": driver.full_name if driver else "",
+            "weekday": t.weekday,
+            "start_time": str(t.start_time) if t.start_time else "",
+            "end_time": str(t.end_time) if t.end_time else "",
+            "is_active": t.is_active,
+        })
+    return result
+
+
+@router.post("/templates", summary="➕ Создать шаблон смены", status_code=201)
+def create_shift_template(
+    vehicle_id: int = Body(...),
+    driver_id: int | None = Body(default=None),
+    weekday: int = Body(..., ge=0, le=6),
+    start_time: str = Body(...),
+    end_time: str = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Создать шаблон повторяющейся смены. weekday: 0=Пн..6=Вс."""
+    from app.models.shift import ShiftTemplate
+    from datetime import time as time_type
+
+    vehicle = db.get(Vehicle, vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    template = ShiftTemplate(
+        vehicle_id=vehicle_id,
+        driver_id=driver_id,
+        weekday=weekday,
+        start_time=time_type.fromisoformat(start_time),
+        end_time=time_type.fromisoformat(end_time),
+        is_active=True,
+        created_by=current_user.id,
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return {"id": template.id, "message": "Шаблон создан"}
+
+
+@router.post("/templates/apply", summary="🔄 Применить шаблоны на неделю")
+def apply_shift_templates(
+    week_start: str = Body(..., description="Понедельник недели YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Создать смены из активных шаблонов на указанную неделю."""
+    from app.models.shift import ShiftTemplate, ShiftTask, ShiftTaskStatus
+    from datetime import date as date_type, timedelta, datetime, time as time_type
+
+    start = date_type.fromisoformat(week_start)
+    templates = db.execute(
+        select(ShiftTemplate)
+        .join(Vehicle, ShiftTemplate.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTemplate.is_active == True)
+    ).scalars().all()
+
+    created = 0
+    skipped = 0
+    for tmpl in templates:
+        shift_date = start + timedelta(days=tmpl.weekday)
+
+        # Пропуск если уже есть смена для этой техники в этот день
+        existing = db.execute(
+            select(ShiftTask).where(
+                ShiftTask.vehicle_id == tmpl.vehicle_id,
+                ShiftTask.shift_date == shift_date,
+                ShiftTask.status.notin_(["cancelled"]),
+            )
+        ).scalar_one_or_none()
+        if existing:
+            skipped += 1
+            continue
+
+        planned_start = datetime.combine(shift_date, tmpl.start_time) if tmpl.start_time else datetime.combine(shift_date, time_type(8, 0))
+        planned_end = datetime.combine(shift_date, tmpl.end_time) if tmpl.end_time else datetime.combine(shift_date, time_type(17, 0))
+
+        task = ShiftTask(
+            vehicle_id=tmpl.vehicle_id,
+            driver_id=tmpl.driver_id,
+            shift_date=shift_date,
+            planned_start=planned_start,
+            planned_end=planned_end,
+            status=ShiftTaskStatus.planned if hasattr(ShiftTaskStatus, "planned") else "planned",
+            created_by=current_user.id,
+        )
+        db.add(task)
+        created += 1
+
+    db.commit()
+    return {"created": created, "skipped": skipped, "week_start": week_start}
