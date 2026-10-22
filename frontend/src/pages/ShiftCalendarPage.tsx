@@ -33,16 +33,17 @@ const ShiftCalendarPage: React.FC = () => {
   const [draggedShift, setDraggedShift] = useState<number | null>(null);
 
   // Live updates via WebSocket
-  const wsMessage = useWebSocket();
+  const { subscribe } = useWebSocket();
   useEffect(() => {
-    if (wsMessage && wsMessage.type === 'shift_updated') {
+    const unsubscribe = subscribe('shift_updated', (data: any) => {
       setShifts(prev => prev.map(s =>
-        s.id === wsMessage.task_id
-          ? { ...s, shift_date: wsMessage.shift_date, status: wsMessage.status || s.status }
+        s.id === data.task_id
+          ? { ...s, shift_date: data.shift_date, status: data.status || s.status }
           : s
       ));
-    }
-  }, [wsMessage]);
+    });
+    return unsubscribe;
+  }, [subscribe]);
 
   const getWeekStart = (date: Date) => {
     const d = new Date(date);
