@@ -68,6 +68,7 @@ class User(Base):
         index=True,
         comment="Telegram user ID для привязки аккаунта",
     )
+    max_chat_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     telegram_link_code: Mapped[str | None] = mapped_column(
         String(32),
         nullable=True,

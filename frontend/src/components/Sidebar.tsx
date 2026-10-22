@@ -26,6 +26,7 @@ const menuItems: MenuItem[] = [
   { label: 'Утилизация техники', icon: '📊', path: '/utilization', group: 'Бизнес' },
   { label: 'Правила авто-назначения', icon: '⚙️', path: '/auto-assign-rules', group: 'Бизнес' },
   { label: 'Обзор платформы', icon: '🏢', path: '/overview', group: 'Бизнес' },
+  { label: 'Управление ролями', icon: '🔑', path: '/user-roles', group: 'Администрирование' },
   { label: 'Журнал действий', icon: '📋', path: '/audit-log', group: 'Администрирование' },
   { label: 'Настройка', icon: '🚀', path: '/onboarding', group: 'Администрирование' },
   { label: 'KPI Водителей', icon: '🏆', path: '/driver-kpi', group: 'Бизнес' },
