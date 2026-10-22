@@ -4241,3 +4241,195 @@ def get_receivables_dashboard(
         "ageing_buckets": {k: round(v, 2) for k, v in buckets.items()},
         "overdue_acts": overdue_acts[:50],
     }
+
+
+# === Bank Transactions Management ===
+
+@router.get("/bank/transactions", summary="🏦 Список банковских транзакций")
+def list_bank_transactions(
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    matched: str | None = Query(default=None, description="matched/unmatched/all"),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=30, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Список банковских транзакций с фильтрами."""
+    from datetime import date as date_type
+    from sqlalchemy import func
+    from app.models.bank import BankTransaction
+
+    stmt = select(BankTransaction).where(BankTransaction.company_id == company_id)
+
+    if date_from:
+        stmt = stmt.where(BankTransaction.doc_date >= date_from)
+    if date_to:
+        stmt = stmt.where(BankTransaction.doc_date <= date_to)
+    if matched == "matched":
+        stmt = stmt.where(BankTransaction.matched_act_id.isnot(None))
+    elif matched == "unmatched":
+        stmt = stmt.where(BankTransaction.matched_act_id.is_(None))
+
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = db.execute(count_stmt).scalar() or 0
+
+    stmt = stmt.order_by(BankTransaction.doc_date.desc(), BankTransaction.id.desc())
+    stmt = stmt.offset((page - 1) * per_page).limit(per_page)
+    txns = db.execute(stmt).scalars().all()
+
+    items = []
+    for t in txns:
+        act = db.get(Act, t.matched_act_id) if t.matched_act_id else None
+        items.append({
+            "id": t.id, "doc_number": t.doc_number, "doc_date": t.doc_date,
+            "payer_name": t.payer_name, "payer_inn": t.payer_inn,
+            "payee_name": t.payee_name, "amount": t.amount,
+            "purpose": t.purpose, "status": t.status,
+            "matched_act_id": t.matched_act_id,
+            "matched_act_number": act.act_number if act else None,
+            "source": t.source,
+        })
+
+    return {"items": items, "total": total, "page": page, "per_page": per_page, "pages": (total + per_page - 1) // per_page if per_page > 0 else 0}
+
+
+@router.post("/bank/transactions/{txn_id}/match", summary="🔗 Ручное разнесение транзакции на акт")
+def manual_match_transaction(
+    txn_id: int,
+    act_id: int = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Вручную привязать банковскую транзакцию к акту."""
+    from app.models.bank import BankTransaction
+
+    txn = db.get(BankTransaction, txn_id)
+    if not txn or txn.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    txn.matched_act_id = act_id
+    act.paid_amount = (act.paid_amount or 0) + txn.amount
+    if act.paid_amount >= (act.total_amount or 0):
+        act.payment_status = "paid"
+    else:
+        act.payment_status = "partial"
+
+    db.commit()
+    return {"message": f"Транзакция {txn.doc_number} привязана к акту {act.act_number}"}
+
+
+@router.get("/acts/unpaid", summary="📋 Неоплаченные акты для разнесения")
+def list_unpaid_acts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Список неоплаченных/частично оплаченных актов для ручного разнесения."""
+    acts = db.execute(
+        select(Act).where(
+            Act.company_id == company_id,
+            Act.status.in_(["draft", "sent_to_edo", "signed"]),
+        )
+    ).scalars().all()
+
+    result = []
+    for a in acts:
+        outstanding = (a.total_amount or 0) - (a.paid_amount or 0)
+        if outstanding > 0:
+            vehicle = db.get(Vehicle, a.vehicle_id) if a.vehicle_id else None
+            result.append({
+                "id": a.id, "act_number": a.act_number, "act_date": str(a.act_date),
+                "vehicle_name": vehicle.name if vehicle else "",
+                "total_amount": a.total_amount, "paid_amount": a.paid_amount or 0,
+                "outstanding": round(outstanding, 2),
+            })
+
+    result.sort(key=lambda x: x["outstanding"], reverse=True)
+    return result
+
+
+@router.get("/stats/pnl-per-vehicle", summary="📊 Прибыльность по технике (P&L)")
+def get_pnl_per_vehicle(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Отчёт прибыльности по каждой единице техники: выручка - расходы = маржа."""
+    from datetime import date as date_type
+    from app.models.shift import ShiftFuelEntry, CompanyCostRates
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+
+    vehicles = db.execute(select(Vehicle).where(Vehicle.company_id == company_id)).scalars().all()
+
+    # Load rates
+    company_rates = db.execute(
+        select(CompanyCostRates).where(CompanyCostRates.company_id == company_id)
+    ).scalar_one_or_none()
+    fuel_price = company_rates.fuel_price_per_liter if company_rates else 65.0
+    hourly_wage = company_rates.hourly_wage if company_rates else 500.0
+    amort_rate = company_rates.amortization_per_hour if company_rates else 300.0
+
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+        .where(ShiftTask.status.notin_(["cancelled"]))
+    ).scalars().all()
+
+    fuel_entries = db.execute(
+        select(ShiftFuelEntry)
+        .join(ShiftTask, ShiftFuelEntry.shift_task_id == ShiftTask.id)
+        .join(Vehicle, ShiftFuelEntry.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+    ).scalars().all()
+
+    acts = db.execute(
+        select(Act).where(
+            Act.company_id == company_id,
+            Act.act_date >= d_from,
+            Act.act_date <= d_to,
+        )
+    ).scalars().all()
+
+    result = []
+    for v in vehicles:
+        v_tasks = [t for t in tasks if t.vehicle_id == v.id]
+        v_fuel = [f for f in fuel_entries if f.vehicle_id == v.id]
+        v_acts = [a for a in acts if a.vehicle_id == v.id]
+
+        hours = sum(max(0, (t.planned_end - t.planned_start).total_seconds() / 3600) for t in v_tasks if t.planned_start and t.planned_end)
+        fuel_liters = sum(f.quantity_liters for f in v_fuel)
+        revenue = sum(a.total_amount or 0 for a in v_acts)
+        fuel_cost = fuel_liters * fuel_price
+        wage_cost = hours * hourly_wage
+        amort_cost = hours * amort_rate
+        total_expenses = fuel_cost + wage_cost + amort_cost
+        margin = revenue - total_expenses
+        margin_pct = round((margin / revenue) * 100, 1) if revenue > 0 else 0
+
+        result.append({
+            "vehicle_id": v.id, "vehicle_name": v.name,
+            "hours": round(hours, 1), "fuel_liters": round(fuel_liters, 2),
+            "revenue": round(revenue, 2),
+            "fuel_cost": round(fuel_cost, 2), "wage_cost": round(wage_cost, 2), "amortization_cost": round(amort_cost, 2),
+            "total_expenses": round(total_expenses, 2),
+            "margin": round(margin, 2), "margin_pct": margin_pct,
+        })
+
+    result.sort(key=lambda x: x["margin"], reverse=True)
+    return {"period": {"from": str(d_from), "to": str(d_to)}, "vehicles": result}

@@ -15,6 +15,8 @@ export { default as ActsPage } from './ActsPage';
 export { default as FinanceDashboardPage } from './FinanceDashboardPage';
 export { default as DocumentArchivePage } from './DocumentArchivePage';
 export { default as ReceivablesPage } from './ReceivablesPage';
+export { default as BankTransactionsPage } from './BankTransactionsPage';
+export { default as PnLPerVehiclePage } from './PnLPerVehiclePage';
 export { default as VehiclesPage } from './VehiclesPage';
 export { default as DriversPage } from './DriversPage';
 export { default as RequestsPage } from './RequestsPage';

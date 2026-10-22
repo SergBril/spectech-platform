@@ -332,6 +332,62 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Уведомления о просроченных актах (ежедневно в 09:00)
+    async def _notify_overdue_receivables():
+        from datetime import date as date_type
+        from app.core.db import SessionLocal
+        from sqlalchemy import select
+        from app.models.acts import Act
+        from app.models.auth import UserCompany
+        from app.services.fcm_service import fcm_service
+
+        today = date_type.today()
+        with SessionLocal() as db:
+            try:
+                company_ids = db.execute(select(UserCompany.company_id).distinct()).scalars().all()
+                for cid in company_ids:
+                    overdue_acts = db.execute(
+                        select(Act).where(
+                            Act.company_id == cid,
+                            Act.status.in_(["draft", "sent_to_edo", "signed"]),
+                            Act.act_date <= today - __import__('datetime').timedelta(days=30),
+                        )
+                    ).scalars().all()
+
+                    if not overdue_acts:
+                        continue
+
+                    total_overdue = sum((a.total_amount or 0) - (a.paid_amount or 0) for a in overdue_acts)
+                    count = len([a for a in overdue_acts if (a.total_amount or 0) - (a.paid_amount or 0) > 0])
+
+                    if count == 0:
+                        continue
+
+                    msg = f"💸 {count} просроченных актов на сумму {total_overdue:,.0f} ₽"
+
+                    dispatcher_ids = db.execute(
+                        select(UserCompany.user_id).where(UserCompany.company_id == cid)
+                    ).scalars().all()
+
+                    for uid in dispatcher_ids:
+                        await fcm_service.send_to_user(uid, "Просроченные платежи", msg, data={"type": "overdue_alert"}, db=db)
+
+                    logger.info("Overdue alert sent to company %d: %d acts, %.0f RUB", cid, count, total_overdue)
+
+                db.commit()
+                logger.info("✅ Overdue receivables notification completed")
+            except Exception as e:
+                logger.error("❌ Overdue notification failed: %s", e)
+                db.rollback()
+
+    scheduler.add_job(
+        _notify_overdue_receivables,
+        trigger=CronTrigger(hour=9, minute=0),
+        id="daily_overdue_receivables",
+        name="Daily overdue receivables alert",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         "⏰ Scheduler started. Interval: %d min. Jobs: %d",
