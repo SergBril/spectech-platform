@@ -169,6 +169,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(RateLimitMiddleware)
+
 #
 
 # Setup Prometheus metrics
