@@ -125,3 +125,17 @@ class NotificationTemplate(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
+class UserNotificationPreference(Base):
+    __tablename__ = "user_notification_preferences"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
+    notify_role_change_max: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_role_change_email: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_overdue_max: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_overdue_email: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_act_signed_max: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_act_signed_email: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))

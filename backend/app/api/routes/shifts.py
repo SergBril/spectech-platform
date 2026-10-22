@@ -5122,3 +5122,68 @@ def get_role_history(
         ).order_by(AuditLog.created_at.desc())
     ).scalars().all()
     return [{"id": l.id, "action": l.action, "details": l.details, "created_at": l.created_at.isoformat() if l.created_at else None} for l in logs]
+
+
+# === User Notification Preferences ===
+
+@router.get("/profile/notification-settings", summary="My notification settings")
+def get_notification_settings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.models.auth import UserNotificationPreference
+    prefs = db.execute(
+        select(UserNotificationPreference).where(UserNotificationPreference.user_id == current_user.id)
+    ).scalar_one_or_none()
+    if not prefs:
+        return {k: True for k in ["notify_role_change_max", "notify_role_change_email", "notify_overdue_max", "notify_overdue_email", "notify_act_signed_max", "notify_act_signed_email"]}
+    return {
+        "notify_role_change_max": prefs.notify_role_change_max,
+        "notify_role_change_email": prefs.notify_role_change_email,
+        "notify_overdue_max": prefs.notify_overdue_max,
+        "notify_overdue_email": prefs.notify_overdue_email,
+        "notify_act_signed_max": prefs.notify_act_signed_max,
+        "notify_act_signed_email": prefs.notify_act_signed_email,
+    }
+
+
+@router.put("/profile/notification-settings", summary="Update notification settings")
+def update_notification_settings(
+    notify_role_change_max: bool | None = Body(default=None),
+    notify_role_change_email: bool | None = Body(default=None),
+    notify_overdue_max: bool | None = Body(default=None),
+    notify_overdue_email: bool | None = Body(default=None),
+    notify_act_signed_max: bool | None = Body(default=None),
+    notify_act_signed_email: bool | None = Body(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.models.auth import UserNotificationPreference
+    prefs = db.execute(
+        select(UserNotificationPreference).where(UserNotificationPreference.user_id == current_user.id)
+    ).scalar_one_or_none()
+    if not prefs:
+        prefs = UserNotificationPreference(user_id=current_user.id)
+        db.add(prefs)
+    if notify_role_change_max is not None: prefs.notify_role_change_max = notify_role_change_max
+    if notify_role_change_email is not None: prefs.notify_role_change_email = notify_role_change_email
+    if notify_overdue_max is not None: prefs.notify_overdue_max = notify_overdue_max
+    if notify_overdue_email is not None: prefs.notify_overdue_email = notify_overdue_email
+    if notify_act_signed_max is not None: prefs.notify_act_signed_max = notify_act_signed_max
+    if notify_act_signed_email is not None: prefs.notify_act_signed_email = notify_act_signed_email
+    db.commit()
+    return {"message": "Notification settings updated"}
+
+
+@router.get("/stats/recent-actions", summary="Recent actions widget")
+def get_recent_actions(
+    limit: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Последние действия из audit log для dashboard виджета."""
+    from app.models.auth import AuditLog
+    logs = db.execute(
+        select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
+    ).scalars().all()
+    return [{"id": l.id, "user_id": l.user_id, "action": l.action, "resource_type": l.resource_type, "details": l.details, "created_at": l.created_at.isoformat() if l.created_at else None} for l in logs]

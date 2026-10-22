@@ -5,12 +5,17 @@ import apiClient from '../api/client';
 const PlatformOverviewPage: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [recentActions, setRecentActions] = useState<any[]>([]);
 
   useEffect(() => {
     apiClient.get('/shifts/stats/platform-overview')
       .then(res => setData(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    apiClient.get('/shifts/stats/recent-actions', { params: { limit: 8 } })
+      .then(res => setRecentActions(Array.isArray(res.data) ? res.data : []))
+      .catch(() => {});
   }, []);
 
   const fmt = (n: number) => n.toLocaleString('ru-RU');
@@ -60,6 +65,23 @@ const PlatformOverviewPage: React.FC = () => {
                 <p className="text-sm text-gray-500">Смен сегодня</p>
                 <p className="text-2xl font-bold text-cyan-700">{data.shifts_today}</p>
               </div>
+            </div>
+            {/* Recent Actions Widget */}
+            <div className="bg-white rounded-xl shadow-sm border p-5 mt-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-3">🕐 Последние действия</h2>
+              {recentActions.length > 0 ? (
+                <div className="space-y-2">
+                  {recentActions.map((a: any) => (
+                    <div key={a.id} className="flex items-center justify-between text-sm py-1.5 border-b last:border-0">
+                      <div className="flex items-center gap-2">
+                        <span className="px-1.5 py-0.5 bg-gray-100 rounded text-xs font-mono">{a.action}</span>
+                        <span className="text-gray-600">{a.details || a.resource_type || '—'}</span>
+                      </div>
+                      <span className="text-xs text-gray-400 whitespace-nowrap">{a.created_at ? new Date(a.created_at).toLocaleTimeString('ru-RU') : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-gray-400 text-sm">Нет действий</p>}
             </div>
           </>
         ) : <p className="text-gray-400 text-center py-8">Нет данных</p>}
