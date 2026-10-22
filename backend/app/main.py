@@ -81,6 +81,7 @@ from app.core.sentry_config import init_sentry
 from app.models import *  # noqa: F401, F403
 from app.services import storage_service
 from app.tasks.scheduler import start_scheduler, stop_scheduler
+from app.middleware.rate_limiter import RateLimitMiddleware
 
 # Настройка логирования
 setup_logging("INFO")
@@ -132,6 +133,8 @@ async def lifespan(app: FastAPI):
 
 # 1. Создание приложения
 app = FastAPI(
+
+
     title="СпецТехника Про API",
     description="""
     # 🚜 Платформа управления спецтехникой

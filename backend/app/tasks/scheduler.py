@@ -363,7 +363,13 @@ def start_scheduler() -> None:
                     if count == 0:
                         continue
 
-                    msg = f"💸 {count} просроченных актов на сумму {total_overdue:,.0f} ₽"
+                    # Use template for overdue notification
+                    try:
+                        from app.services.notification_template_service import render_template
+                        tmpl_data = render_template(db, "overdue_acts", "max", count=count, amount=f"{total_overdue:,.0f}")
+                        msg = tmpl_data["body"] if tmpl_data else f"{count} просроченных актов на сумму {total_overdue:,.0f} RUB"
+                    except Exception:
+                        msg = f"{count} просроченных актов на сумму {total_overdue:,.0f} RUB"
 
                     dispatcher_ids = db.execute(
                         select(UserCompany.user_id).where(UserCompany.company_id == cid)

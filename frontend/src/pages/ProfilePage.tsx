@@ -8,12 +8,18 @@ const ProfilePage: React.FC = () => {
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState({ full_name: '', phone: '' });
   const [bindLink, setBindLink] = useState('');
+  const [roleHistory, setRoleHistory] = useState<any[]>([]);
 
   useEffect(() => {
     apiClient.get('/shifts/profile/me').then(res => {
       setProfile(res.data);
       setForm({ full_name: res.data.full_name || '', phone: res.data.phone || '' });
     }).catch(() => {}).finally(() => setLoading(false));
+
+    // Load role history
+    apiClient.get(`/shifts/audit-logs/role-history/${profile?.id || 0}`).then(res => {
+      setRoleHistory(Array.isArray(res.data) ? res.data : []);
+    }).catch(() => {});
   }, []);
 
   const saveProfile = async () => {
@@ -116,6 +122,20 @@ const ProfilePage: React.FC = () => {
             </div>
           )}
         </div>
+        {/* Role History */}
+        {roleHistory.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border p-6 space-y-3">
+            <h2 className="text-lg font-bold">📋 История изменений роли</h2>
+            <div className="space-y-2">
+              {roleHistory.map((h: any) => (
+                <div key={h.id} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
+                  <span className="text-gray-600">{h.details || h.action}</span>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">{h.created_at ? new Date(h.created_at).toLocaleString('ru-RU') : ''}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );
