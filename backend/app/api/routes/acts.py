@@ -328,6 +328,57 @@ async def sign_act(
             act.status = DocumentStatus.paid
             logger.info(f"✅ Act {act.document_number} fully signed, status=paid")
 
+        # Auto-send to EDO if enabled + log to edo_send_logs
+        try:
+            from app.models.company import Company
+            from app.models.finance import EdoSendLog
+            company = db.get(Company, act.company_id) if act.company_id else None
+            if company and getattr(company, "auto_send_on_sign", False):
+                operator = getattr(company, "edo_operator", "none") or "none"
+                if operator != "none":
+                    from app.services.edoxml.upd_xml_generator import generate_upd_xml
+                    from app.models.contractor import Contractor
+                    client = db.get(Contractor, act.client_id) if act.client_id else None
+                    if client:
+                        xml_bytes = generate_upd_xml(act, company, client)
+                        sig_bytes = b""
+                        try:
+                            from app.services.edoxml.signature_service import create_detached_signature
+                            sig_bytes = create_detached_signature(xml_bytes)
+                        except Exception:
+                            pass
+                        log_entry = EdoSendLog(
+                            act_id=act.id,
+                            document_number=act.document_number or str(act.id),
+                            operator=operator,
+                            status="pending",
+                            xml_size=len(xml_bytes),
+                            sig_size=len(sig_bytes) if sig_bytes else None,
+                            sent_by_user_id=current_user.id if current_user else None,
+                        )
+                        db.add(log_entry)
+                        db.flush()
+                        try:
+                            if operator == "diadoc":
+                                from app.services.diadoc_service import diadoc_service
+                                result = diadoc_service.send_signed_package(
+                                    xml_bytes=xml_bytes, signature_bytes=sig_bytes,
+                                    document_number=act.document_number
+                                )
+                                log_entry.status = "success"
+                                log_entry.message = str(result.get("message", "Sent"))[:500]
+                                logger.info(f"Auto-send to Diadoc OK: {act.document_number}")
+                            else:
+                                log_entry.status = "pending"
+                                log_entry.message = f"Operator {operator} not yet integrated"
+                        except Exception as send_err:
+                            log_entry.status = "failed"
+                            log_entry.message = str(send_err)[:500]
+                            logger.warning(f"Auto-send failed: {send_err}")
+                        db.commit()
+        except Exception as auto_err:
+            logger.warning(f"Auto-send/log error: {auto_err}")
+
         db.commit()
         db.refresh(act)
 
