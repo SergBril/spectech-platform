@@ -161,17 +161,26 @@ async def update_shift_task(
     # Уведомление водителю о назначении/изменении смены
     notify_driver = driver_id if driver_id is not None else task.driver_id
     if notify_driver and changes:
+        change_msg = f"Ваша смена обновлена: {', '.join(changes)}"
         try:
             from app.services.notification_service import create_notification
-            from app.models.driver import Driver
-            drv = db.get(Driver, notify_driver)
-            if drv and drv.user_id:
-                await create_notification(
-                    db=db, user_id=drv.user_id,
-                    title="📅 Изменение смены",
-                    body=f"Ваша смена обновлена: {', '.join(changes)}",
-                    channel="in_app",
-                )
+            from app.models.contractor import DriverProfile
+            profile = db.get(DriverProfile, notify_driver)
+            if profile and hasattr(profile, 'employee_contractor_id'):
+                # In-app notification via employee link
+                from app.models.contractor import Employee
+                emp = db.get(Employee, profile.employee_contractor_id)
+                if emp and hasattr(emp, 'user_id') and emp.user_id:
+                    await create_notification(
+                        db=db, user_id=emp.user_id,
+                        title="📅 Изменение смены",
+                        body=change_msg,
+                        channel="in_app",
+                    )
+            # SMS notification
+            await send_driver_sms_notification(notify_driver, change_msg, db)
+            # Push notification
+            await send_driver_push_notification(notify_driver, "📅 Изменение смены", change_msg, db)
         except Exception:
             pass
 
@@ -190,6 +199,81 @@ async def update_shift_task(
         pass
 
     return {"message": "Смена обновлена", "id": task_id, "changes": changes}
+
+
+@router.get("/calendar/export-ical", summary="📅 Экспорт календаря в iCal (.ics)")
+def export_shift_calendar_ical(
+    date_from: str = Query(..., description="Начало периода YYYY-MM-DD"),
+    date_to: str = Query(..., description="Конец периода YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Экспорт календаря смен в формате iCalendar (.ics) для импорта в Google Calendar / Outlook."""
+    from datetime import date as date_type, timedelta
+    from fastapi.responses import Response
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+        .order_by(ShiftTask.shift_date)
+    ).scalars().all()
+
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//SpectechPlatform//ShiftCalendar//RU",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        f"X-WR-CALNAME:Смены {current_user.company.name if hasattr(current_user, 'company') and current_user.company else 'Компания'}",
+    ]
+
+    for t in tasks:
+        vehicle = db.get(Vehicle, t.vehicle_id)
+        v_name = vehicle.name if vehicle else f"Vehicle#{t.vehicle_id}"
+
+        driver_name = ""
+        if t.driver_id:
+            from app.models.contractor import DriverProfile
+            profile = db.get(DriverProfile, t.driver_id)
+            if profile:
+                from app.models.contractor import Employee
+                emp = db.get(Employee, profile.employee_contractor_id)
+                driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
+
+        dt_start = t.planned_start or __import__('datetime').datetime.combine(t.shift_date, __import__('datetime').time(8, 0))
+        dt_end = t.planned_end or __import__('datetime').datetime.combine(t.shift_date, __import__('datetime').time(17, 0))
+
+        uid = f"shift-{t.id}@spectech.dev"
+        summary = f"{v_name}" + (f" — {driver_name}" if driver_name else "")
+        description = f"Статус: {t.status}\nТехника: {v_name}" + (f"\nВодитель: {driver_name}" if driver_name else "")
+
+        lines.extend([
+            "BEGIN:VEVENT",
+            f"UID:{uid}",
+            f"DTSTART:{dt_start.strftime('%Y%m%dT%H%M%S')}",
+            f"DTEND:{dt_end.strftime('%Y%m%dT%H%M%S')}",
+            f"SUMMARY:{summary}",
+            f"DESCRIPTION:{description}",
+            f"STATUS:{'CONFIRMED' if t.status in ('confirmed', 'in_progress', 'completed') else 'TENTATIVE'}",
+            "END:VEVENT",
+        ])
+
+    lines.append("END:VCALENDAR")
+    ical_content = "\r\n".join(lines)
+
+    filename = f"shifts_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.ics"
+    return Response(
+        content=ical_content,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/calendar/export-pdf", summary="🖨️ PDF календаря смен")
@@ -678,6 +762,29 @@ def create_shift_template(
     return {"id": template.id, "message": "Шаблон создан"}
 
 
+@router.delete("/templates/{template_id}", summary="🗑️ Удалить шаблон смены")
+def delete_shift_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Удалить шаблон повторяющейся смены."""
+    from app.models.shift import ShiftTemplate
+
+    template = db.get(ShiftTemplate, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    vehicle = db.get(Vehicle, template.vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    db.delete(template)
+    db.commit()
+    return {"message": "Шаблон удалён", "id": template_id}
+
+
 @router.post("/templates/apply", summary="🔄 Применить шаблоны на неделю")
 def apply_shift_templates(
     week_start: str = Body(..., description="Понедельник недели YYYY-MM-DD"),
@@ -731,3 +838,38 @@ def apply_shift_templates(
 
     db.commit()
     return {"created": created, "skipped": skipped, "week_start": week_start}
+
+
+# === SMS/Push Notification Service ===
+
+async def send_driver_sms_notification(driver_id: int, message: str, db: Session):
+    """Отправка SMS уведомления водителю (stub для интеграции с провайдером)."""
+    from app.models.contractor import DriverProfile
+    import logging
+    logger = logging.getLogger(__name__)
+
+    profile = db.get(DriverProfile, driver_id)
+    if not profile:
+        logger.warning(f"Driver profile {driver_id} not found for SMS")
+        return False
+
+    phone = getattr(profile, "phone", None) or getattr(profile, "contact_phone", None)
+    if not phone:
+        logger.warning(f"No phone for driver profile {driver_id}")
+        return False
+
+    # TODO: Интеграция с SMS-провайдером (GreenSMS, SMS.ru, Twilio)
+    # Пример: await greensms.send(phone, message)
+    logger.info(f"SMS STUB → {phone}: {message}")
+    return True
+
+
+async def send_driver_push_notification(driver_id: int, title: str, body: str, db: Session):
+    """Отправка Push уведомления водителю (stub для интеграции с FCM/APNs)."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # TODO: Интеграция с Firebase Cloud Messaging / APNs
+    # Пример: await fcm.send(device_token, title, body)
+    logger.info(f"PUSH STUB → driver {driver_id}: {title} — {body}")
+    return True
