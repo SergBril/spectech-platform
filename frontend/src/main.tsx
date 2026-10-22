@@ -27,6 +27,7 @@ import {
   CostPerHourPage,
   ActsPage,
   FinanceDashboardPage,
+  DocumentArchivePage,
   VehiclesPage,
   DriversPage,
   RequestsPage,
@@ -104,6 +105,7 @@ const AppRoutes = () => {
         <Route path="/cost-per-hour" element={<ProtectedRoute><CostPerHourPage /></ProtectedRoute>} />
         <Route path="/acts" element={<ProtectedRoute><ActsPage /></ProtectedRoute>} />
         <Route path="/finance" element={<ProtectedRoute><FinanceDashboardPage /></ProtectedRoute>} />
+        <Route path="/documents" element={<ProtectedRoute><DocumentArchivePage /></ProtectedRoute>} />
         <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
         <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
         <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
