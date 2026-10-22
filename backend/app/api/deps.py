@@ -171,3 +171,12 @@ def get_user_company_ids(
         ).all()
     )
     return list(ids)
+
+
+async def get_current_company_id_optional(
+    user: User | None = Depends(get_current_user_optional),
+) -> int | None:
+    """Опциональный company_id: возвращает None если не авторизован."""
+    if not user or not user.company_id:
+        return None
+    return user.company_id

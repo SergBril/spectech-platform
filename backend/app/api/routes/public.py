@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.api.deps import get_current_user, get_current_company_id
+from app.api.deps import get_current_user, get_current_company_id, get_current_user_optional, get_current_company_id_optional
 from app.models.catalog import Category, Vehicle
 from app.models.company import Company
 from app.models.auth import User
