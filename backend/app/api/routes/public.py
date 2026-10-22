@@ -699,7 +699,7 @@ def list_marketplace_requests(
     """
     stmt = (
         select(DispatchRequest)
-        .where(DispatchDispatchRequest.source_channel == "marketplace")
+        .where(DispatchRequest.source_channel == "marketplace")
         .where(DispatchRequest.is_published == True)
         .where(DispatchRequest.status.in_(["new", "processing"]))
     )
@@ -713,7 +713,7 @@ def list_marketplace_requests(
 
     # Count total for pagination
     count_stmt = select(func.count()).select_from(DispatchRequest).where(
-        DispatchDispatchRequest.source_channel == "marketplace",
+        DispatchRequest.source_channel == "marketplace",
         DispatchRequest.is_published == True,
         DispatchRequest.status.in_(["new", "processing"]),
     )
@@ -908,7 +908,7 @@ def marketplace_payouts_report(
         select(Payout)
         .join(RequestAssignment, Payout.assignment_id == RequestAssignment.id)
         .join(DispatchRequest, RequestAssignment.request_id == DispatchRequest.id)
-        .where(DispatchDispatchRequest.source_channel == "marketplace")
+        .where(DispatchRequest.source_channel == "marketplace")
     )
 
     if date_from:
@@ -1003,19 +1003,19 @@ def marketplace_stats(
     from sqlalchemy import func
 
     total_requests = db.execute(
-        select(func.count()).select_from(DispatchRequest).where(DispatchDispatchRequest.source_channel == "marketplace")
+        select(func.count()).select_from(DispatchRequest).where(DispatchRequest.source_channel == "marketplace")
     ).scalar() or 0
 
     active_requests = db.execute(
         select(func.count()).select_from(DispatchRequest).where(
-            DispatchDispatchRequest.source_channel == "marketplace",
+            DispatchRequest.source_channel == "marketplace",
             DispatchRequest.status.in_(["new", "processing", "has_responses"]),
         )
     ).scalar() or 0
 
     assigned_requests = db.execute(
         select(func.count()).select_from(DispatchRequest).where(
-            DispatchDispatchRequest.source_channel == "marketplace",
+            DispatchRequest.source_channel == "marketplace",
             DispatchRequest.status == "assigned",
         )
     ).scalar() or 0
@@ -1023,22 +1023,22 @@ def marketplace_stats(
     # По режимам
     client_count = db.execute(
         select(func.count()).select_from(DispatchRequest).where(
-            DispatchDispatchRequest.source_channel == "marketplace",
-            DispatchDispatchRequest.marketplace_mode == "client",
+            DispatchRequest.source_channel == "marketplace",
+            DispatchRequest.marketplace_mode == "client",
         )
     ).scalar() or 0
 
     dispatcher_count = db.execute(
         select(func.count()).select_from(DispatchRequest).where(
-            DispatchDispatchRequest.source_channel == "marketplace",
-            DispatchDispatchRequest.marketplace_mode == "owner_dispatcher",
+            DispatchRequest.source_channel == "marketplace",
+            DispatchRequest.marketplace_mode == "owner_dispatcher",
         )
     ).scalar() or 0
 
     # Средний срок оплаты
     avg_payment = db.execute(
         select(func.avg(DispatchRequest.payment_terms_days)).where(
-            DispatchDispatchRequest.source_channel == "marketplace",
+            DispatchRequest.source_channel == "marketplace",
             DispatchRequest.payment_terms_days.isnot(None),
         )
     ).scalar()
@@ -1086,7 +1086,7 @@ def export_marketplace_requests(
 
     stmt = (
         select(DispatchRequest)
-        .where(DispatchDispatchRequest.source_channel == "marketplace")
+        .where(DispatchRequest.source_channel == "marketplace")
         .where(DispatchRequest.is_published == True)
         .order_by(DispatchRequest.created_at.desc())
     )
@@ -1165,14 +1165,15 @@ def list_my_responses(
     company_id: int = Depends(get_current_company_id),
 ):
     """Список откликов текущей компании на заявки маркетплейса."""
+    from app.models.dispatch import RequestAssignment
     from app.models.dispatch import Request as DispatchRequestAssignment
 
     assignments = db.execute(
-        select(RequestAssignment)
-        .join(DispatchRequest, RequestAssignment.request_id == DispatchRequest.id)
-        .join(Vehicle, RequestAssignment.vehicle_id == Vehicle.id)
-        .where(Vehicle.company_id == company_id)
-        .order_by(RequestAssignment.created_at.desc())
+    select(RequestAssignment)
+    .join(DispatchRequest, RequestAssignment.request_id == DispatchRequest.id)
+    .join(Vehicle, RequestAssignment.vehicle_id == Vehicle.id)
+    .where(Vehicle.company_id == company_id)
+    .order_by(RequestAssignment.created_at.desc())
     ).scalars().all()
 
     result = []
