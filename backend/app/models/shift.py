@@ -215,3 +215,31 @@ class ShiftGeofence(Base):
     auto_started: Mapped[bool] = mapped_column(default=False)
     auto_completed: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+
+
+class ShiftFuelEntry(Base):
+    __tablename__ = "shift_fuel_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shift_task_id: Mapped[int] = mapped_column(ForeignKey("shift_tasks.id"), nullable=False)
+    vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), nullable=False)
+    fuel_type: Mapped[str] = mapped_column(String(20), default="diesel")
+    quantity_liters: Mapped[float] = mapped_column(nullable=False)
+    odometer_reading: Mapped[float | None] = mapped_column(nullable=True)
+    engine_hours: Mapped[float | None] = mapped_column(nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    recorded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+
+
+class PreShiftChecklist(Base):
+    __tablename__ = "pre_shift_checklists"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shift_task_id: Mapped[int] = mapped_column(ForeignKey("shift_tasks.id"), nullable=False)
+    submitted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    checklist_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    photo_paths: Mapped[str | None] = mapped_column(Text, nullable=True)
+    has_issues: Mapped[bool] = mapped_column(default=False)
+    submitted_at: Mapped[datetime | None] = mapped_column(nullable=True)

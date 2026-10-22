@@ -11,6 +11,11 @@ const DriverAppPage: React.FC = () => {
   const [chatModal, setChatModal] = useState<number | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [chatText, setChatText] = useState('');
+  const [fuelModal, setFuelModal] = useState<number | null>(null);
+  const [fuelForm, setFuelForm] = useState({ quantity_liters: '', odometer_reading: '', engine_hours: '' });
+  const [checklistModal, setChecklistModal] = useState<number | null>(null);
+  const [checklistItems, setChecklistItems] = useState<any[]>([]);
+  const [checklistNotes, setChecklistNotes] = useState('');
 
   const loadShifts = async () => {
     try {
@@ -55,6 +60,46 @@ const DriverAppPage: React.FC = () => {
       await apiClient.post(`/shifts/tasks/${chatModal}/messages`, { text: chatText });
       setChatText('');
       loadMessages(chatModal);
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
+  const submitFuel = async () => {
+    if (!fuelModal || !fuelForm.quantity_liters) return;
+    try {
+      const res = await apiClient.post(`/shifts/tasks/${fuelModal}/fuel-entry`, {
+        quantity_liters: parseFloat(fuelForm.quantity_liters),
+        odometer_reading: fuelForm.odometer_reading ? parseFloat(fuelForm.odometer_reading) : null,
+        engine_hours: fuelForm.engine_hours ? parseFloat(fuelForm.engine_hours) : null,
+      });
+      let msg = `⛽ Топливо записано (${fuelForm.quantity_liters} л)`;
+      if (res.data.consumption_per_100km) msg += `\nРасход: ${res.data.consumption_per_100km} л/100км`;
+      alert(msg);
+      setFuelModal(null);
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
+  const loadChecklist = async (taskId: number) => {
+    try {
+      const res = await apiClient.get(`/shifts/tasks/${taskId}/pre-shift-checklist`);
+      if (res.data.submitted) {
+        alert(res.data.has_issues ? '⚠️ Чеклист уже отправлен с замечаниями' : '✅ Чеклист уже отправлен');
+        return;
+      }
+      setChecklistItems(res.data.items || []);
+      setChecklistNotes('');
+      setChecklistModal(taskId);
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
+  const submitChecklist = async () => {
+    if (!checklistModal) return;
+    try {
+      const res = await apiClient.post(`/shifts/tasks/${checklistModal}/pre-shift-checklist`, {
+        items: checklistItems, notes: checklistNotes,
+      });
+      alert(res.data.message);
+      setChecklistModal(null);
+      loadShifts();
     } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
   };
 
@@ -126,10 +171,22 @@ const DriverAppPage: React.FC = () => {
                   ▶️ Начать смену
                 </button>
               )}
-              <button onClick={() => loadMessages(s.id)}
-                className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 mt-1">
-                💬 Чат с диспетчером
-              </button>
+              <div className="flex gap-1 mt-1">
+                {(s.status === 'planned' || s.status === 'confirmed') && (
+                  <button onClick={() => loadChecklist(s.id)}
+                    className="flex-1 py-2 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-medium hover:bg-emerald-200">
+                    ✅ Приёмка
+                  </button>
+                )}
+                <button onClick={() => { setFuelModal(s.id); setFuelForm({ quantity_liters: '', odometer_reading: '', engine_hours: '' }); }}
+                  className="flex-1 py-2 bg-orange-100 text-orange-700 rounded-lg text-xs font-medium hover:bg-orange-200">
+                  ⛽ Топливо
+                </button>
+                <button onClick={() => loadMessages(s.id)}
+                  className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200">
+                  💬 Чат
+                </button>
+              </div>
               {s.status === 'completed' && !s.report_id && (
                 <button onClick={() => { setReportModal(s.id); setReportForm({ odometer_start: '', odometer_end: '', notes: '' }); setReportPhotos(null); }}
                   className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
@@ -143,6 +200,63 @@ const DriverAppPage: React.FC = () => {
           ))
         )}
       </div>
+
+      {/* Fuel Entry Modal */}
+      {fuelModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-end z-50">
+          <div className="bg-white rounded-t-2xl w-full p-6 space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold">⛽ Запись топлива</h2>
+              <button onClick={() => setFuelModal(null)} className="text-gray-400 text-xl">✕</button>
+            </div>
+            <label className="block"><span className="text-xs text-gray-500">Количество (литры)</span>
+              <input type="number" step="0.1" value={fuelForm.quantity_liters} onChange={e => setFuelForm({...fuelForm, quantity_liters: e.target.value})}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm" placeholder="0.0" /></label>
+            <label className="block"><span className="text-xs text-gray-500">Пробег (км, опционально)</span>
+              <input type="number" step="0.1" value={fuelForm.odometer_reading} onChange={e => setFuelForm({...fuelForm, odometer_reading: e.target.value})}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm" /></label>
+            <label className="block"><span className="text-xs text-gray-500">Моточасы (опционально)</span>
+              <input type="number" step="0.1" value={fuelForm.engine_hours} onChange={e => setFuelForm({...fuelForm, engine_hours: e.target.value})}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm" /></label>
+            <button onClick={submitFuel} disabled={!fuelForm.quantity_liters}
+              className="w-full py-3 bg-orange-600 text-white rounded-xl text-base font-bold hover:bg-orange-700 disabled:opacity-50">
+              ⛽ Записать
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pre-Shift Checklist Modal */}
+      {checklistModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-end z-50">
+          <div className="bg-white rounded-t-2xl w-full p-6 max-h-[85vh] overflow-y-auto space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold">✅ Приёмка техники</h2>
+              <button onClick={() => setChecklistModal(null)} className="text-gray-400 text-xl">✕</button>
+            </div>
+            <div className="space-y-2">
+              {checklistItems.map((item: any, i: number) => (
+                <div key={item.key} className={`flex items-center justify-between p-3 rounded-lg border ${item.passed === false ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                  <span className="text-sm font-medium">{item.label} {item.required && <span className="text-red-500">*</span>}</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => { const updated = [...checklistItems]; updated[i] = {...updated[i], passed: true}; setChecklistItems(updated); }}
+                      className={`px-3 py-1 rounded text-xs font-medium ${item.passed !== false ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'}`}>✅ ОК</button>
+                    <button onClick={() => { const updated = [...checklistItems]; updated[i] = {...updated[i], passed: false}; setChecklistItems(updated); }}
+                      className={`px-3 py-1 rounded text-xs font-medium ${item.passed === false ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-600'}`}>❌ Проблема</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <label className="block"><span className="text-xs text-gray-500">Заметки</span>
+              <textarea value={checklistNotes} onChange={e => setChecklistNotes(e.target.value)}
+                className="w-full mt-1 px-3 py-2 border rounded-lg text-sm" rows={2} /></label>
+            <button onClick={submitChecklist}
+              className="w-full py-3 bg-emerald-600 text-white rounded-xl text-base font-bold hover:bg-emerald-700">
+              ✅ Отправить чеклист
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Chat Modal */}
       {chatModal && (
