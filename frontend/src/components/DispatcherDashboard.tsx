@@ -14,6 +14,20 @@ const DispatcherDashboard: React.FC = () => {
       .finally(() => setLoading(false));
   }, [filterCategory, filterDriver]);
 
+  const checkIdle = async () => {
+    try {
+      const res = await apiClient.post('/shifts/alerts/check-idle');
+      alert(res.data.notified ? res.data.message : 'Нет простаивающей техники ✅');
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
+  const checkConflicts = async () => {
+    try {
+      const res = await apiClient.post('/shifts/alerts/check-conflicts');
+      alert(res.data.notified ? res.data.message : 'Нет конфликтов ✅');
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
+  };
+
   if (loading) return <div className="animate-pulse h-32 bg-gray-100 rounded-xl"></div>;
   if (!summary) return null;
 

@@ -1363,10 +1363,38 @@ def auto_assign_driver(
         .where(Employee.company_id == company_id)
     ).scalars().all()
 
+    # Load auto-assign rules for this company
+    from app.models.shift import AutoAssignRule
+    import json
+    rules = db.execute(
+        select(AutoAssignRule)
+        .where(AutoAssignRule.company_id == company_id)
+        .where(AutoAssignRule.is_active == True)
+        .order_by(AutoAssignRule.priority.desc())
+    ).scalars().all()
+
+    blacklist_ids = set()
+    priority_ids = []
+    for rule in rules:
+        try:
+            cfg = json.loads(rule.config_json) if rule.config_json else {}
+        except Exception:
+            cfg = {}
+        if rule.rule_type == "blacklist":
+            blacklist_ids.update(cfg.get("driver_ids", []))
+        elif rule.rule_type == "priority_driver":
+            priority_ids.extend([(did, rule.priority) for did in cfg.get("driver_ids", [])])
+
+    priority_map = {did: prio for did, prio in priority_ids}
+
     best_driver = None
     best_score = -1
 
     for profile in drivers:
+        # Blacklist check
+        if profile.employee_contractor_id in blacklist_ids:
+            continue
+
         # Check if driver is already busy on this date
         busy = db.execute(
             select(ShiftTask).where(
@@ -1378,8 +1406,11 @@ def auto_assign_driver(
         if busy:
             continue
 
-        # Score based on: license category match, fewer shifts this week
         score = 0
+
+        # Priority rule bonus
+        if profile.employee_contractor_id in priority_map:
+            score += priority_map[profile.employee_contractor_id] * 5
 
         # License category bonus
         vehicle_cat = getattr(vehicle, 'category', '') or ''
@@ -1398,7 +1429,7 @@ def auto_assign_driver(
                 ShiftTask.status.notin_(["cancelled"]),
             )
         ).scalar() or 0
-        score += max(0, 7 - week_shifts)  # Less loaded = better
+        score += max(0, 7 - week_shifts)
 
         if score > best_score:
             best_score = score
@@ -1696,3 +1727,109 @@ def delete_auto_assign_rule(
     db.delete(rule)
     db.commit()
     return {"message": "Правило удалено"}
+
+
+# === Alert Notifications ===
+
+@router.post("/alerts/check-idle", summary="⚠️ Проверить простой техники")
+async def check_idle_vehicles(
+    target_date: str | None = Body(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Проверить и уведомить о простаивающей технике."""
+    from datetime import date as date_type
+    from app.services.alert_service import check_and_notify_idle_vehicles
+
+    d = date_type.fromisoformat(target_date) if target_date else date_type.today()
+    result = await check_and_notify_idle_vehicles(db, company_id, d)
+    return result
+
+
+@router.post("/alerts/check-conflicts", summary="🔴 Проверить конфликты расписания")
+async def check_schedule_conflicts(
+    target_date: str | None = Body(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Проверить и уведомить о двойных назначениях водителей."""
+    from datetime import date as date_type
+    from app.services.alert_service import check_and_notify_conflicts
+
+    d = date_type.fromisoformat(target_date) if target_date else date_type.today()
+    result = await check_and_notify_conflicts(db, company_id, d)
+    return result
+
+
+@router.get("/stats/driver-kpi", summary="📊 KPI водителей")
+def get_driver_kpi(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """KPI водителей: часы работы, количество смен, утилизация, рейтинг."""
+    from datetime import date as date_type, timedelta
+    from app.models.contractor import DriverProfile, Employee
+
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+    total_days = (d_to - d_from).days + 1
+
+    drivers = db.execute(
+        select(DriverProfile)
+        .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
+        .where(Employee.company_id == company_id)
+    ).scalars().all()
+
+    tasks = db.execute(
+        select(ShiftTask)
+        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id == company_id)
+        .where(ShiftTask.shift_date >= d_from)
+        .where(ShiftTask.shift_date <= d_to)
+        .where(ShiftTask.status.notin_(["cancelled"]))
+        .where(ShiftTask.driver_id.isnot(None))
+    ).scalars().all()
+
+    kpi_list = []
+    for profile in drivers:
+        emp = db.get(Employee, profile.employee_contractor_id)
+        driver_name = f"{emp.first_name} {emp.last_name}" if emp else f"Driver#{profile.employee_contractor_id}"
+
+        d_tasks = [t for t in tasks if t.driver_id == profile.employee_contractor_id]
+        active_days = len(set(t.shift_date for t in d_tasks))
+        utilization_pct = round((active_days / total_days) * 100, 1) if total_days > 0 else 0
+
+        total_hours = sum(
+            max(0, (t.planned_end - t.planned_start).total_seconds() / 3600)
+            for t in d_tasks if t.planned_start and t.planned_end
+        )
+
+        completed = len([t for t in d_tasks if t.status == "completed"])
+        completion_rate = round((completed / len(d_tasks)) * 100, 1) if d_tasks else 0
+
+        # Simple rating: weighted score
+        rating = round(utilization_pct * 0.4 + completion_rate * 0.3 + min(total_hours / max(total_days, 1), 10) * 3, 1)
+
+        kpi_list.append({
+            "driver_id": profile.employee_contractor_id,
+            "driver_name": driver_name,
+            "shift_count": len(d_tasks),
+            "active_days": active_days,
+            "total_days": total_days,
+            "utilization_pct": utilization_pct,
+            "total_hours": round(total_hours, 1),
+            "completion_rate": completion_rate,
+            "rating": rating,
+        })
+
+    kpi_list.sort(key=lambda x: x["rating"], reverse=True)
+
+    return {
+        "period": {"from": str(d_from), "to": str(d_to), "days": total_days},
+        "drivers": kpi_list,
+    }

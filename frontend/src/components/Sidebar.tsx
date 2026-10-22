@@ -25,6 +25,7 @@ const menuItems: MenuItem[] = [
   { label: 'Планирование смен', icon: '📅', path: '/shift-calendar', group: 'Бизнес' },
   { label: 'Утилизация техники', icon: '📊', path: '/utilization', group: 'Бизнес' },
   { label: 'Правила авто-назначения', icon: '⚙️', path: '/auto-assign-rules', group: 'Бизнес' },
+  { label: 'KPI Водителей', icon: '🏆', path: '/driver-kpi', group: 'Бизнес' },
   { label: 'Мои публикации', icon: '🏪', path: '/my-listings', group: 'Бизнес' },
   { label: 'Контрагенты', icon: '👥', path: '/contractors', group: 'Бизнес' },
 
