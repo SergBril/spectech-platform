@@ -193,6 +193,83 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Авто-генерация и отправка актов (1-е число месяца в 09:00)
+    async def _auto_generate_and_send_acts():
+        from datetime import date as date_type, timedelta
+        from app.core.db import SessionLocal
+        from app.models.shift import ShiftTask
+        from app.models.vehicle import Vehicle
+        from app.models.acts import Act
+        from app.services.diadoc_service import diadoc_service
+        from xml.etree.ElementTree import Element, SubElement, tostring
+
+        today = date_type.today()
+        if today.day != 1:
+            logger.debug("Not 1st of month, skipping auto acts")
+            return
+
+        prev_month_end = today - timedelta(days=1)
+        prev_month_start = prev_month_end.replace(day=1)
+
+        with SessionLocal() as db:
+            try:
+                from sqlalchemy import select
+                from app.models.auth import UserCompany
+
+                company_ids = db.execute(select(UserCompany.company_id).distinct()).scalars().all()
+                for cid in company_ids:
+                    tasks = db.execute(
+                        select(ShiftTask)
+                        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+                        .where(Vehicle.company_id == cid)
+                        .where(ShiftTask.shift_date >= prev_month_start)
+                        .where(ShiftTask.shift_date <= prev_month_end)
+                        .where(ShiftTask.status == "completed")
+                    ).scalars().all()
+
+                    created = 0
+                    for t in tasks:
+                        existing = db.execute(
+                            select(Act).where(Act.shift_task_id == t.id)
+                        ).scalar_one_or_none()
+                        if existing:
+                            continue
+
+                        vehicle = db.get(Vehicle, t.vehicle_id)
+                        hours = 0
+                        if t.planned_start and t.planned_end:
+                            hours = round((t.planned_end - t.planned_start).total_seconds() / 3600, 2)
+
+                        act = Act(
+                            company_id=cid, shift_task_id=t.id,
+                            act_number=f"AUTO-{prev_month_start.strftime('%Y%m')}-{t.id:04d}",
+                            act_date=prev_month_end, vehicle_id=t.vehicle_id,
+                            hours_worked=hours, hourly_rate=1500,
+                            total_amount=round(hours * 1500, 2),
+                            vat_amount=round(hours * 1500 * 0.2, 2),
+                            status="draft",
+                        )
+                        db.add(act)
+                        created += 1
+
+                    db.commit()
+                    if created > 0:
+                        logger.info("Auto-generated %d acts for company %d (%s)", created, cid, prev_month_start.strftime("%Y-%m"))
+
+                db.commit()
+                logger.info("✅ Auto acts generation completed")
+            except Exception as e:
+                logger.error("❌ Auto acts generation failed: %s", e)
+                db.rollback()
+
+    scheduler.add_job(
+        _auto_generate_and_send_acts,
+        trigger=CronTrigger(day=1, hour=9, minute=0),
+        id="monthly_auto_acts",
+        name="Monthly auto-generate acts",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         "⏰ Scheduler started. Interval: %d min. Jobs: %d",

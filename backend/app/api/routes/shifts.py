@@ -3598,3 +3598,154 @@ async def bulk_send_acts_via_diadoc(
 
     db.commit()
     return {"sent": sent, "errors": errors, "total": len(act_ids)}
+
+
+@router.get("/acts/registry", summary="📋 Реестр актов с фильтрами")
+def get_acts_registry(
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    min_amount: float | None = Query(default=None),
+    max_amount: float | None = Query(default=None),
+    search: str | None = Query(default=None, description="Поиск по номеру акта или технике"),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Реестр актов с фильтрацией, поиском и пагинацией."""
+    from datetime import date as date_type
+    from sqlalchemy import func, or_
+
+    stmt = select(Act).where(Act.company_id == company_id)
+
+    if date_from:
+        stmt = stmt.where(Act.act_date >= date_type.fromisoformat(date_from))
+    if date_to:
+        stmt = stmt.where(Act.act_date <= date_type.fromisoformat(date_to))
+    if status:
+        stmt = stmt.where(Act.status == status)
+    if min_amount is not None:
+        stmt = stmt.where(Act.total_amount >= min_amount)
+    if max_amount is not None:
+        stmt = stmt.where(Act.total_amount <= max_amount)
+    if search:
+        search_pattern = f"%{search}%"
+        stmt = stmt.outerjoin(Vehicle, Act.vehicle_id == Vehicle.id).where(
+            or_(
+                Act.act_number.ilike(search_pattern),
+                Vehicle.name.ilike(search_pattern),
+            )
+        )
+
+    # Total count
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = db.execute(count_stmt).scalar() or 0
+
+    # Paginated results
+    stmt = stmt.order_by(Act.act_date.desc(), Act.id.desc())
+    stmt = stmt.offset((page - 1) * per_page).limit(per_page)
+    acts = db.execute(stmt).scalars().all()
+
+    items = []
+    for a in acts:
+        vehicle = db.get(Vehicle, a.vehicle_id) if a.vehicle_id else None
+        items.append({
+            "id": a.id,
+            "act_number": a.act_number,
+            "act_date": str(a.act_date),
+            "vehicle_name": vehicle.name if vehicle else "",
+            "driver_name": a.driver_name or "",
+            "hours_worked": a.hours_worked,
+            "total_amount": a.total_amount,
+            "vat_amount": a.vat_amount,
+            "status": a.status,
+            "edo_message_id": a.edo_message_id,
+        })
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page if per_page > 0 else 0,
+    }
+
+
+# === Digital Signature (КЭП) ===
+
+@router.post("/acts/{act_id}/sign", summary="✍️ Подписать акт КЭП")
+async def sign_act_with_kep(
+    act_id: int,
+    certificate_thumbprint: str = Body(default=""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Подписать акт квалифицированной электронной подписью."""
+    from app.services.digital_signature_service import digital_signature_service
+    from xml.etree.ElementTree import Element, SubElement, tostring
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    # Generate XML for signing
+    root = Element("UniversalTransferDocument")
+    root.set("Function", "СЧФДОП")
+    root.set("Date", str(act.act_date))
+    root.set("Number", act.act_number or f"ACT-{act.id}")
+
+    item = SubElement(root, "Item")
+    SubElement(item, "Name").text = f"Услуги спецтехники ({act.act_date})"
+    SubElement(item, "Quantity").text = str(act.hours_worked or 0)
+    SubElement(item, "Total").text = str(act.total_amount or 0)
+
+    xml_bytes = tostring(root, encoding="unicode", xml_declaration=True).encode("utf-8")
+
+    result = await digital_signature_service.sign_document(xml_bytes, certificate_thumbprint)
+
+    if result.get("status") in ("signed", "signed_stub"):
+        act.signature = result.get("signature", "")
+        act.signed_at = __import__('datetime').datetime.now(__import__('datetime').timezone.utc)
+        act.signed_by = current_user.id
+        if act.status == "draft":
+            act.status = "signed"
+        db.commit()
+        return {"message": "Акт подписан КЭП", "signature_length": len(result.get("signature", "")), **result}
+    else:
+        raise HTTPException(status_code=500, detail=result.get("error", "Signing failed"))
+
+
+@router.get("/acts/{act_id}/verify-signature", summary="🔍 Проверить подпись акта")
+async def verify_act_signature(
+    act_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Проверить КЭП акта."""
+    from app.services.digital_signature_service import digital_signature_service
+    from xml.etree.ElementTree import Element, SubElement, tostring
+
+    act = db.get(Act, act_id)
+    if not act or act.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Act not found")
+
+    if not act.signature:
+        return {"valid": False, "message": "Акт не подписан"}
+
+    # Reconstruct XML for verification
+    root = Element("UniversalTransferDocument")
+    root.set("Function", "СЧФДОП")
+    root.set("Date", str(act.act_date))
+    root.set("Number", act.act_number or f"ACT-{act.id}")
+    item = SubElement(root, "Item")
+    SubElement(item, "Name").text = f"Услуги спецтехники ({act.act_date})"
+    SubElement(item, "Quantity").text = str(act.hours_worked or 0)
+    SubElement(item, "Total").text = str(act.total_amount or 0)
+    xml_bytes = tostring(root, encoding="unicode", xml_declaration=True).encode("utf-8")
+
+    result = await digital_signature_service.verify_signature(xml_bytes, act.signature)
+    return {"valid": result.get("valid", False), "provider": result.get("provider", ""), "signed_at": act.signed_at.isoformat() if act.signed_at else None}

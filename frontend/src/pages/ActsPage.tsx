@@ -14,10 +14,20 @@ const ActsPage: React.FC = () => {
   const [bulkBoxId, setBulkBoxId] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadActs = async () => {
+  const [filters, setFilters] = useState({ date_from: '', date_to: '', status: '', search: '' });
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+
+  const loadActs = async (page = 1) => {
     try {
-      const res = await apiClient.get('/acts');
-      setActs(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      setLoading(true);
+      const params: any = { page, per_page: 20 };
+      if (filters.date_from) params.date_from = filters.date_from;
+      if (filters.date_to) params.date_to = filters.date_to;
+      if (filters.status) params.status = filters.status;
+      if (filters.search) params.search = filters.search;
+      const res = await apiClient.get('/shifts/acts/registry', { params });
+      setActs(Array.isArray(res.data.items) ? res.data.items : []);
+      setPagination({ page: res.data.page, pages: res.data.pages, total: res.data.total });
     } catch {} finally { setLoading(false); }
   };
 
@@ -28,7 +38,7 @@ const ActsPage: React.FC = () => {
     } catch {}
   };
 
-  useEffect(() => { loadActs(); }, []);
+  useEffect(() => { loadActs(); }, [filters]);
 
   const toggleSelect = (id: number) => {
     const next = new Set(selectedActIds);
@@ -39,6 +49,15 @@ const ActsPage: React.FC = () => {
   const selectAllDrafts = () => {
     const drafts = acts.filter(a => a.status === 'draft').map(a => a.id);
     setSelectedActIds(new Set(drafts));
+  };
+
+  const signAct = async (actId: number) => {
+    if (!confirm('Подписать акт КЭП?')) return;
+    try {
+      const res = await apiClient.post(`/shifts/acts/${actId}/sign`, { certificate_thumbprint: '' });
+      alert(`✅ ${res.data.message}`);
+      loadActs(pagination.page);
+    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
   };
 
   const refreshStatuses = async () => {
@@ -144,12 +163,23 @@ const ActsPage: React.FC = () => {
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${st.color}`}>{st.label}</span>
                       </td>
                       <td className="px-4 py-3 text-right">
+                        <div className="flex gap-1 justify-end">
                         {a.status === 'draft' && (
-                          <button onClick={() => openSendModal(a.id)}
-                            className="px-3 py-1 bg-indigo-600 text-white rounded text-xs font-medium hover:bg-indigo-700">
-                            📤 В Diadoc
-                          </button>
+                          <>
+                            <button onClick={() => signAct(a.id)}
+                              className="px-2 py-1 bg-emerald-600 text-white rounded text-xs font-medium hover:bg-emerald-700">
+                              ✍️ КЭП
+                            </button>
+                            <button onClick={() => openSendModal(a.id)}
+                              className="px-2 py-1 bg-indigo-600 text-white rounded text-xs font-medium hover:bg-indigo-700">
+                              📤 Diadoc
+                            </button>
+                          </>
                         )}
+                        {a.status === 'signed' && a.signature && (
+                          <span className="text-xs text-green-600" title="Подписан КЭП">✍️</span>
+                        )}
+                      </div>
                         {a.edo_message_id && (
                           <span className="text-xs text-gray-400 ml-2" title={a.edo_message_id}>ID: {a.edo_message_id.slice(0, 8)}…</span>
                         )}
