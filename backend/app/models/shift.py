@@ -3,6 +3,7 @@ from decimal import Decimal
 from enum import Enum
 
 from sqlalchemy import (
+    Text,
     JSON,
     Date,
     DateTime,
@@ -13,6 +14,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy import (
+    Text,
     Enum as SqlEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -185,4 +187,18 @@ class ShiftAuditLog(Base):
     old_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
     new_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
     changed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+
+
+class AutoAssignRule(Base):
+    __tablename__ = "auto_assign_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    priority: Mapped[int] = mapped_column(default=0)  # Higher = checked first
+    rule_type: Mapped[str] = mapped_column(String(30), nullable=False)  # priority_driver, blacklist, category_match
+    config_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: {driver_ids: [...], category: "..."}
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
