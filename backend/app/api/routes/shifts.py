@@ -4968,3 +4968,140 @@ async def import_users_csv(
                details=f"CSV import: {created} created, {skipped} skipped")
 
     return {"created": created, "skipped": skipped, "errors": errors[:10]}
+
+
+@router.get("/profile/me", summary="My profile")
+def get_my_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Полный профиль текущего пользователя."""
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "phone": current_user.phone,
+        "role": getattr(current_user, "role", "viewer"),
+        "is_superuser": current_user.is_superuser,
+        "telegram_id": current_user.telegram_id,
+        "max_chat_id": current_user.max_chat_id,
+        "max_bound": bool(current_user.max_chat_id),
+        "status": current_user.status.value if hasattr(current_user.status, "value") else str(current_user.status),
+        "last_login_at": current_user.last_login_at.isoformat() if current_user.last_login_at else None,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+    }
+
+
+@router.put("/profile/me", summary="Update my profile")
+def update_my_profile(
+    full_name: str | None = Body(default=None),
+    phone: str | None = Body(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Обновить свой профиль."""
+    from app.services.audit_service import log_action
+    changes = []
+    if full_name is not None and full_name != current_user.full_name:
+        current_user.full_name = full_name
+        changes.append("full_name")
+    if phone is not None and phone != current_user.phone:
+        current_user.phone = phone
+        changes.append("phone")
+    if changes:
+        db.commit()
+        log_action(db, current_user.id, "update", "profile", current_user.id,
+                   details="Updated: " + ", ".join(changes))
+    return {"message": "Profile updated", "changes": changes}
+
+
+# === Notification Templates ===
+
+@router.get("/notification-templates", summary="Notification templates list")
+def list_notification_templates(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Список шаблонов уведомлений."""
+    from app.models.auth import NotificationTemplate
+    tmpls = db.execute(select(NotificationTemplate).order_by(NotificationTemplate.code)).scalars().all()
+    return [{"id": t.id, "code": t.code, "channel": t.channel, "subject": t.subject, "body": t.body, "is_active": t.is_active} for t in tmpls]
+
+
+@router.put("/notification-templates/{tmpl_id}", summary="Update template")
+def update_notification_template(
+    tmpl_id: int,
+    subject: str | None = Body(default=None),
+    body: str | None = Body(default=None),
+    is_active: bool | None = Body(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Обновить шаблон уведомления (admin only)."""
+    from app.services.rbac_service import RBACMiddleware
+    from app.models.auth import NotificationTemplate
+    RBACMiddleware.require(current_user, "templates:manage")
+
+    tmpl = db.get(NotificationTemplate, tmpl_id)
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if subject is not None:
+        tmpl.subject = subject
+    if body is not None:
+        tmpl.body = body
+    if is_active is not None:
+        tmpl.is_active = is_active
+    db.commit()
+    return {"message": "Template updated"}
+
+
+@router.post("/notification-templates/init-defaults", summary="Init default templates")
+def init_defaults(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Создать стандартные шаблоны уведомлений."""
+    from app.services.rbac_service import RBACMiddleware
+    from app.services.notification_template_service import init_default_templates
+    RBACMiddleware.require(current_user, "templates:manage")
+    created = init_default_templates(db)
+    return {"created": created}
+
+
+@router.get("/users/export-csv", summary="Export users CSV")
+def export_users_csv(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Экспорт пользователей в CSV (admin only)."""
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+    from app.services.rbac_service import RBACMiddleware
+    RBACMiddleware.require(current_user, "users:manage_roles")
+
+    users = db.execute(select(User)).scalars().all()
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["email", "full_name", "phone", "role", "status"])
+    for u in users:
+        writer.writerow([u.email, u.full_name or "", u.phone or "", getattr(u, "role", "viewer"), u.status.value if hasattr(u.status, "value") else str(u.status)])
+    buf.seek(0)
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="users.csv"'})
+
+
+@router.get("/audit-logs/role-history/{user_id}", summary="Role change history")
+def get_role_history(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """История изменений роли пользователя."""
+    from app.models.auth import AuditLog
+    logs = db.execute(
+        select(AuditLog).where(
+            AuditLog.resource_type == "user_role",
+            AuditLog.resource_id == user_id,
+        ).order_by(AuditLog.created_at.desc())
+    ).scalars().all()
+    return [{"id": l.id, "action": l.action, "details": l.details, "created_at": l.created_at.isoformat() if l.created_at else None} for l in logs]
