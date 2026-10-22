@@ -55,7 +55,7 @@ const ReceivablesPage: React.FC = () => {
               <h2 className="text-lg font-bold text-gray-900 mb-4">📊 Возрастная структура</h2>
               <div className="flex h-10 rounded-lg overflow-hidden">
                 {Object.entries(data.ageing_buckets).map(([key, val]) => {
-                  const total = Object.values(data.ageing_buckets).reduce((a: number, b: any) => a + Number(b), 0) || 1;
+                  const total = (Object.values(data.ageing_buckets) as number[]).reduce((a, b) => a + b, 0) || 1;
                   const pct = ((val as number) / total) * 100;
                   if (pct < 1) return null;
                   return (
