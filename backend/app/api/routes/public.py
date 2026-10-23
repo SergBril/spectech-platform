@@ -1177,7 +1177,7 @@ def list_my_responses(
 
     result = []
     for a in assignments:
-        req = db.get(Request, a.request_id)
+        req = db.get(DispatchRequest, a.request_id)
         vehicle = db.get(Vehicle, a.vehicle_id)
         result.append({
             "id": a.id,
