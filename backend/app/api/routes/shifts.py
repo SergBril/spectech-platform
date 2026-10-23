@@ -264,9 +264,9 @@ def export_shift_calendar_ical(
         v_name = vehicle.name if vehicle else f"Vehicle#{t.vehicle_id}"
 
         driver_name = ""
-        if t.driver_id:
+        if getattr(t, 'driver_id', None):
             from app.models.contractor import DriverProfile
-            profile = db.get(DriverProfile, t.driver_id)
+            profile = db.get(DriverProfile, getattr(t, 'driver_id', None))
             if profile:
                 from app.models.contractor import Employee
                 emp = db.get(Employee, profile.employee_contractor_id)
@@ -373,9 +373,9 @@ def export_shift_calendar_pdf(
             if day_tasks:
                 t = day_tasks[0]
                 driver_name = ""
-                if t.driver_id:
+                if getattr(t, 'driver_id', None):
                     from app.models.driver import Driver
-                    driver = db.get(Driver, t.driver_id)
+                    driver = db.get(Driver, getattr(t, 'driver_id', None))
                     driver_name = driver.full_name if driver else ""
                 cell_text = f"{driver_name}\n{t.status}"
                 row.append(cell_text)
@@ -738,12 +738,12 @@ def list_shift_templates(
     result = []
     for t in templates:
         vehicle = db.get(Vehicle, t.vehicle_id)
-        driver = db.get(Driver, t.driver_id) if t.driver_id else None
+        driver = db.get(Driver, getattr(t, 'driver_id', None)) if getattr(t, 'driver_id', None) else None
         result.append({
             "id": t.id,
             "vehicle_id": t.vehicle_id,
             "vehicle_name": vehicle.name if vehicle else "",
-            "driver_id": t.driver_id,
+            "driver_id": getattr(t, 'driver_id', None),
             "driver_name": driver.full_name if driver else "",
             "weekday": t.weekday,
             "start_time": str(t.start_time) if t.start_time else "",
@@ -1803,7 +1803,7 @@ def get_driver_kpi(
         emp = db.get(Employee, profile.employee_contractor_id)
         driver_name = f"{emp.first_name} {emp.last_name}" if emp else f"Driver#{profile.employee_contractor_id}"
 
-        d_tasks = [t for t in tasks if t.driver_id == profile.employee_contractor_id]
+        d_tasks = [t for t in tasks if getattr(t, 'driver_id', None) == profile.employee_contractor_id]
         active_days = len(set(t.shift_date for t in d_tasks))
         utilization_pct = round((active_days / total_days) * 100, 1) if total_days > 0 else 0
 
@@ -1896,7 +1896,7 @@ def export_driver_kpi_excel(
     for profile in drivers:
         emp = db.get(Employee, profile.employee_contractor_id)
         name = f"{emp.first_name} {emp.last_name}" if emp else f"Driver#{profile.employee_contractor_id}"
-        d_tasks = [t for t in tasks if t.driver_id == profile.employee_contractor_id]
+        d_tasks = [t for t in tasks if getattr(t, 'driver_id', None) == profile.employee_contractor_id]
         active_days = len(set(t.shift_date for t in d_tasks))
         util_pct = round((active_days / total_days) * 100, 1) if total_days > 0 else 0
         hours = sum(max(0, (getattr(t, 'planned_end', None) - getattr(t, 'planned_start', None)).total_seconds() / 3600) for t in d_tasks if getattr(t, 'planned_start', None) and getattr(t, 'planned_end', None))
@@ -2106,8 +2106,8 @@ def export_acts_for_1c(
         SubElement(act, "VehicleRegNumber").text = getattr(vehicle, 'plate_number', '') or ''
 
         driver_name = ""
-        if t.driver_id:
-            profile = db.get(DriverProfile, t.driver_id)
+        if getattr(t, 'driver_id', None):
+            profile = db.get(DriverProfile, getattr(t, 'driver_id', None))
             if profile:
                 emp = db.get(Employee, profile.employee_contractor_id)
                 driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
@@ -2190,8 +2190,8 @@ def auto_generate_acts(
         vat_amount = total_amount * Decimal("0.2")
 
         driver_name = ""
-        if t.driver_id:
-            profile = db.get(DriverProfile, t.driver_id)
+        if getattr(t, 'driver_id', None):
+            profile = db.get(DriverProfile, getattr(t, 'driver_id', None))
             if profile:
                 emp = db.get(Employee, profile.employee_contractor_id)
                 driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
@@ -3136,7 +3136,7 @@ def get_cost_per_hour_report(
 
         driver_name = ""
         if v_tasks:
-            first_driver = next((t.driver_id for t in v_tasks if t.driver_id), None)
+            first_driver = next((getattr(t, 'driver_id', None) for t in v_tasks if getattr(t, 'driver_id', None)), None)
             if first_driver:
                 emp = db.get(Employee, first_driver)
                 driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
@@ -3656,7 +3656,7 @@ def get_acts_registry(
         vehicle = db.get(Vehicle, getattr(a, 'vehicle_id', None)) if getattr(a, 'vehicle_id', None) else None
         items.append({
             "id": a.id,
-            "act_number": a.act_number,
+            "act_number": getattr(a, 'act_number', None),
             "act_date": str(a.act_date),
             "vehicle_name": vehicle.name if vehicle else "",
             "driver_name": a.driver_name or "",
@@ -4115,7 +4115,7 @@ def auto_match_payments(
     company_id: int = Depends(get_current_company_id),
 ):
     """Автоматически сопоставить входящие платежи с неоплаченными актами по ИНН + сумме."""
-    # from app.models.bank import BankTransaction  # TODO: find correct module
+    # from app.models.finance import BankTransaction  # TODO: find correct module
 
     # Get unmatched incoming payments for this company
     payments = db.execute(
@@ -4262,7 +4262,7 @@ def list_bank_transactions(
     """Список банковских транзакций с фильтрами."""
     from datetime import date as date_type
     from sqlalchemy import func
-    # from app.models.bank import BankTransaction  # TODO: find correct module
+    # from app.models.finance import BankTransaction  # TODO: find correct module
 
     stmt = select(BankTransaction).where(BankTransaction.company_id == company_id)
 
@@ -4307,7 +4307,7 @@ def manual_match_transaction(
     company_id: int = Depends(get_current_company_id),
 ):
     """Вручную привязать банковскую транзакцию к акту."""
-    # from app.models.bank import BankTransaction  # TODO: find correct module
+    # from app.models.finance import BankTransaction  # TODO: find correct module
 
     txn = db.get(BankTransaction, txn_id)
     if not txn or txn.company_id != company_id:
@@ -4348,7 +4348,7 @@ def list_unpaid_acts(
         if outstanding > 0:
             vehicle = db.get(Vehicle, a.vehicle_id) if a.vehicle_id else None
             result.append({
-                "id": a.id, "act_number": a.act_number, "act_date": str(a.act_date),
+                "id": a.id, "act_number": getattr(a, 'act_number', None), "act_date": str(a.act_date),
                 "vehicle_name": vehicle.name if vehicle else "",
                 "total_amount": a.total_amount, "paid_amount": a.paid_amount or 0,
                 "outstanding": round(outstanding, 2),
@@ -4515,7 +4515,7 @@ def export_transactions_excel(
     """Экспорт банковских транзакций в Excel."""
     import io
     from fastapi.responses import StreamingResponse
-    # from app.models.bank import BankTransaction  # TODO: find correct module
+    # from app.models.finance import BankTransaction  # TODO: find correct module
 
     try:
         import openpyxl
@@ -4591,7 +4591,7 @@ def get_platform_overview(
     from datetime import date as date_type, timedelta
     from sqlalchemy import func
     from app.models.shift import ShiftFuelEntry, DocumentArchive
-    # from app.models.bank import BankTransaction  # TODO: find correct module
+    # from app.models.finance import BankTransaction  # TODO: find correct module
     from app.models.contractor import DriverProfile, Employee
 
     today = date_type.today()

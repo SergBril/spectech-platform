@@ -782,7 +782,7 @@ async def respond_to_marketplace_request(
     import asyncio
 
     # Проверяем заявку
-    request = db.get(Request, request_id)
+    request = db.get(DispatchRequest, request_id)
     if not request or request.source_channel != "marketplace":
         raise HTTPException(status_code=404, detail="Marketplace request not found")
 
@@ -938,7 +938,7 @@ def marketplace_payouts_report(
 
     for row_idx, p in enumerate(payouts, 2):
         assignment = db.get(RequestAssignment, p.assignment_id) if hasattr(p, "assignment_id") and p.assignment_id else None
-        request = db.get(Request, assignment.request_id) if assignment else None
+        request = db.get(DispatchRequest, assignment.request_id) if assignment else None
         vehicle = db.get(Vehicle, assignment.vehicle_id) if assignment else None
 
         amount = float(p.amount) if p.amount else 0
