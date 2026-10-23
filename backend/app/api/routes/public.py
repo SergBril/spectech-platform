@@ -461,7 +461,7 @@ def create_request_from_listing(
     """
     from datetime import datetime as dt
 
-    from app.models.contractor import Contractor
+
     from app.services.marketplace_service import marketplace_service
 
     try:
@@ -555,7 +555,7 @@ def get_public_company_rating(
         # Сейчас возвращаем захардкоженные значения из PublicCompanyRead
         from sqlalchemy import func
 
-        from app.models.review import Review
+
 
         result = (
             db.query(
@@ -597,8 +597,8 @@ def get_public_company_reviews(
 
         # TODO: когда будет таблица Review - заменить на реальные отзывы
         # Сейчас возвращаем мок-данные для демонстрации
-        from app.models.contractor import Contractor
-        from app.models.review import Review
+
+
 
         reviews = (
             db.query(Review)
@@ -730,7 +730,7 @@ def list_marketplace_requests(
     for req in requests_list:
         cat_name = None
         if req.vehicle_category_id:
-            from app.models.catalog import Category
+
             cat = db.get(Category, req.vehicle_category_id)
             cat_name = cat.name if cat else None
 
@@ -900,8 +900,8 @@ def marketplace_payouts_report(
         raise HTTPException(status_code=500, detail="openpyxl not installed")
 
     # Get payouts related to marketplace requests
-    from app.models.finance import Payout
-    from app.models.dispatch import Request as DispatchRequest, RequestAssignmentAssignment
+
+
 
     stmt = (
         select(Payout)
@@ -1043,7 +1043,7 @@ def marketplace_stats(
     ).scalar()
 
     # Отклики
-    from app.models.dispatch import Request as DispatchRequest, RequestAssignmentAssignment
+
     total_responses = db.execute(
         select(func.count()).select_from(RequestAssignment)
     ).scalar() or 0
@@ -1164,8 +1164,8 @@ def list_my_responses(
     company_id: int = Depends(get_current_company_id),
 ):
     """Список откликов текущей компании на заявки маркетплейса."""
-    from app.models.dispatch import RequestAssignment
-    from app.models.dispatch import Request as DispatchRequest, RequestAssignmentAssignment
+
+
 
     assignments = db.execute(
     select(RequestAssignment)
