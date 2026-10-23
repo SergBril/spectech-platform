@@ -102,8 +102,6 @@ class DiadocService:
             return []
 
 
-diadoc_service = DiadocService()
-
 
     async def get_document_status(self, message_id: str, token: str) -> dict:
         """Получить статус документа в Diadoc."""
@@ -142,3 +140,7 @@ diadoc_service = DiadocService()
         except Exception as e:
             logger.error(f"❌ Diadoc status check failed: {e}")
             return {"status": "error", "message_id": message_id, "error": str(e)}
+
+diadoc_service = DiadocService()
+
+
