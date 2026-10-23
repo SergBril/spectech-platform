@@ -82,6 +82,7 @@ from app.api.routes import telematics as telematics_route
 from app.api.routes import vehicles as vehicles_route
 from app.api.routes import map as map_route
 from app.api.routes import websocket as ws_route
+from app.models import *  # noqa: F401, F403
 
 # Настройка логирования
 setup_logging("INFO")
@@ -93,7 +94,6 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 SpectechPlatform v0.1.0 starting...")
 
     # Импортируем модели ВНУТРИ lifespan чтобы не затенять роутеры
-    from app.models import *  # noqa: F401, F403
 
     # Запускаем планировщик фоновых задач
     start_scheduler()
