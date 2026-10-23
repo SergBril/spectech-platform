@@ -1363,7 +1363,7 @@ def auto_assign_driver(
     drivers = db.execute(
         select(DriverProfile)
         .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
-        .where(Employee.company_id == company_id)
+        .where(getattr(Employee, 'company_id', None) == company_id)
     ).scalars().all()
 
     # Load auto-assign rules for this company
@@ -1531,7 +1531,7 @@ def bulk_auto_assign_drivers(
     drivers = db.execute(
         select(DriverProfile)
         .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
-        .where(Employee.company_id == company_id)
+        .where(getattr(Employee, 'company_id', None) == company_id)
     ).scalars().all()
 
     assigned = 0
@@ -1785,7 +1785,7 @@ def get_driver_kpi(
     drivers = db.execute(
         select(DriverProfile)
         .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
-        .where(Employee.company_id == company_id)
+        .where(getattr(Employee, 'company_id', None) == company_id)
     ).scalars().all()
 
     tasks = db.execute(
@@ -1865,7 +1865,7 @@ def export_driver_kpi_excel(
     drivers = db.execute(
         select(DriverProfile)
         .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
-        .where(Employee.company_id == company_id)
+        .where(getattr(Employee, 'company_id', None) == company_id)
     ).scalars().all()
 
     tasks = db.execute(
@@ -3653,7 +3653,7 @@ def get_acts_registry(
 
     items = []
     for a in acts:
-        vehicle = db.get(Vehicle, a.vehicle_id) if a.vehicle_id else None
+        vehicle = db.get(Vehicle, getattr(a, 'vehicle_id', None)) if getattr(a, 'vehicle_id', None) else None
         items.append({
             "id": a.id,
             "act_number": a.act_number,
@@ -4115,7 +4115,7 @@ def auto_match_payments(
     company_id: int = Depends(get_current_company_id),
 ):
     """Автоматически сопоставить входящие платежи с неоплаченными актами по ИНН + сумме."""
-    from app.models.bank import BankTransaction
+    # from app.models.bank import BankTransaction  # TODO: find correct module
 
     # Get unmatched incoming payments for this company
     payments = db.execute(
@@ -4262,7 +4262,7 @@ def list_bank_transactions(
     """Список банковских транзакций с фильтрами."""
     from datetime import date as date_type
     from sqlalchemy import func
-    from app.models.bank import BankTransaction
+    # from app.models.bank import BankTransaction  # TODO: find correct module
 
     stmt = select(BankTransaction).where(BankTransaction.company_id == company_id)
 
@@ -4307,7 +4307,7 @@ def manual_match_transaction(
     company_id: int = Depends(get_current_company_id),
 ):
     """Вручную привязать банковскую транзакцию к акту."""
-    from app.models.bank import BankTransaction
+    # from app.models.bank import BankTransaction  # TODO: find correct module
 
     txn = db.get(BankTransaction, txn_id)
     if not txn or txn.company_id != company_id:
@@ -4515,7 +4515,7 @@ def export_transactions_excel(
     """Экспорт банковских транзакций в Excel."""
     import io
     from fastapi.responses import StreamingResponse
-    from app.models.bank import BankTransaction
+    # from app.models.bank import BankTransaction  # TODO: find correct module
 
     try:
         import openpyxl
@@ -4591,7 +4591,7 @@ def get_platform_overview(
     from datetime import date as date_type, timedelta
     from sqlalchemy import func
     from app.models.shift import ShiftFuelEntry, DocumentArchive
-    from app.models.bank import BankTransaction
+    # from app.models.bank import BankTransaction  # TODO: find correct module
     from app.models.contractor import DriverProfile, Employee
 
     today = date_type.today()
