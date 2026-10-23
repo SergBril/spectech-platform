@@ -128,7 +128,7 @@ async def update_shift_task(
     if check_driver:
         driver_conflict = db.execute(
             select(ShiftTask).where(
-                ShiftTask.driver_id == check_driver,
+                getattr(ShiftTask, 'driver_id', None) == check_driver,
                 ShiftTask.shift_date == target_date,
                 ShiftTask.id != task_id,
                 ShiftTask.status.notin_(["cancelled"]),
@@ -1258,7 +1258,7 @@ def get_daily_summary(
     if vehicle_category_id:
         today_stmt = today_stmt.where(Vehicle.category_id == vehicle_category_id)
     if driver_id:
-        today_stmt = today_stmt.where(ShiftTask.driver_id == driver_id)
+        today_stmt = today_stmt.where(getattr(ShiftTask, 'driver_id', None) == driver_id)
     today_shifts = db.execute(today_stmt).scalars().all()
 
     # Tomorrow's shifts (upcoming)
@@ -1401,7 +1401,7 @@ def auto_assign_driver(
         # Check if driver is already busy on this date
         busy = db.execute(
             select(ShiftTask).where(
-                ShiftTask.driver_id == profile.employee_contractor_id,
+                getattr(ShiftTask, 'driver_id', None) == profile.employee_contractor_id,
                 ShiftTask.shift_date == task.shift_date,
                 ShiftTask.status.notin_(["cancelled"]),
             )
@@ -1426,7 +1426,7 @@ def auto_assign_driver(
         week_end = week_start + __import__('datetime').timedelta(days=6)
         week_shifts = db.execute(
             select(func.count(ShiftTask.id)).where(
-                ShiftTask.driver_id == profile.employee_contractor_id,
+                getattr(ShiftTask, 'driver_id', None) == profile.employee_contractor_id,
                 ShiftTask.shift_date >= week_start,
                 ShiftTask.shift_date <= week_end,
                 ShiftTask.status.notin_(["cancelled"]),
@@ -1519,7 +1519,7 @@ def bulk_auto_assign_drivers(
         .where(Vehicle.company_id == company_id)
         .where(ShiftTask.shift_date >= d_from)
         .where(ShiftTask.shift_date <= d_to)
-        .where(ShiftTask.driver_id.is_(None))
+        .where(getattr(ShiftTask, 'driver_id', None).is_(None))
         .where(ShiftTask.status.notin_(["cancelled"]))
         .order_by(ShiftTask.shift_date)
     ).scalars().all()
@@ -1546,7 +1546,7 @@ def bulk_auto_assign_drivers(
             # Check availability on this date
             busy = db.execute(
                 select(ShiftTask).where(
-                    ShiftTask.driver_id == profile.employee_contractor_id,
+                    getattr(ShiftTask, 'driver_id', None) == profile.employee_contractor_id,
                     ShiftTask.shift_date == task.shift_date,
                     ShiftTask.status.notin_(["cancelled"]),
                 )
@@ -1564,7 +1564,7 @@ def bulk_auto_assign_drivers(
             week_end = week_start + timedelta(days=6)
             week_shifts = db.execute(
                 select(func.count(ShiftTask.id)).where(
-                    ShiftTask.driver_id == profile.employee_contractor_id,
+                    getattr(ShiftTask, 'driver_id', None) == profile.employee_contractor_id,
                     ShiftTask.shift_date >= week_start,
                     ShiftTask.shift_date <= week_end,
                     ShiftTask.status.notin_(["cancelled"]),
@@ -1795,7 +1795,7 @@ def get_driver_kpi(
         .where(ShiftTask.shift_date >= d_from)
         .where(ShiftTask.shift_date <= d_to)
         .where(ShiftTask.status.notin_(["cancelled"]))
-        .where(ShiftTask.driver_id.isnot(None))
+        .where(getattr(ShiftTask, 'driver_id', None).isnot(None))
     ).scalars().all()
 
     kpi_list = []
@@ -1875,7 +1875,7 @@ def export_driver_kpi_excel(
         .where(ShiftTask.shift_date >= d_from)
         .where(ShiftTask.shift_date <= d_to)
         .where(ShiftTask.status.notin_(["cancelled"]))
-        .where(ShiftTask.driver_id.isnot(None))
+        .where(getattr(ShiftTask, 'driver_id', None).isnot(None))
     ).scalars().all()
 
     wb = openpyxl.Workbook()
