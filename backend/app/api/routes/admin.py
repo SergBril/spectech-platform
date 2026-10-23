@@ -247,10 +247,10 @@ def get_finance_stats(
         or 0
     )
     unpaid_amount = (
-        db.query(func.sum(Invoice.total_amount - Invoice.paid_amount))
+        db.query(func.sum(Invoice.paid_amount - Invoice.paid_amount))
         .filter(
             Invoice.status.in_([DocumentStatus.draft, DocumentStatus.sent]),
-            Invoice.total_amount > Invoice.paid_amount,
+            Invoice.paid_amount > Invoice.paid_amount,
         )
         .scalar()
         or 0

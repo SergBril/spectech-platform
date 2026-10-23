@@ -94,7 +94,7 @@ def list_maintenance_orders(
     query = (
         select(MaintenanceOrder)
         .options(joinedload(MaintenanceOrder.vehicle))
-        .where(MaintenanceOrder.company_id.in_(company_ids))
+        .where(MaintenanceOrder.company_id == company_id)
     )
 
     if status_filter:
@@ -107,7 +107,7 @@ def list_maintenance_orders(
         query = query.where(MaintenanceOrder.priority == priority)
 
     count_query = select(MaintenanceOrder).where(
-        MaintenanceOrder.company_id.in_(company_ids)
+        MaintenanceOrder.company_id == company_id
     )
     if status_filter:
         count_query = count_query.where(MaintenanceOrder.status == status_filter)
@@ -245,7 +245,7 @@ def get_maintenance_order(
         )
         .filter(
             MaintenanceOrder.id == order_id,
-            MaintenanceOrder.company_id.in_(company_ids),
+            MaintenanceOrder.company_id == company_id,
         )
         .first()
     )
@@ -276,7 +276,7 @@ def update_maintenance_order(
         db.query(MaintenanceOrder)
         .filter(
             MaintenanceOrder.id == order_id,
-            MaintenanceOrder.company_id.in_(company_ids),
+            MaintenanceOrder.company_id == company_id,
         )
         .first()
     )
@@ -328,7 +328,7 @@ def complete_maintenance_order(
         .options(joinedload(MaintenanceOrder.vehicle))
         .filter(
             MaintenanceOrder.id == order_id,
-            MaintenanceOrder.company_id.in_(company_ids),
+            MaintenanceOrder.company_id == company_id,
         )
         .first()
     )

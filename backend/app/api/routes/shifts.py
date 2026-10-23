@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
 from app.core.db import get_db
 from app.models.auth import User
+from app.models.bank_statement import BankTransaction
+
 from app.models.finance import Act
 from app.models.catalog import Vehicle
 
