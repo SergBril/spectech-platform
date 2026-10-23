@@ -1795,7 +1795,7 @@ def get_driver_kpi(
         .where(ShiftTask.shift_date >= d_from)
         .where(ShiftTask.shift_date <= d_to)
         .where(ShiftTask.status.notin_(["cancelled"]))
-        .where(getattr(ShiftTask, 'driver_id', None).isnot(None))
+        
     ).scalars().all()
 
     kpi_list = []
@@ -1875,7 +1875,7 @@ def export_driver_kpi_excel(
         .where(ShiftTask.shift_date >= d_from)
         .where(ShiftTask.shift_date <= d_to)
         .where(ShiftTask.status.notin_(["cancelled"]))
-        .where(getattr(ShiftTask, 'driver_id', None).isnot(None))
+        
     ).scalars().all()
 
     wb = openpyxl.Workbook()
@@ -3659,8 +3659,8 @@ def get_acts_registry(
             "act_number": getattr(a, 'act_number', None),
             "act_date": str(a.act_date),
             "vehicle_name": vehicle.name if vehicle else "",
-            "driver_name": a.driver_name or "",
-            "hours_worked": a.hours_worked,
+            "driver_name": getattr(a, 'driver_name', None) or "",
+            "hours_worked": getattr(a, 'hours_worked', None),
             "total_amount": a.total_amount,
             "vat_amount": a.vat_amount,
             "status": a.status,
