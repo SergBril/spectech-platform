@@ -13,61 +13,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.exc import (
-    SQLAlchemyError,
-)
+from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.routes import (
-    acts,
-    addresses,
-    admin,
-    analytics,
-    auth,
-    bank_statements,
-    benchmark,
-    catalog,
-    categories,
-    chat,
-    companies,
-    contractors,
-    debug,
-    disputes,
-    downtime,
-    driver,
-    drivers,
-    email,
-    email_bulk,
-    email_templates,
-    export,
-    files,
-    finance,
-    gps,
-    invoices,
-    maintenance,
-    marketplace,
-    marketplace_listings,
-    me,
-    payments,
-    payouts,
-    public,  # 🆕 Маркетплейс
-    rbac,
-    rentals,
-    requests,
-    reviews,
-    salaries,
-    secure_test,
-    shifts,
-    signature,
-    system,
-    tasks,
-    tax,
-    telematics,
-    vehicles,
-)
-from app.api.routes import (
-    map as map_routes,
-)
-from app.api.routes import websocket as ws_routes
+# ⚠️ ВАЖНО: Импорт моделей ДОЛЖЕН быть ПОСЛЕ импорта роутеров,
+# иначе wildcard import затеняет имена модулей роутеров.
+# Поэтому сначала импортируем все роутеры с алиасами,
+# а модели импортируем в самом конце перед lifespan.
+
 from app.core.config import settings
 from app.core.exception_handlers import (
     general_exception_handler,
@@ -78,10 +30,58 @@ from app.core.logging_config import setup_logging
 from app.core.metrics import setup_metrics
 from app.core.middleware import RequestLoggingMiddleware
 from app.core.sentry_config import init_sentry
-from app.models import *  # noqa: F401, F403
 from app.services import storage_service
 from app.tasks.scheduler import start_scheduler, stop_scheduler
 from app.middleware.rate_limiter import RateLimitMiddleware
+
+# === Импорты роутеров (все с уникальными алиасами чтобы избежать конфликтов) ===
+from app.api.routes import acts as acts_route
+from app.api.routes import addresses as addresses_route
+from app.api.routes import admin as admin_route
+from app.api.routes import analytics as analytics_route
+from app.api.routes import auth as auth_route
+from app.api.routes import bank_statements as bank_statements_route
+from app.api.routes import benchmark as benchmark_route
+from app.api.routes import catalog as catalog_route
+from app.api.routes import categories as categories_route
+from app.api.routes import chat as chat_route
+from app.api.routes import companies as companies_route
+from app.api.routes import contractors as contractors_route
+from app.api.routes import debug as debug_route
+from app.api.routes import disputes as disputes_route
+from app.api.routes import downtime as downtime_route
+from app.api.routes import driver as driver_route
+from app.api.routes import drivers as drivers_route
+from app.api.routes import email as email_route
+from app.api.routes import email_bulk as email_bulk_route
+from app.api.routes import email_templates as email_templates_route
+from app.api.routes import export as export_route
+from app.api.routes import files as files_route
+from app.api.routes import finance as finance_route
+from app.api.routes import gps as gps_route
+from app.api.routes import invoices as invoices_route
+from app.api.routes import maintenance as maintenance_route
+from app.api.routes import marketplace as marketplace_route
+from app.api.routes import marketplace_listings as marketplace_listings_route
+from app.api.routes import me as me_route
+from app.api.routes import payments as payments_route
+from app.api.routes import payouts as payouts_route
+from app.api.routes import public as public_route
+from app.api.routes import rbac as rbac_route
+from app.api.routes import rentals as rentals_route
+from app.api.routes import requests as requests_route
+from app.api.routes import reviews as reviews_route
+from app.api.routes import salaries as salaries_route
+from app.api.routes import secure_test as secure_test_route
+from app.api.routes import shifts as shifts_route
+from app.api.routes import signature as signature_route
+from app.api.routes import system as system_route
+from app.api.routes import tasks as tasks_route
+from app.api.routes import tax as tax_route
+from app.api.routes import telematics as telematics_route
+from app.api.routes import vehicles as vehicles_route
+from app.api.routes import map as map_route
+from app.api.routes import websocket as ws_route
 
 # Настройка логирования
 setup_logging("INFO")
@@ -91,6 +91,9 @@ logger = logging.getLogger("spectech.app")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 SpectechPlatform v0.1.0 starting...")
+
+    # Импортируем модели ВНУТРИ lifespan чтобы не затенять роутеры
+    from app.models import *  # noqa: F401, F403
 
     # Запускаем планировщик фоновых задач
     start_scheduler()
@@ -112,7 +115,6 @@ async def lifespan(app: FastAPI):
     # Close DB connections
     try:
         from app.core.db import engine
-
         engine.dispose()
         logger.info("✅ Database connections closed")
     except Exception as e:
@@ -121,7 +123,6 @@ async def lifespan(app: FastAPI):
     # Close Redis
     try:
         from app.core.redis import redis_client
-
         if redis_client:
             redis_client.close()
             logger.info("✅ Redis connection closed")
@@ -133,8 +134,6 @@ async def lifespan(app: FastAPI):
 
 # 1. Создание приложения
 app = FastAPI(
-
-
     title="СпецТехника Про API",
     description="""
     # 🚜 Платформа управления спецтехникой
@@ -171,8 +170,6 @@ app = FastAPI(
 
 app.add_middleware(RateLimitMiddleware)
 
-#
-
 # Setup Prometheus metrics
 if settings.environment != "testing":
     setup_metrics(app)
@@ -180,13 +177,6 @@ if settings.environment != "testing":
 # Инициализируем Sentry
 init_sentry()
 
-# Add Prometheus metrics
-
-
-# Добавляем Request ID middleware (ПЕРВЫМ!)
-# app.add_middleware(RequestIDMiddleware)  # временно отключено
-
-# Таблицы создаются через Alembic миграции при старте контейнера
 print("✅ Database migrations managed by Alembic")
 
 # 3. Регистрируем обработчики ошибок
@@ -195,102 +185,72 @@ app.add_exception_handler(SQLAlchemyError, sqlalchemy_exception_handler)
 app.add_exception_handler(Exception, general_exception_handler)
 
 # 4. Middleware
-allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3001",
+        "http://localhost:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3001",
+        "http://127.0.0.1:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Disposition"],  # ← ВАЖНО для скачивания файлов!
+    expose_headers=["Content-Disposition"],
 )
 
 app.add_middleware(RequestLoggingMiddleware)
 
-# 5. Роутеры API
-# Debug endpoints
-
-# Debug endpoints (без префикса - он уже в router)
-app.include_router(debug.router, prefix="/api/v1", tags=["debug"])
-
-app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
-app.include_router(addresses.router, prefix="/api/v1")
-app.include_router(categories.router, prefix="/api/v1/categories", tags=["catalog"])
-app.include_router(
-    vehicles.router, prefix="/api/v1", tags=["🚜 Vehicles (Спецтехника)"]
-)
-app.include_router(
-    drivers.router, prefix="/api/v1/drivers", tags=["👷 Drivers (Водители)"]
-)
-app.include_router(requests.router, prefix="/api/v1/requests", tags=["dispatch"])
-app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["dispatch"])
-app.include_router(
-    contractors.router, prefix="/api/v1/contractors", tags=["contractors"]
-)
-app.include_router(email.router, prefix="/api/v1/email", tags=["email"])
-app.include_router(rbac.router, prefix="/api/v1/rbac", tags=["rbac"])
-app.include_router(me.router, prefix="/api/v1", tags=["me"])
-app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["finance"])
-app.include_router(acts.router, prefix="/api/v1/acts", tags=["finance"])
-app.include_router(payouts.router, prefix="/api/v1/finance/payouts", tags=["finance"])
-app.include_router(payments.router, prefix="/api/v1/payments", tags=["finance"])
-app.include_router(telematics.router, prefix="/api/v1/telematics", tags=["telematics"])
-app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
-app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
-app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
-app.include_router(ws_routes.router, prefix="/api/v1", tags=["websocket"])
-app.include_router(benchmark.router, prefix="/api/v1", tags=["benchmark"])
-app.include_router(secure_test.router, prefix="/api/v1", tags=["🔒 Secure Test (RBAC)"])
-app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
-app.include_router(export.router, prefix="/api/v1/export", tags=["export"])
-app.include_router(tax.router, prefix="/api/v1", tags=["📊 Tax & VAT (НДС)"])
-app.include_router(companies.router, prefix="/api/v1", tags=["companies"])
-app.include_router(
-    marketplace.router, prefix="/api/v1", tags=["🎯 Marketplace (Отклики на заявки)"]
-)
-app.include_router(
-    marketplace_listings.router,
-    prefix="/api/v1",
-    tags=["🛒 Marketplace (Управление объявлениями)"],
-)
-app.include_router(chat.router, prefix="/api/v1", tags=["💬 Chat (Чат по заявке)"])
-app.include_router(public.router, prefix="/api/v1", tags=["🌐 Public (Маркетплейс)"])
-app.include_router(
-    maintenance.router, prefix="/api/v1", tags=["🔧 Maintenance (ТО и Ремонты)"]
-)
-app.include_router(email_templates.router, prefix="/api/v1")
-app.include_router(email_bulk.router, prefix="/api/v1")
-app.include_router(catalog.router, prefix="/api/v1")
-app.include_router(signature.router, prefix="/api/v1/signature", tags=["signature"])
-app.include_router(finance.router, prefix="/api/v1/finance", tags=["Финансы"])
-app.include_router(disputes.router, prefix="/api/v1/disputes", tags=["disputes"])
-app.include_router(downtime.router, prefix="/api/v1/downtime", tags=["downtime"])
-app.include_router(rentals.router, prefix="/api/v1", tags=["📋 Rentals (Аренда)"])
-app.include_router(
-    bank_statements.router,
-    prefix="/api/v1/banking",
-    tags=["💳 Banking (Банковские выписки)"],
-)
-app.include_router(
-    salaries.router, prefix="/api/v1/salaries", tags=["💰 Salaries (Зарплаты)"]
-)
-app.include_router(
-    map_routes.router, prefix="/api/v1/map", tags=["🗺️ Map (Карта техники)"]
-)
-app.include_router(gps.router, prefix="/api/v1/gps", tags=["📡 GPS"])
-app.include_router(
-    driver.router, prefix="/api/v1/driver", tags=["📱 Driver (Мобильное приложение)"]
-)
-app.include_router(
-    admin.router, prefix="/api/v1/admin", tags=["🔧 Admin (Админ-панель)"]
-)
-app.include_router(reviews.router, prefix="/api/v1", tags=["Reviews"])
+# 5. Роутеры API (используем алиасы _route чтобы не конфликтовать с моделями)
+app.include_router(debug_route.router, prefix="/api/v1", tags=["debug"])
+app.include_router(auth_route.router, prefix="/api/v1", tags=["auth"])
+app.include_router(addresses_route.router, prefix="/api/v1")
+app.include_router(categories_route.router, prefix="/api/v1/categories", tags=["catalog"])
+app.include_router(vehicles_route.router, prefix="/api/v1", tags=["🚜 Vehicles (Спецтехника)"])
+app.include_router(drivers_route.router, prefix="/api/v1/drivers", tags=["👷 Drivers (Водители)"])
+app.include_router(requests_route.router, prefix="/api/v1/requests", tags=["dispatch"])
+app.include_router(shifts_route.router, prefix="/api/v1/shifts", tags=["dispatch"])
+app.include_router(contractors_route.router, prefix="/api/v1/contractors", tags=["contractors"])
+app.include_router(email_route.router, prefix="/api/v1/email", tags=["email"])
+app.include_router(rbac_route.router, prefix="/api/v1/rbac", tags=["rbac"])
+app.include_router(me_route.router, prefix="/api/v1", tags=["me"])
+app.include_router(invoices_route.router, prefix="/api/v1/invoices", tags=["finance"])
+app.include_router(acts_route.router, prefix="/api/v1/acts", tags=["finance"])
+app.include_router(payouts_route.router, prefix="/api/v1/finance/payouts", tags=["finance"])
+app.include_router(payments_route.router, prefix="/api/v1/payments", tags=["finance"])
+app.include_router(telematics_route.router, prefix="/api/v1/telematics", tags=["telematics"])
+app.include_router(tasks_route.router, prefix="/api/v1/tasks", tags=["tasks"])
+app.include_router(system_route.router, prefix="/api/v1/system", tags=["system"])
+app.include_router(files_route.router, prefix="/api/v1/files", tags=["files"])
+app.include_router(ws_route.router, prefix="/api/v1", tags=["websocket"])
+app.include_router(benchmark_route.router, prefix="/api/v1", tags=["benchmark"])
+app.include_router(secure_test_route.router, prefix="/api/v1", tags=["🔒 Secure Test (RBAC)"])
+app.include_router(analytics_route.router, prefix="/api/v1/analytics", tags=["analytics"])
+app.include_router(export_route.router, prefix="/api/v1/export", tags=["export"])
+app.include_router(tax_route.router, prefix="/api/v1", tags=["📊 Tax & VAT (НДС)"])
+app.include_router(companies_route.router, prefix="/api/v1", tags=["companies"])
+app.include_router(marketplace_route.router, prefix="/api/v1", tags=["🎯 Marketplace (Отклики на заявки)"])
+app.include_router(marketplace_listings_route.router, prefix="/api/v1", tags=["🛒 Marketplace (Управление объявлениями)"])
+app.include_router(chat_route.router, prefix="/api/v1", tags=["💬 Chat (Чат по заявке)"])
+app.include_router(public_route.router, prefix="/api/v1", tags=["🌐 Public (Маркетплейс)"])
+app.include_router(maintenance_route.router, prefix="/api/v1", tags=["🔧 Maintenance (ТО и Ремонты)"])
+app.include_router(email_templates_route.router, prefix="/api/v1")
+app.include_router(email_bulk_route.router, prefix="/api/v1")
+app.include_router(catalog_route.router, prefix="/api/v1")
+app.include_router(signature_route.router, prefix="/api/v1/signature", tags=["signature"])
+app.include_router(finance_route.router, prefix="/api/v1/finance", tags=["Финансы"])
+app.include_router(disputes_route.router, prefix="/api/v1/disputes", tags=["disputes"])
+app.include_router(downtime_route.router, prefix="/api/v1/downtime", tags=["downtime"])
+app.include_router(rentals_route.router, prefix="/api/v1", tags=["📋 Rentals (Аренда)"])
+app.include_router(bank_statements_route.router, prefix="/api/v1/banking", tags=["💳 Banking (Банковские выписки)"])
+app.include_router(salaries_route.router, prefix="/api/v1/salaries", tags=["💰 Salaries (Зарплаты)"])
+app.include_router(map_route.router, prefix="/api/v1/map", tags=["🗺️ Map (Карта техники)"])
+app.include_router(gps_route.router, prefix="/api/v1/gps", tags=["📡 GPS"])
+app.include_router(driver_route.router, prefix="/api/v1/driver", tags=["📱 Driver (Мобильное приложение)"])
+app.include_router(admin_route.router, prefix="/api/v1/admin", tags=["🔧 Admin (Админ-панель)"])
+app.include_router(reviews_route.router, prefix="/api/v1", tags=["Reviews"])
 
 uploads_dir = Path("uploads")
 uploads_dir.mkdir(exist_ok=True)
@@ -300,9 +260,7 @@ app.mount("/static", StaticFiles(directory="uploads"), name="static")
 # 6. Кастомизация OpenAPI
 def custom_openapi():
     """Custom OpenAPI schema."""
-    # if app.openapi_schema:
-    #     return app.openapi_schema
-    app.openapi_schema = None  # Сбрасываем кэш
+    app.openapi_schema = None
     openapi_schema = get_openapi(
         title="СпецТехника Про API",
         version="1.0.0",
@@ -353,14 +311,12 @@ async def root_landing():
         <div class="container">
             <h1>🚜 СпецТехника Про API</h1>
             <p><strong>Версия:</strong> 1.0.0 | <strong>Статус:</strong> Production</p>
-
             <h2>📚 Документация</h2>
             <div class="card">
                 <a href="/docs">🔵 Swagger UI</a>
                 <a href="/redoc">🔴 ReDoc</a>
                 <a href="/api/v1/openapi.json">📄 OpenAPI JSON</a>
             </div>
-
             <h2>🚀 Быстрый старт</h2>
             <div class="card">
                 <h3>1. Аутентификация</h3>
@@ -370,7 +326,6 @@ async def root_landing():
   "password": "admin123"
 }</code></pre>
             </div>
-
             <h2>📋 Основные модули</h2>
             <ul>
                 <li><strong>auth</strong> — аутентификация, JWT</li>
@@ -379,7 +334,6 @@ async def root_landing():
                 <li><strong>finance</strong> — счета, акты, выплаты</li>
                 <li><strong>dispatch</strong> — заявки на работы</li>
             </ul>
-
             <h2>🔧 Среда</h2>
             <p>Base URL: <code>http://localhost:8000</code></p>
             <p>WebSocket: <code>ws://localhost:8000/ws</code></p>
@@ -400,7 +354,6 @@ def health_check():
 def readiness_check():
     """Проверка готовности (БД)."""
     from sqlalchemy import text
-
     from app.core.db import SessionLocal
 
     try:
