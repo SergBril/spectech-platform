@@ -74,6 +74,9 @@ def _enrich_vehicle(vehicle: Vehicle, db: Session = None) -> dict:
 
     # Assigned driver name
     data["assigned_driver_name"] = None
+    # Алиасы для фронтенда (RequestFormModal ожидает driver_id/driver_name)
+    data["driver_id"] = getattr(vehicle, "assigned_driver_id", None)
+    data["driver_name"] = None
     if hasattr(vehicle, "assigned_driver_id") and vehicle.assigned_driver_id:
         try:
             # Driver name comes from Contractor.name via Employee
@@ -84,6 +87,7 @@ def _enrich_vehicle(vehicle: Vehicle, db: Session = None) -> dict:
             )
             if emp and emp.contractor:
                 data["assigned_driver_name"] = emp.contractor.name
+                data["driver_name"] = emp.contractor.name
         except Exception:
             pass
 

@@ -1192,3 +1192,34 @@ async def get_matching_vehicles(
 
     matches = vehicle_matcher.find_matching_vehicles(db, request_id, company_id)
     return {"request_id": request_id, "total_matches": len(matches), "vehicles": matches}
+
+
+@router.delete("/{request_id}", summary="🗑️ Удалить (отменить) заявку")
+async def delete_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_ids: list[int] = Depends(get_user_company_ids),
+):
+    """Мягкое удаление заявки (перевод в статус cancelled)."""
+    request = db.get(Request, request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    # Проверка прав: только своя компания
+    if request.company_id not in company_ids:
+        raise HTTPException(status_code=403, detail="Cannot delete another company's request")
+
+    # Нельзя удалить уже завершённую или отменённую заявку
+    if request.status in (RequestStatus.cancelled, RequestStatus.completed):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete request with status '{request.status.value}'"
+        )
+
+    old_status = request.status
+    request.status = RequestStatus.cancelled
+    db.commit()
+
+    logger.info("Request #%s deleted (cancelled) by user #%s", request_id, current_user.id)
+    return {"message": "Request deleted successfully", "id": request_id}

@@ -32,6 +32,12 @@ class Contractor(Base):
     ogrn: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     legal_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Банковские реквизиты
+    bank_account: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    bik: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    bank_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    correspondent_account: Mapped[str | None] = mapped_column(String(50), nullable=True)
     actual_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     bank_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 

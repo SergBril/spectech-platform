@@ -716,3 +716,51 @@ def get_revenue_by_vehicle(
         }
         for r in results
     ]
+
+
+@router.get("/invoices/{invoice_id}/pdf")
+def download_invoice_pdf(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Скачать PDF счёта."""
+    from fastapi.responses import StreamingResponse
+    from app.services.pdf_service import pdf_service
+    import io
+
+    invoice = db.get(Invoice, invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    try:
+        pdf_bytes = pdf_service.generate_invoice_pdf(invoice)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=invoice_{invoice.document_number}.pdf"}
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate invoice PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+
+@router.post("/invoices/{invoice_id}/resend-email")
+def resend_invoice_email(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Повторно отправить счёт по email."""
+    from app.services.email_service import email_service
+
+    invoice = db.get(Invoice, invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    try:
+        email_service.send_invoice_email(invoice)
+        return {"message": "Email sent successfully", "id": invoice_id}
+    except Exception as e:
+        logger.error(f"Failed to resend invoice email: {e}")
+        raise HTTPException(status_code=500, detail=f"Email sending failed: {str(e)}")

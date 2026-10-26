@@ -10,6 +10,8 @@ export const DashboardWidgets: React.FC = () => {
     pending: 0,
   });
   const [payoutsSummary, setPayoutsSummary] = useState<PayoutsSummary | null>(null);
+  const [widgetsLoading, setWidgetsLoading] = useState(true);
+  const [widgetsError, setWidgetsError] = useState<string | null>(null);
 
   useEffect(() => {
     loadWidgetsData();
