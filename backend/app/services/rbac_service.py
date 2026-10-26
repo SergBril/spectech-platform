@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 class Role(str, Enum):
     ADMIN = "admin"
+
+    owner = "owner"
     DISPATCHER = "dispatcher"
     DRIVER = "driver"
     ACCOUNTANT = "accountant"
@@ -49,6 +51,18 @@ PERMISSIONS = {
     Role.VIEWER: {
         "shifts:read", "vehicles:read", "reports:read",
         "overview:read",
+    },
+
+    Role.owner: {
+        "requests:read", "requests:create", "requests:update", "requests:delete",
+        "vehicles:read", "vehicles:create", "vehicles:update", "vehicles:delete",
+        "drivers:read", "drivers:create", "drivers:update", "drivers:delete",
+        "finance:read", "finance:create", "finance:update", "finance:delete",
+        "maintenance:read", "maintenance:create", "maintenance:update", "maintenance:delete",
+        "shifts:read", "shifts:create", "shifts:update", "shifts:delete",
+        "marketplace:read", "marketplace:create", "marketplace:update",
+        "audit:read", "users:manage_roles", "templates:manage",
+        "reports:read", "reports:create", "reports:update", "reports:approve",
     },
 }
 
