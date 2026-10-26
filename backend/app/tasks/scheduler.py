@@ -409,7 +409,7 @@ def start_scheduler() -> None:
     async def _auto_match_payments():
         from app.core.db import SessionLocal
         from sqlalchemy import select
-        from app.models.bank import BankTransaction
+        from app.models.bank_statement import BankTransaction
         from app.models.finance import Act
         from app.models.auth import UserCompany
 

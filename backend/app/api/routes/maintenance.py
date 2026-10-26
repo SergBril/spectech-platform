@@ -245,7 +245,7 @@ def get_maintenance_order(
         )
         .filter(
             MaintenanceOrder.id == order_id,
-            MaintenanceOrder.company_id.in_(company_ids),
+            MaintenanceOrder.company_id == company_id,
         )
         .first()
     )
@@ -276,7 +276,7 @@ def update_maintenance_order(
         db.query(MaintenanceOrder)
         .filter(
             MaintenanceOrder.id == order_id,
-            MaintenanceOrder.company_id.in_(company_ids),
+            MaintenanceOrder.company_id == company_id,
         )
         .first()
     )
@@ -328,7 +328,7 @@ def complete_maintenance_order(
         .options(joinedload(MaintenanceOrder.vehicle))
         .filter(
             MaintenanceOrder.id == order_id,
-            MaintenanceOrder.company_id.in_(company_ids),
+            MaintenanceOrder.company_id == company_id,
         )
         .first()
     )
