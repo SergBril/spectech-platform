@@ -95,6 +95,7 @@ class Vehicle(Base):
         comment="Текущий водитель (FK к employees.contractor_id)",
     )
     company_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    region: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     psm_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     osago_expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_custom_number: Mapped[bool] = mapped_column(Boolean, default=False)
