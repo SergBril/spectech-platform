@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import type {
   Request,
   RequestCreate,
@@ -18,6 +18,17 @@ interface Contractor {
   id: number;
   name: string;
   type: string;
+}
+
+interface VehicleWithDriver {
+  id: number;
+  name: string;
+  category_id: number | null;
+  driver_id: number | null;
+  driver_name: string;
+  hourly_rate: number | null;
+  shift_rate: number | null;
+  attributes: Record<string, any>;
 }
 
 interface Props {
@@ -77,16 +88,12 @@ const toLocalDatetime = (iso: string | null | undefined) => {
 
 /**
  * Определяет режим маркетплейса автоматически на основе роли пользователя.
- * - client → 'client' (заказчик, платит 100%)
- * - owner/dispatcher → 'owner_dispatcher' (диспетчер, получает 10% комиссии)
- * - новый/неизвестный → 'client' по умолчанию
  */
 const getAutoMarketplaceMode = (user: any): 'client' | 'owner_dispatcher' => {
   const role = user?.role || user?.user_type || '';
   if (role === 'owner' || role === 'dispatcher' || role === 'owner_dispatcher') {
     return 'owner_dispatcher';
   }
-  // По умолчанию — клиент (включая новых пользователей)
   return 'client';
 };
 
@@ -129,15 +136,16 @@ export const RequestFormModal: React.FC<Props> = ({
   const [attributeValues, setAttributeValues] = useState<Record<string, string>>({});
   const [loadingAttributes, setLoadingAttributes] = useState(false);
 
-  // Назначение: свой водитель или маркетплейс
+  // Назначение: своя техника+водитель или маркетплейс
   const [assignmentMode, setAssignmentMode] = useState<'own' | 'marketplace'>('own');
-  // Режим маркетплейса определяется автоматически, но храним в state для передачи в payload
   const [marketplaceMode, setMarketplaceMode] = useState<'client' | 'owner_dispatcher'>('client');
   const [paymentTermsDays, setPaymentTermsDays] = useState<number>(7);
   const [showExtendedPaymentWarning, setShowExtendedPaymentWarning] = useState(false);
-  const [drivers, setDrivers] = useState<{id: number; name: string}[]>([]);
-  const [selectedDriverId, setSelectedDriverId] = useState<number | null>(null);
-  const [loadingDrivers, setLoadingDrivers] = useState(false);
+
+  // Техника с водителями
+  const [vehiclesWithDrivers, setVehiclesWithDrivers] = useState<VehicleWithDriver[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(request?.assigned_vehicle_id || null);
+  const [loadingVehicles, setLoadingVehicles] = useState(false);
 
   // Custom attribute value modal
   const [customAttrModal, setCustomAttrModal] = useState<{ attrId: number; attrName: string; slug: string } | null>(null);
@@ -150,9 +158,16 @@ export const RequestFormModal: React.FC<Props> = ({
   useEffect(() => {
     const autoMode = getAutoMarketplaceMode(user);
     setMarketplaceMode(autoMode);
+    // Если заказчик — срок оплаты всегда 0 (предоплата 100%)
+    if (autoMode === 'client') {
+      setPaymentTermsDays(0);
+      setShowExtendedPaymentWarning(false);
+    } else {
+      setPaymentTermsDays(7);
+    }
   }, [user]);
 
-  // Загрузка клиентов, каталога и водителей
+  // Загрузка клиентов, каталога и техники с водителями
   useEffect(() => {
     const loadData = async () => {
       // Клиенты
@@ -160,7 +175,6 @@ export const RequestFormModal: React.FC<Props> = ({
         const res = await apiClient.get('/contractors', { params: { type: 'client', limit: 500 } });
         const list = Array.isArray(res.data) ? res.data : [];
         setClients(list);
-        // Only set default client for new requests, not when editing
         if (!request && !selectedClientId && list.length > 0) setSelectedClientId(list[0].id);
       } catch (e) { console.warn('Failed to load clients:', e); }
       setLoadingClients(false);
@@ -168,27 +182,27 @@ export const RequestFormModal: React.FC<Props> = ({
       // Каталог
       try {
         const tree = await getCatalogTree();
-        console.log('[RequestForm] Catalog tree loaded:', tree.length, 'categories');
         setCatalogTree(tree);
       } catch (e) { console.warn('Failed to load catalog:', e); }
 
-      // Водители
+      // Техника с водителями
       try {
-        setLoadingDrivers(true);
-        const res = await apiClient.get('/drivers', { params: { limit: 500 } });
+        setLoadingVehicles(true);
+        const res = await apiClient.get('/vehicles', { params: { limit: 500, include_driver: true } });
         const raw = res.data;
         const list = Array.isArray(raw) ? raw : (raw?.items || raw?.data || []);
-        setDrivers(list.map((d: any) => ({
-          id: d.id ?? d.driver_id,
-          name: d.name || d.full_name || d.driver_name || `Водитель #${d.id || d.driver_id}`
+        setVehiclesWithDrivers(list.map((v: any) => ({
+          id: v.id,
+          name: v.name || v.license_plate || `#${v.id}`,
+          category_id: v.category_id ?? null,
+          driver_id: v.driver_id ?? v.operator_id ?? null,
+          driver_name: v.driver_name || v.operator_name || '',
+          hourly_rate: v.hourly_rate ?? null,
+          shift_rate: v.shift_rate ?? null,
+          attributes: v.attributes || {},
         })));
-      } catch (e) { console.warn('Failed to load drivers:', e); }
-
-      // При редактировании: если у заявки есть assigned_operator_id, выбираем его
-      if (request?.assigned_operator_id) {
-        setSelectedDriverId(request.assigned_operator_id);
-      }
-      setLoadingDrivers(false);
+      } catch (e) { console.warn('Failed to load vehicles:', e); }
+      setLoadingVehicles(false);
     };
     loadData();
   }, []);
@@ -212,110 +226,75 @@ export const RequestFormModal: React.FC<Props> = ({
     if (selectedSubcategoryId) {
       setLoadingAttributes(true);
       getSubcategoryAttributes(selectedSubcategoryId)
-        .then(attrs => {
-          console.log('[RequestForm] Attributes loaded:', attrs.length);
-          setSubcategoryAttributes(attrs);
-        })
-        .catch((e) => { console.warn('Failed to load attributes:', e); setSubcategoryAttributes([]); })
+        .then(attrs => setSubcategoryAttributes(attrs))
+        .catch(() => setSubcategoryAttributes([]))
         .finally(() => setLoadingAttributes(false));
     } else {
       setSubcategoryAttributes([]);
     }
   }, [selectedSubcategoryId]);
 
-  // 🆕 АВТО-РАСЧЁТ суммы: часы × ставка
+  // Фильтрация техники по категории/подкатегории и атрибутам
+  const filteredVehicles = useMemo(() => {
+    return vehiclesWithDrivers.filter(v => {
+      // Фильтр по подкатегории
+      if (selectedSubcategoryId && v.category_id !== selectedSubcategoryId) return false;
+      // Фильтр по категории (если подкатегория не выбрана)
+      if (!selectedSubcategoryId && selectedCategoryId && v.category_id !== selectedCategoryId) return false;
+      // Фильтр по атрибутам
+      for (const [slug, val] of Object.entries(attributeValues)) {
+        if (val && v.attributes?.[slug] !== val) return false;
+      }
+      return true;
+    });
+  }, [vehiclesWithDrivers, selectedCategoryId, selectedSubcategoryId, attributeValues]);
+
+  // АВТО-РАСЧЁТ суммы
   useEffect(() => {
     const hours = parseFloat(shiftDuration) || 0;
     const rate = parseFloat(clientRate) || 0;
-
     if (hours > 0 && rate > 0 && !request) {
       let total = 0;
-
       switch (rateType) {
-        case 'hourly':
-          total = hours * rate;
-          break;
-        case 'daily':
-        case 'shift':
-          // Смена = 8 часов по умолчанию
-          total = rate;
-          break;
-        case 'fixed':
-          total = rate;
-          break;
+        case 'hourly': total = hours * rate; break;
+        case 'daily': case 'shift': total = rate; break;
+        case 'fixed': total = rate; break;
       }
-
-      if (total > 0) {
-        setEstimatedAmount(total.toString());
-      }
+      if (total > 0) setEstimatedAmount(total.toString());
     }
   }, [shiftDuration, clientRate, rateType, request]);
 
-  // Если передано vehicleId — подставляем ставку техники как дефолт
+  // Автозаполнение ставки из выбранной техники
   useEffect(() => {
-    if (vehicleId && !request && !clientRate) {
-      // Загружаем информацию о технике для автозаполнения ставки
-      apiClient.get(`/public/vehicles/${vehicleId}`)
-        .then(res => {
-          const vehicle = res.data;
-          if (vehicle.hourly_rate && !clientRate) {
-            setClientRate(vehicle.hourly_rate.toString());
-            setRateType('hourly');
-          } else if (vehicle.shift_rate && !clientRate) {
-            setClientRate(vehicle.shift_rate.toString());
-            setRateType('shift');
-          }
-        })
-        .catch(() => {});
+    if (selectedVehicleId && !request && !clientRate) {
+      const v = vehiclesWithDrivers.find(v => v.id === selectedVehicleId);
+      if (v) {
+        if (v.hourly_rate) { setClientRate(v.hourly_rate.toString()); setRateType('hourly'); }
+        else if (v.shift_rate) { setClientRate(v.shift_rate.toString()); setRateType('shift'); }
+      }
     }
-  }, [vehicleId]);
+  }, [selectedVehicleId, vehiclesWithDrivers, request, clientRate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!workType.trim()) {
-      setError('Введите тип работы');
-      return;
-    }
-    if (!objectAddress.trim()) {
-      setError('Введите адрес объекта');
-      return;
-    }
+    if (!workType.trim()) { setError('Введите тип работы'); return; }
+    if (!objectAddress.trim()) { setError('Введите адрес объекта'); return; }
+    if (!plannedStart || !plannedEnd) { setError('Укажите даты начала и окончания'); return; }
+    if (!selectedClientId) { setError('Выберите клиента'); return; }
 
-    // Marketplace-specific validation
+    // Marketplace validation
     if (assignmentMode === 'marketplace') {
-      if (!plannedStart) {
-        setError('Укажите дату начала работ для заявки в маркетплейсе');
-        return;
-      }
-      if (!plannedEnd) {
-        setError('Укажите дату окончания работ для заявки в маркетплейсе');
-        return;
-      }
       const start = new Date(plannedStart);
       const end = new Date(plannedEnd);
-      if (end <= start) {
-        setError('Дата окончания должна быть позже даты начала');
-        return;
-      }
-      if (Number(paymentTermsDays) < 1 || Number(paymentTermsDays) > 90) {
-        setError('Срок оплаты должен быть от 1 до 90 дней');
-        return;
-      }
-      if (!clientRate || Number(clientRate) <= 0) {
-        setError('Укажите ставку клиента для заявки в маркетплейсе');
-        return;
-      }
+      if (end <= start) { setError('Дата окончания должна быть позже даты начала'); return; }
+      if (!clientRate || Number(clientRate) <= 0) { setError('Укажите ставку для заявки в маркетплейсе'); return; }
     }
 
-    if (!plannedStart || !plannedEnd) {
-      setError('Укажите даты начала и окончания');
-      return;
-    }
-
-    if (!selectedClientId) {
-      setError('Выберите клиента');
+    // Own vehicle validation
+    if (assignmentMode === 'own' && !selectedVehicleId) {
+      setError('Выберите технику с водителем');
       return;
     }
 
@@ -337,24 +316,21 @@ export const RequestFormModal: React.FC<Props> = ({
         vehicle_category_id: selectedSubcategoryId || undefined,
       };
 
-      // 🆕 Добавляем vehicle_id для заявок с маркетплейса
-      if (vehicleId) {
-        payload.vehicle_id = vehicleId;
-      }
-
       if (shiftDuration) payload.shift_duration_hours = parseFloat(shiftDuration);
       if (clientRate) payload.client_rate = parseFloat(clientRate);
       if (estimatedAmount) payload.estimated_amount = parseFloat(estimatedAmount);
 
-      if (request) {
-        payload.status = status;
+      // Назначение техники и водителя
+      if (assignmentMode === 'own' && selectedVehicleId) {
+        payload.assigned_vehicle_id = selectedVehicleId;
+        const selectedV = vehiclesWithDrivers.find(v => v.id === selectedVehicleId);
+        if (selectedV?.driver_id) {
+          payload.driver_id = selectedV.driver_id;
+          payload.assigned_operator_id = selectedV.driver_id;
+        }
       }
 
-      // Передаём выбранного водителя
-      if (selectedDriverId && assignmentMode === 'own') {
-        payload.driver_id = selectedDriverId;
-        payload.assigned_operator_id = selectedDriverId;
-      }
+      if (request) payload.status = status;
 
       await onSave(payload);
     } catch (err: any) {
@@ -364,10 +340,10 @@ export const RequestFormModal: React.FC<Props> = ({
     }
   };
 
-  // Определяем текст для отображения текущего режима маркетплейса
+  // Текст для отображения режима маркетплейса
   const marketplaceModeLabel = marketplaceMode === 'owner_dispatcher'
-    ? { icon: '📋', title: 'Диспетчер', desc: 'Вы получаете 10% комиссии от смены. Счёт выставляется исполнителю.' }
-    : { icon: '🏪', title: 'Заказчик', desc: 'Вы оплачиваете 100% стоимости. Счёт выставляется вашей компании.' };
+    ? { icon: '📋', title: 'Диспетчер / Владелец техники', desc: 'Вы получаете 10% комиссии. Стандартный срок оплаты: 7 дней.', color: 'orange' }
+    : { icon: '🏪', title: 'Заказчик', desc: 'Предоплата 100%. Счёт выставляется вашей компании.', color: 'purple' };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -380,7 +356,6 @@ export const RequestFormModal: React.FC<Props> = ({
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
           </div>
 
-          {/* 🆕 Выбранная техника */}
           {vehicleId && vehicleName && (
             <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-xs text-blue-600 uppercase font-semibold mb-1">Выбранная техника</p>
@@ -389,86 +364,57 @@ export const RequestFormModal: React.FC<Props> = ({
           )}
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
-              {error}
-            </div>
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">{error}</div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Тип заявки + Приоритет */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Тип заявки *</label>
-                <select
-                  value={requestType}
-                  onChange={(e) => setRequestType(e.target.value as RequestType)}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  {REQUEST_TYPES.map(t => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
+                <select value={requestType} onChange={(e) => setRequestType(e.target.value as RequestType)}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                  {REQUEST_TYPES.map(t => (<option key={t.value} value={t.value}>{t.label}</option>))}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Приоритет *</label>
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value as Priority)}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  {PRIORITIES.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
+                <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                  {PRIORITIES.map(p => (<option key={p.value} value={p.value}>{p.label}</option>))}
                 </select>
               </div>
             </div>
 
-            {/* === КЛИЕНТ === */}
+            {/* Клиент */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Клиент *</label>
-              <select
-                value={selectedClientId ?? ''}
-                onChange={(e) => setSelectedClientId(Number(e.target.value) || null)}
-                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                disabled={loadingClients}
-              >
+              <select value={selectedClientId ?? ''} onChange={(e) => setSelectedClientId(Number(e.target.value) || null)}
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" disabled={loadingClients}>
                 <option value="">Выберите клиента</option>
-                {clients.map(cl => (
-                  <option key={cl.id} value={cl.id}>{cl.name}</option>
-                ))}
+                {clients.map(cl => (<option key={cl.id} value={cl.id}>{cl.name}</option>))}
               </select>
             </div>
 
-            {/* === КАТЕГОРИЯ И ПОДКАТЕГОРИЯ === */}
+            {/* Категория и подкатегория */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Категория техники</label>
-                <select
-                  value={selectedCategoryId ?? ''}
-                  onChange={(e) => {
-                    const catId = Number(e.target.value) || null;
-                    setSelectedCategoryId(catId);
-                    setSelectedSubcategoryId(null);
-                    setAttributeValues({});
-                  }}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                >
+                <select value={selectedCategoryId ?? ''} onChange={(e) => {
+                  setSelectedCategoryId(Number(e.target.value) || null);
+                  setSelectedSubcategoryId(null);
+                  setAttributeValues({});
+                }} className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
                   <option value="">Выберите категорию</option>
-                  {catalogTree.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
+                  {catalogTree.map(cat => (<option key={cat.id} value={cat.id}>{cat.name}</option>))}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Подкатегория</label>
-                <select
-                  value={selectedSubcategoryId ?? ''}
-                  onChange={(e) => {
-                    setSelectedSubcategoryId(Number(e.target.value) || null);
-                    setAttributeValues({});
-                  }}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                  disabled={!selectedCategoryId}
-                >
+                <select value={selectedSubcategoryId ?? ''} onChange={(e) => {
+                  setSelectedSubcategoryId(Number(e.target.value) || null);
+                  setAttributeValues({});
+                }} className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" disabled={!selectedCategoryId}>
                   <option value="">Выберите подкатегорию</option>
                   {(catalogTree.find(c => c.id === selectedCategoryId)?.subcategories || []).map(sub => (
                     <option key={sub.id} value={sub.id}>{sub.name}</option>
@@ -477,7 +423,7 @@ export const RequestFormModal: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* === АТРИБУТЫ ПОДКАТЕГОРИИ === */}
+            {/* Атрибуты подкатегории */}
             {subcategoryAttributes.length > 0 && (
               <div className="p-4 bg-gray-50 rounded-lg space-y-3">
                 <p className="text-xs font-semibold text-gray-500 uppercase">Характеристики техники</p>
@@ -490,38 +436,25 @@ export const RequestFormModal: React.FC<Props> = ({
                       </label>
                       {attr.data_type === 'select' ? (
                         <div className="flex gap-1">
-                          <select
-                            value={attributeValues[attr.slug] || ''}
+                          <select value={attributeValues[attr.slug] || ''}
                             onChange={(e) => setAttributeValues(prev => ({ ...prev, [attr.slug]: e.target.value }))}
-                            className="flex-1 p-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                          >
+                            className="flex-1 p-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
                             <option value="">Выберите</option>
-                            {attr.options.map(opt => (
-                              <option key={opt.id} value={opt.value}>{opt.value}</option>
-                            ))}
+                            {attr.options.map(opt => (<option key={opt.id} value={opt.value}>{opt.value}</option>))}
                           </select>
                           {attr.allow_custom_values && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCustomAttrModal({ attrId: attr.id, attrName: attr.name, slug: attr.slug });
-                                setCustomValue('');
-                                setCustomNumericValue('');
-                                setCustomError('');
-                              }}
-                              className="px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-bold transition-colors"
-                              title="Добавить новое значение"
-                            >+</button>
+                            <button type="button" onClick={() => {
+                              setCustomAttrModal({ attrId: attr.id, attrName: attr.name, slug: attr.slug });
+                              setCustomValue(''); setCustomNumericValue(''); setCustomError('');
+                            }} className="px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-bold transition-colors" title="Добавить новое значение">+</button>
                           )}
                         </div>
                       ) : (
-                        <input
-                          type={attr.data_type === 'number' ? 'number' : 'text'}
+                        <input type={attr.data_type === 'number' ? 'number' : 'text'}
                           value={attributeValues[attr.slug] || ''}
                           onChange={(e) => setAttributeValues(prev => ({ ...prev, [attr.slug]: e.target.value }))}
                           className="w-full p-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                          placeholder={attr.data_type === 'number' ? '0' : ''}
-                        />
+                          placeholder={attr.data_type === 'number' ? '0' : ''} />
                       )}
                     </div>
                   ))}
@@ -529,105 +462,127 @@ export const RequestFormModal: React.FC<Props> = ({
               </div>
             )}
 
-            {/* === НАЗНАЧЕНИЕ: СВОЙ ВОДИТЕЛЬ ИЛИ МАРКЕТПЛЕЙС === */}
+            {/* === НАЗНАЧЕНИЕ: СВОЯ ТЕХНИКА+ВОДИТЕЛЬ ИЛИ МАРКЕТПЛЕЙС === */}
             <div className="p-4 border border-gray-200 rounded-lg">
               <label className="block text-sm font-semibold text-gray-700 mb-3">Назначение заявки</label>
               <div className="flex gap-4 mb-3">
                 <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border transition-all ${
                   assignmentMode === 'own' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
                 }`}>
-                  <input
-                    type="radio"
-                    name="assignmentMode"
-                    value="own"
-                    checked={assignmentMode === 'own'}
-                    onChange={() => setAssignmentMode('own')}
-                    className="accent-blue-600"
-                  />
-                  <span className="text-sm font-medium">👷 Свой водитель</span>
+                  <input type="radio" name="assignmentMode" value="own"
+                    checked={assignmentMode === 'own'} onChange={() => setAssignmentMode('own')}
+                    className="accent-blue-600" />
+                  <span className="text-sm font-medium">🚜 Своя техника + водитель</span>
                 </label>
                 <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border transition-all ${
                   assignmentMode === 'marketplace' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'
                 }`}>
-                  <input
-                    type="radio"
-                    name="assignmentMode"
-                    value="marketplace"
-                    checked={assignmentMode === 'marketplace'}
-                    onChange={() => setAssignmentMode('marketplace')}
-                    className="accent-green-600"
-                  />
+                  <input type="radio" name="assignmentMode" value="marketplace"
+                    checked={assignmentMode === 'marketplace'} onChange={() => setAssignmentMode('marketplace')}
+                    className="accent-green-600" />
                   <span className="text-sm font-medium">🌐 Маркетплейс</span>
                 </label>
               </div>
 
               {assignmentMode === 'own' && (
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Выберите технику с водителем *
+                    {filteredVehicles.length < vehiclesWithDrivers.length && (
+                      <span className="text-xs text-gray-400 ml-2">
+                        (отфильтровано: {filteredVehicles.length} из {vehiclesWithDrivers.length})
+                      </span>
+                    )}
+                  </label>
                   <select
-                    value={selectedDriverId ?? ''}
-                    onChange={(e) => setSelectedDriverId(Number(e.target.value) || null)}
+                    value={selectedVehicleId ?? ''}
+                    onChange={(e) => setSelectedVehicleId(Number(e.target.value) || null)}
                     className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                    disabled={loadingDrivers}
+                    disabled={loadingVehicles}
                   >
-                    <option value="">Выберите водителя</option>
-                    {drivers.map(d => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
+                    <option value="">
+                      {loadingVehicles ? 'Загрузка техники...' : filteredVehicles.length === 0 ? 'Нет подходящей техники' : 'Выберите технику с водителем'}
+                    </option>
+                    {filteredVehicles.map(v => (
+                      <option key={v.id} value={v.id}>
+                        🚜 {v.name} {v.driver_name ? `— 👷 ${v.driver_name}` : '— ⚠️ Без водителя'}
+                      </option>
                     ))}
                   </select>
+                  {selectedVehicleId && (() => {
+                    const sv = vehiclesWithDrivers.find(v => v.id === selectedVehicleId);
+                    if (!sv) return null;
+                    return (
+                      <div className="mt-2 p-3 bg-blue-50 rounded border border-blue-200 text-sm">
+                        <div className="flex justify-between">
+                          <span className="font-medium text-gray-900">🚜 {sv.name}</span>
+                          <span className="text-gray-600">
+                            {sv.hourly_rate ? `${sv.hourly_rate} ₽/час` : sv.shift_rate ? `${sv.shift_rate} ₽/смена` : 'Ставка не указана'}
+                          </span>
+                        </div>
+                        {sv.driver_name ? (
+                          <div className="text-green-700 mt-1">👷 Водитель: {sv.driver_name}</div>
+                        ) : (
+                          <div className="text-orange-600 mt-1">⚠️ Водитель не назначен. Заявка будет создана без водителя.</div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
               {assignmentMode === 'marketplace' && (
                 <div className="space-y-3 bg-green-50 p-4 rounded border border-green-200">
-                  <p className="text-sm text-green-700 font-medium">
-                    📢 Заявка будет опубликована в маркетплейсе
-                  </p>
+                  <p className="text-sm text-green-700 font-medium">📢 Заявка будет опубликована в маркетплейсе</p>
 
                   {/* Автоматически определённый режим (read-only) */}
                   <div className={`p-3 rounded border ${
-                    marketplaceMode === 'owner_dispatcher'
-                      ? 'bg-orange-50 border-orange-200'
-                      : 'bg-purple-50 border-purple-200'
+                    marketplaceMode === 'owner_dispatcher' ? 'bg-orange-50 border-orange-200' : 'bg-purple-50 border-purple-200'
                   }`}>
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-lg">{marketplaceModeLabel.icon}</span>
                       <span className={`text-sm font-semibold ${
                         marketplaceMode === 'owner_dispatcher' ? 'text-orange-800' : 'text-purple-800'
-                      }`}>
-                        Режим: {marketplaceModeLabel.title}
-                      </span>
+                      }`}>Режим: {marketplaceModeLabel.title}</span>
                     </div>
                     <p className={`text-xs ${
                       marketplaceMode === 'owner_dispatcher' ? 'text-orange-600' : 'text-purple-600'
-                    }`}>
-                      {marketplaceModeLabel.desc}
-                    </p>
+                    }`}>{marketplaceModeLabel.desc}</p>
                   </div>
 
                   {/* Срок оплаты */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Срок оплаты (дней) *</label>
                     <div className="flex items-center gap-3">
-                      <input type="number" min={1} max={90}
+                      <input type="number" min={0} max={90}
                         value={paymentTermsDays}
                         onChange={(e) => {
-                          const v = Number(e.target.value) || 7;
+                          const v = Math.max(0, Math.min(90, Number(e.target.value) || 0));
                           setPaymentTermsDays(v);
                           setShowExtendedPaymentWarning(v > 7);
                         }}
-                        className="w-24 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                        disabled={marketplaceMode === 'client'}
+                        className={`w-24 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none ${
+                          marketplaceMode === 'client' ? 'bg-gray-100 cursor-not-allowed' : ''
+                        }`}
                       />
-                      <span className="text-sm text-gray-500">Стандарт: 7 дней</span>
+                      <span className="text-sm text-gray-500">
+                        {marketplaceMode === 'client' ? 'Предоплата 100%' : 'Стандарт: 7 дней'}
+                      </span>
                     </div>
-                    {showExtendedPaymentWarning && (
+                    {marketplaceMode === 'client' && (
+                      <p className="text-xs text-purple-600 mt-1">
+                        🔒 Для заказчиков доступна только предоплата 100%
+                      </p>
+                    )}
+                    {showExtendedPaymentWarning && marketplaceMode === 'owner_dispatcher' && (
                       <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded animate-pulse">
                         <div className="flex items-start gap-2">
                           <span className="text-red-600 text-lg">⚠️</span>
                           <div>
                             <p className="text-sm font-medium text-red-800">Увеличенный срок оплаты: {paymentTermsDays} дн.</p>
                             <p className="text-xs text-red-600 mt-1">
-                              Исполнители увидят предупреждение об изменённых условиях оплаты.
-                              Это может снизить количество откликов на заявку.
+                              Исполнители увидят предупреждение. Это может снизить количество откликов.
                             </p>
                           </div>
                         </div>
@@ -638,89 +593,57 @@ export const RequestFormModal: React.FC<Props> = ({
               )}
             </div>
 
+            {/* Тип работы */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Тип работы *</label>
-              <input
-                type="text"
-                value={workType}
-                onChange={(e) => setWorkType(e.target.value)}
+              <input type="text" value={workType} onChange={(e) => setWorkType(e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                placeholder="Например: Земляные работы"
-                required
-              />
+                placeholder="Например: Земляные работы" required />
             </div>
 
+            {/* Адрес */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Адрес объекта *</label>
-              <AddressAutocomplete
-                value={objectAddress}
-                onChange={setObjectAddress}
-                placeholder="Например: Москва, Красная площадь"
-              />
+              <AddressAutocomplete value={objectAddress} onChange={setObjectAddress}
+                placeholder="Например: Москва, Красная площадь" />
             </div>
 
+            {/* Даты */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Плановое начало *</label>
-                <input
-                  type="datetime-local"
-                  value={plannedStart}
-                  onChange={(e) => setPlannedStart(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                  required
-                />
+                <input type="datetime-local" value={plannedStart} onChange={(e) => setPlannedStart(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" required />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Плановое окончание *</label>
-                <input
-                  type="datetime-local"
-                  value={plannedEnd}
-                  onChange={(e) => setPlannedEnd(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                  required
-                />
+                <input type="datetime-local" value={plannedEnd} onChange={(e) => setPlannedEnd(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" required />
               </div>
             </div>
 
+            {/* Длительность, ставка, тип ставки */}
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Длительность (ч)</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={shiftDuration}
-                  onChange={(e) => setShiftDuration(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="8"
-                />
+                <input type="number" step="0.5" min="0" value={shiftDuration} onChange={(e) => setShiftDuration(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="8" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Ставка (₽)</label>
-                <input
-                  type="number"
-                  step="100"
-                  min="0"
-                  value={clientRate}
-                  onChange={(e) => setClientRate(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="5000"
-                />
+                <input type="number" step="100" min="0" value={clientRate} onChange={(e) => setClientRate(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="5000" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Тип ставки</label>
-                <select
-                  value={rateType}
-                  onChange={(e) => setRateType(e.target.value as RateType)}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  {RATE_TYPES.map(r => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
+                <select value={rateType} onChange={(e) => setRateType(e.target.value as RateType)}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                  {RATE_TYPES.map(r => (<option key={r.value} value={r.value}>{r.label}</option>))}
                 </select>
               </div>
             </div>
 
+            {/* Ожидаемая сумма */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Ожидаемая сумма (₽)
@@ -730,179 +653,107 @@ export const RequestFormModal: React.FC<Props> = ({
                   )}
                 </span>
               </label>
-              <input
-                type="number"
-                step="100"
-                min="0"
-                value={estimatedAmount}
-                onChange={(e) => setEstimatedAmount(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                placeholder="40000"
-              />
+              <input type="number" step="100" min="0" value={estimatedAmount} onChange={(e) => setEstimatedAmount(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" placeholder="40000" />
             </div>
 
+            {/* Источник + Статус */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Источник заявки</label>
-                <select
-                  value={sourceChannel}
-                  onChange={(e) => setSourceChannel(e.target.value as SourceChannel)}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  {SOURCE_CHANNELS.map(s => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
+                <select value={sourceChannel} onChange={(e) => setSourceChannel(e.target.value as SourceChannel)}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                  {SOURCE_CHANNELS.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}
                 </select>
               </div>
               {request && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Статус</label>
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value as RequestStatus)}
-                    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                  >
-                    {STATUSES.map(s => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
+                  <select value={status} onChange={(e) => setStatus(e.target.value as RequestStatus)}
+                    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                    {STATUSES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}
                   </select>
                 </div>
               )}
             </div>
 
+            {/* Комментарий */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Комментарий</label>
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                rows={2}
+              <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2}
                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                placeholder="Дополнительная информация"
-              />
+                placeholder="Дополнительная информация" />
             </div>
 
-            {/* === МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ ЗНАЧЕНИЯ === */}
+            {/* Модальное окно добавления значения атрибута */}
             {customAttrModal && (
               <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
                 <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">
-                    Новое значение: {customAttrModal.attrName}
-                  </h3>
-                  {customError && (
-                    <div className="mb-3 p-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded">
-                      {customError}
-                    </div>
-                  )}
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">Новое значение: {customAttrModal.attrName}</h3>
+                  {customError && (<div className="mb-3 p-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded">{customError}</div>)}
                   <div className="space-y-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Значение *</label>
-                      <input
-                        type="text"
-                        value={customValue}
-                        onChange={(e) => { setCustomValue(e.target.value); setCustomError(''); }}
+                      <input type="text" value={customValue} onChange={(e) => { setCustomValue(e.target.value); setCustomError(''); }}
                         className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder={`Например: ${customAttrModal.attrName}`}
-                        autoFocus
-                      />
+                        placeholder={`Например: ${customAttrModal.attrName}`} autoFocus />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Числовое значение <span className="text-gray-400">(опционально)</span>
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={customNumericValue}
-                        onChange={(e) => setCustomNumericValue(e.target.value)}
-                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="36"
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Числовое значение <span className="text-gray-400">(опционально)</span></label>
+                      <input type="number" step="any" value={customNumericValue} onChange={(e) => setCustomNumericValue(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="36" />
                     </div>
                   </div>
                   <div className="flex justify-end gap-3 mt-6">
-                    <button
-                      type="button"
-                      onClick={() => setCustomAttrModal(null)}
-                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
-                      disabled={addingCustom}
-                    >Отмена</button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!customValue.trim()) {
-                          setCustomError('Введите значение');
-                          return;
-                        }
-                        // Check duplicates locally
-                        const attr = subcategoryAttributes.find(a => a.id === customAttrModal.attrId);
-                        if (attr?.options.some(o => o.value.toLowerCase() === customValue.trim().toLowerCase())) {
-                          setCustomError(`Значение "${customValue.trim()}" уже существует`);
-                          return;
-                        }
-                        setAddingCustom(true);
-                        setCustomError('');
-                        try {
-                          const newOpt = await addCustomOption(customAttrModal.attrId, {
-                            value: customValue.trim(),
-                            numeric_value: customNumericValue ? parseFloat(customNumericValue) : null,
-                          });
-                          // Update attributes list
-                          setSubcategoryAttributes(prev => prev.map(a =>
-                            a.id === customAttrModal.attrId
-                              ? { ...a, options: [...a.options, newOpt] }
-                              : a
-                          ));
-                          // Auto-select new value
-                          setAttributeValues(prev => ({ ...prev, [customAttrModal.slug]: newOpt.value }));
-                          setCustomAttrModal(null);
-                        } catch (err: any) {
-                          const msg = err.response?.data?.detail || 'Ошибка при добавлении';
-                          setCustomError(msg);
-                        } finally {
-                          setAddingCustom(false);
-                        }
-                      }}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                      disabled={addingCustom}
-                    >{addingCustom ? 'Добавление...' : 'Добавить'}</button>
+                    <button type="button" onClick={() => setCustomAttrModal(null)}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50" disabled={addingCustom}>Отмена</button>
+                    <button type="button" onClick={async () => {
+                      if (!customValue.trim()) { setCustomError('Введите значение'); return; }
+                      const attr = subcategoryAttributes.find(a => a.id === customAttrModal.attrId);
+                      if (attr?.options.some(o => o.value.toLowerCase() === customValue.trim().toLowerCase())) {
+                        setCustomError(`Значение "${customValue.trim()}" уже существует`); return;
+                      }
+                      setAddingCustom(true); setCustomError('');
+                      try {
+                        const newOpt = await addCustomOption(customAttrModal.attrId, {
+                          value: customValue.trim(),
+                          numeric_value: customNumericValue ? parseFloat(customNumericValue) : null,
+                        });
+                        setSubcategoryAttributes(prev => prev.map(a =>
+                          a.id === customAttrModal.attrId ? { ...a, options: [...a.options, newOpt] } : a
+                        ));
+                        setAttributeValues(prev => ({ ...prev, [customAttrModal.slug]: newOpt.value }));
+                        setCustomAttrModal(null);
+                      } catch (err: any) {
+                        setCustomError(err.response?.data?.detail || 'Ошибка при добавлении');
+                      } finally { setAddingCustom(false); }
+                    }} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                      disabled={addingCustom}>{addingCustom ? 'Добавление...' : 'Добавить'}</button>
                   </div>
                 </div>
               </div>
             )}
 
+            {/* Кнопки */}
             <div className="flex justify-end space-x-3 pt-4 border-t">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
-                disabled={saving}
-              >
-                Отмена
-              </button>
-              <button
-                type="submit"
+              <button type="button" onClick={onClose}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50" disabled={saving}>Отмена</button>
+              <button type="submit"
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                disabled={saving || loadingClients}
-              >
+                disabled={saving || loadingClients || loadingVehicles}>
                 {saving ? 'Сохранение...' : (request ? 'Сохранить' : 'Создать заявку')}
               </button>
               {request && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setPublishing(true);
-                    try {
-                      const result = await requestsApi.publish(request.id);
-                      alert(result.message);
-                    } catch (err: any) {
-                      alert(err.response?.data?.detail || 'Ошибка публикации');
-                    } finally {
-                      setPublishing(false);
-                    }
-                  }}
-                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                  disabled={publishing || saving}
-                >
+                <button type="button" onClick={async () => {
+                  setPublishing(true);
+                  try {
+                    const result = await requestsApi.publish(request.id);
+                    alert(result.message);
+                  } catch (err: any) {
+                    alert(err.response?.data?.detail || 'Ошибка публикации');
+                  } finally { setPublishing(false); }
+                }} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                  disabled={publishing || saving}>
                   {publishing ? 'Публикация...' : '🌐 Опубликовать в маркетплейсе'}
                 </button>
               )}
