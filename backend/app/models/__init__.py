@@ -74,3 +74,6 @@ from app.models.rental import Rental  # noqa: F401
 
 # === Marketplace ===
 from app.models.marketplace import MarketplaceOffer  # noqa: F401
+
+# === UserCompany ===
+from app.models.user_company import UserCompany  # noqa: F401

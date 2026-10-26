@@ -73,7 +73,7 @@ from app.api.routes import requests as requests_route
 from app.api.routes import reviews as reviews_route
 from app.api.routes import salaries as salaries_route
 from app.api.routes import secure_test as secure_test_route
-from app.api.routes import shifts as shifts_route
+from app.api.routes.shifts import router as shifts_router
 from app.api.routes import signature as signature_route
 from app.api.routes import system as system_route
 from app.api.routes import tasks as tasks_route
@@ -211,7 +211,7 @@ app.include_router(categories_route.router, prefix="/api/v1/categories", tags=["
 app.include_router(vehicles_route.router, prefix="/api/v1", tags=["🚜 Vehicles (Спецтехника)"])
 app.include_router(drivers_route.router, prefix="/api/v1/drivers", tags=["👷 Drivers (Водители)"])
 app.include_router(requests_route.router, prefix="/api/v1/requests", tags=["dispatch"])
-app.include_router(shifts_route.router, prefix="/api/v1/shifts", tags=["dispatch"])
+app.include_router(shifts_router, prefix="/api/v1/shifts", tags=["dispatch"])
 app.include_router(contractors_route.router, prefix="/api/v1/contractors", tags=["contractors"])
 app.include_router(email_route.router, prefix="/api/v1/email", tags=["email"])
 app.include_router(rbac_route.router, prefix="/api/v1/rbac", tags=["rbac"])
