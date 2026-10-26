@@ -3439,7 +3439,7 @@ async def send_act_via_diadoc(
     root = Element("UniversalTransferDocument")
     root.set("Function", "СЧФДОП")
     root.set("Date", str(act.act_date))
-    root.set("Number", getattr(act, 'document_number', None) or f'ACT-{act.id}' or f"ACT-{act.id}")
+    root.set("Number", getattr(act, 'document_number', None) or f"ACT-{act.id}")
 
     seller = SubElement(root, "Seller")
     SubElement(seller, "Name").text = current_user.company.name if hasattr(current_user, 'company') and current_user.company else ""
@@ -3519,7 +3519,6 @@ async def refresh_all_diadoc_statuses(
     acts = db.execute(
         select(Act).where(
             Act.company_id == company_id,
-            Act.status.in_(['sent_to_edo', 'signed']),
             Act.status.in_(["sent_to_edo"]),
         )
     ).scalars().all()
@@ -3658,7 +3657,7 @@ def get_acts_registry(
         vehicle = db.get(Vehicle, getattr(a, 'vehicle_id', None)) if getattr(a, 'vehicle_id', None) else None
         items.append({
             "id": a.id,
-            "act_number": getattr(a, 'act_number', None),
+            "act_number": getattr(a, 'document_number', None),
             "act_date": str(a.act_date),
             "vehicle_name": vehicle.name if vehicle else "",
             "driver_name": getattr(a, 'driver_name', None) or "",
