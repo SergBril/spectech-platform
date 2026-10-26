@@ -781,7 +781,7 @@ def get_request_timeline(
     logs = db.execute(
         select(RequestStatusLog)
         .where(RequestStatusLog.request_id == request_id)
-        .order_by(RequestStatusLog.created_at.desc())
+        .order_by(RequestStatusLog.changed_at.desc())
     ).scalars().all()
 
     result = []

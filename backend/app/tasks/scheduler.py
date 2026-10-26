@@ -199,7 +199,7 @@ def start_scheduler() -> None:
         from app.core.db import SessionLocal
         from app.models.shift import ShiftTask
         from app.models.vehicle import Vehicle
-        from app.models.acts import Act
+        from app.models.finance import Act
         from app.services.diadoc_service import diadoc_service
         from xml.etree.ElementTree import Element, SubElement, tostring
 
@@ -274,7 +274,7 @@ def start_scheduler() -> None:
     async def _check_act_statuses():
         from app.core.db import SessionLocal
         from sqlalchemy import select
-        from app.models.acts import Act
+        from app.models.finance import Act
         from app.models.auth import UserCompany
         from app.services.diadoc_service import diadoc_service
         from app.services.fcm_service import fcm_service
@@ -337,7 +337,7 @@ def start_scheduler() -> None:
         from datetime import date as date_type
         from app.core.db import SessionLocal
         from sqlalchemy import select
-        from app.models.acts import Act
+        from app.models.finance import Act
         from app.models.auth import UserCompany
         from app.services.fcm_service import fcm_service
 
@@ -410,7 +410,7 @@ def start_scheduler() -> None:
         from app.core.db import SessionLocal
         from sqlalchemy import select
         from app.models.bank import BankTransaction
-        from app.models.acts import Act
+        from app.models.finance import Act
         from app.models.auth import UserCompany
 
         with SessionLocal() as db:
