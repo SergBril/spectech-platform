@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.api.deps import get_current_user, get_current_company_id, get_current_user_optional, get_current_company_id_optional
 from app.models.catalog import Category, Vehicle
+from app.models.contractor import Contractor
 from app.models.dispatch import Request as DispatchRequest, RequestAssignment
 
 from app.models.company import Company

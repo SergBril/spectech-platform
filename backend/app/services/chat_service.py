@@ -7,35 +7,56 @@ from datetime import datetime, UTC
 logger = logging.getLogger(__name__)
 
 
-async def send_chat_message(db: Session, sender_id: int, recipient_id: int, text: str, shift_task_id: int | None = None) -> dict:
-    """Отправить сообщение в чат."""
-    from app.models.chat import ChatMessage, ChatRoom
+def send_chat_message(
+    db: Session,
+    sender_id: int,
+    recipient_id: int,
+    text: str,
+    shift_task_id: int | None = None,
+    message_type: str = "text",
+    file_url: str | None = None,
+    attachments: dict | None = None,
+) -> dict:
+    """Отправить сообщение в чат (синхронная версия)."""
+    from app.models.chat import ChatMessage, RequestChat
 
-    # Find or create chat room
+    # Если shift_task_id не передан, используем 0 как fallback
+    if not shift_task_id:
+        shift_task_id = 0
+
+    # Ищем существующий чат по request_id
     room = db.execute(
-        select(ChatRoom).where(
-            ChatRoom.participant_ids.contains([sender_id, recipient_id])
-        )
+        select(RequestChat).where(RequestChat.request_id == shift_task_id)
     ).scalar_one_or_none()
 
+    # Если не нашли — создаём новый
     if not room:
-        room = ChatRoom(
-            participant_ids=[sender_id, recipient_id],
-            shift_task_id=shift_task_id,
+        room = RequestChat(
+            request_id=shift_task_id,
             created_at=datetime.now(UTC),
         )
         db.add(room)
         db.flush()
 
     msg = ChatMessage(
-        room_id=room.id,
+        chat_id=room.id,
         sender_id=sender_id,
-        text=text,
-        sent_at=datetime.now(UTC),
+        content=text,
+        message_type=message_type,  # ← Используем переданный тип
+        sender_type="user",
+        file_url=file_url,          # ← Поддержка URL файла
+        attachments=attachments,    # ← Поддержка вложений
+        created_at=datetime.now(UTC),
     )
     db.add(msg)
     db.commit()
     db.refresh(msg)
 
-    logger.info(f"Chat message {msg.id}: user {sender_id} → {recipient_id}")
-    return {"message_id": msg.id, "room_id": room.id}
+    logger.info(f"Chat message {msg.id}: user {sender_id} → {recipient_id} (type={message_type})")
+    return {
+        "message_id": msg.id,
+        "room_id": room.id,
+        "sent_at": msg.created_at.isoformat(),
+        "message_type": message_type,
+        "file_url": file_url,
+    }

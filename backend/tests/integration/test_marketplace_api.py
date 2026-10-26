@@ -181,9 +181,16 @@ class TestPublicMarketplace:
 
     @pytest.fixture
     def published_vehicle(
-        self, auth_client: TestClient, sample_vehicle: Vehicle
+        self, auth_client: TestClient, sample_vehicle: Vehicle, db_session: Session
     ) -> Vehicle:
         """Публикует технику для публичных тестов."""
+        # Убедиться, что компания активна (публичный API фильтрует по Company.is_active)
+        from app.models.company import Company
+        company = db_session.get(Company, sample_vehicle.company_id)
+        if company and not company.is_active:
+            company.is_active = True
+            db_session.commit()
+
         auth_client.post(
             "/api/v1/marketplace/listings",
             json={

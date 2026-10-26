@@ -126,20 +126,14 @@ async def update_shift_task(
         conflicts.append(f"Техника «{v.name if v else task.vehicle_id}» уже занята {target_date}")
 
     # Конфликт водителя: другая смена этого водителя в тот же день
-    check_driver = driver_id if driver_id is not None else task.driver_id
-    if check_driver:
-        driver_conflict = db.execute(
-            select(ShiftTask).where(
-                getattr(ShiftTask, 'driver_id', None) == check_driver,
-                ShiftTask.shift_date == target_date,
-                ShiftTask.id != task_id,
-                ShiftTask.status.notin_(["cancelled"]),
-            )
-        ).scalar_one_or_none()
-        if driver_conflict:
-            from app.models.driver import Driver
-            d = db.get(Driver, check_driver)
-            conflicts.append(f"Водитель «{d.full_name if d else check_driver}» уже назначен {target_date}")
+    driver_conflict = db.execute(
+        select(ShiftTask).where(
+            ShiftTask.operator_id == check_driver,
+            ShiftTask.shift_date == target_date,
+            ShiftTask.id != task_id,
+            ShiftTask.status.notin_(["cancelled"]),
+        )
+    ).scalar_one_or_none()
 
     if conflicts:
         raise HTTPException(status_code=409, detail={"conflicts": conflicts})
@@ -3532,7 +3526,10 @@ async def refresh_all_diadoc_statuses(
 
     updated = 0
     for act in acts:
-        result = await diadoc_service.get_document_status(act.edo_message_id, token)
+        edo_msg_id = getattr(act, 'edo_message_id', None)
+        if not edo_msg_id:
+            continue
+        result = await diadoc_service.get_document_status(edo_msg_id, token)
         new_status = result.get("status", "")
         if new_status in ("signed", "rejected") and act.status != new_status:
             act.status = new_status
