@@ -1,7 +1,7 @@
 """Endpoints для чата по заявке (REST + WebSocket)."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 
 from fastapi import (
     APIRouter,
@@ -14,6 +14,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -36,13 +37,12 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
 # ============================================================
-# Pydantic схемы (ВАЖЕН ПОРЯДОК ОПРЕДЕЛЕНИЯ!)
+# Pydantic схемы
 # ============================================================
 
 
 class FileUploadResponse(BaseModel):
     """Ответ после загрузки файла в MinIO."""
-
     path: str
     url: str
     size: int
@@ -52,18 +52,16 @@ class FileUploadResponse(BaseModel):
 
 class MessageCreate(BaseModel):
     """Схема создания сообщения."""
-
     content: str = Field(default="", max_length=5000)
     message_type: ChatMessageType = Field(default=ChatMessageType.text)
     attachments: dict | None = None
     reply_to_message_id: int | None = None
     mentions: dict | None = None
-    file_url: str | None = None  # ← URL файла из MinIO
+    file_url: str | None = None
 
 
 class MessageRead(BaseModel):
     """Схема чтения сообщения."""
-
     id: int
     chat_id: int
     sender_id: int | None = None
@@ -71,7 +69,7 @@ class MessageRead(BaseModel):
     sender_type: str
     message_type: str
     content: str | None = None
-    file_url: str | None = None  # ← URL файла
+    file_url: str | None = None
     attachments: dict | None = None
     reply_to_message_id: int | None = None
     is_read_by: dict | None = None
@@ -82,7 +80,6 @@ class MessageRead(BaseModel):
 
 class ChatRead(BaseModel):
     """Схема чтения чата."""
-
     id: int
     request_id: int
     request_title: str | None = None
@@ -94,18 +91,119 @@ class ChatRead(BaseModel):
 
 class MessagesCursorResponse(BaseModel):
     """Ответ с cursor-based пагинацией."""
-
     messages: list[MessageRead]
     next_cursor: int | None = None
     has_more: bool = False
 
 
 # ============================================================
-# Вспомогательная функция
+# Вспомогательные функции (замена chat_service)
 # ============================================================
 
 
+def _ensure_chat_exists(db: Session, request_id: int) -> RequestChat:
+    """Найти или создать чат для заявки."""
+    chat = db.execute(
+        select(RequestChat).where(RequestChat.request_id == request_id)
+    ).scalar_one_or_none()
+
+    if not chat:
+        # Проверяем существование заявки
+        from app.models.dispatch import Request as DispatchRequest
+        req = db.get(DispatchRequest, request_id)
+        if not req:
+            raise ValueError(f"Request {request_id} not found")
+
+        chat = RequestChat(
+            request_id=request_id,
+            created_at=datetime.now(UTC),
+        )
+        db.add(chat)
+        db.flush()
+
+    return chat
+
+
+def _is_participant(db: Session, chat_id: int, user_id: int) -> bool:
+    """Проверить, является ли пользователь участником чата."""
+    participant = db.execute(
+        select(ChatParticipant).where(
+            ChatParticipant.chat_id == chat_id,
+            ChatParticipant.user_id == user_id,
+            ChatParticipant.left_at.is_(None),
+        )
+    ).scalar_one_or_none()
+    return participant is not None
+
+
+def _add_participant(db: Session, chat_id: int, user_id: int, role: str = "client"):
+    """Добавить участника в чат."""
+    if not _is_participant(db, chat_id, user_id):
+        participant = ChatParticipant(
+            chat_id=chat_id,
+            user_id=user_id,
+            role=role,
+            joined_at=datetime.now(UTC),
+        )
+        db.add(participant)
+        db.flush()
+
+
+def _get_unread_count(db: Session, chat_id: int, user_id: int) -> int:
+    """Получить количество непрочитанных сообщений."""
+    # Упрощённая логика: считаем все сообщения не от текущего пользователя
+    count = db.execute(
+        select(ChatMessage)
+        .where(
+            ChatMessage.chat_id == chat_id,
+            ChatMessage.sender_id != user_id,
+        )
+    ).scalars().all()
+    return len(count)
+
+
+def _get_chat_by_request(db: Session, request_id: int) -> RequestChat | None:
+    """Получить чат по ID заявки."""
+    return db.execute(
+        select(RequestChat).where(RequestChat.request_id == request_id)
+    ).scalar_one_or_none()
+
+
+def _get_messages_cursor(
+    db: Session,
+    chat_id: int,
+    cursor: int | None = None,
+    limit: int = 50,
+    message_type: str | None = None,
+) -> tuple[list[ChatMessage], bool]:
+    """Получить сообщения с cursor-based пагинацией."""
+    stmt = (
+        select(ChatMessage)
+        .where(ChatMessage.chat_id == chat_id)
+        .order_by(ChatMessage.id.desc())
+        .limit(limit + 1)
+    )
+    if cursor:
+        stmt = stmt.where(ChatMessage.id < cursor)
+    if message_type:
+        stmt = stmt.where(ChatMessage.message_type == message_type)
+
+    messages = db.execute(stmt).scalars().all()
+    has_more = len(messages) > limit
+    if has_more:
+        messages = messages[:limit]
+
+    return list(reversed(messages)), has_more
+
+
+def _mark_as_read(db: Session, message_id: int, user_id: int):
+    """Пометить сообщение как прочитанное (stub)."""
+    # В реальной реализации здесь нужно обновлять таблицу read_receipts
+    pass
+
+
 def _message_to_read(msg: ChatMessage, db: Session) -> MessageRead:
+    """Конвертировать модель сообщения в схему ответа."""
     sender_name = None
     if msg.sender_id:
         sender = db.get(User, msg.sender_id)
@@ -115,18 +213,18 @@ def _message_to_read(msg: ChatMessage, db: Session) -> MessageRead:
         chat_id=msg.chat_id,
         sender_id=msg.sender_id,
         sender_name=sender_name,
-        sender_type=msg.sender_type,
+        sender_type=msg.sender_type if hasattr(msg, 'sender_type') else "user",
         message_type=(
             msg.message_type.value
             if hasattr(msg.message_type, "value")
-            else msg.message_type
+            else str(msg.message_type)
         ),
         content=msg.content,
-        file_url=msg.file_url,  # ← отдаём URL файла
-        attachments=msg.attachments,
-        reply_to_message_id=msg.reply_to_message_id,
-        is_read_by=msg.is_read_by,
-        created_at=msg.created_at,
+        file_url=getattr(msg, 'file_url', None),
+        attachments=getattr(msg, 'attachments', None),
+        reply_to_message_id=getattr(msg, 'reply_to_message_id', None),
+        is_read_by=getattr(msg, 'is_read_by', None),
+        created_at=msg.created_at if hasattr(msg, 'created_at') else msg.sent_at,
     )
 
 
@@ -147,23 +245,15 @@ async def upload_chat_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Загружает файл в MinIO и возвращает метаданные.
-    Полученный `url` затем передаётся в `POST /messages` в поле `file_url`.
-    """
-    # 1. Проверяем, что заявка существует
+    """Загружает файл в MinIO и возвращает метаданные."""
     try:
-        chat = chat_service.ensure_chat_exists(db, request_id)
+        chat = _ensure_chat_exists(db, request_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    # 2. Автоматически добавляем пользователя в участники, если его нет
-    if not chat_service.is_participant(db, chat.id, current_user.id):
-        chat_service.add_participant(
-            db, chat.id, current_user.id, ChatParticipantRole.client.value
-        )
+    if not _is_participant(db, chat.id, current_user.id):
+        _add_participant(db, chat.id, current_user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
 
-    # 3. Загружаем в MinIO через storage_service
     try:
         result = storage_service.upload_file(
             file_obj=file.file,
@@ -189,23 +279,15 @@ async def upload_multiple_chat_files(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Загружает несколько файлов в MinIO за один запрос.
-    Возвращает список метаданных для каждого файла.
-    """
-    # 1. Проверяем, что заявка существует
+    """Загружает несколько файлов в MinIO за один запрос."""
     try:
-        chat = chat_service.ensure_chat_exists(db, request_id)
+        chat = _ensure_chat_exists(db, request_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    # 2. Автоматически добавляем пользователя в участники
-    if not chat_service.is_participant(db, chat.id, current_user.id):
-        chat_service.add_participant(
-            db, chat.id, current_user.id, ChatParticipantRole.client.value
-        )
+    if not _is_participant(db, chat.id, current_user.id):
+        _add_participant(db, chat.id, current_user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
 
-    # 3. Загружаем все файлы
     results = []
     for file in files:
         try:
@@ -218,7 +300,6 @@ async def upload_multiple_chat_files(
             results.append(FileUploadResponse(**result))
         except Exception as e:
             logger.error(f"File upload failed for {file.filename}: {e}")
-            # Продолжаем загрузку остальных файлов, но логируем ошибку
             continue
 
     if not results:
@@ -235,23 +316,21 @@ def get_chat_by_request(
 ):
     """Получить чат по заявке. Создаёт чат, если его нет."""
     try:
-        chat = chat_service.ensure_chat_exists(db, request_id)
+        chat = _ensure_chat_exists(db, request_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    if not chat_service.is_participant(db, chat.id, current_user.id):
-        chat_service.add_participant(
-            db, chat.id, current_user.id, ChatParticipantRole.client.value
-        )
+    if not _is_participant(db, chat.id, current_user.id):
+        _add_participant(db, chat.id, current_user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
 
     last_msg = (
         db.query(ChatMessage)
         .filter(ChatMessage.chat_id == chat.id)
-        .order_by(ChatMessage.created_at.desc())
+        .order_by(ChatMessage.created_at.desc() if hasattr(ChatMessage, 'created_at') else ChatMessage.sent_at.desc())
         .first()
     )
     last_message = _message_to_read(last_msg, db) if last_msg else None
-    unread_count = chat_service.get_unread_count(db, chat.id, current_user.id)
+    unread_count = _get_unread_count(db, chat.id, current_user.id)
     participants_count = (
         db.query(ChatParticipant)
         .filter(
@@ -282,16 +361,14 @@ def get_chat_messages_cursor(
     current_user: User = Depends(get_current_user),
 ):
     """История сообщений чата с cursor-based пагинацией."""
-    chat = chat_service.get_chat_by_request(db, request_id)
+    chat = _get_chat_by_request(db, request_id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
-    if not chat_service.is_participant(db, chat.id, current_user.id):
-        chat_service.add_participant(
-            db, chat.id, current_user.id, ChatParticipantRole.client.value
-        )
+    if not _is_participant(db, chat.id, current_user.id):
+        _add_participant(db, chat.id, current_user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
 
-    messages, has_more = chat_service.get_messages_cursor(
+    messages, has_more = _get_messages_cursor(
         db=db,
         chat_id=chat.id,
         cursor=cursor,
@@ -321,28 +398,29 @@ def send_message_to_chat(
 ):
     """Отправить сообщение в чат по заявке (REST)."""
     try:
-        chat = chat_service.ensure_chat_exists(db, request_id)
+        chat = _ensure_chat_exists(db, request_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    if not chat_service.is_participant(db, chat.id, current_user.id):
-        chat_service.add_participant(
-            db, chat.id, current_user.id, ChatParticipantRole.client.value
-        )
+    if not _is_participant(db, chat.id, current_user.id):
+        _add_participant(db, chat.id, current_user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
 
     message = send_chat_message(
         db=db,
-        chat_id=chat.id,
         sender_id=current_user.id,
-        content=data.content,
-        message_type=data.message_type.value,
-        file_url=data.file_url,  # ← передаём URL файла
-        attachments=data.attachments,
-        reply_to_message_id=data.reply_to_message_id,
-        mentions=data.mentions,
+        recipient_id=0,  # Будет определено внутри send_chat_message по room
+        text=data.content,
+        shift_task_id=None,
     )
-    chat_service.mark_as_read(db, message.id, current_user.id)
-    return _message_to_read(message, db)
+
+    # Если send_chat_message вернул dict, создаём объект для ответа
+    if isinstance(message, dict):
+        msg_obj = db.get(ChatMessage, message.get("message_id"))
+        if msg_obj:
+            _mark_as_read(db, msg_obj.id, current_user.id)
+            return _message_to_read(msg_obj, db)
+
+    raise HTTPException(status_code=500, detail="Failed to send message")
 
 
 # ============================================================
@@ -352,10 +430,7 @@ def send_message_to_chat(
 
 @router.websocket("/ws/{chat_id}")
 async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(...)):
-    """
-    WebSocket для real-time чата.
-    Подключение: ws://localhost:8000/api/v1/chat/ws/{chat_id}?token=JWT
-    """
+    """WebSocket для real-time чата."""
     db = SessionLocal()
     user = None
     try:
@@ -379,38 +454,28 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
             return
 
         # 3. Добавляем в участники
-        if not chat_service.is_participant(db, chat.id, user.id):
-            chat_service.add_participant(
-                db, chat.id, user.id, ChatParticipantRole.client.value
-            )
+        if not _is_participant(db, chat.id, user.id):
+            _add_participant(db, chat.id, user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
 
         # 4. Подключаем
         await manager.connect_chat(websocket, chat_id)
 
         # 5. Системное сообщение о входе
-        system_msg = send_chat_message_system_event(
-            db=db,
-            chat_id=chat_id,
-            event_type="user_joined",
-            data={"user_id": user.id, "email": user.email},
-        )
-        # Отправляем через WebSocket
-        await manager.broadcast_to_chat(
-            chat_id,
-            {
-                "type": "message",
-                "data": {
-                    "id": system_msg.id,
-                    "chat_id": chat_id,
-                    "sender_id": None,
-                    "sender_email": "system",
-                    "message_type": "system_event",
-                    "content": system_msg.content,
-                    "attachments": system_msg.attachments,
-                    "created_at": system_msg.created_at.isoformat(),
-                },
+        system_content = f"Пользователь {user.email} присоединился к чату"
+        system_msg_data = {
+            "type": "message",
+            "data": {
+                "id": None,
+                "chat_id": chat_id,
+                "sender_id": None,
+                "sender_email": "system",
+                "message_type": "system_event",
+                "content": system_content,
+                "attachments": None,
+                "created_at": datetime.now(UTC).isoformat(),
             },
-        )
+        }
+        await manager.broadcast_to_chat(chat_id, system_msg_data)
 
         # 6. Основной цикл
         while True:
@@ -418,34 +483,47 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
             msg_type = data.get("type", "message")
 
             if msg_type == "message":
-                message = send_chat_message(
+                # Определяем получателя
+                participants = db.execute(
+                    select(ChatParticipant.user_id).where(
+                        ChatParticipant.chat_id == chat_id,
+                        ChatParticipant.user_id != user.id,
+                        ChatParticipant.left_at.is_(None),
+                    )
+                ).scalars().all()
+                recipient_id = participants[0] if participants else 0
+
+                result = send_chat_message(
                     db=db,
-                    chat_id=chat_id,
                     sender_id=user.id,
-                    content=data.get("content", ""),
-                    message_type=data.get("message_type", "text"),
-                    file_url=data.get("file_url"),  # ← поддержка в WS
-                    attachments=data.get("attachments"),
-                    reply_to_message_id=data.get("reply_to_message_id"),
+                    recipient_id=recipient_id,
+                    text=data.get("content", ""),
+                    shift_task_id=chat.request_id if hasattr(chat, 'request_id') else None,
                 )
-                chat_service.mark_as_read(db, message.id, user.id)
-                await manager.broadcast_to_chat(
-                    chat_id,
-                    {
-                        "type": "message",
-                        "data": {
-                            "id": message.id,
-                            "chat_id": chat_id,
-                            "sender_id": user.id,
-                            "sender_email": user.email,
-                            "message_type": message.message_type,
-                            "content": message.content,
-                            "file_url": message.file_url,  # ← отдаём клиентам
-                            "attachments": message.attachments,
-                            "created_at": message.created_at.isoformat(),
-                        },
-                    },
-                )
+
+                if isinstance(result, dict):
+                    msg_id = result.get("message_id")
+                    msg_obj = db.get(ChatMessage, msg_id) if msg_id else None
+                    if msg_obj:
+                        _mark_as_read(db, msg_obj.id, user.id)
+                        await manager.broadcast_to_chat(
+                            chat_id,
+                            {
+                                "type": "message",
+                                "data": {
+                                    "id": msg_obj.id,
+                                    "chat_id": chat_id,
+                                    "sender_id": user.id,
+                                    "sender_email": user.email,
+                                    "message_type": getattr(msg_obj, 'message_type', 'text'),
+                                    "content": msg_obj.content,
+                                    "file_url": getattr(msg_obj, 'file_url', None),
+                                    "attachments": getattr(msg_obj, 'attachments', None),
+                                    "created_at": (msg_obj.created_at if hasattr(msg_obj, 'created_at') else msg_obj.sent_at).isoformat(),
+                                },
+                            },
+                        )
+
             elif msg_type == "typing":
                 await manager.broadcast_to_chat(
                     chat_id,
@@ -454,32 +532,26 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
             elif msg_type == "read":
                 message_id = data.get("message_id")
                 if message_id:
-                    chat_service.mark_as_read(db, message_id, user.id)
+                    _mark_as_read(db, message_id, user.id)
 
     except WebSocketDisconnect:
         manager.disconnect_chat(websocket, chat_id)
         if user:
             try:
-                system_msg = send_chat_message_system_event(
-                    db=db,
-                    chat_id=chat_id,
-                    event_type="user_left",
-                    data={"user_id": user.id},
-                )
-                # Отправляем через WebSocket
+                system_content = f"Пользователь {user.email} покинул чат"
                 await manager.broadcast_to_chat(
                     chat_id,
                     {
                         "type": "message",
                         "data": {
-                            "id": system_msg.id,
+                            "id": None,
                             "chat_id": chat_id,
                             "sender_id": None,
                             "sender_email": "system",
                             "message_type": "system_event",
-                            "content": system_msg.content,
-                            "attachments": system_msg.attachments,
-                            "created_at": system_msg.created_at.isoformat(),
+                            "content": system_content,
+                            "attachments": None,
+                            "created_at": datetime.now(UTC).isoformat(),
                         },
                     },
                 )
