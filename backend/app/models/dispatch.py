@@ -56,6 +56,7 @@ class Request(Base):
     )
     work_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     object_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    region: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     planned_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

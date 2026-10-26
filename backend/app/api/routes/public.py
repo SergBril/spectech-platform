@@ -713,6 +713,20 @@ def list_marketplace_requests(
     if company_id:
         stmt = stmt.where(DispatchRequest.company_id != company_id)
 
+    # Региональная фильтрация: владелец техники видит только заявки своего региона
+    vehicle_regions = []
+    if company_id:
+        from app.models.catalog import Vehicle
+        vehicle_regions = db.execute(
+            select(Vehicle.region).where(
+                Vehicle.company_id == company_id,
+                Vehicle.region.isnot(None),
+            ).distinct()
+        ).scalars().all()
+
+        if vehicle_regions:
+            stmt = stmt.where(DispatchRequest.region.in_(vehicle_regions))
+
     # Count total for pagination
     count_stmt = select(func.count()).select_from(DispatchRequest).where(
         DispatchRequest.source_channel == "marketplace",
@@ -723,6 +737,8 @@ def list_marketplace_requests(
         count_stmt = count_stmt.where(DispatchRequest.vehicle_category_id == category_id)
     if company_id:
         count_stmt = count_stmt.where(DispatchRequest.company_id != company_id)
+    if company_id and vehicle_regions:
+        count_stmt = count_stmt.where(DispatchRequest.region.in_(vehicle_regions))
     total = db.execute(count_stmt).scalar() or 0
 
     stmt = stmt.order_by(DispatchRequest.created_at.desc()).offset(offset).limit(limit)
