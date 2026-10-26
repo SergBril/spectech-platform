@@ -3638,7 +3638,7 @@ def get_acts_registry(
         search_pattern = f"%{search}%"
         stmt = stmt.outerjoin(Vehicle, Act.vehicle_id == Vehicle.id).where(
             or_(
-                Act.act_number.ilike(search_pattern),
+                getattr(Act, 'document_number', Act.id).ilike(search_pattern),
                 Vehicle.name.ilike(search_pattern),
             )
         )
@@ -4349,7 +4349,7 @@ def list_unpaid_acts(
         if outstanding > 0:
             vehicle = db.get(Vehicle, a.vehicle_id) if a.vehicle_id else None
             result.append({
-                "id": a.id, "act_number": getattr(a, 'act_number', None), "act_date": str(a.act_date),
+                "id": a.id, "act_number": getattr(a, 'document_number', None), "act_date": str(a.act_date),
                 "vehicle_name": vehicle.name if vehicle else "",
                 "total_amount": a.total_amount, "paid_amount": a.paid_amount or 0,
                 "outstanding": round(outstanding, 2),
