@@ -44,6 +44,10 @@ class ContractorUpdate(BaseModel):
     kpp: str | None = Field(None, max_length=20)
     ogrn: str | None = Field(None, max_length=20)
     legal_address: str | None = None
+    bank_account: str | None = None
+    bik: str | None = None
+    bank_name: str | None = None
+    correspondent_account: str | None = None
     actual_address: str | None = None
     bank_details: BankDetails | None = None
     contact_name: str | None = Field(None, max_length=255)
@@ -52,6 +56,11 @@ class ContractorUpdate(BaseModel):
     tax_system: str | None = Field(None, max_length=20)
     is_active: bool | None = None
 
+
+    bank_account: str | None = None
+    bik: str | None = None
+    bank_name: str | None = None
+    correspondent_account: str | None = None
 
 class ContractorRead(BaseModel):
     """Схема чтения контрагента."""
