@@ -94,7 +94,7 @@ def list_maintenance_orders(
     query = (
         select(MaintenanceOrder)
         .options(joinedload(MaintenanceOrder.vehicle))
-        .where(MaintenanceOrder.company_id == company_id)
+        .where(MaintenanceOrder.company_id.in_(company_ids))
     )
 
     if status_filter:
