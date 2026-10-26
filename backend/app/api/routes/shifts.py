@@ -3666,7 +3666,7 @@ def get_acts_registry(
             "total_amount": a.total_amount,
             "vat_amount": a.vat_amount,
             "status": a.status,
-            "edo_message_id": a.edo_message_id,
+            "edo_message_id": getattr(a, 'edo_message_id', None),
         })
 
     return {
@@ -4269,9 +4269,9 @@ def list_bank_transactions(
     stmt = select(BankTransaction).where(BankTransaction.company_id == company_id)
 
     if date_from:
-        stmt = stmt.where(BankTransaction.doc_date >= date_from)
+        stmt = stmt.where(BankTransaction.document_date >= date_from)
     if date_to:
-        stmt = stmt.where(BankTransaction.doc_date <= date_to)
+        stmt = stmt.where(BankTransaction.document_date <= date_to)
     if matched == "matched":
         stmt = stmt.where(BankTransaction.matched_act_id.isnot(None))
     elif matched == "unmatched":
@@ -4280,7 +4280,7 @@ def list_bank_transactions(
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = db.execute(count_stmt).scalar() or 0
 
-    stmt = stmt.order_by(BankTransaction.doc_date.desc(), BankTransaction.id.desc())
+    stmt = stmt.order_by(BankTransaction.document_date.desc(), BankTransaction.id.desc())
     stmt = stmt.offset((page - 1) * per_page).limit(per_page)
     txns = db.execute(stmt).scalars().all()
 
@@ -4527,14 +4527,14 @@ def export_transactions_excel(
 
     stmt = select(BankTransaction).where(BankTransaction.company_id == company_id)
     if date_from:
-        stmt = stmt.where(BankTransaction.doc_date >= date_from)
+        stmt = stmt.where(BankTransaction.document_date >= date_from)
     if date_to:
-        stmt = stmt.where(BankTransaction.doc_date <= date_to)
+        stmt = stmt.where(BankTransaction.document_date <= date_to)
     if matched == "matched":
         stmt = stmt.where(BankTransaction.matched_act_id.isnot(None))
     elif matched == "unmatched":
         stmt = stmt.where(BankTransaction.matched_act_id.is_(None))
-    stmt = stmt.order_by(BankTransaction.doc_date.desc())
+    stmt = stmt.order_by(BankTransaction.document_date.desc())
 
     txns = db.execute(stmt).scalars().all()
 
@@ -4627,7 +4627,7 @@ def get_platform_overview(
     txn_month = db.execute(
         select(func.count(), func.coalesce(func.sum(BankTransaction.amount), 0))
         .where(BankTransaction.company_id == company_id)
-        .where(BankTransaction.doc_date >= str(month_start))
+        .where(BankTransaction.document_date >= str(month_start))
     ).one()
     txn_count = txn_month[0] or 0
     txn_amount = float(txn_month[1] or 0)
