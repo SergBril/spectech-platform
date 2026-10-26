@@ -12,6 +12,7 @@ import apiClient from '../api/client';
 import { requestsApi } from '../api/requests';
 import AddressAutocomplete from './AddressAutocomplete';
 import { getCatalogTree, getSubcategoryAttributes, addCustomOption, type CategoryTree, type AttributeDefinition } from '../api/catalog';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Contractor {
   id: number;
@@ -74,6 +75,21 @@ const toLocalDatetime = (iso: string | null | undefined) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+/**
+ * Определяет режим маркетплейса автоматически на основе роли пользователя.
+ * - client → 'client' (заказчик, платит 100%)
+ * - owner/dispatcher → 'owner_dispatcher' (диспетчер, получает 10% комиссии)
+ * - новый/неизвестный → 'client' по умолчанию
+ */
+const getAutoMarketplaceMode = (user: any): 'client' | 'owner_dispatcher' => {
+  const role = user?.role || user?.user_type || '';
+  if (role === 'owner' || role === 'dispatcher' || role === 'owner_dispatcher') {
+    return 'owner_dispatcher';
+  }
+  // По умолчанию — клиент (включая новых пользователей)
+  return 'client';
+};
+
 export const RequestFormModal: React.FC<Props> = ({
   request,
   onClose,
@@ -81,6 +97,8 @@ export const RequestFormModal: React.FC<Props> = ({
   vehicleId,
   vehicleName,
 }) => {
+  const { user } = useAuth();
+
   const [workType, setWorkType] = useState(request?.work_type || '');
   const [objectAddress, setObjectAddress] = useState(request?.object_address || '');
   const [requestType, setRequestType] = useState<RequestType>(request?.request_type || 'one_time');
@@ -113,6 +131,7 @@ export const RequestFormModal: React.FC<Props> = ({
 
   // Назначение: свой водитель или маркетплейс
   const [assignmentMode, setAssignmentMode] = useState<'own' | 'marketplace'>('own');
+  // Режим маркетплейса определяется автоматически, но храним в state для передачи в payload
   const [marketplaceMode, setMarketplaceMode] = useState<'client' | 'owner_dispatcher'>('client');
   const [paymentTermsDays, setPaymentTermsDays] = useState<number>(7);
   const [showExtendedPaymentWarning, setShowExtendedPaymentWarning] = useState(false);
@@ -126,6 +145,12 @@ export const RequestFormModal: React.FC<Props> = ({
   const [customNumericValue, setCustomNumericValue] = useState('');
   const [addingCustom, setAddingCustom] = useState(false);
   const [customError, setCustomError] = useState('');
+
+  // Автоматически определяем режим маркетплейса при монтировании
+  useEffect(() => {
+    const autoMode = getAutoMarketplaceMode(user);
+    setMarketplaceMode(autoMode);
+  }, [user]);
 
   // Загрузка клиентов, каталога и водителей
   useEffect(() => {
@@ -151,13 +176,18 @@ export const RequestFormModal: React.FC<Props> = ({
       try {
         setLoadingDrivers(true);
         const res = await apiClient.get('/drivers', { params: { limit: 500 } });
-        const list = Array.isArray(res.data) ? res.data : [];
-        setDrivers(list.map((d: any) => ({ id: d.id, name: d.name || d.full_name || `Водитель #${d.id}` })));
+        const raw = res.data;
+        const list = Array.isArray(raw) ? raw : (raw?.items || raw?.data || []);
+        setDrivers(list.map((d: any) => ({
+          id: d.id ?? d.driver_id,
+          name: d.name || d.full_name || d.driver_name || `Водитель #${d.id || d.driver_id}`
+        })));
       } catch (e) { console.warn('Failed to load drivers:', e); }
-     // При редактировании: если у заявки есть assigned_operator_id, выбираем его
-     if (request?.assigned_operator_id) {
-       setSelectedDriverId(request.assigned_operator_id);
-     }
+
+      // При редактировании: если у заявки есть assigned_operator_id, выбираем его
+      if (request?.assigned_operator_id) {
+        setSelectedDriverId(request.assigned_operator_id);
+      }
       setLoadingDrivers(false);
     };
     loadData();
@@ -192,8 +222,6 @@ export const RequestFormModal: React.FC<Props> = ({
       setSubcategoryAttributes([]);
     }
   }, [selectedSubcategoryId]);
-
-
 
   // 🆕 АВТО-РАСЧЁТ суммы: часы × ставка
   useEffect(() => {
@@ -281,10 +309,6 @@ export const RequestFormModal: React.FC<Props> = ({
       }
     }
 
-    if (false) { // placeholder to keep original structure
-      setError('Введите адрес объекта');
-      return;
-    }
     if (!plannedStart || !plannedEnd) {
       setError('Укажите даты начала и окончания');
       return;
@@ -323,16 +347,13 @@ export const RequestFormModal: React.FC<Props> = ({
       if (estimatedAmount) payload.estimated_amount = parseFloat(estimatedAmount);
 
       if (request) {
-       payload.status = status;
+        payload.status = status;
       }
+
       // Передаём выбранного водителя
       if (selectedDriverId && assignmentMode === 'own') {
         payload.driver_id = selectedDriverId;
         payload.assigned_operator_id = selectedDriverId;
-      }
-
-      if (selectedDriverId) {
-          payload.driver_id = selectedDriverId;
       }
 
       await onSave(payload);
@@ -342,6 +363,11 @@ export const RequestFormModal: React.FC<Props> = ({
       setError(msg);
     }
   };
+
+  // Определяем текст для отображения текущего режима маркетплейса
+  const marketplaceModeLabel = marketplaceMode === 'owner_dispatcher'
+    ? { icon: '📋', title: 'Диспетчер', desc: 'Вы получаете 10% комиссии от смены. Счёт выставляется исполнителю.' }
+    : { icon: '🏪', title: 'Заказчик', desc: 'Вы оплачиваете 100% стоимости. Счёт выставляется вашей компании.' };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -361,8 +387,6 @@ export const RequestFormModal: React.FC<Props> = ({
               <p className="text-lg font-bold text-gray-900">🚜 {vehicleName}</p>
             </div>
           )}
-
-
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
@@ -505,122 +529,114 @@ export const RequestFormModal: React.FC<Props> = ({
               </div>
             )}
 
-         {/* === НАЗНАЧЕНИЕ: СВОЙ ВОДИТЕЛЬ ИЛИ МАРКЕТПЛЕЙС === */}
-         <div className="p-4 border border-gray-200 rounded-lg">
-           <label className="block text-sm font-semibold text-gray-700 mb-3">Назначение заявки</label>
-           <div className="flex gap-4 mb-3">
-             <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border transition-all ${
-               assignmentMode === 'own' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
-             }`}>
-               <input
-                 type="radio"
-                 name="assignmentMode"
-                 value="own"
-                 checked={assignmentMode === 'own'}
-                 onChange={() => setAssignmentMode('own')}
-                 className="accent-blue-600"
-               />
-               <span className="text-sm font-medium">👷 Свой водитель</span>
-             </label>
-             {!request && (
-               <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border transition-all ${
-                 assignmentMode === 'marketplace' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'
-               }`}>
-                 <input
-                   type="radio"
-                   name="assignmentMode"
-                   value="marketplace"
-                   checked={assignmentMode === 'marketplace'}
-                   onChange={() => setAssignmentMode('marketplace')}
-                   className="accent-green-600"
-                 />
-                 <span className="text-sm font-medium">🌐 Маркетплейс</span>
-               </label>
-             )}
-           </div>
-           {assignmentMode === 'own' && (
-             <div>
-               <select
-                 value={selectedDriverId ?? ''}
-                 onChange={(e) => setSelectedDriverId(Number(e.target.value) || null)}
-                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                 disabled={loadingDrivers}
-               >
-                 <option value="">Выберите водителя</option>
-                 {drivers.map(d => (
-                   <option key={d.id} value={d.id}>{d.name}</option>
-                 ))}
-               </select>
-             </div>
-           )}
-           {assignmentMode === 'marketplace' && !request && (
-             <div className="space-y-3 bg-green-50 p-4 rounded border border-green-200">
-               <p className="text-sm text-green-700 font-medium">
-                 📢 Заявка будет опубликована в маркетплейсе
-               </p>
-               {/* Режим маркетплейса */}
-               <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">Режим размещения *</label>
-                 <div className="flex gap-3">
-                   <label className={`flex-1 flex items-center gap-2 p-3 rounded border cursor-pointer transition-colors ${
-                     marketplaceMode === 'client' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:bg-gray-50'
-                   }`}>
-                     <input type="radio" name="mpMode" value="client"
-                       checked={marketplaceMode === 'client'}
-                       onChange={() => setMarketplaceMode('client')}
-                       className="accent-purple-600" />
-                     <div>
-                       <div className="text-sm font-medium">🏪 Я заказчик</div>
-                       <div className="text-xs text-gray-500">Плачу 100%, исполнитель получает 90%</div>
-                     </div>
-                   </label>
-                   <label className={`flex-1 flex items-center gap-2 p-3 rounded border cursor-pointer transition-colors ${
-                     marketplaceMode === 'owner_dispatcher' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 hover:bg-gray-50'
-                   }`}>
-                     <input type="radio" name="mpMode" value="owner_dispatcher"
-                       checked={marketplaceMode === 'owner_dispatcher'}
-                       onChange={() => setMarketplaceMode('owner_dispatcher')}
-                       className="accent-orange-600" />
-                     <div>
-                       <div className="text-sm font-medium">📋 Я диспетчер</div>
-                       <div className="text-xs text-gray-500">Получаю 10% диспетчерских</div>
-                     </div>
-                   </label>
-                 </div>
-               </div>
-               {/* Срок оплаты */}
-               <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">Срок оплаты (дней) *</label>
-                 <div className="flex items-center gap-3">
-                   <input type="number" min={1} max={90}
-                     value={paymentTermsDays}
-                     onChange={(e) => {
-                       const v = Number(e.target.value) || 7;
-                       setPaymentTermsDays(v);
-                       setShowExtendedPaymentWarning(v > 7);
-                     }}
-                     className="w-24 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                   />
-                   <span className="text-sm text-gray-500">Стандарт: 7 дней</span>
-                 </div>
-                 {paymentTermsDays > 7 && (
-                   <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded animate-pulse">
-                     <div className="flex items-start gap-2">
-                       <span className="text-red-600 text-lg">⚠️</span>
-                       <div>
-                         <p className="text-sm font-medium text-red-800">Увеличенный срок оплаты: {paymentTermsDays} дн.</p>
-                         <p className="text-xs text-red-600 mt-1">
-                           Исполнители увидят предупреждение об изменённых условиях оплаты.
-                           Это может снизить количество откликов на заявку.
-                         </p>
-                       </div>
-                     </div>
-                   </div>
-                 )}
-               </div>
-             </div>
-           )}
-         </div>
+            {/* === НАЗНАЧЕНИЕ: СВОЙ ВОДИТЕЛЬ ИЛИ МАРКЕТПЛЕЙС === */}
+            <div className="p-4 border border-gray-200 rounded-lg">
+              <label className="block text-sm font-semibold text-gray-700 mb-3">Назначение заявки</label>
+              <div className="flex gap-4 mb-3">
+                <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border transition-all ${
+                  assignmentMode === 'own' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
+                }`}>
+                  <input
+                    type="radio"
+                    name="assignmentMode"
+                    value="own"
+                    checked={assignmentMode === 'own'}
+                    onChange={() => setAssignmentMode('own')}
+                    className="accent-blue-600"
+                  />
+                  <span className="text-sm font-medium">👷 Свой водитель</span>
+                </label>
+                <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border transition-all ${
+                  assignmentMode === 'marketplace' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'
+                }`}>
+                  <input
+                    type="radio"
+                    name="assignmentMode"
+                    value="marketplace"
+                    checked={assignmentMode === 'marketplace'}
+                    onChange={() => setAssignmentMode('marketplace')}
+                    className="accent-green-600"
+                  />
+                  <span className="text-sm font-medium">🌐 Маркетплейс</span>
+                </label>
+              </div>
+
+              {assignmentMode === 'own' && (
+                <div>
+                  <select
+                    value={selectedDriverId ?? ''}
+                    onChange={(e) => setSelectedDriverId(Number(e.target.value) || null)}
+                    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                    disabled={loadingDrivers}
+                  >
+                    <option value="">Выберите водителя</option>
+                    {drivers.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {assignmentMode === 'marketplace' && (
+                <div className="space-y-3 bg-green-50 p-4 rounded border border-green-200">
+                  <p className="text-sm text-green-700 font-medium">
+                    📢 Заявка будет опубликована в маркетплейсе
+                  </p>
+
+                  {/* Автоматически определённый режим (read-only) */}
+                  <div className={`p-3 rounded border ${
+                    marketplaceMode === 'owner_dispatcher'
+                      ? 'bg-orange-50 border-orange-200'
+                      : 'bg-purple-50 border-purple-200'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">{marketplaceModeLabel.icon}</span>
+                      <span className={`text-sm font-semibold ${
+                        marketplaceMode === 'owner_dispatcher' ? 'text-orange-800' : 'text-purple-800'
+                      }`}>
+                        Режим: {marketplaceModeLabel.title}
+                      </span>
+                    </div>
+                    <p className={`text-xs ${
+                      marketplaceMode === 'owner_dispatcher' ? 'text-orange-600' : 'text-purple-600'
+                    }`}>
+                      {marketplaceModeLabel.desc}
+                    </p>
+                  </div>
+
+                  {/* Срок оплаты */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Срок оплаты (дней) *</label>
+                    <div className="flex items-center gap-3">
+                      <input type="number" min={1} max={90}
+                        value={paymentTermsDays}
+                        onChange={(e) => {
+                          const v = Number(e.target.value) || 7;
+                          setPaymentTermsDays(v);
+                          setShowExtendedPaymentWarning(v > 7);
+                        }}
+                        className="w-24 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                      <span className="text-sm text-gray-500">Стандарт: 7 дней</span>
+                    </div>
+                    {showExtendedPaymentWarning && (
+                      <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded animate-pulse">
+                        <div className="flex items-start gap-2">
+                          <span className="text-red-600 text-lg">⚠️</span>
+                          <div>
+                            <p className="text-sm font-medium text-red-800">Увеличенный срок оплаты: {paymentTermsDays} дн.</p>
+                            <p className="text-xs text-red-600 mt-1">
+                              Исполнители увидят предупреждение об изменённых условиях оплаты.
+                              Это может снизить количество откликов на заявку.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Тип работы *</label>
