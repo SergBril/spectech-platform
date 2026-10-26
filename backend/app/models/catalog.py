@@ -192,9 +192,8 @@ class Vehicle(Base):
 
     # Связь с компанией-владельцем (для маркетплейса)
     company: Mapped[Optional["Company"]] = relationship(
-        "Company",
-        primaryjoin="Vehicle.company_id == Company.id",
-        foreign_keys="[Vehicle.company_id]",
+        "app.models.company.Company",
+        primaryjoin="Vehicle.company_id == foreign(app.models.company.Company.id)",
         lazy="selectin",
     )
 

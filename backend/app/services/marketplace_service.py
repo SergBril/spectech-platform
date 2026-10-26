@@ -78,8 +78,9 @@ class MarketplaceService:
         if base_location_lon is not None:
             vehicle.base_location_lon = base_location_lon
 
-        # Публикуем
+        # Публикуем: устанавливаем оба флага для публичного каталога
         vehicle.is_available_for_rent = True
+        vehicle.marketplace_commission_agreed = True
 
         db.commit()
         db.refresh(vehicle)
@@ -103,6 +104,7 @@ class MarketplaceService:
             raise ValueError("Cannot unpublish vehicle from another company")
 
         vehicle.is_available_for_rent = False
+        vehicle.marketplace_commission_agreed = False
         db.commit()
         db.refresh(vehicle)
 
@@ -130,6 +132,7 @@ class MarketplaceService:
             "base_location_lat",
             "base_location_lon",
             "is_available_for_rent",
+            "marketplace_commission_agreed",
         }
 
         for key, value in updates.items():
@@ -172,6 +175,7 @@ class MarketplaceService:
             .join(Company, Vehicle.company_id == Company.id)
             .where(
                 Vehicle.is_available_for_rent == True,
+                Vehicle.marketplace_commission_agreed == True,
                 Vehicle.is_deleted == False,
                 Company.is_active == True,
             )

@@ -405,14 +405,56 @@ def send_message_to_chat(
     if not _is_participant(db, chat.id, current_user.id):
         _add_participant(db, chat.id, current_user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
 
+    # Определяем получателя
+    recipient_id = None
+    
+    # Проверяем, является ли текущий пользователь водителем этой смены
+    from app.models.contractor import DriverProfile, Employee
+    my_profile = db.execute(
+        select(DriverProfile).join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
+        .where(Employee.user_id == current_user.id)
+    ).scalar_one_or_none()
+    
+    # Получаем shift_task из чата (если есть связь)
+    task = None
+    if hasattr(chat, 'shift_task_id') and chat.shift_task_id:
+        task = db.get(ShiftTask, chat.shift_task_id)
+    elif hasattr(chat, 'request_id') and chat.request_id:
+        # Пытаемся найти смену через заявку
+        from app.models.shift import ShiftTask as ST
+        task = db.execute(
+            select(ST).where(ST.request_id == chat.request_id)
+        ).scalars().first()
+    
+    if my_profile and task and task.operator_id == my_profile.employee_contractor_id:
+        # Водитель отправляет диспетчеру (первому пользователю компании)
+        from app.models.auth import UserCompany
+        dispatcher_id = db.execute(
+            select(UserCompany.user_id).where(UserCompany.company_id == chat.company_id if hasattr(chat, 'company_id') else 0)
+            .where(UserCompany.user_id != current_user.id)
+        ).scalars().first()
+        recipient_id = dispatcher_id
+    elif task and task.operator_id:
+        # Диспетчер отправляет водителю
+        driver_emp = db.get(Employee, task.operator_id)
+        if driver_emp and driver_emp.user_id:
+            recipient_id = driver_emp.user_id
+    
+    # Fallback: если не удалось определить получателя, используем 0 (системное сообщение)
+    if recipient_id is None:
+        recipient_id = 0
+
     message = send_chat_message(
         db=db,
         sender_id=current_user.id,
-        recipient_id=0,  # Будет определено внутри send_chat_message по room
+        recipient_id=recipient_id,
         text=data.content,
-        shift_task_id=None,
+        shift_task_id=request_id,
+        message_type=data.message_type.value if hasattr(data.message_type, 'value') else str(data.message_type),
+        file_url=data.file_url,
+        attachments=data.attachments,
     )
-
+    
     # Если send_chat_message вернул dict, создаём объект для ответа
     if isinstance(message, dict):
         msg_obj = db.get(ChatMessage, message.get("message_id"))
@@ -499,6 +541,9 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
                     recipient_id=recipient_id,
                     text=data.get("content", ""),
                     shift_task_id=chat.request_id if hasattr(chat, 'request_id') else None,
+                    message_type=data.get("message_type", "text"),
+                    file_url=data.get("file_url"),
+                    attachments=data.get("attachments"),
                 )
 
                 if isinstance(result, dict):
