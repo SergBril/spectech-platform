@@ -31,6 +31,62 @@ interface VehicleWithDriver {
   attributes: Record<string, any>;
 }
 
+/**
+ * Региональные пресеты для минимальных смен и ставок.
+ * В будущем можно загружать из API /api/v1/regions/pricing
+ */
+const REGION_PRESETS: Record<string, {
+  label: string;
+  minShiftHours: number;       // Минимальная смена (работа + подача)
+  workHours: number;           // Часы работы
+  deliveryHours: number;       // Часы подачи
+  defaultShiftRate: number;    // Ставка за смену по умолчанию
+  defaultHourlyRate: number;   // Почасовая ставка по умолчанию
+  deliveryCostPerKm: number;   // Стоимость доставки за км (для негабарита)
+  description: string;
+}> = {
+  moscow: {
+    label: '🏙️ Москва',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 35000,
+    defaultHourlyRate: 5000,
+    deliveryCostPerKm: 100,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  moscow_oblast: {
+    label: '🌄 Московская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 35000,
+    defaultHourlyRate: 5000,
+    deliveryCostPerKm: 100,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача) + км от МКАД',
+  },
+  volgograd: {
+    label: '🏗️ Волгоградская область',
+    minShiftHours: 4,
+    workHours: 3,
+    deliveryHours: 1,
+    defaultShiftRate: 20000,
+    defaultHourlyRate: 3500,
+    deliveryCostPerKm: 80,
+    description: 'Мин. смена 4ч (3ч работа + 1ч подача)',
+  },
+  hourly_no_min: {
+    label: '⏱️ Почасовая (без мин. смены)',
+    minShiftHours: 1,
+    workHours: 1,
+    deliveryHours: 0,
+    defaultShiftRate: 0,
+    defaultHourlyRate: 3000,
+    deliveryCostPerKm: 0,
+    description: 'Оплата строго по часам, без минимальной смены',
+  },
+};
+
 interface Props {
   request: Request | null;
   onClose: () => void;
@@ -44,17 +100,16 @@ const REQUEST_TYPES: { value: RequestType; label: string }[] = [
   { value: 'recurring', label: 'Повторяющаяся' },
 ];
 
-// Для заказчика убираем дубль "daily" (Посменная), оставляем только "shift" (За смену)
+// Для заказчика: без дубля daily/shift
 const CLIENT_RATE_TYPES: { value: RateType; label: string }[] = [
   { value: 'shift', label: 'За смену' },
   { value: 'hourly', label: 'Почасовая' },
   { value: 'fixed', label: 'Фиксированная цена' },
 ];
 
-// Для владельца/диспетчера оставляем все варианты
+// Для владельца/диспетчера: все варианты
 const OWNER_RATE_TYPES: { value: RateType; label: string }[] = [
   { value: 'hourly', label: 'Почасовая' },
-  { value: 'daily', label: 'Посменная' },
   { value: 'shift', label: 'За смену' },
   { value: 'fixed', label: 'Фиксированная' },
 ];
@@ -94,23 +149,15 @@ const toLocalDatetime = (iso: string | null | undefined) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-/**
- * Определяет, является ли текущий пользователь заказчиком (клиентом платформы).
- * Если роль client/customer или пустая — считаем заказчиком.
- */
 const isClientUser = (user: any): boolean => {
   const role = user?.role || user?.user_type || '';
   return role === 'client' || role === 'customer' || role === '';
 };
 
-/**
- * Проверяет, выбрана ли сегодняшняя дата (или прошедшая) для начала работ.
- */
 const isTodayOrEarlier = (dateStr: string): boolean => {
   if (!dateStr) return false;
   const selected = new Date(dateStr);
   const today = new Date();
-  // Сравниваем только даты, без времени
   return selected.toDateString() <= today.toDateString();
 };
 
@@ -141,7 +188,10 @@ export const RequestFormModal: React.FC<Props> = ({
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState('');
 
-  // Выбор клиента (только для не-заказчиков)
+  // Регион
+  const [selectedRegion, setSelectedRegion] = useState<string>('moscow');
+
+  // Клиент
   const [clients, setClients] = useState<Contractor[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<number | null>(request?.client_id || null);
   const [loadingClients, setLoadingClients] = useState(true);
@@ -154,26 +204,32 @@ export const RequestFormModal: React.FC<Props> = ({
   const [attributeValues, setAttributeValues] = useState<Record<string, string>>({});
   const [loadingAttributes, setLoadingAttributes] = useState(false);
 
-  // Назначение: своя техника+водитель или маркетплейс
-  // Для заказчика всегда marketplace, для остальных — выбор
+  // Назначение
   const [assignmentMode, setAssignmentMode] = useState<'own' | 'marketplace'>(isClient ? 'marketplace' : 'own');
   const [marketplaceMode, setMarketplaceMode] = useState<'client' | 'owner_dispatcher'>(isClient ? 'client' : 'owner_dispatcher');
   const [paymentTermsDays, setPaymentTermsDays] = useState<number>(isClient ? 0 : 7);
   const [showExtendedPaymentWarning, setShowExtendedPaymentWarning] = useState(false);
 
-  // Техника с водителями (только для не-заказчиков)
+  // Техника с водителями
   const [vehiclesWithDrivers, setVehiclesWithDrivers] = useState<VehicleWithDriver[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(request?.assigned_vehicle_id || null);
   const [loadingVehicles, setLoadingVehicles] = useState(false);
 
-  // Custom attribute value modal
+  // Доставка техники
+  const [needsDelivery, setNeedsDelivery] = useState(false);
+  const [deliveryCost, setDeliveryCost] = useState<string>('');
+
+  // Custom attribute modal
   const [customAttrModal, setCustomAttrModal] = useState<{ attrId: number; attrName: string; slug: string } | null>(null);
   const [customValue, setCustomValue] = useState('');
   const [customNumericValue, setCustomNumericValue] = useState('');
   const [addingCustom, setAddingCustom] = useState(false);
   const [customError, setCustomError] = useState('');
 
-  // Инициализация режима при монтировании
+  // Текущий пресет региона
+  const regionPreset = REGION_PRESETS[selectedRegion] || REGION_PRESETS['moscow'];
+
+  // Инициализация режима для клиента
   useEffect(() => {
     if (isClient) {
       setAssignmentMode('marketplace');
@@ -266,32 +322,49 @@ export const RequestFormModal: React.FC<Props> = ({
     }
   }, [selectedSubcategoryId]);
 
-  // Фильтрация техники по категории/подкатегории и атрибутам
-  const filteredVehicles = useMemo(() => {
-    return vehiclesWithDrivers.filter(v => {
-      if (selectedSubcategoryId && v.category_id !== selectedSubcategoryId) return false;
-      if (!selectedSubcategoryId && selectedCategoryId && v.category_id !== selectedCategoryId) return false;
-      for (const [slug, val] of Object.entries(attributeValues)) {
-        if (val && v.attributes?.[slug] !== val) return false;
-      }
-      return true;
-    });
-  }, [vehiclesWithDrivers, selectedCategoryId, selectedSubcategoryId, attributeValues]);
-
-  // АВТО-РАСЧЁТ суммы
+  // 🆕 УМНЫЙ АВТО-РАСЧЁТ суммы + предупреждения о мин. смене
   useEffect(() => {
     const hours = parseFloat(shiftDuration) || 0;
     const rate = parseFloat(clientRate) || 0;
-    if (hours > 0 && rate > 0 && !request) {
-      let total = 0;
+    const minHours = regionPreset.minShiftHours;
+
+    let total = 0;
+    let warning: string | null = null;
+
+    if (rate > 0) {
       switch (rateType) {
-        case 'hourly': total = hours * rate; break;
-        case 'daily': case 'shift': total = rate; break;
-        case 'fixed': total = rate; break;
+        case 'hourly':
+          total = hours * rate;
+          // Предупреждение о минимальной смене для почасовой (кроме пресета "без минимума")
+          if (selectedRegion !== 'hourly_no_min' && hours > 0 && hours < minHours) {
+            warning = `⚠️ Минимальная смена в регионе «${regionPreset.label}»: ${minHours}ч (${regionPreset.workHours}ч работа + ${regionPreset.deliveryHours}ч подача). Текущая длительность: ${hours}ч.`;
+          }
+          break;
+        case 'shift':
+          // Для «За смену» сумма = ставка (не зависит от часов)
+          total = rate;
+          break;
+        case 'daily':
+          total = rate;
+          break;
+        case 'fixed':
+          total = rate;
+          break;
       }
-      if (total > 0) setEstimatedAmount(total.toString());
     }
-  }, [shiftDuration, clientRate, rateType, request]);
+
+    // Добавляем доставку
+    if (needsDelivery && deliveryCost) {
+      total += parseFloat(deliveryCost) || 0;
+    }
+
+    if (total > 0) {
+      setEstimatedAmount(total.toString());
+    }
+
+    // Устанавливаем предупреждение через отдельный state ниже
+    // (используем ref или просто рендерим inline)
+  }, [shiftDuration, clientRate, rateType, selectedRegion, regionPreset, needsDelivery, deliveryCost]);
 
   // Автозаполнение ставки из выбранной техники
   useEffect(() => {
@@ -304,6 +377,31 @@ export const RequestFormModal: React.FC<Props> = ({
     }
   }, [selectedVehicleId, vehiclesWithDrivers, request, clientRate]);
 
+  // Фильтрация техники по категории/подкатегории и атрибутам
+  const filteredVehicles = useMemo(() => {
+    return vehiclesWithDrivers.filter(v => {
+      if (selectedSubcategoryId && v.category_id !== selectedSubcategoryId) return false;
+      if (!selectedSubcategoryId && selectedCategoryId && v.category_id !== selectedCategoryId) return false;
+      for (const [slug, val] of Object.entries(attributeValues)) {
+        if (val && v.attributes?.[slug] !== val) return false;
+      }
+      return true;
+    });
+  }, [vehiclesWithDrivers, selectedCategoryId, selectedSubcategoryId, attributeValues]);
+
+  // Предупреждение о мин. смене (вычисляем отдельно для рендера)
+  const minShiftWarning = useMemo(() => {
+    const hours = parseFloat(shiftDuration) || 0;
+    const minHours = regionPreset.minShiftHours;
+    if (rateType === 'hourly' && selectedRegion !== 'hourly_no_min' && hours > 0 && hours < minHours) {
+      return `⚠️ Минимальная смена в регионе «${regionPreset.label}»: ${minHours}ч (${regionPreset.workHours}ч работа + ${regionPreset.deliveryHours}ч подача). Текущая длительность: ${hours}ч.`;
+    }
+    return null;
+  }, [shiftDuration, rateType, selectedRegion, regionPreset]);
+
+  // Предупреждение о срочной заявке
+  const isUrgentRequest = isTodayOrEarlier(plannedStart);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -312,8 +410,7 @@ export const RequestFormModal: React.FC<Props> = ({
     if (!objectAddress.trim()) { setError('Введите адрес объекта'); return; }
     if (!plannedStart || !plannedEnd) { setError('Укажите даты начала и окончания'); return; }
 
-    // Для заказчика client_id не требуется (берётся из токена на бэкенде)
-    // Для остальных — обязателен
+    // Для не-заказчиков: клиент обязателен
     if (!isClient && !selectedClientId) { setError('Выберите клиента'); return; }
 
     // Marketplace validation
@@ -324,7 +421,7 @@ export const RequestFormModal: React.FC<Props> = ({
       if (!clientRate || Number(clientRate) <= 0) { setError('Укажите бюджет / стоимость смены'); return; }
     }
 
-    // Own vehicle validation (только для не-заказчиков)
+    // Own vehicle validation
     if (!isClient && assignmentMode === 'own' && !selectedVehicleId) {
       setError('Выберите технику с водителем');
       return;
@@ -342,9 +439,10 @@ export const RequestFormModal: React.FC<Props> = ({
         priority: priority,
         comment: comment.trim() || undefined,
         vehicle_category_id: selectedSubcategoryId || undefined,
+        region: selectedRegion,
       };
 
-      // Для заказчика: source_channel=web, marketplace_mode=client, payment_terms=0, client_id не передаём
+      // Для заказчика: source_channel=web, marketplace_mode=client, payment_terms=0
       if (isClient) {
         payload.source_channel = 'web';
         payload.marketplace_mode = 'client';
@@ -360,7 +458,7 @@ export const RequestFormModal: React.FC<Props> = ({
       if (clientRate) payload.client_rate = parseFloat(clientRate);
       if (estimatedAmount) payload.estimated_amount = parseFloat(estimatedAmount);
 
-      // Назначение техники и водителя (только для не-заказчиков в режиме own)
+      // Назначение техники и водителя
       if (!isClient && assignmentMode === 'own' && selectedVehicleId) {
         payload.assigned_vehicle_id = selectedVehicleId;
         const selectedV = vehiclesWithDrivers.find(v => v.id === selectedVehicleId);
@@ -368,6 +466,12 @@ export const RequestFormModal: React.FC<Props> = ({
           payload.driver_id = selectedV.driver_id;
           payload.assigned_operator_id = selectedV.driver_id;
         }
+      }
+
+      // Доставка техники
+      if (needsDelivery && deliveryCost) {
+        payload.delivery_cost = parseFloat(deliveryCost);
+        payload.needs_delivery = true;
       }
 
       if (request) payload.status = status;
@@ -384,9 +488,6 @@ export const RequestFormModal: React.FC<Props> = ({
   const marketplaceModeLabel = marketplaceMode === 'owner_dispatcher'
     ? { icon: '📋', title: 'Диспетчер / Владелец техники', desc: 'Вы получаете 10% комиссии. Стандартный срок оплаты: 7 дней.' }
     : { icon: '🏪', title: 'Заказчик', desc: 'Предоплата 100%. Счёт выставляется вашей компании.' };
-
-  // Проверка срочности заявки
-  const isUrgentRequest = isTodayOrEarlier(plannedStart);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -407,7 +508,7 @@ export const RequestFormModal: React.FC<Props> = ({
                 <div>
                   <p className="text-sm font-semibold text-yellow-800">Заявка на сегодня / срочная</p>
                   <p className="text-xs text-yellow-700 mt-1">
-                    Оплата может не успеть пройти до начала работ. Возможно потребуется оставить залог 
+                    Оплата может не успеть пройти до начала работ. Возможно потребуется оставить залог
                     до поступления оплаты на расчётный счёт исполнителя.
                   </p>
                 </div>
@@ -415,6 +516,7 @@ export const RequestFormModal: React.FC<Props> = ({
             </div>
           )}
 
+          {/* Выбранная техника (если передана извне) */}
           {vehicleId && vehicleName && (
             <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-xs text-blue-600 uppercase font-semibold mb-1">Выбранная техника</p>
@@ -456,6 +558,38 @@ export const RequestFormModal: React.FC<Props> = ({
                 </select>
               </div>
             )}
+
+            {/* === ВЫБОР РЕГИОНА === */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">🗺️ Регион работ</label>
+              <select
+                value={selectedRegion}
+                onChange={(e) => {
+                  setSelectedRegion(e.target.value);
+                  // Автозаполнение ставки при смене региона (только для новых заявок)
+                  if (!request && !clientRate) {
+                    const preset = REGION_PRESETS[e.target.value];
+                    if (preset) {
+                      if (rateType === 'shift') {
+                        setClientRate(preset.defaultShiftRate.toString());
+                      } else if (rateType === 'hourly') {
+                        setClientRate(preset.defaultHourlyRate.toString());
+                      }
+                      // Автозаполнение длительности мин. сменой
+                      if (rateType === 'shift') {
+                        setShiftDuration(preset.minShiftHours.toString());
+                      }
+                    }
+                  }
+                }}
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                {Object.entries(REGION_PRESETS).map(([key, preset]) => (
+                  <option key={key} value={key}>{preset.label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">{regionPreset.description}</p>
+            </div>
 
             {/* Категория и подкатегория */}
             <div className="grid grid-cols-2 gap-4">
@@ -535,12 +669,10 @@ export const RequestFormModal: React.FC<Props> = ({
                     </label>
                   </div>
                   <p className="text-xs text-gray-500">
-                    Ваша заявка будет обработана менеджерами платформы. 
-                    После подтверждения вам будет выставлен счёт. 
+                    Ваша заявка будет обработана менеджерами платформы.
+                    После подтверждения вам будет выставлен счёт.
                     Техника и водитель будут назначены после поступления оплаты.
                   </p>
-
-                  {/* Информация о предоплате */}
                   <div className="p-3 bg-purple-50 border border-purple-200 rounded">
                     <div className="flex items-center gap-2">
                       <span className="text-purple-600">💳</span>
@@ -623,7 +755,7 @@ export const RequestFormModal: React.FC<Props> = ({
                   {assignmentMode === 'marketplace' && (
                     <div className="space-y-3 bg-green-50 p-4 rounded border border-green-200">
                       <p className="text-sm text-green-700 font-medium">📢 Заявка будет опубликована в маркетплейсе</p>
-                      
+
                       {/* Автоматически определённый режим (read-only) */}
                       <div className={`p-3 rounded border ${
                         marketplaceMode === 'owner_dispatcher' ? 'bg-orange-50 border-orange-200' : 'bg-purple-50 border-purple-200'
@@ -711,21 +843,40 @@ export const RequestFormModal: React.FC<Props> = ({
             {/* Длительность, ставка, тип ставки */}
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Длительность (ч)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Длительность (ч)
+                  {rateType === 'shift' && (
+                    <span className="text-xs text-gray-400 ml-1">(информационно)</span>
+                  )}
+                </label>
                 <input type="number" step="0.5" min="0" value={shiftDuration} onChange={(e) => setShiftDuration(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="8" />
+                  className={`w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none ${
+                    rateType === 'shift' ? 'bg-gray-50' : ''
+                  }`} placeholder={regionPreset.minShiftHours.toString()} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isClient ? 'Бюджет / Стоимость смены (₽)' : 'Ставка (₽)'}
+                  {rateType === 'shift' ? 'Стоимость смены (₽)' : isClient ? 'Бюджет / Ставка (₽)' : 'Ставка (₽)'}
                 </label>
                 <input type="number" step="100" min="0" value={clientRate} onChange={(e) => setClientRate(e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder={isClient ? "Например: 35000" : "5000"} />
+                  placeholder={rateType === 'shift' ? regionPreset.defaultShiftRate.toString() : regionPreset.defaultHourlyRate.toString()} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Тип ставки</label>
-                <select value={rateType} onChange={(e) => setRateType(e.target.value as RateType)}
+                <select value={rateType} onChange={(e) => {
+                  const newType = e.target.value as RateType;
+                  setRateType(newType);
+                  // При переключении на «За смену» ставим мин. смену региона
+                  if (newType === 'shift' && !request) {
+                    setShiftDuration(regionPreset.minShiftHours.toString());
+                    if (!clientRate) setClientRate(regionPreset.defaultShiftRate.toString());
+                  }
+                  // При переключении на почасовую
+                  if (newType === 'hourly' && !request && !clientRate) {
+                    setClientRate(regionPreset.defaultHourlyRate.toString());
+                  }
+                }}
                   className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
                   {(isClient ? CLIENT_RATE_TYPES : OWNER_RATE_TYPES).map(r => (
                     <option key={r.value} value={r.value}>{r.label}</option>
@@ -734,13 +885,60 @@ export const RequestFormModal: React.FC<Props> = ({
               </div>
             </div>
 
+            {/* ⚠️ Предупреждение о минимальной смене */}
+            {minShiftWarning && (
+              <div className="p-3 bg-yellow-50 border border-yellow-300 rounded-lg">
+                <p className="text-sm text-yellow-800">{minShiftWarning}</p>
+              </div>
+            )}
+
+            {/* 🚛 Доставка техники (для экскаваторов, бульдозеров и т.д.) */}
+            <div className="p-4 border border-gray-200 rounded-lg">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={needsDelivery}
+                  onChange={(e) => setNeedsDelivery(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  🚛 Требуется доставка техники до объекта
+                </span>
+              </label>
+              <p className="text-xs text-gray-500 mt-1 ml-6">
+                Для техники, которая не может передвигаться по городу (экскаваторы, бульдозеры, катки и т.д.)
+              </p>
+              {needsDelivery && (
+                <div className="mt-3 ml-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Стоимость доставки (туда и обратно, ₽)
+                  </label>
+                  <input
+                    type="number"
+                    step="500"
+                    min="0"
+                    value={deliveryCost}
+                    onChange={(e) => setDeliveryCost(e.target.value)}
+                    className="w-full max-w-xs p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder={`~${regionPreset.deliveryCostPerKm} ₽/км × расстояние`}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Ориентировочная ставка: {regionPreset.deliveryCostPerKm} ₽/км. Включает доставку от базы до объекта и обратно.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Ожидаемая сумма */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Ожидаемая сумма (₽)
+                Итого к оплате (₽)
                 <span className="text-xs text-gray-500 ml-2">
                   {parseFloat(shiftDuration) > 0 && parseFloat(clientRate) > 0 && (
                     <span className="text-blue-600">✨ авторасчёт</span>
+                  )}
+                  {needsDelivery && parseFloat(deliveryCost) > 0 && (
+                    <span className="text-orange-600 ml-1">+ доставка</span>
                   )}
                 </span>
               </label>
