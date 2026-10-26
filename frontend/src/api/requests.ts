@@ -79,6 +79,7 @@ export interface RequestUpdate extends Partial<RequestCreate> {
   final_amount?: number;
   assigned_vehicle_id?: number | null;
   assigned_operator_id?: number | null;
+  driver_id?: number | null;
 }
 
 export const requestsApi = {

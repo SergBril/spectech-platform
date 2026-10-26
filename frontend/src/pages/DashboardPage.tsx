@@ -25,6 +25,7 @@ export const DashboardPage: React.FC = () => {
   const [usersCount, setUsersCount] = useState<number>(0);
   const [driversCount, setDriversCount] = useState<number>(0);
   const [mpStats, setMpStats] = useState<any>(null);
+  const [platformOverview, setPlatformOverview] = useState<any>(null);
   const [period, setPeriod] = useState<{ from: string; to: string }>({ from: '', to: '' });
 
   useEffect(() => {
@@ -78,6 +79,12 @@ export const DashboardPage: React.FC = () => {
       try {
         const mpRes = await apiClient.get('/public/marketplace/stats');
         setMpStats(mpRes.data);
+      } catch { /* ignore */ }
+
+      // Load platform overview (idle/busy vehicles, acts, transactions)
+      try {
+        const poRes = await apiClient.get('/shifts/stats/platform-overview');
+        setPlatformOverview(poRes.data);
       } catch { /* ignore */ }
     } catch (err) {
       console.error('Failed to load dashboard:', err);
@@ -194,6 +201,56 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* === СВОДКА ПО ТЕХНИКЕ (Platform Overview) === */}
+        {platformOverview && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Смен сегодня</p>
+                  <p className="text-3xl font-bold text-indigo-600">{platformOverview.shifts_today ?? 0}</p>
+                </div>
+                <span className="text-4xl">📅</span>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Актов за месяц</p>
+                  <p className="text-3xl font-bold text-green-600">{platformOverview.acts_this_month?.count ?? 0}</p>
+                  <p className="text-xs text-gray-600">
+                    Выручка: {(platformOverview.acts_this_month?.revenue ?? 0).toLocaleString('ru-RU')} ₽
+                  </p>
+                </div>
+                <span className="text-4xl">📄</span>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Просроченные акты</p>
+                  <p className={`text-3xl font-bold ${platformOverview.overdue_acts > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    {platformOverview.overdue_acts ?? 0}
+                  </p>
+                </div>
+                <span className="text-4xl">⚠️</span>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Транзакции за месяц</p>
+                  <p className="text-3xl font-bold text-blue-600">{platformOverview.transactions_this_month?.count ?? 0}</p>
+                  <p className="text-xs text-gray-600">
+                    Неразнесено: {platformOverview.unmatched_transactions ?? 0}
+                  </p>
+                </div>
+                <span className="text-4xl">🏦</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* === ПОЛЬЗОВАТЕЛИ И ВОДИТЕЛИ === */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
