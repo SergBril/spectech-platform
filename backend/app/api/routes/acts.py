@@ -47,7 +47,7 @@ def download_invoice_facture_pdf(
 ):
     """Скачать PDF счёта-фактуры."""
     from fastapi.responses import StreamingResponse
-    from app.services.pdf_service import pdf_service
+    from app.services.pdf_generator import generate_invoice_facture_pdf
     import io
 
     act = db.get(Act, act_id)
@@ -55,7 +55,7 @@ def download_invoice_facture_pdf(
         raise HTTPException(status_code=404, detail="Act not found")
 
     try:
-        pdf_bytes = pdf_service.generate_invoice_facture_pdf(act)
+        pdf_bytes = generate_invoice_facture_pdf(act)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
@@ -74,7 +74,7 @@ def download_upd_pdf(
 ):
     """Скачать PDF УПД."""
     from fastapi.responses import StreamingResponse
-    from app.services.pdf_service import pdf_service
+    from app.services.pdf_generator import generate_upd_pdf
     import io
 
     act = db.get(Act, act_id)
@@ -82,7 +82,7 @@ def download_upd_pdf(
         raise HTTPException(status_code=404, detail="Act not found")
 
     try:
-        pdf_bytes = pdf_service.generate_upd_pdf(act)
+        pdf_bytes = generate_upd_pdf(act)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
@@ -101,7 +101,7 @@ def download_torg12_pdf(
 ):
     """Скачать PDF ТОРГ-12."""
     from fastapi.responses import StreamingResponse
-    from app.services.pdf_service import pdf_service
+    from app.services.pdf_generator import generate_torg12_pdf
     import io
 
     act = db.get(Act, act_id)
@@ -109,7 +109,7 @@ def download_torg12_pdf(
         raise HTTPException(status_code=404, detail="Act not found")
 
     try:
-        pdf_bytes = pdf_service.generate_torg12_pdf(act)
+        pdf_bytes = generate_torg12_pdf(act)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
