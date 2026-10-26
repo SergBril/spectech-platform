@@ -33,16 +33,17 @@ interface VehicleWithDriver {
 
 /**
  * Региональные пресеты для минимальных смен и ставок.
+ * Москва и МО всегда вверху. Остальные отсортированы по алфавиту.
  * В будущем можно загружать из API /api/v1/regions/pricing
  */
 const REGION_PRESETS: Record<string, {
   label: string;
-  minShiftHours: number;       // Минимальная смена (работа + подача)
-  workHours: number;           // Часы работы
-  deliveryHours: number;       // Часы подачи
-  defaultShiftRate: number;    // Ставка за смену по умолчанию
-  defaultHourlyRate: number;   // Почасовая ставка по умолчанию
-  deliveryCostPerKm: number;   // Стоимость доставки за км (для негабарита)
+  minShiftHours: number;
+  workHours: number;
+  deliveryHours: number;
+  defaultShiftRate: number;
+  defaultHourlyRate: number;
+  deliveryCostPerKm: number;
   description: string;
 }> = {
   moscow: {
@@ -65,6 +66,189 @@ const REGION_PRESETS: Record<string, {
     deliveryCostPerKm: 100,
     description: 'Мин. смена 8ч (7ч работа + 1ч подача) + км от МКАД',
   },
+  // === Центральный ФО ===
+  belgorod: {
+    label: '🏗️ Белгородская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 28000,
+    defaultHourlyRate: 4000,
+    deliveryCostPerKm: 80,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  bryansk: {
+    label: '🏗️ Брянская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 25000,
+    defaultHourlyRate: 3500,
+    deliveryCostPerKm: 70,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  vladimir: {
+    label: '🏗️ Владимирская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 28000,
+    defaultHourlyRate: 4000,
+    deliveryCostPerKm: 80,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  voronezh: {
+    label: '🏗️ Воронежская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 27000,
+    defaultHourlyRate: 3800,
+    deliveryCostPerKm: 75,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  ivanovo: {
+    label: '🏗️ Ивановская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 24000,
+    defaultHourlyRate: 3500,
+    deliveryCostPerKm: 70,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  kaluga: {
+    label: '🏗️ Калужская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 30000,
+    defaultHourlyRate: 4200,
+    deliveryCostPerKm: 85,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  kostroma: {
+    label: '🏗️ Костромская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 24000,
+    defaultHourlyRate: 3500,
+    deliveryCostPerKm: 70,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  kursk: {
+    label: '🏗️ Курская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 26000,
+    defaultHourlyRate: 3700,
+    deliveryCostPerKm: 75,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  lipetsk: {
+    label: '🏗️ Липецкая область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 26000,
+    defaultHourlyRate: 3700,
+    deliveryCostPerKm: 75,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  oryol: {
+    label: '🏗️ Орловская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 24000,
+    defaultHourlyRate: 3500,
+    deliveryCostPerKm: 70,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  ryazan: {
+    label: '🏗️ Рязанская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 26000,
+    defaultHourlyRate: 3700,
+    deliveryCostPerKm: 75,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  smolensk: {
+    label: '🏗️ Смоленская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 25000,
+    defaultHourlyRate: 3500,
+    deliveryCostPerKm: 70,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  tambov: {
+    label: '🏗️ Тамбовская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 24000,
+    defaultHourlyRate: 3500,
+    deliveryCostPerKm: 70,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  tver: {
+    label: '🏗️ Тверская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 27000,
+    defaultHourlyRate: 3800,
+    deliveryCostPerKm: 80,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  tula: {
+    label: '🏗️ Тульская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 28000,
+    defaultHourlyRate: 4000,
+    deliveryCostPerKm: 80,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  yaroslavl: {
+    label: '🏗️ Ярославская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 27000,
+    defaultHourlyRate: 3800,
+    deliveryCostPerKm: 75,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  // === Северо-Западный ФО ===
+  leningrad_oblast: {
+    label: '🌄 Ленинградская область',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 32000,
+    defaultHourlyRate: 4500,
+    deliveryCostPerKm: 90,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  saint_petersburg: {
+    label: '🏙️ Санкт-Петербург',
+    minShiftHours: 8,
+    workHours: 7,
+    deliveryHours: 1,
+    defaultShiftRate: 35000,
+    defaultHourlyRate: 5000,
+    deliveryCostPerKm: 100,
+    description: 'Мин. смена 8ч (7ч работа + 1ч подача)',
+  },
+  // === Прочие (для тестирования разных мин. смен) ===
   volgograd: {
     label: '🏗️ Волгоградская область',
     minShiftHours: 4,
@@ -86,6 +270,24 @@ const REGION_PRESETS: Record<string, {
     description: 'Оплата строго по часам, без минимальной смены',
   },
 };
+
+/**
+ * Упорядоченный список ключей регионов:
+ * 1. Москва
+ * 2. Московская область
+ * 3. Санкт-Петербург
+ * 4. Ленинградская область
+ * 5. Остальные по алфавиту
+ */
+const ORDERED_REGION_KEYS = [
+  'moscow',
+  'moscow_oblast',
+  'saint_petersburg',
+  'leningrad_oblast',
+  ...Object.keys(REGION_PRESETS)
+    .filter(k => !['moscow', 'moscow_oblast', 'saint_petersburg', 'leningrad_oblast'].includes(k))
+    .sort((a, b) => REGION_PRESETS[a].label.localeCompare(REGION_PRESETS[b].label, 'ru')),
+];
 
 interface Props {
   request: Request | null;
@@ -575,7 +777,6 @@ export const RequestFormModal: React.FC<Props> = ({
                       } else if (rateType === 'hourly') {
                         setClientRate(preset.defaultHourlyRate.toString());
                       }
-                      // Автозаполнение длительности мин. сменой
                       if (rateType === 'shift') {
                         setShiftDuration(preset.minShiftHours.toString());
                       }
@@ -584,9 +785,15 @@ export const RequestFormModal: React.FC<Props> = ({
                 }}
                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
               >
-                {Object.entries(REGION_PRESETS).map(([key, preset]) => (
-                  <option key={key} value={key}>{preset.label}</option>
-                ))}
+                {ORDERED_REGION_KEYS.map((key) => {
+                  const preset = REGION_PRESETS[key];
+                  const isTop = key === 'moscow' || key === 'moscow_oblast';
+                  return (
+                    <option key={key} value={key} className={isTop ? 'font-bold' : ''}>
+                      {preset.label}
+                    </option>
+                  );
+                })}
               </select>
               <p className="text-xs text-gray-500 mt-1">{regionPreset.description}</p>
             </div>
