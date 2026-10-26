@@ -4123,7 +4123,7 @@ def auto_match_payments(
     payments = db.execute(
         select(BankTransaction).where(
             BankTransaction.company_id == company_id,
-            BankTransaction.matched_act_id.is_(None),
+            BankTransaction.matched_invoice_id.is_(None),
             BankTransaction.status == "processed",
         )
     ).scalars().all()
@@ -4273,9 +4273,9 @@ def list_bank_transactions(
     if date_to:
         stmt = stmt.where(BankTransaction.document_date <= date_to)
     if matched == "matched":
-        stmt = stmt.where(BankTransaction.matched_act_id.isnot(None))
+        stmt = stmt.where(BankTransaction.matched_invoice_id.isnot(None))
     elif matched == "unmatched":
-        stmt = stmt.where(BankTransaction.matched_act_id.is_(None))
+        stmt = stmt.where(BankTransaction.matched_invoice_id.is_(None))
 
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = db.execute(count_stmt).scalar() or 0
@@ -4531,9 +4531,9 @@ def export_transactions_excel(
     if date_to:
         stmt = stmt.where(BankTransaction.document_date <= date_to)
     if matched == "matched":
-        stmt = stmt.where(BankTransaction.matched_act_id.isnot(None))
+        stmt = stmt.where(BankTransaction.matched_invoice_id.isnot(None))
     elif matched == "unmatched":
-        stmt = stmt.where(BankTransaction.matched_act_id.is_(None))
+        stmt = stmt.where(BankTransaction.matched_invoice_id.is_(None))
     stmt = stmt.order_by(BankTransaction.document_date.desc())
 
     txns = db.execute(stmt).scalars().all()
@@ -4636,7 +4636,7 @@ def get_platform_overview(
     unmatched_count = db.execute(
         select(func.count()).select_from(BankTransaction)
         .where(BankTransaction.company_id == company_id)
-        .where(BankTransaction.matched_act_id.is_(None))
+        .where(BankTransaction.matched_invoice_id.is_(None))
     ).scalar() or 0
 
     # Documents in archive
