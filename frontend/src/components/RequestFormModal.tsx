@@ -44,7 +44,15 @@ const REQUEST_TYPES: { value: RequestType; label: string }[] = [
   { value: 'recurring', label: 'Повторяющаяся' },
 ];
 
-const RATE_TYPES: { value: RateType; label: string }[] = [
+// Для заказчика убираем дубль "daily" (Посменная), оставляем только "shift" (За смену)
+const CLIENT_RATE_TYPES: { value: RateType; label: string }[] = [
+  { value: 'shift', label: 'За смену' },
+  { value: 'hourly', label: 'Почасовая' },
+  { value: 'fixed', label: 'Фиксированная цена' },
+];
+
+// Для владельца/диспетчера оставляем все варианты
+const OWNER_RATE_TYPES: { value: RateType; label: string }[] = [
   { value: 'hourly', label: 'Почасовая' },
   { value: 'daily', label: 'Посменная' },
   { value: 'shift', label: 'За смену' },
@@ -87,14 +95,23 @@ const toLocalDatetime = (iso: string | null | undefined) => {
 };
 
 /**
- * Определяет режим маркетплейса автоматически на основе роли пользователя.
+ * Определяет, является ли текущий пользователь заказчиком (клиентом платформы).
+ * Если роль client/customer или пустая — считаем заказчиком.
  */
-const getAutoMarketplaceMode = (user: any): 'client' | 'owner_dispatcher' => {
+const isClientUser = (user: any): boolean => {
   const role = user?.role || user?.user_type || '';
-  if (role === 'owner' || role === 'dispatcher' || role === 'owner_dispatcher') {
-    return 'owner_dispatcher';
-  }
-  return 'client';
+  return role === 'client' || role === 'customer' || role === '';
+};
+
+/**
+ * Проверяет, выбрана ли сегодняшняя дата (или прошедшая) для начала работ.
+ */
+const isTodayOrEarlier = (dateStr: string): boolean => {
+  if (!dateStr) return false;
+  const selected = new Date(dateStr);
+  const today = new Date();
+  // Сравниваем только даты, без времени
+  return selected.toDateString() <= today.toDateString();
 };
 
 export const RequestFormModal: React.FC<Props> = ({
@@ -105,6 +122,7 @@ export const RequestFormModal: React.FC<Props> = ({
   vehicleName,
 }) => {
   const { user } = useAuth();
+  const isClient = useMemo(() => isClientUser(user), [user]);
 
   const [workType, setWorkType] = useState(request?.work_type || '');
   const [objectAddress, setObjectAddress] = useState(request?.object_address || '');
@@ -113,9 +131,9 @@ export const RequestFormModal: React.FC<Props> = ({
   const [plannedEnd, setPlannedEnd] = useState(toLocalDatetime(request?.planned_end));
   const [shiftDuration, setShiftDuration] = useState(request?.shift_duration_hours?.toString() || '8');
   const [clientRate, setClientRate] = useState(request?.client_rate?.toString() || '');
-  const [rateType, setRateType] = useState<RateType>((request?.rate_type as RateType) || 'hourly');
+  const [rateType, setRateType] = useState<RateType>((request?.rate_type as RateType) || (isClient ? 'shift' : 'hourly'));
   const [estimatedAmount, setEstimatedAmount] = useState(request?.estimated_amount?.toString() || '');
-  const [sourceChannel, setSourceChannel] = useState<SourceChannel>((request?.source_channel as SourceChannel) || (vehicleId ? 'web' : 'phone'));
+  const [sourceChannel, setSourceChannel] = useState<SourceChannel>((request?.source_channel as SourceChannel) || 'web');
   const [priority, setPriority] = useState<Priority>((request?.priority as Priority) || 'normal');
   const [status, setStatus] = useState<RequestStatus>(request?.status || 'new');
   const [comment, setComment] = useState(request?.comment || '');
@@ -123,7 +141,7 @@ export const RequestFormModal: React.FC<Props> = ({
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState('');
 
-  // Выбор клиента
+  // Выбор клиента (только для не-заказчиков)
   const [clients, setClients] = useState<Contractor[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<number | null>(request?.client_id || null);
   const [loadingClients, setLoadingClients] = useState(true);
@@ -137,12 +155,13 @@ export const RequestFormModal: React.FC<Props> = ({
   const [loadingAttributes, setLoadingAttributes] = useState(false);
 
   // Назначение: своя техника+водитель или маркетплейс
-  const [assignmentMode, setAssignmentMode] = useState<'own' | 'marketplace'>('own');
-  const [marketplaceMode, setMarketplaceMode] = useState<'client' | 'owner_dispatcher'>('client');
-  const [paymentTermsDays, setPaymentTermsDays] = useState<number>(7);
+  // Для заказчика всегда marketplace, для остальных — выбор
+  const [assignmentMode, setAssignmentMode] = useState<'own' | 'marketplace'>(isClient ? 'marketplace' : 'own');
+  const [marketplaceMode, setMarketplaceMode] = useState<'client' | 'owner_dispatcher'>(isClient ? 'client' : 'owner_dispatcher');
+  const [paymentTermsDays, setPaymentTermsDays] = useState<number>(isClient ? 0 : 7);
   const [showExtendedPaymentWarning, setShowExtendedPaymentWarning] = useState(false);
 
-  // Техника с водителями
+  // Техника с водителями (только для не-заказчиков)
   const [vehiclesWithDrivers, setVehiclesWithDrivers] = useState<VehicleWithDriver[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(request?.assigned_vehicle_id || null);
   const [loadingVehicles, setLoadingVehicles] = useState(false);
@@ -154,30 +173,41 @@ export const RequestFormModal: React.FC<Props> = ({
   const [addingCustom, setAddingCustom] = useState(false);
   const [customError, setCustomError] = useState('');
 
-  // Автоматически определяем режим маркетплейса при монтировании
+  // Инициализация режима при монтировании
   useEffect(() => {
-    const autoMode = getAutoMarketplaceMode(user);
-    setMarketplaceMode(autoMode);
-    // Если заказчик — срок оплаты всегда 0 (предоплата 100%)
-    if (autoMode === 'client') {
+    if (isClient) {
+      setAssignmentMode('marketplace');
+      setMarketplaceMode('client');
       setPaymentTermsDays(0);
       setShowExtendedPaymentWarning(false);
+      setSourceChannel('web');
     } else {
-      setPaymentTermsDays(7);
+      const role = user?.role || user?.user_type || '';
+      if (role === 'owner' || role === 'dispatcher' || role === 'owner_dispatcher') {
+        setMarketplaceMode('owner_dispatcher');
+        setPaymentTermsDays(7);
+      } else {
+        setMarketplaceMode('client');
+        setPaymentTermsDays(0);
+      }
     }
-  }, [user]);
+  }, [user, isClient]);
 
-  // Загрузка клиентов, каталога и техники с водителями
+  // Загрузка данных
   useEffect(() => {
     const loadData = async () => {
-      // Клиенты
-      try {
-        const res = await apiClient.get('/contractors', { params: { type: 'client', limit: 500 } });
-        const list = Array.isArray(res.data) ? res.data : [];
-        setClients(list);
-        if (!request && !selectedClientId && list.length > 0) setSelectedClientId(list[0].id);
-      } catch (e) { console.warn('Failed to load clients:', e); }
-      setLoadingClients(false);
+      // Клиенты (только для не-заказчиков)
+      if (!isClient) {
+        try {
+          const res = await apiClient.get('/contractors', { params: { type: 'client', limit: 500 } });
+          const list = Array.isArray(res.data) ? res.data : [];
+          setClients(list);
+          if (!request && !selectedClientId && list.length > 0) setSelectedClientId(list[0].id);
+        } catch (e) { console.warn('Failed to load clients:', e); }
+        setLoadingClients(false);
+      } else {
+        setLoadingClients(false);
+      }
 
       // Каталог
       try {
@@ -185,27 +215,29 @@ export const RequestFormModal: React.FC<Props> = ({
         setCatalogTree(tree);
       } catch (e) { console.warn('Failed to load catalog:', e); }
 
-      // Техника с водителями
-      try {
-        setLoadingVehicles(true);
-        const res = await apiClient.get('/vehicles', { params: { limit: 500, include_driver: true } });
-        const raw = res.data;
-        const list = Array.isArray(raw) ? raw : (raw?.items || raw?.data || []);
-        setVehiclesWithDrivers(list.map((v: any) => ({
-          id: v.id,
-          name: v.name || v.license_plate || `#${v.id}`,
-          category_id: v.category_id ?? null,
-          driver_id: v.driver_id ?? v.operator_id ?? null,
-          driver_name: v.driver_name || v.operator_name || '',
-          hourly_rate: v.hourly_rate ?? null,
-          shift_rate: v.shift_rate ?? null,
-          attributes: v.attributes || {},
-        })));
-      } catch (e) { console.warn('Failed to load vehicles:', e); }
-      setLoadingVehicles(false);
+      // Техника с водителями (только для не-заказчиков)
+      if (!isClient) {
+        try {
+          setLoadingVehicles(true);
+          const res = await apiClient.get('/vehicles', { params: { limit: 500, include_driver: true } });
+          const raw = res.data;
+          const list = Array.isArray(raw) ? raw : (raw?.items || raw?.data || []);
+          setVehiclesWithDrivers(list.map((v: any) => ({
+            id: v.id,
+            name: v.name || v.license_plate || `#${v.id}`,
+            category_id: v.category_id ?? null,
+            driver_id: v.driver_id ?? v.operator_id ?? null,
+            driver_name: v.driver_name || v.operator_name || '',
+            hourly_rate: v.hourly_rate ?? null,
+            shift_rate: v.shift_rate ?? null,
+            attributes: v.attributes || {},
+          })));
+        } catch (e) { console.warn('Failed to load vehicles:', e); }
+        setLoadingVehicles(false);
+      }
     };
     loadData();
-  }, []);
+  }, [isClient]);
 
   // При редактировании: определяем категорию по подкатегории
   useEffect(() => {
@@ -237,11 +269,8 @@ export const RequestFormModal: React.FC<Props> = ({
   // Фильтрация техники по категории/подкатегории и атрибутам
   const filteredVehicles = useMemo(() => {
     return vehiclesWithDrivers.filter(v => {
-      // Фильтр по подкатегории
       if (selectedSubcategoryId && v.category_id !== selectedSubcategoryId) return false;
-      // Фильтр по категории (если подкатегория не выбрана)
       if (!selectedSubcategoryId && selectedCategoryId && v.category_id !== selectedCategoryId) return false;
-      // Фильтр по атрибутам
       for (const [slug, val] of Object.entries(attributeValues)) {
         if (val && v.attributes?.[slug] !== val) return false;
       }
@@ -282,18 +311,21 @@ export const RequestFormModal: React.FC<Props> = ({
     if (!workType.trim()) { setError('Введите тип работы'); return; }
     if (!objectAddress.trim()) { setError('Введите адрес объекта'); return; }
     if (!plannedStart || !plannedEnd) { setError('Укажите даты начала и окончания'); return; }
-    if (!selectedClientId) { setError('Выберите клиента'); return; }
+
+    // Для заказчика client_id не требуется (берётся из токена на бэкенде)
+    // Для остальных — обязателен
+    if (!isClient && !selectedClientId) { setError('Выберите клиента'); return; }
 
     // Marketplace validation
     if (assignmentMode === 'marketplace') {
       const start = new Date(plannedStart);
       const end = new Date(plannedEnd);
       if (end <= start) { setError('Дата окончания должна быть позже даты начала'); return; }
-      if (!clientRate || Number(clientRate) <= 0) { setError('Укажите ставку для заявки в маркетплейсе'); return; }
+      if (!clientRate || Number(clientRate) <= 0) { setError('Укажите бюджет / стоимость смены'); return; }
     }
 
-    // Own vehicle validation
-    if (assignmentMode === 'own' && !selectedVehicleId) {
+    // Own vehicle validation (только для не-заказчиков)
+    if (!isClient && assignmentMode === 'own' && !selectedVehicleId) {
       setError('Выберите технику с водителем');
       return;
     }
@@ -307,21 +339,29 @@ export const RequestFormModal: React.FC<Props> = ({
         planned_start: new Date(plannedStart).toISOString(),
         planned_end: new Date(plannedEnd).toISOString(),
         rate_type: rateType,
-        source_channel: assignmentMode === 'marketplace' ? 'marketplace' : sourceChannel,
-        marketplace_mode: assignmentMode === 'marketplace' ? marketplaceMode : undefined,
-        payment_terms_days: assignmentMode === 'marketplace' ? paymentTermsDays : undefined,
         priority: priority,
         comment: comment.trim() || undefined,
-        client_id: selectedClientId,
         vehicle_category_id: selectedSubcategoryId || undefined,
       };
+
+      // Для заказчика: source_channel=web, marketplace_mode=client, payment_terms=0, client_id не передаём
+      if (isClient) {
+        payload.source_channel = 'web';
+        payload.marketplace_mode = 'client';
+        payload.payment_terms_days = 0;
+      } else {
+        payload.source_channel = assignmentMode === 'marketplace' ? 'marketplace' : sourceChannel;
+        payload.marketplace_mode = assignmentMode === 'marketplace' ? marketplaceMode : undefined;
+        payload.payment_terms_days = assignmentMode === 'marketplace' ? paymentTermsDays : undefined;
+        payload.client_id = selectedClientId;
+      }
 
       if (shiftDuration) payload.shift_duration_hours = parseFloat(shiftDuration);
       if (clientRate) payload.client_rate = parseFloat(clientRate);
       if (estimatedAmount) payload.estimated_amount = parseFloat(estimatedAmount);
 
-      // Назначение техники и водителя
-      if (assignmentMode === 'own' && selectedVehicleId) {
+      // Назначение техники и водителя (только для не-заказчиков в режиме own)
+      if (!isClient && assignmentMode === 'own' && selectedVehicleId) {
         payload.assigned_vehicle_id = selectedVehicleId;
         const selectedV = vehiclesWithDrivers.find(v => v.id === selectedVehicleId);
         if (selectedV?.driver_id) {
@@ -342,8 +382,11 @@ export const RequestFormModal: React.FC<Props> = ({
 
   // Текст для отображения режима маркетплейса
   const marketplaceModeLabel = marketplaceMode === 'owner_dispatcher'
-    ? { icon: '📋', title: 'Диспетчер / Владелец техники', desc: 'Вы получаете 10% комиссии. Стандартный срок оплаты: 7 дней.', color: 'orange' }
-    : { icon: '🏪', title: 'Заказчик', desc: 'Предоплата 100%. Счёт выставляется вашей компании.', color: 'purple' };
+    ? { icon: '📋', title: 'Диспетчер / Владелец техники', desc: 'Вы получаете 10% комиссии. Стандартный срок оплаты: 7 дней.' }
+    : { icon: '🏪', title: 'Заказчик', desc: 'Предоплата 100%. Счёт выставляется вашей компании.' };
+
+  // Проверка срочности заявки
+  const isUrgentRequest = isTodayOrEarlier(plannedStart);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -355,6 +398,22 @@ export const RequestFormModal: React.FC<Props> = ({
             </h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
           </div>
+
+          {/* Предупреждение о срочной заявке для заказчика */}
+          {isClient && isUrgentRequest && (
+            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-300 rounded-lg animate-pulse">
+              <div className="flex items-start gap-2">
+                <span className="text-yellow-600 text-xl">⏰</span>
+                <div>
+                  <p className="text-sm font-semibold text-yellow-800">Заявка на сегодня / срочная</p>
+                  <p className="text-xs text-yellow-700 mt-1">
+                    Оплата может не успеть пройти до начала работ. Возможно потребуется оставить залог 
+                    до поступления оплаты на расчётный счёт исполнителя.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {vehicleId && vehicleName && (
             <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -386,15 +445,17 @@ export const RequestFormModal: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* Клиент */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Клиент *</label>
-              <select value={selectedClientId ?? ''} onChange={(e) => setSelectedClientId(Number(e.target.value) || null)}
-                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" disabled={loadingClients}>
-                <option value="">Выберите клиента</option>
-                {clients.map(cl => (<option key={cl.id} value={cl.id}>{cl.name}</option>))}
-              </select>
-            </div>
+            {/* Клиент — ТОЛЬКО для не-заказчиков */}
+            {!isClient && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Клиент *</label>
+                <select value={selectedClientId ?? ''} onChange={(e) => setSelectedClientId(Number(e.target.value) || null)}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" disabled={loadingClients}>
+                  <option value="">Выберите клиента</option>
+                  {clients.map(cl => (<option key={cl.id} value={cl.id}>{cl.name}</option>))}
+                </select>
+              </div>
+            )}
 
             {/* Категория и подкатегория */}
             <div className="grid grid-cols-2 gap-4">
@@ -462,134 +523,159 @@ export const RequestFormModal: React.FC<Props> = ({
               </div>
             )}
 
-            {/* === НАЗНАЧЕНИЕ: СВОЯ ТЕХНИКА+ВОДИТЕЛЬ ИЛИ МАРКЕТПЛЕЙС === */}
+            {/* === НАЗНАЧЕНИЕ === */}
             <div className="p-4 border border-gray-200 rounded-lg">
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Назначение заявки</label>
-              <div className="flex gap-4 mb-3">
-                <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border transition-all ${
-                  assignmentMode === 'own' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
-                }`}>
-                  <input type="radio" name="assignmentMode" value="own"
-                    checked={assignmentMode === 'own'} onChange={() => setAssignmentMode('own')}
-                    className="accent-blue-600" />
-                  <span className="text-sm font-medium">🚜 Своя техника + водитель</span>
-                </label>
-                <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border transition-all ${
-                  assignmentMode === 'marketplace' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'
-                }`}>
-                  <input type="radio" name="assignmentMode" value="marketplace"
-                    checked={assignmentMode === 'marketplace'} onChange={() => setAssignmentMode('marketplace')}
-                    className="accent-green-600" />
-                  <span className="text-sm font-medium">🌐 Маркетплейс</span>
-                </label>
-              </div>
+              {isClient ? (
+                /* === РЕЖИМ ЗАКАЗЧИКА === */
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">🏪</span>
+                    <label className="block text-sm font-semibold text-gray-700">
+                      Заявка для платформы СпецТехника Про
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Ваша заявка будет обработана менеджерами платформы. 
+                    После подтверждения вам будет выставлен счёт. 
+                    Техника и водитель будут назначены после поступления оплаты.
+                  </p>
 
-              {assignmentMode === 'own' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Выберите технику с водителем *
-                    {filteredVehicles.length < vehiclesWithDrivers.length && (
-                      <span className="text-xs text-gray-400 ml-2">
-                        (отфильтровано: {filteredVehicles.length} из {vehiclesWithDrivers.length})
+                  {/* Информация о предоплате */}
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded">
+                    <div className="flex items-center gap-2">
+                      <span className="text-purple-600">💳</span>
+                      <span className="text-sm font-medium text-purple-800">
+                        Предоплата 100% • Счёт формируется автоматически
                       </span>
-                    )}
-                  </label>
-                  <select
-                    value={selectedVehicleId ?? ''}
-                    onChange={(e) => setSelectedVehicleId(Number(e.target.value) || null)}
-                    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                    disabled={loadingVehicles}
-                  >
-                    <option value="">
-                      {loadingVehicles ? 'Загрузка техники...' : filteredVehicles.length === 0 ? 'Нет подходящей техники' : 'Выберите технику с водителем'}
-                    </option>
-                    {filteredVehicles.map(v => (
-                      <option key={v.id} value={v.id}>
-                        🚜 {v.name} {v.driver_name ? `— 👷 ${v.driver_name}` : '— ⚠️ Без водителя'}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedVehicleId && (() => {
-                    const sv = vehiclesWithDrivers.find(v => v.id === selectedVehicleId);
-                    if (!sv) return null;
-                    return (
-                      <div className="mt-2 p-3 bg-blue-50 rounded border border-blue-200 text-sm">
-                        <div className="flex justify-between">
-                          <span className="font-medium text-gray-900">🚜 {sv.name}</span>
-                          <span className="text-gray-600">
-                            {sv.hourly_rate ? `${sv.hourly_rate} ₽/час` : sv.shift_rate ? `${sv.shift_rate} ₽/смена` : 'Ставка не указана'}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* === РЕЖИМ ВЛАДЕЛЬЦА / ДИСПЕТЧЕРА === */
+                <>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Назначение заявки</label>
+                  <div className="flex gap-4 mb-3">
+                    <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border transition-all ${
+                      assignmentMode === 'own' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
+                    }`}>
+                      <input type="radio" name="assignmentMode" value="own"
+                        checked={assignmentMode === 'own'} onChange={() => setAssignmentMode('own')}
+                        className="accent-blue-600" />
+                      <span className="text-sm font-medium">🚜 Своя техника + водитель</span>
+                    </label>
+                    <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border transition-all ${
+                      assignmentMode === 'marketplace' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'
+                    }`}>
+                      <input type="radio" name="assignmentMode" value="marketplace"
+                        checked={assignmentMode === 'marketplace'} onChange={() => setAssignmentMode('marketplace')}
+                        className="accent-green-600" />
+                      <span className="text-sm font-medium">🌐 Маркетплейс</span>
+                    </label>
+                  </div>
+
+                  {assignmentMode === 'own' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Выберите технику с водителем *
+                        {filteredVehicles.length < vehiclesWithDrivers.length && (
+                          <span className="text-xs text-gray-400 ml-2">
+                            (отфильтровано: {filteredVehicles.length} из {vehiclesWithDrivers.length})
+                          </span>
+                        )}
+                      </label>
+                      <select
+                        value={selectedVehicleId ?? ''}
+                        onChange={(e) => setSelectedVehicleId(Number(e.target.value) || null)}
+                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                        disabled={loadingVehicles}
+                      >
+                        <option value="">
+                          {loadingVehicles ? 'Загрузка...' : filteredVehicles.length === 0 ? 'Нет подходящей техники' : 'Выберите технику с водителем'}
+                        </option>
+                        {filteredVehicles.map(v => (
+                          <option key={v.id} value={v.id}>
+                            🚜 {v.name} {v.driver_name ? `— 👷 ${v.driver_name}` : '— ⚠️ Без водителя'}
+                          </option>
+                        ))}
+                      </select>
+                      {selectedVehicleId && (() => {
+                        const sv = vehiclesWithDrivers.find(v => v.id === selectedVehicleId);
+                        if (!sv) return null;
+                        return (
+                          <div className="mt-2 p-3 bg-blue-50 rounded border border-blue-200 text-sm">
+                            <div className="flex justify-between">
+                              <span className="font-medium text-gray-900">🚜 {sv.name}</span>
+                              <span className="text-gray-600">
+                                {sv.hourly_rate ? `${sv.hourly_rate} ₽/час` : sv.shift_rate ? `${sv.shift_rate} ₽/смена` : 'Ставка не указана'}
+                              </span>
+                            </div>
+                            {sv.driver_name ? (
+                              <div className="text-green-700 mt-1">👷 Водитель: {sv.driver_name}</div>
+                            ) : (
+                              <div className="text-orange-600 mt-1">⚠️ Водитель не назначен</div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {assignmentMode === 'marketplace' && (
+                    <div className="space-y-3 bg-green-50 p-4 rounded border border-green-200">
+                      <p className="text-sm text-green-700 font-medium">📢 Заявка будет опубликована в маркетплейсе</p>
+                      
+                      {/* Автоматически определённый режим (read-only) */}
+                      <div className={`p-3 rounded border ${
+                        marketplaceMode === 'owner_dispatcher' ? 'bg-orange-50 border-orange-200' : 'bg-purple-50 border-purple-200'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{marketplaceModeLabel.icon}</span>
+                          <span className={`text-sm font-semibold ${
+                            marketplaceMode === 'owner_dispatcher' ? 'text-orange-800' : 'text-purple-800'
+                          }`}>Режим: {marketplaceModeLabel.title}</span>
+                        </div>
+                        <p className={`text-xs ${
+                          marketplaceMode === 'owner_dispatcher' ? 'text-orange-600' : 'text-purple-600'
+                        }`}>{marketplaceModeLabel.desc}</p>
+                      </div>
+
+                      {/* Срок оплаты */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Срок оплаты (дней) *</label>
+                        <div className="flex items-center gap-3">
+                          <input type="number" min={0} max={90}
+                            value={paymentTermsDays}
+                            onChange={(e) => {
+                              const v = Math.max(0, Math.min(90, Number(e.target.value) || 0));
+                              setPaymentTermsDays(v);
+                              setShowExtendedPaymentWarning(v > 7);
+                            }}
+                            disabled={marketplaceMode === 'client'}
+                            className={`w-24 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none ${
+                              marketplaceMode === 'client' ? 'bg-gray-100 cursor-not-allowed' : ''
+                            }`}
+                          />
+                          <span className="text-sm text-gray-500">
+                            {marketplaceMode === 'client' ? 'Предоплата 100%' : 'Стандарт: 7 дней'}
                           </span>
                         </div>
-                        {sv.driver_name ? (
-                          <div className="text-green-700 mt-1">👷 Водитель: {sv.driver_name}</div>
-                        ) : (
-                          <div className="text-orange-600 mt-1">⚠️ Водитель не назначен. Заявка будет создана без водителя.</div>
+                        {showExtendedPaymentWarning && marketplaceMode === 'owner_dispatcher' && (
+                          <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded animate-pulse">
+                            <div className="flex items-start gap-2">
+                              <span className="text-red-600 text-lg">⚠️</span>
+                              <div>
+                                <p className="text-sm font-medium text-red-800">Увеличенный срок оплаты: {paymentTermsDays} дн.</p>
+                                <p className="text-xs text-red-600 mt-1">
+                                  Исполнители увидят предупреждение. Это может снизить количество откликов.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
                         )}
                       </div>
-                    );
-                  })()}
-                </div>
-              )}
-
-              {assignmentMode === 'marketplace' && (
-                <div className="space-y-3 bg-green-50 p-4 rounded border border-green-200">
-                  <p className="text-sm text-green-700 font-medium">📢 Заявка будет опубликована в маркетплейсе</p>
-
-                  {/* Автоматически определённый режим (read-only) */}
-                  <div className={`p-3 rounded border ${
-                    marketplaceMode === 'owner_dispatcher' ? 'bg-orange-50 border-orange-200' : 'bg-purple-50 border-purple-200'
-                  }`}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-lg">{marketplaceModeLabel.icon}</span>
-                      <span className={`text-sm font-semibold ${
-                        marketplaceMode === 'owner_dispatcher' ? 'text-orange-800' : 'text-purple-800'
-                      }`}>Режим: {marketplaceModeLabel.title}</span>
                     </div>
-                    <p className={`text-xs ${
-                      marketplaceMode === 'owner_dispatcher' ? 'text-orange-600' : 'text-purple-600'
-                    }`}>{marketplaceModeLabel.desc}</p>
-                  </div>
-
-                  {/* Срок оплаты */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Срок оплаты (дней) *</label>
-                    <div className="flex items-center gap-3">
-                      <input type="number" min={0} max={90}
-                        value={paymentTermsDays}
-                        onChange={(e) => {
-                          const v = Math.max(0, Math.min(90, Number(e.target.value) || 0));
-                          setPaymentTermsDays(v);
-                          setShowExtendedPaymentWarning(v > 7);
-                        }}
-                        disabled={marketplaceMode === 'client'}
-                        className={`w-24 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none ${
-                          marketplaceMode === 'client' ? 'bg-gray-100 cursor-not-allowed' : ''
-                        }`}
-                      />
-                      <span className="text-sm text-gray-500">
-                        {marketplaceMode === 'client' ? 'Предоплата 100%' : 'Стандарт: 7 дней'}
-                      </span>
-                    </div>
-                    {marketplaceMode === 'client' && (
-                      <p className="text-xs text-purple-600 mt-1">
-                        🔒 Для заказчиков доступна только предоплата 100%
-                      </p>
-                    )}
-                    {showExtendedPaymentWarning && marketplaceMode === 'owner_dispatcher' && (
-                      <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded animate-pulse">
-                        <div className="flex items-start gap-2">
-                          <span className="text-red-600 text-lg">⚠️</span>
-                          <div>
-                            <p className="text-sm font-medium text-red-800">Увеличенный срок оплаты: {paymentTermsDays} дн.</p>
-                            <p className="text-xs text-red-600 mt-1">
-                              Исполнители увидят предупреждение. Это может снизить количество откликов.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -630,15 +716,20 @@ export const RequestFormModal: React.FC<Props> = ({
                   className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="8" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ставка (₽)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {isClient ? 'Бюджет / Стоимость смены (₽)' : 'Ставка (₽)'}
+                </label>
                 <input type="number" step="100" min="0" value={clientRate} onChange={(e) => setClientRate(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="5000" />
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder={isClient ? "Например: 35000" : "5000"} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Тип ставки</label>
                 <select value={rateType} onChange={(e) => setRateType(e.target.value as RateType)}
                   className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
-                  {RATE_TYPES.map(r => (<option key={r.value} value={r.value}>{r.label}</option>))}
+                  {(isClient ? CLIENT_RATE_TYPES : OWNER_RATE_TYPES).map(r => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -657,15 +748,17 @@ export const RequestFormModal: React.FC<Props> = ({
                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" placeholder="40000" />
             </div>
 
-            {/* Источник + Статус */}
+            {/* Источник + Статус — Источник скрыт для заказчика */}
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Источник заявки</label>
-                <select value={sourceChannel} onChange={(e) => setSourceChannel(e.target.value as SourceChannel)}
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
-                  {SOURCE_CHANNELS.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}
-                </select>
-              </div>
+              {!isClient && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Источник заявки</label>
+                  <select value={sourceChannel} onChange={(e) => setSourceChannel(e.target.value as SourceChannel)}
+                    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                    {SOURCE_CHANNELS.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}
+                  </select>
+                </div>
+              )}
               {request && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Статус</label>
