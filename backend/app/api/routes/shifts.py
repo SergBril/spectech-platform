@@ -3439,7 +3439,7 @@ async def send_act_via_diadoc(
     root = Element("UniversalTransferDocument")
     root.set("Function", "СЧФДОП")
     root.set("Date", str(act.act_date))
-    root.set("Number", act.act_number or f"ACT-{act.id}")
+    root.set("Number", getattr(act, 'document_number', None) or f'ACT-{act.id}' or f"ACT-{act.id}")
 
     seller = SubElement(root, "Seller")
     SubElement(seller, "Name").text = current_user.company.name if hasattr(current_user, 'company') and current_user.company else ""
@@ -3519,7 +3519,7 @@ async def refresh_all_diadoc_statuses(
     acts = db.execute(
         select(Act).where(
             Act.company_id == company_id,
-            Act.edo_message_id.isnot(None),
+            Act.status.in_(['sent_to_edo', 'signed']),
             Act.status.in_(["sent_to_edo"]),
         )
     ).scalars().all()
@@ -3576,7 +3576,7 @@ async def bulk_send_acts_via_diadoc(
         root = Element("UniversalTransferDocument")
         root.set("Function", "СЧФДОП")
         root.set("Date", str(act.act_date))
-        root.set("Number", act.act_number or f"ACT-{act.id}")
+        root.set("Number", getattr(act, 'document_number', None) or f'ACT-{act.id}' or f"ACT-{act.id}")
 
         seller = SubElement(root, "Seller")
         SubElement(seller, "Name").text = ""
@@ -3700,7 +3700,7 @@ async def sign_act_with_kep(
     root = Element("UniversalTransferDocument")
     root.set("Function", "СЧФДОП")
     root.set("Date", str(act.act_date))
-    root.set("Number", act.act_number or f"ACT-{act.id}")
+    root.set("Number", getattr(act, 'document_number', None) or f'ACT-{act.id}' or f"ACT-{act.id}")
 
     item = SubElement(root, "Item")
     SubElement(item, "Name").text = f"Услуги спецтехники ({act.act_date})"
@@ -3745,7 +3745,7 @@ async def verify_act_signature(
     root = Element("UniversalTransferDocument")
     root.set("Function", "СЧФДОП")
     root.set("Date", str(act.act_date))
-    root.set("Number", act.act_number or f"ACT-{act.id}")
+    root.set("Number", getattr(act, 'document_number', None) or f'ACT-{act.id}' or f"ACT-{act.id}")
     item = SubElement(root, "Item")
     SubElement(item, "Name").text = f"Услуги спецтехники ({act.act_date})"
     SubElement(item, "Quantity").text = str(act.hours_worked or 0)
@@ -3873,11 +3873,11 @@ def auto_index_acts(
 
         vehicle = db.get(Vehicle, act.vehicle_id) if act.vehicle_id else None
         vname = vehicle.name if vehicle else ""
-        content = f"Акт {act.act_number} от {act.act_date}. Техника: {vname}. Часов: {act.hours_worked}. Сумма: {act.total_amount} руб."
+        content = f"Акт {getattr(act, 'document_number', None) or f'ACT-{act.id}'} от {act.act_date}. Техника: {vname}. Часов: {act.hours_worked}. Сумма: {act.total_amount} руб."
 
         doc = DocumentArchive(
             company_id=company_id, doc_type="act",
-            doc_number=act.act_number, title=f"Акт {act.act_number} от {act.act_date}",
+            doc_number=getattr(act, 'document_number', None) or f'ACT-{act.id}', title=f"Акт {getattr(act, 'document_number', None) or f'ACT-{act.id}'} от {act.act_date}",
             content_text=content, related_act_id=act.id,
             uploaded_by=current_user.id,
         )
@@ -4157,8 +4157,8 @@ def auto_match_payments(
 
             # Match by purpose containing act number
             purpose_match = False
-            if payment.purpose and act.act_number:
-                purpose_match = act.act_number.replace("-", "") in payment.purpose.replace("-", "").replace(" ", "")
+            if payment.purpose and getattr(act, 'document_number', None) or f'ACT-{act.id}':
+                purpose_match = getattr(act, 'document_number', None) or f'ACT-{act.id}'.replace("-", "") in payment.purpose.replace("-", "").replace(" ", "")
 
             if amount_match and (inn_match or purpose_match or not act.counterparty_inn):
                 best_act = act
@@ -4214,7 +4214,7 @@ def get_receivables_dashboard(
             vehicle = db.get(Vehicle, act.vehicle_id) if act.vehicle_id else None
             overdue_acts.append({
                 "id": act.id,
-                "act_number": act.act_number,
+                "act_number": getattr(act, 'document_number', None) or f'ACT-{act.id}',
                 "act_date": str(act.act_date),
                 "vehicle_name": vehicle.name if vehicle else "",
                 "counterparty": act.counterparty_name or act.driver_name or "",
@@ -4293,7 +4293,7 @@ def list_bank_transactions(
             "payee_name": t.payee_name, "amount": t.amount,
             "purpose": t.purpose, "status": t.status,
             "matched_act_id": t.matched_act_id,
-            "matched_act_number": act.act_number if act else None,
+            "matched_act_number": getattr(act, 'document_number', None) or f'ACT-{act.id}' if act else None,
             "source": t.source,
         })
 
@@ -4327,7 +4327,7 @@ def manual_match_transaction(
         act.payment_status = "partial"
 
     db.commit()
-    return {"message": f"Транзакция {txn.doc_number} привязана к акту {act.act_number}"}
+    return {"message": f"Транзакция {txn.doc_number} привязана к акту {getattr(act, 'document_number', None) or f'ACT-{act.id}'}"}
 
 
 @router.get("/acts/unpaid", summary="📋 Неоплаченные акты для разнесения")
@@ -4561,7 +4561,7 @@ def export_transactions_excel(
         ws.cell(row=row_idx, column=4, value=t.payer_inn or "")
         ws.cell(row=row_idx, column=5, value=t.amount).number_format = '#,##0'
         ws.cell(row=row_idx, column=6, value=t.purpose or "")
-        ws.cell(row=row_idx, column=7, value=act.act_number if act else "")
+        ws.cell(row=row_idx, column=7, value=getattr(act, 'document_number', None) or f'ACT-{act.id}' if act else "")
         ws.cell(row=row_idx, column=8, value="Разнесено" if act else "Не разнесено")
         total_amount += t.amount
 
@@ -4627,7 +4627,7 @@ def get_platform_overview(
     txn_month = db.execute(
         select(func.count(), func.coalesce(func.sum(BankTransaction.amount), 0))
         .where(BankTransaction.company_id == company_id)
-        .where(BankTransaction.document_date >= str(month_start))
+        .where(BankTransaction.document_date >= month_start)
     ).one()
     txn_count = txn_month[0] or 0
     txn_amount = float(txn_month[1] or 0)
