@@ -77,3 +77,6 @@ from app.models.marketplace import MarketplaceOffer  # noqa: F401
 
 # === UserCompany ===
 from app.models.user_company import UserCompany  # noqa: F401
+
+# === Telematics (Geofences, GPS) ===
+from app.models.telematics import Geofence, GpsPoint  # noqa: F401
