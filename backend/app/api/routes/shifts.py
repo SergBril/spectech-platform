@@ -4287,7 +4287,7 @@ def list_bank_transactions(
     for t in txns:
         act = db.get(Act, t.matched_act_id) if t.matched_act_id else None
         items.append({
-            "id": t.id, "doc_number": t.doc_number, "doc_date": t.doc_date,
+            "id": t.id, "doc_number": t.document_number, "doc_date": t.document_date,
             "payer_name": t.payer_name, "payer_inn": t.payer_inn,
             "payee_name": t.payee_name, "amount": t.amount,
             "purpose": t.purpose, "status": t.status,
@@ -4554,8 +4554,8 @@ def export_transactions_excel(
     total_amount = 0
     for row_idx, t in enumerate(txns, 2):
         act = db.get(Act, t.matched_act_id) if t.matched_act_id else None
-        ws.cell(row=row_idx, column=1, value=t.doc_date)
-        ws.cell(row=row_idx, column=2, value=t.doc_number)
+        ws.cell(row=row_idx, column=1, value=t.document_date)
+        ws.cell(row=row_idx, column=2, value=t.document_number)
         ws.cell(row=row_idx, column=3, value=t.payer_name or "")
         ws.cell(row=row_idx, column=4, value=t.payer_inn or "")
         ws.cell(row=row_idx, column=5, value=t.amount).number_format = '#,##0'

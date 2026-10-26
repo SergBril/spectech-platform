@@ -422,7 +422,7 @@ def start_scheduler() -> None:
                     payments = db.execute(
                         select(BankTransaction).where(
                             BankTransaction.company_id == cid,
-                            BankTransaction.matched_act_id.is_(None),
+                            BankTransaction.matched_invoice_id.is_(None),
                             BankTransaction.status == "processed",
                         )
                     ).scalars().all()
@@ -444,7 +444,7 @@ def start_scheduler() -> None:
                             purpose_match = bool(payment.purpose and act.act_number and act.act_number.replace("-", "") in payment.purpose.replace("-", "").replace(" ", ""))
 
                             if amount_match and (inn_match or purpose_match or not act.counterparty_inn):
-                                payment.matched_act_id = act.id
+                                payment.matched_invoice_id = act.id
                                 act.paid_amount = (act.paid_amount or 0) + payment.amount
                                 act.payment_status = "paid" if act.paid_amount >= act.total_amount else "partial"
                                 total_matched += 1

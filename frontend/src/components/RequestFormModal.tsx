@@ -322,6 +322,10 @@ export const RequestFormModal: React.FC<Props> = ({
         payload.status = status;
       }
 
+      if (selectedDriverId) {
+          payload.driver_id = selectedDriverId;
+      }
+
       await onSave(payload);
     } catch (err: any) {
       setSaving(false);
