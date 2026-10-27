@@ -11,53 +11,51 @@ import PageLoader from './components/PageLoader';
 import { Sentry } from './lib/sentry';
 
 // Lazy-loaded pages
-import {
-  DashboardPage,
-  FinancePage,
-  CompanyProfilePage,
-  MarketplacePage,
-  MyResponsesPage,
-  ShiftCalendarPage,
-  UtilizationPage,
-  AutoAssignRulesPage,
-  DriverKPIPage,
-  DriverAppPage,
-  FuelDashboardPage,
-  ChecklistConfigsPage,
-  CostPerHourPage,
-  ActsPage,
-  FinanceDashboardPage,
-  DocumentArchivePage,
-  ReceivablesPage,
-  BankTransactionsPage,
-  PnLPerVehiclePage,
-  PlatformOverviewPage,
-  NotificationSettingsPage,
-  EdoSettingsPage,
-  OnboardingWizardPage,
-  AuditLogPage,
-  UserRolesPage,
-  VehiclesPage,
-  DriversPage,
-  RequestsPage,
-  ContractorsPage,
-  ContractorDetailPage,
-  MaintenancePage,
-  MaintenanceDetailPage,
-  MaintenanceCreatePage,
-  MaintenanceAnalyticsPage,
-  FuelAnalyticsPage,
-  ReconciliationPage,
-  InvoicesPage,
-  PayoutsPage,
-  EmailTemplatesPage,
-  EmailLogsPage,
-  CompanySettingsPage,
-  MyListingsPage,
-  RequestDetailPage,
-  ActCreatePage,
-  VehicleDetailPage,
-} from './pages';
+const ActCreatePage = lazy(() => import('./pages/ActCreatePage'));
+const ActsPage = lazy(() => import('./pages/ActsPage'));
+const AuditLogPage = lazy(() => import('./pages/AuditLogPage'));
+const AutoAssignRulesPage = lazy(() => import('./pages/AutoAssignRulesPage'));
+const BankTransactionsPage = lazy(() => import('./pages/BankTransactionsPage'));
+const ChecklistConfigsPage = lazy(() => import('./pages/ChecklistConfigsPage'));
+const CompanyProfilePage = lazy(() => import('./pages/CompanyProfilePage'));
+const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage'));
+const ContractorDetailPage = lazy(() => import('./pages/ContractorDetailPage'));
+const ContractorsPage = lazy(() => import('./pages/ContractorsPage'));
+const CostPerHourPage = lazy(() => import('./pages/CostPerHourPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const DocumentArchivePage = lazy(() => import('./pages/DocumentArchivePage'));
+const DriverAppPage = lazy(() => import('./pages/DriverAppPage'));
+const DriverKPIPage = lazy(() => import('./pages/DriverKPIPage'));
+const DriversPage = lazy(() => import('./pages/DriversPage'));
+const EdoSettingsPage = lazy(() => import('./pages/EdoSettingsPage'));
+const EmailLogsPage = lazy(() => import('./pages/EmailLogsPage'));
+const EmailTemplatesPage = lazy(() => import('./pages/EmailTemplatesPage'));
+const FinanceDashboardPage = lazy(() => import('./pages/FinanceDashboardPage'));
+const FinancePage = lazy(() => import('./pages/FinancePage'));
+const FuelAnalyticsPage = lazy(() => import('./pages/FuelAnalyticsPage'));
+const FuelDashboardPage = lazy(() => import('./pages/FuelDashboardPage'));
+const InvoicesPage = lazy(() => import('./pages/InvoicesPage'));
+const MaintenanceAnalyticsPage = lazy(() => import('./pages/MaintenanceAnalyticsPage'));
+const MaintenanceCreatePage = lazy(() => import('./pages/MaintenanceCreatePage'));
+const MaintenanceDetailPage = lazy(() => import('./pages/MaintenanceDetailPage'));
+const MaintenancePage = lazy(() => import('./pages/MaintenancePage'));
+const MarketplacePage = lazy(() => import('./pages/MarketplacePage'));
+const MyListingsPage = lazy(() => import('./pages/MyListingsPage'));
+const MyResponsesPage = lazy(() => import('./pages/MyResponsesPage'));
+const NotificationSettingsPage = lazy(() => import('./pages/NotificationSettingsPage'));
+const OnboardingWizardPage = lazy(() => import('./pages/OnboardingWizardPage'));
+const PayoutsPage = lazy(() => import('./pages/PayoutsPage'));
+const PlatformOverviewPage = lazy(() => import('./pages/PlatformOverviewPage'));
+const PnLPerVehiclePage = lazy(() => import('./pages/PnLPerVehiclePage'));
+const ReceivablesPage = lazy(() => import('./pages/ReceivablesPage'));
+const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage'));
+const RequestDetailPage = lazy(() => import('./pages/RequestDetailPage'));
+const RequestsPage = lazy(() => import('./pages/RequestsPage'));
+const ShiftCalendarPage = lazy(() => import('./pages/ShiftCalendarPage'));
+const UserRolesPage = lazy(() => import('./pages/UserRolesPage'));
+const UtilizationPage = lazy(() => import('./pages/UtilizationPage'));
+const VehicleDetailPage = lazy(() => import('./pages/VehicleDetailPage'));
+const VehiclesPage = lazy(() => import('./pages/VehiclesPage'));
 
 // ╨Ы╤С╨│╨║╨╕╨╡ ╤Б╤В╤А╨░╨╜╨╕╤Ж╤Л тАФ ╨╖╨░╨│╤А╤Г╨╢╨░╤О╤В╤Б╤П ╤Б╤А╨░╨╖╤Г
 import LoginPage from './pages/LoginPage';
@@ -85,6 +83,7 @@ const DriverDashboardPage = lazy(() => import('./pages/driver/DriverDashboardPag
 const ShiftReportPage = lazy(() => import('./pages/driver/ShiftReportPage'));
 const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
 const GpsAdminPage = lazy(() => import('./pages/admin/GpsAdminPage'));
+
 
 const AppRoutes = () => {
   return (
