@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.services.email_service import email_service
 from app.services.notification_service import create_notification
 from app.services.telegram_service import telegram_service
+from app.services.max_service import max_service
 
 logger = logging.getLogger("spectech.notifications")
 
@@ -48,7 +49,7 @@ class NotificationDispatcher:
         - 🤖 Telegram: короткое уведомление
         - 💬 In-app: если есть user_id
         """
-        results = {"email": False, "telegram": False, "in_app": False}
+        results = {"email": False, "telegram": False, "max": False, "in_app": False}
 
         try:
             # Email
@@ -71,6 +72,20 @@ class NotificationDispatcher:
             )
         except Exception as e:
             logger.error(f"Failed to send rental_completed telegram: {e}")
+
+        try:
+            # MAX
+            results["max"] = await max_service.send_alert(
+                title=f"Аренда #{rental.id} завершена",
+                message=(
+                    f"Сумма: {rental.total_amount:.2f} ₽\n"
+                    f"Счёт: {invoice.document_number}\n"
+                    f"Оплатить до: {invoice.due_date.strftime('%d.%m.%Y')}"
+                ),
+                urgency="info",
+            )
+        except Exception as e:
+            logger.error(f"Failed to send rental_completed max: {e}")
 
         try:
             # In-app
@@ -97,7 +112,7 @@ class NotificationDispatcher:
         owner_user_id: int | None = None,
     ) -> dict[str, bool]:
         """Уведомление собственнику о созданной выплате."""
-        results = {"email": False, "telegram": False, "in_app": False}
+        results = {"email": False, "telegram": False, "max": False, "in_app": False}
 
         try:
             results["email"] = email_service.send_payout_created(
@@ -143,7 +158,7 @@ class NotificationDispatcher:
         dispatcher_user_id: int | None = None,
     ) -> dict[str, bool]:
         """Уведомление диспетчеру о новом споре."""
-        results = {"email": False, "telegram": False, "in_app": False}
+        results = {"email": False, "telegram": False, "max": False, "in_app": False}
 
         try:
             results["email"] = email_service.send_dispute_opened(
@@ -187,7 +202,7 @@ class NotificationDispatcher:
         manager_user_id: int | None = None,
     ) -> dict[str, bool]:
         """Уведомление менеджеру/CEO об эскалации."""
-        results = {"email": False, "telegram": False, "in_app": False}
+        results = {"email": False, "telegram": False, "max": False, "in_app": False}
 
         try:
             results["email"] = email_service.send_dispute_escalated(
