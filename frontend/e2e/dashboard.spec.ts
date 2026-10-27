@@ -1,21 +1,17 @@
-﻿import { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 test.describe('Dashboard', () => {
   test('should load dashboard page', async ({ page }) => {
-    // Collect console errors for debugging
     const errors: string[] = [];
     page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
     page.on('pageerror', err => errors.push(err.message));
 
     await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-    // Wait longer for initial data load + isInitialLoading
-    await page.waitForTimeout(3000);
-
+    // Deterministic wait instead of fixed timeout
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
     await expect(page).toHaveURL(/\/$/);
 
-    // Check body visibility with better timeout
-    const hasContent = await page.locator('body').first().isVisible({ timeout: 5000 });
+    const hasContent = await page.locator('body').first().isVisible({ timeout: 10000 });
     if (!hasContent) {
       console.log('Console errors:', errors);
     }
@@ -24,21 +20,22 @@ test.describe('Dashboard', () => {
 
   test('should have sidebar navigation', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(3000);
-    const hasNav = await page.locator('nav, aside, [class*="sidebar"], [class*="Sidebar"]').first().isVisible({ timeout: 5000 });
-    expect(hasNav).toBeTruthy();
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+
+    // Wait for Layout component to render sidebar with increased timeout
+    const sidebar = page.locator('nav, aside, [class*="sidebar"], [class*="Sidebar"]').first();
+    await expect(sidebar).toBeVisible({ timeout: 15000 });
   });
 
   test('should navigate to vehicles', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(3000);
-    const vehiclesLink = page.locator('a[href*="vehicles"], [href*="vehicles"]').first();
-    if (await vehiclesLink.isVisible()) {
-      await vehiclesLink.click();
-      await page.waitForURL('**/vehicles', { timeout: 10000 });
-      await expect(page).toHaveURL(/\/vehicles/);
-    }
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+
+    // Sidebar uses <button> with navigate(), not <a href>
+    const vehiclesBtn = page.locator('button:has-text("Техника")').first();
+    await expect(vehiclesBtn).toBeVisible({ timeout: 15000 });
+    await vehiclesBtn.click();
+    await page.waitForURL('**/vehicles', { timeout: 10000 });
+    await expect(page).toHaveURL(/\/vehicles/);
   });
 });
