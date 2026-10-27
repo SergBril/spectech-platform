@@ -46,7 +46,8 @@ export default defineConfig({
             if (id.includes('leaflet')) {
               return 'vendor-map';
             }
-            if (id.includes('recharts') || id.includes('d3')) {
+            // recharts/d3 are lazy-loaded per page via dynamic imports
+            if (id.includes('d3')) {
               return 'vendor-charts';
             }
             if (id.includes('axios') || id.includes('dayjs')) {
