@@ -340,6 +340,7 @@ def get_chat_by_request(
         .count()
     )
 
+    db.commit()
     return ChatRead(
         id=chat.id,
         request_id=chat.request_id,
