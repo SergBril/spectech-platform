@@ -135,6 +135,19 @@ class NotificationDispatcher:
             logger.error(f"Failed to send payout_created telegram: {e}")
 
         try:
+            results["max"] = await max_service.send_alert(
+                title=f"💰 Выплата {payout.document_number}",
+                message=(
+                    f"Gross: {payout.gross_amount:.2f} ₽\n"
+                    f"Комиссия: {payout.platform_commission:.2f} ₽\n"
+                    f"К выплате: {payout.net_amount:.2f} ₽"
+                ),
+                urgency="success",
+            )
+        except Exception as e:
+            logger.error(f"Failed to send payout_created max: {e}")
+
+        try:
             if owner_user_id:
                 await create_notification(
                     db=db,
@@ -175,6 +188,15 @@ class NotificationDispatcher:
             )
         except Exception as e:
             logger.error(f"Failed to send dispute_opened telegram: {e}")
+
+        try:
+            results["max"] = await max_service.send_dispute_alert(
+                dispute_id=dispute.id,
+                dispute_type=dispute.dispute_type.value,
+                initiator=dispute.initiator_role.value,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send dispute_opened max: {e}")
 
         try:
             if dispatcher_user_id:
@@ -219,6 +241,15 @@ class NotificationDispatcher:
             )
         except Exception as e:
             logger.error(f"Failed to send dispute_escalated telegram: {e}")
+
+        try:
+            results["max"] = await max_service.send_escalation_alert(
+                dispute_id=dispute.id,
+                from_role=from_role,
+                to_role=to_role,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send dispute_escalated max: {e}")
 
         try:
             if manager_user_id:
