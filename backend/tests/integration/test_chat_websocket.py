@@ -189,7 +189,6 @@ class TestChatWebSocket:
             assert data["type"] == "typing"
             assert "user_id" in data["data"]
 
-    @pytest.mark.skip(reason="Read receipt (_mark_as_read) is a stub - not implemented yet")
     def test_websocket_read_receipt(
         self, auth_client: TestClient, auth_headers: dict, auth_token: str
     ):

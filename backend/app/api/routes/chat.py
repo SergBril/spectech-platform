@@ -197,9 +197,18 @@ def _get_messages_cursor(
 
 
 def _mark_as_read(db: Session, message_id: int, user_id: int):
-    """Пометить сообщение как прочитанное (stub)."""
-    # В реальной реализации здесь нужно обновлять таблицу read_receipts
-    pass
+    """Пометить сообщение как прочитанное."""
+    from sqlalchemy import select as sa_select
+    msg = db.get(ChatMessage, message_id)
+    if not msg:
+        return
+
+    current = msg.is_read_by or {}
+    if str(user_id) not in current:
+        from datetime import datetime, UTC
+        current[str(user_id)] = datetime.now(UTC).isoformat()
+        msg.is_read_by = current
+        db.commit()
 
 
 def _message_to_read(msg: ChatMessage, db: Session) -> MessageRead:
