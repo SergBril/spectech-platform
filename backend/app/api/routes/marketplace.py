@@ -599,6 +599,7 @@ def list_marketplace_requests(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     category_id: int | None = Query(None, description="Фильтр по категории техники"),
+    region: str | None = Query(None, description="Фильтр по региону"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
@@ -640,6 +641,9 @@ def list_marketplace_requests(
 
     if category_id:
         query = query.where(Request.vehicle_category_id == category_id)
+
+    if region:
+        query = query.where(Request.region == region)
 
     # Filter: only show requests matching company vehicles
     if my_category_ids:
