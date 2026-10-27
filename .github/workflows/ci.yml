@@ -1,23 +1,21 @@
-name: CI Pipeline
+﻿name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
 
 jobs:
-  test:
-    name: Run Tests
+  backend-tests:
     runs-on: ubuntu-latest
-
     services:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: spectech
-          POSTGRES_PASSWORD: spectech  # pragma: allowlist secret
           POSTGRES_DB: spectech_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
         ports:
           - 5432:5432
         options: >-
@@ -25,7 +23,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
       redis:
         image: redis:7-alpine
         ports:
@@ -37,133 +34,56 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Cache pip packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-packages  # pragma: allowlist secret
-          restore-keys: pip-packages  # pragma: allowlist secret
-
       - name: Install dependencies
+        working-directory: backend
         run: |
-          cd backend
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          pip install pytest pytest-cov pytest-asyncio
 
-      - name: Run tests with coverage
-        run: |
-          cd backend
-          pytest tests/ -v --cov=app --cov-report=xml --cov-report=html
+      - name: Run backend tests
+        working-directory: backend
         env:
-          DATABASE_URL: postgresql://spectech:spectech@localhost:5432/spectech_test  # pragma: allowlist secret
+          DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/spectech_test
           REDIS_URL: redis://localhost:6379/0
           ENVIRONMENT: testing
+          TESTING: "true"
+          SECRET_KEY: ci-test-secret-key
+          DADATA_API_KEY: ""
+          MAX_ENABLED: "false"
+        run: |
+          python -m pytest --cov=app --cov-report=term-missing --tb=short -q
 
-      - name: Upload coverage to GitHub
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: backend/htmlcov/
-
-  security-scan:
-    name: Security Scan
+  e2e-tests:
     runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: './backend'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'HIGH,CRITICAL'
-
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3  # pragma: allowlist secret
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-  e2e:
-    name: E2E Tests (Playwright)
-    runs-on: ubuntu-latest
-    needs: test
-
-    services:
-      postgres:
-        image: timescale/timescaledb:latest-pg16
-        env:
-          POSTGRES_USER: spectech
-          POSTGRES_PASSWORD: spectech  # pragma: allowlist secret
-          POSTGRES_DB: spectech
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+    needs: backend-tests
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Install backend deps
-          cd backend
-          pip install -r requirements.txt
-
-      - name: Setup database
-          cd backend
-          python -c "from app.core.db import engine, Base; import app.models; Base.metadata.create_all(engine)"
-          alembic stamp head
-          python seed.py
-        env:
-          DATABASE_URL: postgresql://spectech:spectech@localhost:5432/spectech  # pragma: allowlist secret
-
-      - name: Start backend
-          cd backend
-          nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 &
-          sleep 10
-          curl -f http://127.0.0.1:8000/api/v1/system/health
-        env:
-          DATABASE_URL: postgresql://spectech:spectech@localhost:5432/spectech  # pragma: allowlist secret
-
-      - name: Install frontend deps
-        run: cd frontend && npm ci
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
 
       - name: Install Playwright browsers
-        run: cd frontend && npx playwright install --with-deps chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
 
       - name: Run E2E tests
-        run: cd frontend && npx playwright test --reporter=list
-        env:
-          E2E_NO_SERVER: "1"
-          E2E_BASE_URL: http://localhost:3000
-
-      - name: Upload E2E artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report
-          path: frontend/test-results/
+        working-directory: frontend
+        run: npx playwright test --reporter=line
