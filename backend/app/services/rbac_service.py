@@ -214,16 +214,16 @@ def init_system_data(db: Session) -> dict:
     
     # Default roles
     default_roles = [
-        {"name": "admin", "description": "Полный доступ"},
-        {"name": "dispatcher", "description": "Диспетчер"},
-        {"name": "driver", "description": "Водитель"},
-        {"name": "accountant", "description": "Бухгалтер"},
-        {"name": "viewer", "description": "Только просмотр"},
+        {"code": "admin", "name": "admin", "description": "Полный доступ", "is_system": True},
+        {"code": "dispatcher", "name": "dispatcher", "description": "Диспетчер", "is_system": True},
+        {"code": "driver", "name": "driver", "description": "Водитель", "is_system": True},
+        {"code": "accountant", "name": "accountant", "description": "Бухгалтер", "is_system": True},
+        {"code": "viewer", "name": "viewer", "description": "Только просмотр", "is_system": True},
     ]
     
     for role_data in default_roles:
         existing = db.execute(
-            select(Role).where(Role.name == role_data["name"])
+            select(Role).where(Role.code == role_data["code"])
         ).scalar_one_or_none()
         
         if not existing:
@@ -239,17 +239,22 @@ def init_system_data(db: Session) -> dict:
                 all_perms.add(p)
     
     for perm_code in all_perms:
+        parts = perm_code.split(":")
+        entity = parts[0] if len(parts) > 0 else ""
+        action = parts[1] if len(parts) > 1 else ""
+
         existing = db.execute(
-            select(Permission).where(Permission.code == perm_code)
+            select(Permission).where(
+                Permission.entity == entity,
+                Permission.action == action,
+            )
         ).scalar_one_or_none()
-        
+
         if not existing:
-            parts = perm_code.split(":")
             perm = Permission(
-                code=perm_code,
-                name=perm_code,
-                resource=parts[0] if len(parts) > 0 else "",
-                action=parts[1] if len(parts) > 1 else "",
+                entity=entity,
+                action=action,
+                description=perm_code,
             )
             db.add(perm)
             created_perms += 1
