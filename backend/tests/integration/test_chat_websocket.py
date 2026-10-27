@@ -45,11 +45,9 @@ class TestChatWebSocket:
                 print(f"🔍 Received data: {data}")  # Логируем
                 assert data["type"] == "message"
                 assert data["data"]["message_type"] == "system_event"
-                assert "user_joined" in data["data"]["content"]
+                assert "присоединился" in data["data"]["content"] or "user_joined" in data["data"]["content"]
             except Exception as e:
-                print(f"❌ Error receiving user_joined: {e}")
-                # Если не получили user_joined, пропускаем тест
-                pytest.skip(f"Server does not send user_joined via WebSocket: {e}")
+                raise AssertionError(f"Failed to receive system join message: {e}")
 
     def test_websocket_connect_invalid_token(self, client: TestClient):
         """Тест: отклонение подключения с невалидным токеном."""
