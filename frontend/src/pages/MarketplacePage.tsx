@@ -31,13 +31,28 @@ const MarketplacePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterCrossCategory, setFilterCrossCategory] = useState(false);
+  const [filterRegion, setFilterRegion] = useState<string>('all');
+
+  // Regions with Moscow/Moscow Oblast at top for better UX
+  const REGIONS = [
+    'Москва',
+    'Московская область',
+    'Санкт-Петербург',
+    'Ленинградская область',
+    'Краснодарский край',
+    'Свердловская область',
+    'Новосибирская область',
+    'Татарстан',
+    'Нижегородская область',
+    'Челябинская область',
+  ];
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(0);
   const pageSize = 12;
 
   useEffect(() => {
     loadRequests();
-  }, [filterCategory, filterCrossCategory, page]);
+  }, [filterCategory, filterCrossCategory, filterRegion, page]);
 
   const loadRequests = async () => {
     setLoading(true);
@@ -45,6 +60,7 @@ const MarketplacePage: React.FC = () => {
       const params: any = { limit: pageSize, offset: page * pageSize };
       if (filterCrossCategory) params.cross_category = true;
       if (filterCategory !== 'all') params.category_id = parseInt(filterCategory);
+      if (filterRegion !== 'all') params.region = filterRegion;
       const res = await apiClient.get('/public/marketplace/requests', { params });
       const data = res.data;
       setRequests(Array.isArray(data) ? data : data?.items || []);
