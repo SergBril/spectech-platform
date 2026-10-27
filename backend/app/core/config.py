@@ -123,6 +123,20 @@ class Settings(BaseSettings):
         description="Таймаут отправки (если Telegram заблокирован — быстро упадём)",
     )
 
+    # MAX (VK) Bot API settings
+    MAX_ENABLED: bool = Field(
+        default=False, description="Enable MAX Bot API notifications"
+    )
+    MAX_BOT_TOKEN: str = Field(
+        default="", description="MAX Bot API token"
+    )
+    MAX_DEFAULT_CHAT_ID: str = Field(
+        default="", description="Default MAX chat/group ID for alerts"
+    )
+    MAX_TIMEOUT_SECONDS: int = Field(
+        default=5, description="Timeout for MAX API requests"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
