@@ -377,10 +377,15 @@ def get_platform_overview(
     ).scalar() or 0
 
     # Recent activity (last 8 audit entries)
-    from app.models.audit import AuditLog
-    recent_actions = db.query(AuditLog).order_by(
-        AuditLog.created_at.desc()
-    ).limit(8).all() if hasattr(AuditLog, "created_at") else []
+    recent_actions = []
+    try:
+        from app.models.audit import AuditLog
+        if hasattr(AuditLog, "created_at"):
+            recent_actions = db.query(AuditLog).order_by(
+                AuditLog.created_at.desc()
+            ).limit(8).all()
+    except (ImportError, Exception):
+        pass
 
     return {
         "counts": {

@@ -280,11 +280,12 @@ def list_reconciliations(
     )
     if status:
         stmt = stmt.where(ShiftDataReconciliation.reconciliation_status == status)
+    needs_join = bool(date_from or date_to)
+    if needs_join:
+        stmt = stmt.join(ShiftTask)
     if date_from:
-        stmt = stmt.join(ShiftTask).where(ShiftTask.shift_date >= date_from)
+        stmt = stmt.where(ShiftTask.shift_date >= date_from)
     if date_to:
-        if not date_from:
-            stmt = stmt.join(ShiftTask)
         stmt = stmt.where(ShiftTask.shift_date <= date_to)
     if shift_task_id:
         stmt = stmt.where(ShiftDataReconciliation.shift_task_id == shift_task_id)
@@ -357,11 +358,12 @@ def get_reconciliation_stats(
     stmt = select(ShiftDataReconciliation).where(
         ShiftDataReconciliation.company_id == company_id
     )
+    needs_join = bool(date_from or date_to)
+    if needs_join:
+        stmt = stmt.join(ShiftTask)
     if date_from:
-        stmt = stmt.join(ShiftTask).where(ShiftTask.shift_date >= date_from)
+        stmt = stmt.where(ShiftTask.shift_date >= date_from)
     if date_to:
-        if not date_from:
-            stmt = stmt.join(ShiftTask)
         stmt = stmt.where(ShiftTask.shift_date <= date_to)
     reconciliations = db.scalars(stmt).all()
     stats = {
@@ -530,7 +532,7 @@ def resolve_reconciliation(
         f"✅ Reconciliation #{reconciliation_id} resolved by user {current_user.id}"
     )
     return {
-        "id": r.id,
+        "id": reconciliation.id,
         "reconciliation_status": reconciliation.reconciliation_status,
         "decision_source": reconciliation.decision_source,
         "final_moto_hours": (
@@ -722,7 +724,8 @@ def get_revenue_by_vehicle(
 def download_invoice_pdf(
     invoice_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),,
+    company_id: int = Depends(get_current_company_id),
 ):
     """Скачать PDF счёта."""
     from fastapi.responses import StreamingResponse
@@ -730,7 +733,7 @@ def download_invoice_pdf(
     import io
 
     invoice = db.get(Invoice, invoice_id)
-    if not invoice:
+    if not invoice or invoice.company_id != company_id:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     try:

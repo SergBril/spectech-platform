@@ -29,13 +29,6 @@ try:
         extract_invoice_numbers_from_purpose,
     )
 except ImportError:
-    # Fallback: пробуем альтернативное имя
-    try:
-        from app.services.bank_statement_parser import (
-            ClientBankExchangeParser,
-            extract_invoice_numbers_from_purpose,
-        )
-    except ImportError:
         logger.warning("⚠️ Bank statement parser not found. Upload will be disabled.")
         ClientBankExchangeParser = None  # type: ignore
         extract_invoice_numbers_from_purpose = None  # type: ignore
@@ -234,6 +227,8 @@ class PaymentsService:
         tx = db.get(BankTransaction, transaction_id)
         if not tx:
             raise ValueError(f"Transaction {transaction_id} not found")
+        if tx.match_status == MatchStatus.manual_matched and tx.payment_id:
+            raise ValueError(f"Transaction {transaction_id} already applied to payment #{tx.payment_id}")
 
         invoice = db.get(Invoice, invoice_id)
         if not invoice:
@@ -348,4 +343,6 @@ class PaymentsService:
 
 
 # Singleton
-payments_service = PaymentsService(our_account_number="40702810210001399360")
+# Account number loaded from settings or env
+_payments_account = getattr(settings, "BANK_ACCOUNT_NUMBER", "40702810210001399360")
+payments_service = PaymentsService(our_account_number=_payments_account)

@@ -457,6 +457,7 @@ class MarketplaceService:
                     RentalStatus.OVERDUE,
                 ]
             ),
+            Rental.vehicle_id.in_(vehicle_ids),
             Rental.start_date <= datetime.combine(to_date, datetime.max.time()),
             Rental.end_date >= datetime.combine(from_date, datetime.min.time()),
         )

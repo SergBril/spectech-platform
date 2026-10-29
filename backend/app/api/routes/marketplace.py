@@ -130,6 +130,13 @@ def create_offer_on_request(
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
+    # 2.5 Проверить согласие на комиссию маркетплейса
+    if not getattr(vehicle, "marketplace_commission_agreed", False):
+        raise HTTPException(
+            status_code=400,
+            detail="Vehicle must agree to marketplace commission before creating offers"
+        )
+
     # 3. Проверить, что техника принадлежит текущей компании
     if vehicle.company_id != current_company_id:
         raise HTTPException(
