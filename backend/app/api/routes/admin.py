@@ -328,3 +328,90 @@ def get_user_activity(
         "new_today": new_today,
         "new_this_week": new_this_week,
     }
+
+
+@router.get("/overview")
+def get_platform_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """📊 Platform Overview — агрегированная статистика для DashboardPage."""
+    _check_platform_owner(current_user)
+
+    from app.models.finance import Invoice, DocumentStatus, Payment
+    from app.models.telematics import GpsPoint
+    from app.models.marketplace import MarketplaceOffer
+    from datetime import timedelta
+
+    now = datetime.now(UTC)
+    thirty_days_ago = now - timedelta(days=30)
+
+    # Core counts
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    total_companies = db.query(func.count(Company.id)).scalar() or 0
+    total_vehicles = db.query(func.count(Vehicle.id)).filter(Vehicle.is_deleted == False).scalar() or 0
+    total_requests = db.query(func.count(Request.id)).scalar() or 0
+
+    # Finance (last 30 days)
+    revenue_30d = db.query(func.coalesce(func.sum(Invoice.paid_amount), 0)).filter(
+        Invoice.status == DocumentStatus.paid,
+        Invoice.created_at >= thirty_days_ago,
+    ).scalar() or 0
+
+    outstanding = db.query(func.coalesce(func.sum(Invoice.total - Invoice.paid_amount), 0)).filter(
+        Invoice.status.in_([DocumentStatus.sent, DocumentStatus.partially_paid]),
+    ).scalar() or 0
+
+    # Fleet / GPS
+    vehicles_with_gps = db.query(func.count(func.distinct(GpsPoint.vehicle_id))).scalar() or 0
+    total_gps_points = db.query(func.count(GpsPoint.id)).scalar() or 0
+    latest_gps = db.query(func.max(GpsPoint.recorded_at)).scalar()
+
+    # Marketplace
+    published_requests = db.query(func.count(Request.id)).filter(
+        Request.is_published == True,
+    ).scalar() or 0
+    total_offers = db.query(func.count(MarketplaceOffer.id)).scalar() or 0
+    accepted_offers = db.query(func.count(MarketplaceOffer.id)).filter(
+        MarketplaceOffer.status == "accepted",
+    ).scalar() or 0
+
+    # Recent activity (last 8 audit entries)
+    from app.models.audit import AuditLog
+    recent_actions = db.query(AuditLog).order_by(
+        AuditLog.created_at.desc()
+    ).limit(8).all() if hasattr(AuditLog, "created_at") else []
+
+    return {
+        "counts": {
+            "users": total_users,
+            "companies": total_companies,
+            "vehicles": total_vehicles,
+            "requests": total_requests,
+        },
+        "finance": {
+            "revenue_30d": float(revenue_30d),
+            "outstanding": float(outstanding),
+        },
+        "fleet": {
+            "vehicles_with_gps": vehicles_with_gps,
+            "total_gps_points": total_gps_points,
+            "latest_gps_at": latest_gps.isoformat() if latest_gps else None,
+        },
+        "marketplace": {
+            "published_requests": published_requests,
+            "total_offers": total_offers,
+            "accepted_offers": accepted_offers,
+            "match_rate": round(accepted_offers / total_offers * 100, 1) if total_offers > 0 else 0,
+        },
+        "recent_actions": [
+            {
+                "action": getattr(a, "action", ""),
+                "entity": getattr(a, "entity_type", ""),
+                "user_id": getattr(a, "user_id", None),
+                "created_at": a.created_at.isoformat() if hasattr(a, "created_at") and a.created_at else None,
+            }
+            for a in recent_actions
+        ],
+    }
+
