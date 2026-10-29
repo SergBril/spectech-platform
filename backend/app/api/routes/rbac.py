@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,9 +14,9 @@ from app.schemas.rbac import (
     UserRoleRead,
 )
 from app.services.rbac_service import (
+    check_permission,
     get_user_permissions,
     init_system_data,
-    require_permission,
 )
 
 router = APIRouter()
@@ -27,7 +27,8 @@ def list_roles(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_permission(db, current_user, "rbac", "manage")
+    if not check_permission(db, current_user, "rbac", "manage"):
+        raise HTTPException(status_code=403, detail="Access denied: rbac:manage")
 
     stmt = select(Role).order_by(Role.code)
     return db.scalars(stmt).all()
@@ -39,7 +40,8 @@ def create_role(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_permission(db, current_user, "rbac", "manage")
+    if not check_permission(db, current_user, "rbac", "manage"):
+        raise HTTPException(status_code=403, detail="Access denied: rbac:manage")
 
     existing = db.scalar(select(Role).where(Role.code == payload.code))
     if existing:
@@ -62,7 +64,8 @@ def list_permissions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_permission(db, current_user, "rbac", "manage")
+    if not check_permission(db, current_user, "rbac", "manage"):
+        raise HTTPException(status_code=403, detail="Access denied: rbac:manage")
 
     stmt = select(Permission).order_by(Permission.entity, Permission.action)
     return db.scalars(stmt).all()
@@ -75,7 +78,8 @@ def grant_permission(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_permission(db, current_user, "rbac", "manage")
+    if not check_permission(db, current_user, "rbac", "manage"):
+        raise HTTPException(status_code=403, detail="Access denied: rbac:manage")
 
     role = db.get(Role, role_id)
     if not role:
@@ -106,7 +110,8 @@ def revoke_permission(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_permission(db, current_user, "rbac", "manage")
+    if not check_permission(db, current_user, "rbac", "manage"):
+        raise HTTPException(status_code=403, detail="Access denied: rbac:manage")
 
     rp = db.scalar(
         select(RolePermission).where(
@@ -128,7 +133,8 @@ def get_user_roles(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_permission(db, current_user, "rbac", "manage")
+    if not check_permission(db, current_user, "rbac", "manage"):
+        raise HTTPException(status_code=403, detail="Access denied: rbac:manage")
 
     user = db.get(User, user_id)
     if not user:
@@ -157,7 +163,8 @@ def assign_role(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_permission(db, current_user, "rbac", "manage")
+    if not check_permission(db, current_user, "rbac", "manage"):
+        raise HTTPException(status_code=403, detail="Access denied: rbac:manage")
 
     if payload.user_id != user_id:
         raise HTTPException(status_code=400, detail="User ID mismatch")
@@ -199,7 +206,8 @@ def unassign_role(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_permission(db, current_user, "rbac", "manage")
+    if not check_permission(db, current_user, "rbac", "manage"):
+        raise HTTPException(status_code=403, detail="Access denied: rbac:manage")
 
     ur = db.scalar(
         select(UserRole).where(

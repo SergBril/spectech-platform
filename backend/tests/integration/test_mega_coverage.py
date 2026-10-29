@@ -93,7 +93,6 @@ class TestSalariesRoutes:
 # ==================== RBAC ====================
 
 class TestRbacRoutes:
-    @pytest.mark.skip(reason="RBAC require_permission bug")
     def test_list_roles(self, client, auth_headers):
         resp = client.get("/api/v1/rbac/roles", headers=auth_headers)
         assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
@@ -102,22 +101,18 @@ class TestRbacRoutes:
         resp = client.post("/api/v1/rbac/roles", json={}, headers=auth_headers)
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
-    @pytest.mark.skip(reason="RBAC require_permission bug")
     def test_list_permissions(self, client, auth_headers):
         resp = client.get("/api/v1/rbac/permissions", headers=auth_headers)
         assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
 
-    @pytest.mark.skip(reason="RBAC require_permission bug")
     def test_assign_permission_not_found(self, client, auth_headers):
         resp = client.post("/api/v1/rbac/roles/99999/permissions/99999", headers=auth_headers)
         assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
 
-    @pytest.mark.skip(reason="RBAC require_permission bug")
     def test_remove_permission_not_found(self, client, auth_headers):
         resp = client.delete("/api/v1/rbac/roles/99999/permissions/99999", headers=auth_headers)
         assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
 
-    @pytest.mark.skip(reason="RBAC require_permission bug")
     def test_user_roles_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/rbac/users/99999/roles", headers=auth_headers)
         assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
@@ -126,7 +121,6 @@ class TestRbacRoutes:
         resp = client.post("/api/v1/rbac/users/99999/roles", json={"role_id": 99999}, headers=auth_headers)
         assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
 
-    @pytest.mark.skip(reason="RBAC require_permission bug")
     def test_remove_user_role_not_found(self, client, auth_headers):
         resp = client.delete("/api/v1/rbac/users/99999/roles/99999", headers=auth_headers)
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
