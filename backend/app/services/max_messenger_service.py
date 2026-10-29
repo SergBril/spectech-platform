@@ -91,4 +91,80 @@ class MaxMessengerService:
         return results
 
 
+
+
+# === Notification Templates ===
+
+class MaxNotificationTemplates:
+    """Шаблоны уведомлений для MAX Bot."""
+
+    @staticmethod
+    def request_created(request_id: int, work_type: str, address: str, planned_start: str) -> tuple[str, str]:
+        title = "🆕 Новая заявка"
+        body = (
+            f"Заявка #{request_id}\n"
+            f"Тип работ: {work_type}\n"
+            f"Адрес: {address}\n"
+            f"Начало: {planned_start}"
+        )
+        return title, body
+
+    @staticmethod
+    def offer_received(request_id: int, company_name: str, price: float, vehicle_name: str) -> tuple[str, str]:
+        title = "📩 Новый отклик на заявку"
+        body = (
+            f"Заявка #{request_id}\n"
+            f"Компания: {company_name}\n"
+            f"Техника: {vehicle_name}\n"
+            f"Цена: {price:,.0f} ₽"
+        )
+        return title, body
+
+    @staticmethod
+    def payment_received(invoice_number: str, amount: float, payer_name: str) -> tuple[str, str]:
+        title = "💰 Оплата получена"
+        body = (
+            f"Счёт: {invoice_number}\n"
+            f"Сумма: {amount:,.0f} ₽\n"
+            f"Плательщик: {payer_name}"
+        )
+        return title, body
+
+    @staticmethod
+    def shift_completed(task_id: int, vehicle_name: str, date: str, hours: float) -> tuple[str, str]:
+        title = "✅ Смена завершена"
+        body = (
+            f"Задание #{task_id}\n"
+            f"Техника: {vehicle_name}\n"
+            f"Дата: {date}\n"
+            f"Моточасы: {hours:.1f} ч"
+        )
+        return title, body
+
+    @staticmethod
+    def salary_approved(record_id: int, employee_name: str, amount: float, period: str) -> tuple[str, str]:
+        title = "💸 Зарплата утверждена"
+        body = (
+            f"Начисление #{record_id}\n"
+            f"Сотрудник: {employee_name}\n"
+            f"Сумма: {amount:,.0f} ₽\n"
+            f"Период: {period}"
+        )
+        return title, body
+
+    @staticmethod
+    def geofence_alert(vehicle_name: str, geofence_name: str, event_type: str, timestamp: str) -> tuple[str, str]:
+        icon = "🟢" if event_type == "enter" else "🔴"
+        action = "въехал в" if event_type == "enter" else "выехал из"
+        title = f"{icon} Геозона: {geofence_name}"
+        body = (
+            f"Техника: {vehicle_name}\n"
+            f"Событие: {action} геозону\n"
+            f"Время: {timestamp}"
+        )
+        return title, body
+
+
+notification_templates = MaxNotificationTemplates()
+
 max_messenger_service = MaxMessengerService()

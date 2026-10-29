@@ -38,25 +38,83 @@ async def max_webhook(request: Request, db: Session = Depends(get_db)):
                 if isinstance(chat_obj, dict):
                     chat_id = chat_obj.get("id", "")
 
-        if "/start" in str(text) and chat_id:
-            parts = str(text).strip().split()
-            if len(parts) >= 2:
-                link_token = parts[1]
-                user = db.execute(
-                    select(User).where(User.telegram_link_code == link_token)
-                ).scalar_one_or_none()
+        if chat_id and text:
+            text_clean = str(text).strip()
+            from app.services.max_messenger_service import max_messenger_service
 
-                if user:
-                    user.max_chat_id = str(chat_id)
-                    db.commit()
-                    from app.services.max_messenger_service import max_messenger_service
-                    msg = "Privyazka uspeshna! Vy budete poluchat uvedomleniya kak " + (user.full_name or user.email or "")
-                    await max_messenger_service.send_message(str(chat_id), msg)
+            # /start <token> — привязка аккаунта
+            if text_clean.startswith("/start"):
+                parts = text_clean.split()
+                if len(parts) >= 2:
+                    link_token = parts[1]
+                    user = db.execute(
+                        select(User).where(User.telegram_link_code == link_token)
+                    ).scalar_one_or_none()
+                    if user:
+                        user.max_chat_id = str(chat_id)
+                        db.commit()
+                        msg = f"✅ Привязка успешна! Уведомления: {user.full_name or user.email}"
+                        await max_messenger_service.send_message(str(chat_id), msg)
+                    else:
+                        await max_messenger_service.send_message(str(chat_id), "❌ Неверный код привязки.")
                 else:
-                    from app.services.max_messenger_service import max_messenger_service
-                    await max_messenger_service.send_message(str(chat_id), "Nevernyy kod privyazki.")
+                    await max_messenger_service.send_message(str(chat_id), "Используйте ссылку из профиля для привязки.")
+                return {"ok": True}
 
-    return {"ok": True}
+            # Find user by chat_id for other commands
+            user = db.execute(
+                select(User).where(User.max_chat_id == str(chat_id))
+            ).scalar_one_or_none()
+
+            if not user:
+                await max_messenger_service.send_message(str(chat_id), "Сначала привяжите аккаунт через /start")
+                return {"ok": True}
+
+            # /help
+            if text_clean.startswith("/help"):
+                help_text = (
+                    "<b>🚜 СпецТехника Про</b>\n\n"
+                    "/status — Статус заявок и техники\n"
+                    "/shifts — Активные смены сегодня\n"
+                    "/help — Эта справка"
+                )
+                await max_messenger_service.send_message(str(chat_id), help_text)
+                return {"ok": True}
+
+            # /status
+            if text_clean.startswith("/status"):
+                from app.models.dispatch import Request, RequestStatus
+                from app.models.catalog import Vehicle
+                active = db.query(Request).filter(
+                    Request.status.in_([RequestStatus.new, RequestStatus.processing]),
+                ).count()
+                avail = db.query(Vehicle).filter(Vehicle.status == "available", Vehicle.is_deleted == False).count()
+                txt = f"<b>📊 Статус</b>\nАктивных заявок: {active}\nСвободной техники: {avail}"
+                await max_messenger_service.send_message(str(chat_id), txt)
+                return {"ok": True}
+
+            # /shifts
+            if text_clean.startswith("/shifts"):
+                from datetime import date as date_type
+                from app.models.shift import ShiftTask
+                today = date_type.today()
+                shifts = db.query(ShiftTask).filter(
+                    ShiftTask.shift_date == today,
+                    ShiftTask.status.in_(["planned", "confirmed", "in_progress"]),
+                ).all()
+                if shifts:
+                    lines_txt = ["<b>📋 Смены сегодня</b>"]
+                    for s in shifts[:10]:
+                        v = db.get(Vehicle, s.vehicle_id)
+                        vn = v.name if v else f"#{s.vehicle_id}"
+                        lines_txt.append(f"• {vn} — {s.status}")
+                    await max_messenger_service.send_message(str(chat_id), "\n".join(lines_txt))
+                else:
+                    await max_messenger_service.send_message(str(chat_id), "Нет активных смен на сегодня.")
+                return {"ok": True}
+
+            await max_messenger_service.send_message(str(chat_id), "Неизвестная команда. Используйте /help")
+            return {"ok": True}
 
 
 
