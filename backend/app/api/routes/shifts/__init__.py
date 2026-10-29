@@ -1,8 +1,8 @@
-"""Shifts router package - auto-refactored from monolithic shifts.py"""
+﻿"""Shifts router package - auto-refactored from monolithic shifts.py"""
 
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/shifts", tags=["Shifts"])
+router = APIRouter(tags=["Shifts"])
 
 from app.api.routes.shifts.tasks import router as tasks_router
 from app.api.routes.shifts.reports import router as reports_router

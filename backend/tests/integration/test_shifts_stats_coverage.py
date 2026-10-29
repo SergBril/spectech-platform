@@ -76,7 +76,13 @@ class TestGetFuelDashboard:
     """Cover get_fuel_dashboard (lines 502-598)."""
 
     def test_basic(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/stats/fuel-dashboard", headers=auth_headers)
+        from datetime import date, timedelta
+        today = date.today()
+        month_ago = today - timedelta(days=30)
+        resp = client.get(
+            f"/api/v1/shifts/stats/fuel-dashboard?date_from={month_ago.isoformat()}&date_to={today.isoformat()}",
+            headers=auth_headers,
+        )
         assert resp.status_code == 200
 
 

@@ -17,6 +17,7 @@ from app.api.deps import get_current_company_id, get_current_user
 
 router = APIRouter()
 
+@router.get("/stats/utilization")
 def get_utilization_stats(
     date_from: str = Query(..., description="Начало периода YYYY-MM-DD"),
     date_to: str = Query(..., description="Конец периода YYYY-MM-DD"),
@@ -87,6 +88,7 @@ def get_utilization_stats(
 
 
 
+@router.get("/stats/utilization/export")
 def export_utilization_excel(
     date_from: str = Query(...),
     date_to: str = Query(...),
@@ -185,6 +187,7 @@ def export_utilization_excel(
 
 
 
+@router.get("/stats/driver-kpi")
 def get_driver_kpi(
     date_from: str = Query(...),
     date_to: str = Query(...),
@@ -257,6 +260,7 @@ def get_driver_kpi(
 
 
 
+@router.get("/stats/driver-kpi/export")
 def export_driver_kpi_excel(
     date_from: str = Query(...),
     date_to: str = Query(...),
@@ -356,6 +360,7 @@ def export_driver_kpi_excel(
 
 
 
+@router.get("/stats/fuel")
 def get_fuel_consumption_stats(
     date_from: str = Query(...),
     date_to: str = Query(...),
@@ -416,6 +421,7 @@ def get_fuel_consumption_stats(
 
 
 
+@router.get("/stats/fuel/export")
 def export_fuel_consumption_excel(
     date_from: str = Query(...),
     date_to: str = Query(...),
@@ -499,6 +505,7 @@ def export_fuel_consumption_excel(
 # === Checklist Configs ===
 
 
+@router.get("/stats/fuel-dashboard")
 def get_fuel_dashboard(
     date_from: str = Query(...),
     date_to: str = Query(...),
@@ -597,6 +604,7 @@ def get_fuel_dashboard(
 
 
 
+@router.get("/stats/cost-per-hour")
 def get_cost_per_hour_report(
     date_from: str = Query(...),
     date_to: str = Query(...),
@@ -699,6 +707,7 @@ def get_cost_per_hour_report(
 
 
 
+@router.get("/stats/cost-per-hour/export")
 def export_cost_per_hour_excel(
     date_from: str = Query(...),
     date_to: str = Query(...),
@@ -773,6 +782,7 @@ def export_cost_per_hour_excel(
 # === Cost Rates Configuration ===
 
 
+@router.get("/stats/cost-rates")
 def get_cost_rates(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -797,6 +807,7 @@ def get_cost_rates(
 
 
 
+@router.patch("/stats/cost-rates")
 def update_cost_rates(
     fuel_price_per_liter: float = Body(...),
     hourly_wage: float = Body(...),
@@ -832,6 +843,7 @@ def update_cost_rates(
 
 
 
+@router.get("/stats/cost-forecast")
 def get_cost_forecast(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -942,6 +954,7 @@ def get_cost_forecast(
 # === Diadoc / ЭДО Integration ===
 
 
+@router.get("/stats/pnl")
 def get_pnl_per_vehicle(
     date_from: str = Query(...),
     date_to: str = Query(...),
@@ -1022,6 +1035,7 @@ def get_pnl_per_vehicle(
 
 
 
+@router.get("/stats/pnl/export")
 def export_pnl_excel(
     date_from: str = Query(...),
     date_to: str = Query(...),
@@ -1087,6 +1101,7 @@ def export_pnl_excel(
 
 
 
+@router.get("/stats/platform-overview")
 def get_platform_overview(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -1172,6 +1187,7 @@ def get_platform_overview(
 # === Audit Log ===
 
 
+@router.get("/stats/recent-actions")
 def get_recent_actions(
     limit: int = Query(default=10, ge=1, le=50),
     db: Session = Depends(get_db),
