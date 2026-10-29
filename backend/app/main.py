@@ -55,6 +55,7 @@ from app.api.routes import drivers as drivers_route
 from app.api.routes import email as email_route
 from app.api.routes import email_bulk as email_bulk_route
 from app.api.routes import email_templates as email_templates_route
+from app.api.routes import edo as edo_route
 from app.api.routes import export as export_route
 from app.api.routes import files as files_route
 from app.api.routes import finance as finance_route
@@ -229,6 +230,7 @@ app.include_router(benchmark_route.router, prefix="/api/v1", tags=["benchmark"])
 app.include_router(secure_test_route.router, prefix="/api/v1", tags=["🔒 Secure Test (RBAC)"])
 app.include_router(analytics_route.router, prefix="/api/v1/analytics", tags=["analytics"])
 app.include_router(export_route.router, prefix="/api/v1/export", tags=["export"])
+app.include_router(edo_route.router, prefix="/api/v1", tags=["📡 ЭДО (Diadoc)"])
 app.include_router(tax_route.router, prefix="/api/v1", tags=["📊 Tax & VAT (НДС)"])
 app.include_router(companies_route.router, prefix="/api/v1", tags=["companies"])
 app.include_router(marketplace_route.router, prefix="/api/v1", tags=["🎯 Marketplace (Отклики на заявки)"])
