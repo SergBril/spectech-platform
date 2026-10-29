@@ -438,6 +438,124 @@ def get_matching_vehicles_for_request(
         "vehicles": matches,
     }
 
+
+
+# === SURPLUS REQUESTS (владелец предлагает свободную технику) ===
+
+class SurplusRequestCreate(BaseModel):
+    """Создание surplus-заявки от владельца техники."""
+    vehicle_id: int = Field(..., description="ID техники")
+    work_type: str = Field(..., description="Тип работ")
+    object_address: str | None = Field(None, description="Адрес объекта")
+    region: str | None = Field(None, description="Регион")
+    planned_start: datetime = Field(...)
+    planned_end: datetime = Field(...)
+    shift_duration_hours: float | None = Field(None, ge=1)
+    offered_price: Decimal = Field(..., gt=0, description="Цена за смену/час")
+    price_type: str = Field(default="per_shift", description="per_hour, per_shift")
+    comment: str | None = Field(None, max_length=2000)
+    dispatcher_commission_pct: float = Field(
+        default=10.0, ge=0, le=50,
+        description="Процент комиссии диспетчера (остальное — исполнителю)"
+    )
+
+
+@router.post(
+    "/surplus-requests",
+    status_code=201,
+    summary="Создать surplus-заявку (свободная техника)",
+)
+def create_surplus_request(
+    data: SurplusRequestCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Владелец техники создаёт заявку на свою свободную технику.
+    Комиссия: dispatcher_commission_pct% диспетчеру, остальное — исполнителю.
+    Заявка автоматически публикуется в маркетплейсе.
+    """
+    # Validate vehicle ownership
+    vehicle = db.get(Vehicle, data.vehicle_id)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    if vehicle.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Vehicle belongs to another company")
+
+    # Calculate commission split
+    performer_pct = 100 - data.dispatcher_commission_pct
+    estimated_amount = float(data.offered_price)
+    if data.price_type == "per_hour" and data.shift_duration_hours:
+        estimated_amount = float(data.offered_price) * data.shift_duration_hours
+
+    dispatcher_fee = round(estimated_amount * data.dispatcher_commission_pct / 100, 2)
+    performer_pay = round(estimated_amount * performer_pct / 100, 2)
+
+    # Create request with marketplace_mode = owner_dispatcher
+    request_obj = Request(
+        company_id=company_id,
+        created_by=current_user.id,
+        work_type=data.work_type,
+        object_address=data.object_address,
+        region=data.region,
+        planned_start=data.planned_start,
+        planned_end=data.planned_end,
+        shift_duration_hours=data.shift_duration_hours,
+        client_rate=float(data.offered_price),
+        rate_type=data.price_type,
+        estimated_amount=estimated_amount,
+        source_channel="marketplace",
+        marketplace_mode="owner_dispatcher",
+        is_published=True,
+        published_at=datetime.now(UTC),
+        comment=(
+            f"{data.comment or ''}\n\n"
+            f"[Surplus] Техника: {vehicle.name}. "
+            f"Комиссия: {data.dispatcher_commission_pct}% диспетчеру ({dispatcher_fee} ₽), "
+            f"{performer_pct}% исполнителю ({performer_pay} ₽)"
+        ),
+        priority="normal",
+    )
+
+    # Set vehicle category from the vehicle
+    if vehicle.category_id:
+        request_obj.vehicle_category_id = vehicle.category_id
+
+    db.add(request_obj)
+    db.flush()
+
+    # Log status
+    from app.models.dispatch import RequestStatusLog
+    db.add(RequestStatusLog(
+        request_id=request_obj.id,
+        from_status=None,
+        to_status="new",
+        changed_by_user_id=current_user.id,
+        comment="Surplus заявка создана владельцем техники",
+    ))
+
+    db.commit()
+    db.refresh(request_obj)
+
+    logger.info(
+        f"Surplus request #{request_obj.id} created by company #{company_id}, "
+        f"vehicle={vehicle.name}, commission={data.dispatcher_commission_pct}%"
+    )
+
+    return {
+        "id": request_obj.id,
+        "vehicle_name": vehicle.name,
+        "work_type": request_obj.work_type,
+        "estimated_amount": estimated_amount,
+        "dispatcher_commission_pct": data.dispatcher_commission_pct,
+        "dispatcher_fee": dispatcher_fee,
+        "performer_pay": performer_pay,
+        "is_published": True,
+        "marketplace_mode": "owner_dispatcher",
+    }
+
+
 # === Вспомогательные функции ===
 
 
