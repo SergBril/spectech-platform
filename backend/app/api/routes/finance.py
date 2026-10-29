@@ -1,4 +1,4 @@
-"""Endpoints для работы с финансовыми документами."""
+﻿"""Endpoints для работы с финансовыми документами."""
 
 import logging
 
@@ -724,7 +724,7 @@ def get_revenue_by_vehicle(
 def download_invoice_pdf(
     invoice_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),,
+    current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
     """Скачать PDF счёта."""
