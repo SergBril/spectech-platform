@@ -199,6 +199,24 @@ async def create_request(
         )
     )
 
+    # Auto-calculate estimated amount if not provided
+    if not request.estimated_amount:
+        from app.services.pricing_service import pricing_service
+        try:
+            estimate = pricing_service.calculate_estimate(
+                region=request.region,
+                rate_type=request.rate_type or "per_shift",
+                shift_duration_hours=float(request.shift_duration_hours) if request.shift_duration_hours else None,
+                custom_rate=float(request.client_rate) if request.client_rate else None,
+            )
+            request.estimated_amount = estimate["estimated_amount"]
+            if not request.client_rate:
+                request.client_rate = estimate["rate_used"]
+            if not request.rate_type:
+                request.rate_type = estimate["rate_type"]
+        except Exception as e:
+            logger.warning(f"Auto-pricing failed for request #{request.id}: {e}")
+
     db.commit()
     db.refresh(request)
 
@@ -1223,3 +1241,29 @@ async def delete_request(
 
     logger.info("Request #%s deleted (cancelled) by user #%s", request_id, current_user.id)
     return {"message": "Request deleted successfully", "id": request_id}
+
+
+@router.get("/pricing/presets")
+def get_pricing_presets():
+    """Список региональных ценовых пресетов."""
+    from app.services.pricing_service import pricing_service
+    return {"regions": pricing_service.get_available_regions()}
+
+
+@router.post("/pricing/calculate")
+def calculate_price(
+    region: str | None = Query(None),
+    rate_type: str = Query("per_shift"),
+    shift_duration_hours: float | None = Query(None),
+    custom_rate: float | None = Query(None),
+    num_shifts: int = Query(1, ge=1),
+):
+    """Рассчитать ориентировочную стоимость заявки."""
+    from app.services.pricing_service import pricing_service
+    return pricing_service.calculate_estimate(
+        region=region,
+        rate_type=rate_type,
+        shift_duration_hours=shift_duration_hours,
+        custom_rate=custom_rate,
+        num_shifts=num_shifts,
+    )
