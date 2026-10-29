@@ -153,3 +153,52 @@ def apply_payment_to_invoice(
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/bank-statements/{statement_id}/rematch")
+def rematch_statement(
+    statement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Перезапускает авто-матчинг для выписки (например, после добавления новых счетов)."""
+    from app.models.bank_statement import BankStatement, BankTransaction, MatchStatus
+
+    statement = db.get(BankStatement, statement_id)
+    if not statement:
+        raise HTTPException(status_code=404, detail="Statement not found")
+    if statement.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Reset unmatched transactions
+    reset_count = (
+        db.query(BankTransaction)
+        .filter(
+            BankTransaction.statement_id == statement_id,
+            BankTransaction.match_status == MatchStatus.unmatched,
+            BankTransaction.is_excluded == False,
+        )
+        .update({"match_status": MatchStatus.unmatched})
+    )
+
+    from app.services.payments_service import payments_service
+    matched_count = payments_service.auto_match_transactions(db, statement_id)
+
+    statement.matched_transactions = (
+        db.query(BankTransaction)
+        .filter(
+            BankTransaction.statement_id == statement_id,
+            BankTransaction.match_status != MatchStatus.unmatched,
+        )
+        .count()
+    )
+    statement.unmatched_transactions = statement.total_transactions - statement.matched_transactions
+    db.commit()
+
+    return {
+        "message": f"Re-matching complete",
+        "matched": matched_count,
+        "total_matched": statement.matched_transactions,
+        "total_unmatched": statement.unmatched_transactions,
+    }

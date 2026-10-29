@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.services.bank_matching_service import BankMatchingService
 from app.models.bank_statement import (
     BankStatement,
     BankTransaction,
@@ -169,16 +170,11 @@ class PaymentsService:
             raise
 
     def auto_match_transactions(self, db: Session, statement_id: int) -> int:
-        """Автоматически привязывает транзакции к Invoice по номеру счёта."""
-        if not extract_invoice_numbers_from_purpose:
-            logger.warning(
-                "⚠️ extract_invoice_numbers_from_purpose not available, skipping auto-match"
-            )
-            return 0
+        """Автоматически привязывает транзакции к Invoice/Payout через BankMatchingService."""
+        from app.services.bank_matching_service import BankMatchingService
 
         stmt = select(BankTransaction).where(
             BankTransaction.statement_id == statement_id,
-            BankTransaction.direction == TransactionDirection.incoming,
             BankTransaction.match_status == MatchStatus.unmatched,
             BankTransaction.is_excluded == False,
         )
@@ -187,31 +183,41 @@ class PaymentsService:
         matched_count = 0
 
         for tx in transactions:
-            if not tx.purpose:
-                continue
+            try:
+                result = BankMatchingService.match_transaction(
+                    db=db, tx=tx, company_id=tx.company_id
+                )
 
-            invoice_numbers = extract_invoice_numbers_from_purpose(tx.purpose)
-
-            for inv_num in invoice_numbers:
-                invoice = self._find_invoice_by_number(db, inv_num, tx.company_id)
-
-                if invoice:
-                    if invoice.status == DocumentStatus.paid:
-                        logger.warning(
-                            f"Invoice {invoice.document_number} already paid, skipping"
-                        )
-                        continue
-
-                    tx.matched_invoice_id = invoice.id
+                if result["matched"]:
+                    tx.matched_invoice_id = result.get("matched_id") if result["match_type"] == "invoice" else None
                     tx.matched_amount = tx.amount
                     tx.match_status = MatchStatus.auto_matched
-                    tx.match_confidence = Decimal("1.00")
+                    tx.match_confidence = Decimal(str(result["confidence"]))
+
+                    # Update invoice paid_amount if matched to invoice
+                    if result["match_type"] == "invoice" and result["matched_id"]:
+                        invoice = db.get(Invoice, result["matched_id"])
+                        if invoice:
+                            current_paid = float(invoice.paid_amount or 0)
+                            new_paid = current_paid + float(tx.amount)
+                            total = float(invoice.total or 0)
+                            invoice.paid_amount = str(min(new_paid, total))
+                            if new_paid >= total:
+                                invoice.status = DocumentStatus.paid
+                            elif new_paid > 0:
+                                invoice.status = DocumentStatus.partially_paid
+
                     matched_count += 1
                     logger.info(
-                        f"Auto-matched transaction {tx.bank_transaction_id} "
-                        f"to Invoice {invoice.document_number}"
+                        f"Auto-matched TX#{tx.id} -> {result['match_type']}#{result['matched_id']} "
+                        f"(confidence={result['confidence']:.2f}): {result['reason']}"
                     )
-                    break
+                else:
+                    logger.debug(f"TX#{tx.id} unmatched: {result['reason']}")
+
+            except Exception as e:
+                logger.warning(f"Error matching TX#{tx.id}: {e}")
+                continue
 
         db.commit()
         return matched_count
