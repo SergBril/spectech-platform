@@ -274,9 +274,29 @@ class MapixAdapter(GpsProviderAdapter):
     async def get_track(
         self, date_from: datetime, date_to: datetime, limit: int = 1000
     ) -> list[GpsPointData]:
-        """Треки пока не поддерживаются для ObjectId-based API."""
-        logger.warning("Mapix track API not implemented for ObjectId-based objects")
-        return []
+        """Получает трек за период через positions API."""
+        try:
+            async with create_retry_client(timeout=30, follow_redirects=True) as client:
+                ok = await self._ensure_session(client)
+                if not ok:
+                    logger.warning("Mapix track: session auth failed")
+                    return []
+
+                # Fetch positions for the period
+                positions = await self._fetch_positions_from_main_page(
+                    client, date_from=date_from, date_to=date_to
+                )
+
+                result = []
+                for pos in positions[:limit]:
+                    result.append(pos)
+
+                logger.info(f"Mapix track: {len(result)} points for {date_from} - {date_to}")
+                return result
+
+        except Exception as e:
+            logger.error(f"Mapix get_track error: {e}", exc_info=True)
+            return []
 
     async def test_connection(self) -> bool:
         try:

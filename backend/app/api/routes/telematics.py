@@ -504,6 +504,29 @@ def delete_geofence(
 # =========================================
 
 
+
+@router.patch("/geofences/{geofence_id}", response_model=GeofenceRead)
+def update_geofence(
+    geofence_id: int,
+    payload: GeofenceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Обновить геозону (только своей компании)."""
+    gf = db.get(Geofence, geofence_id)
+    if not gf or gf.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Geofence not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(gf, key, value)
+
+    db.commit()
+    db.refresh(gf)
+    return gf
+
+
 @router.get("/fuel", response_model=list[FuelTransactionRead])
 def list_fuel_transactions(
     vehicle_id: int | None = None,
