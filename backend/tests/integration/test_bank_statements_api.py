@@ -131,7 +131,7 @@ class TestBankStatementsAPI:
 
         # Создаём тестовый Invoice с номером 347 (есть в выписке)
         invoice = Invoice(
-            document_number="INV-2026-347",
+            document_number="347",
             client_id=1,
             company_id=company.id,
             subtotal=Decimal("179179.67"),

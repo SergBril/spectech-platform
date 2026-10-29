@@ -449,17 +449,22 @@ class MarketplaceService:
             return set()
 
         # Ищем все Rentals с пересечением дат
-        stmt = select(Rental).where(
-            Rental.status.in_(
-                [
-                    RentalStatus.DRAFT,
-                    RentalStatus.ACTIVE,
-                    RentalStatus.OVERDUE,
-                ]
-            ),
-            Rental.vehicle_id.in_(vehicle_ids),
-            Rental.start_date <= datetime.combine(to_date, datetime.max.time()),
-            Rental.end_date >= datetime.combine(from_date, datetime.min.time()),
+        from app.models.rental import RentalItem
+        stmt = (
+            select(Rental)
+            .join(RentalItem, RentalItem.rental_id == Rental.id)
+            .where(
+                Rental.status.in_(
+                    [
+                        RentalStatus.DRAFT,
+                        RentalStatus.ACTIVE,
+                        RentalStatus.OVERDUE,
+                    ]
+                ),
+                RentalItem.vehicle_id.in_(vehicle_ids),
+                Rental.start_date <= datetime.combine(to_date, datetime.max.time()),
+                Rental.end_date >= datetime.combine(from_date, datetime.min.time()),
+            )
         )
         rentals = list(db.scalars(stmt).all())
 

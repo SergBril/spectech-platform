@@ -113,7 +113,7 @@ class BankMatchingService:
 
             if contractor:
                 # Для входящих — ищем инвойсы этого клиента
-                if tx.operation_type == TransactionType.income:
+                if tx.document_type == TransactionDirection.incoming:
                     invoice = (
                         db.query(Invoice)
                         .filter(
@@ -145,7 +145,7 @@ class BankMatchingService:
                         return result
 
                 # Для исходящих — ищем выплаты этому контрагенту
-                elif tx.operation_type == TransactionType.expense:
+                elif tx.document_type == TransactionDirection.outgoing:
                     payout = (
                         db.query(Payout)
                         .filter(
@@ -173,7 +173,7 @@ class BankMatchingService:
                         return result
 
         # === Стратегия 3: Поиск только по сумме (низкая уверенность) ===
-        if tx.operation_type == TransactionType.income:
+        if tx.document_type == TransactionDirection.incoming:
             invoices = (
                 db.query(Invoice)
                 .filter(
@@ -213,7 +213,7 @@ class BankMatchingService:
     def apply_match(cls, db: Session, tx: BankTransaction, match_result: dict) -> None:
         """Применяет результат матчинга к транзакции."""
         if match_result["matched"]:
-            tx.match_status = MatchStatus.matched_auto
+            tx.match_status = MatchStatus.auto_matched
             tx.match_confidence = match_result["confidence"]
 
             if match_result["match_type"] == "invoice":
