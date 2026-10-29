@@ -51,6 +51,10 @@ class Contractor(Base):
     )
 
     company_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_public_lead: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+        comment="Публичный лид из маркетплейса (без регистрации)"
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     created_at: Mapped[datetime] = mapped_column(

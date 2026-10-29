@@ -488,18 +488,39 @@ def create_request_from_listing(
             )
 
         # 3. Создаём или находим Contractor (клиента) по контактным данным
-        # В production: через регистрацию или привязку к user
-        # Сейчас: создаём временного contractor для заявки
-        client_contractor = Contractor(
-            name=data.contact_name,
-            type="client",
-            contact_phone=data.contact_phone,
-            contact_email=data.contact_email,
-            email=data.contact_email,
-            company_id=vehicle.company_id,  # Привязываем к компании маркетплейса
-        )
-        db.add(client_contractor)
-        db.flush()
+        # Ищем существующего клиента по email или телефону в этой компании
+        from sqlalchemy import or_
+        existing_client = None
+        if data.contact_email:
+            existing_client = db.query(Contractor).filter(
+                Contractor.company_id == vehicle.company_id,
+                Contractor.type == "client",
+                or_(
+                    Contractor.email == data.contact_email,
+                    Contractor.contact_email == data.contact_email,
+                ),
+            ).first()
+        if not existing_client and data.contact_phone:
+            existing_client = db.query(Contractor).filter(
+                Contractor.company_id == vehicle.company_id,
+                Contractor.type == "client",
+                Contractor.contact_phone == data.contact_phone,
+            ).first()
+
+        if existing_client:
+            client_contractor = existing_client
+        else:
+            client_contractor = Contractor(
+                name=data.contact_name,
+                type="client",
+                contact_phone=data.contact_phone,
+                contact_email=data.contact_email,
+                email=data.contact_email,
+                company_id=vehicle.company_id,
+                is_public_lead=True,
+            )
+            db.add(client_contractor)
+            db.flush()
 
         # 4. Создаём заявку
         request = marketplace_service.create_request_from_listing(
