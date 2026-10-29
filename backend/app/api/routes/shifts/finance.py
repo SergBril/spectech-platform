@@ -12,18 +12,10 @@ from app.models.shift import ShiftTask, ShiftFuelEntry, CompanyCostRates
 from app.models.catalog import Vehicle
 from app.api.deps import get_current_company_id, get_current_user
 
-from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile, Request
-from pydantic import BaseModel
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
-from app.core.db import get_db
 from app.models.auth import User
 from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
 
-from app.models.finance import Act
-from app.models.shift import ShiftTask, ShiftFuelEntry, CompanyCostRates
-from app.models.catalog import Vehicle
 
 router = APIRouter()
 
@@ -145,7 +137,6 @@ def export_finance_dashboard_excel(
 ):
     """Экспорт финансового дашборда в Excel."""
     import io
-    from datetime import date as date_type
     from fastapi.responses import StreamingResponse
 
     try:
