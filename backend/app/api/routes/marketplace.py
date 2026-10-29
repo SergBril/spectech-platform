@@ -405,6 +405,39 @@ def reject_offer(
     return _build_offer_response(offer, db)
 
 
+
+# === ПОДБОР ТЕХНИКИ ДЛЯ ЗАЯВКИ ===
+
+@router.get(
+    "/requests/{request_id}/matching-vehicles",
+    summary="Подобрать технику компании для заявки",
+)
+def get_matching_vehicles_for_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """
+    Возвращает список техники текущей компании, подходящей для заявки.
+    Использует VehicleMatcherService для скоринга по атрибутам и категориям.
+    """
+    request_obj = db.get(Request, request_id)
+    if not request_obj:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    from app.services.marketplace.vehicle_matcher import vehicle_matcher
+
+    matches = vehicle_matcher.find_matching_vehicles(
+        db=db, request_id=request_id, company_id=company_id
+    )
+
+    return {
+        "request_id": request_id,
+        "total_matches": len(matches),
+        "vehicles": matches,
+    }
+
 # === Вспомогательные функции ===
 
 
