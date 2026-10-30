@@ -292,6 +292,25 @@ async def approve_salary_record(
                 "⚠️ Salary notification failed for record #%s: %s", record_id, notif_err
             )
 
+
+        # MAX notification about salary approval
+        try:
+            from app.services.max_messenger_service import max_messenger_service, notification_templates
+            employee_name = ''
+            if hasattr(record, 'employee_contractor_id') and record.employee_contractor_id:
+                from app.models.contractor import Contractor
+                contractor = db.get(Contractor, record.employee_contractor_id)
+                employee_name = contractor.name if contractor else ''
+            title, body = notification_templates.salary_approved(
+                record_id=record.id,
+                employee_name=employee_name or 'N/A',
+                amount=float(record.net_amount or 0),
+                period=str(record.period_start) if hasattr(record, 'period_start') else '',
+            )
+            await max_messenger_service.notify_company_dispatchers(db, company_id, title, body)
+        except Exception as max_err:
+            logger.warning('MAX salary notification failed: %s', max_err)
+
         return _serialize_record(record)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
