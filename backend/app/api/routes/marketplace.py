@@ -176,6 +176,24 @@ def create_offer_on_request(
     db.add(offer)
     db.commit()
     db.refresh(offer)
+    # MAX notification to request owner about new offer
+    try:
+        from app.services.max_messenger_service import max_messenger_service, notification_templates
+        title, body = notification_templates.offer_received(
+            request_id=request_obj.id,
+            vehicle_name=vehicle.name if vehicle else "N/A",
+            offered_price=float(data.offered_price),
+            price_type=data.price_type,
+        )
+        import asyncio
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(max_messenger_service.notify_company_dispatchers(db, request_obj.company_id, title, body))
+        except RuntimeError:
+            pass
+    except Exception as max_err:
+        logger.warning("MAX offer notification failed: %s", max_err)
+
 
     logger.info(
         "Offer created: id=%s, request=%s, company=%s, vehicle=%s, price=%s",
