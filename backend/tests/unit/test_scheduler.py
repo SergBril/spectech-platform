@@ -166,15 +166,19 @@ class TestScheduler:
     @pytest.fixture(autouse=True)
     def _isolated_scheduler(self):
         from app.tasks.scheduler import scheduler
+        # Pre-cleanup: stop and remove all jobs
         try:
             if scheduler.running:
                 scheduler.shutdown(wait=False)
+            scheduler.remove_all_jobs()
         except Exception:
             pass
         yield
+        # Post-cleanup
         try:
             if scheduler.running:
                 scheduler.shutdown(wait=False)
+            scheduler.remove_all_jobs()
         except Exception:
             pass
     """Тесты планировщика задач."""
