@@ -112,6 +112,19 @@ async def process_geofence_event(
         except Exception:
             pass
 
+        # MAX notification about geofence auto-complete
+        try:
+            from app.services.max_messenger_service import max_messenger_service, notification_templates
+            title, body = notification_templates.geofence_alert(
+                vehicle_name=vehicle.name if vehicle else "N/A",
+                geofence_name=getattr(sg, "name", "N/A") if sg else "N/A",
+                event_type="auto_complete",
+                timestamp=ts.isoformat(),
+            )
+            await max_messenger_service.notify_company_dispatchers(db, company_id, title, body)
+        except Exception:
+            pass
+
     db.commit()
     return {"message": f"Shift {action}", "task_id": task.id, "action": action}
 
