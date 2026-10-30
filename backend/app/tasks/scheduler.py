@@ -475,19 +475,21 @@ def start_scheduler() -> None:
 
 def stop_scheduler() -> None:
     """Останавливает планировщик."""
-    if scheduler.running:
-        scheduler.shutdown(wait=False)
-        logger.info("🛑 Scheduler stopped")
-    else:
-        logger.debug("Scheduler was not running")
+    try:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+            logger.info("🛑 Scheduler stopped")
+        else:
+            logger.debug("Scheduler was not running")
+    except Exception as e:
+        logger.warning("Error stopping scheduler: %s", e)
 
 
 def get_scheduler_status() -> dict:
     """Возвращает статус планировщика (для health-check)."""
-    return {
-        "enabled": settings.SCHEDULER_ENABLED,
-        "running": scheduler.running,
-        "jobs": (
+    try:
+        is_running = scheduler.running
+        jobs_list = (
             [
                 {
                     "id": job.id,
@@ -496,7 +498,15 @@ def get_scheduler_status() -> dict:
                 }
                 for job in scheduler.get_jobs()
             ]
-            if scheduler.running
+            if is_running
             else []
-        ),
+        )
+    except Exception:
+        # Scheduler may be shutting down during parallel tests
+        is_running = False
+        jobs_list = []
+    return {
+        "enabled": settings.SCHEDULER_ENABLED,
+        "running": is_running,
+        "jobs": jobs_list,
     }
