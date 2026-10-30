@@ -14,6 +14,7 @@ from app.api.deps import get_current_user
 
 router = APIRouter()
 
+@router.get("/audit-logs", summary="📋 Журнал действий пользователей")
 def list_audit_logs(
     user_id: int | None = Query(default=None),
     action: str | None = Query(default=None),
@@ -61,6 +62,7 @@ def list_audit_logs(
 # === User Role Management ===
 
 
+@router.get("/users/roles", summary="👥 Список пользователей с ролями", tags=["RBAC"])
 def list_users_with_roles(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -79,6 +81,7 @@ def list_users_with_roles(
 
 
 
+@router.put("/users/{user_id}/role", summary="🔑 Назначить роль пользователю", tags=["RBAC"])
 def assign_user_role(
     user_id: int,
     role: str = Body(..., embed=True),
@@ -139,6 +142,7 @@ def assign_user_role(
 # === MAX Messenger Integration ===
 
 
+@router.post("/users/bulk-role", summary="Bulk role change", tags=["RBAC"])
 def bulk_change_roles(
     user_ids: list[int] = Body(...),
     role: str = Body(...),
@@ -170,6 +174,7 @@ def bulk_change_roles(
 
 
 
+@router.post("/users/import-csv", summary="Import users from CSV", tags=["RBAC"])
 async def import_users_csv(
     file: UploadFile = File(...),
     default_role: str = Body(default="viewer"),
@@ -237,6 +242,7 @@ async def import_users_csv(
 
 
 
+@router.get("/users/export-csv", summary="Export users CSV", tags=["RBAC"])
 def export_users_csv(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -259,6 +265,7 @@ def export_users_csv(
 
 
 
+@router.get("/audit-logs/role-history/{user_id}", summary="Role change history", tags=["Audit"])
 def get_role_history(
     user_id: int,
     db: Session = Depends(get_db),

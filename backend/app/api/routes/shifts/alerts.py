@@ -22,6 +22,7 @@ from app.api.deps import get_current_company_id, get_current_user, get_user_comp
 
 router = APIRouter()
 
+@router.get("/alerts/idle-vehicles", summary="🚫 Простаивающая техника")
 async def check_idle_vehicles(
     target_date: str | None = Body(default=None),
     db: Session = Depends(get_db),
@@ -38,6 +39,7 @@ async def check_idle_vehicles(
 
 
 
+@router.get("/alerts/conflicts", summary="⚠️ Конфликты расписания")
 async def check_schedule_conflicts(
     target_date: str | None = Body(default=None),
     db: Session = Depends(get_db),

@@ -26,6 +26,7 @@ from app.models.contractor import DriverProfile, Employee
 
 router = APIRouter()
 
+@router.get("/templates", summary="📋 Шаблоны смен")
 def list_shift_templates(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -60,6 +61,7 @@ def list_shift_templates(
 
 
 
+@router.post("/templates", summary="➕ Создать шаблон смены", status_code=201)
 def create_shift_template(
     vehicle_id: int = Body(...),
     driver_id: int | None = Body(default=None),
@@ -94,6 +96,7 @@ def create_shift_template(
 
 
 
+@router.delete("/templates/{template_id}", summary="🗑️ Удалить шаблон смены")
 def delete_shift_template(
     template_id: int,
     db: Session = Depends(get_db),
@@ -117,6 +120,7 @@ def delete_shift_template(
 
 
 
+@router.post("/templates/apply", summary="🔄 Применить шаблоны на неделю")
 def apply_shift_templates(
     week_start: str = Body(..., description="Понедельник недели YYYY-MM-DD"),
     db: Session = Depends(get_db),
@@ -186,6 +190,7 @@ def apply_shift_templates(
 # === SMS/Push Notification Service ===
 
 
+@router.get("/templates/{template_id}/exclusions", summary="📅 Исключения шаблона")
 def list_template_exclusions(
     template_id: int,
     db: Session = Depends(get_db),
@@ -213,6 +218,7 @@ def list_template_exclusions(
 
 
 
+@router.post("/templates/{template_id}/exclusions", summary="➕ Добавить исключение", status_code=201)
 def create_template_exclusion(
     template_id: int,
     exclusion_date: str = Body(...),
@@ -246,6 +252,7 @@ def create_template_exclusion(
 
 
 
+@router.delete("/templates/exclusions/{exclusion_id}", summary="🗑️ Удалить исключение")
 def delete_template_exclusion(
     exclusion_id: int,
     db: Session = Depends(get_db),

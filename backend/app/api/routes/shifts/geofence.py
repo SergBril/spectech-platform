@@ -25,6 +25,7 @@ from app.models.catalog import Vehicle
 
 router = APIRouter()
 
+@router.post("/geofence/event", summary="📍 Обработка события геозоны")
 async def process_geofence_event(
     vehicle_id: int = Body(...),
     geofence_id: int = Body(...),
@@ -130,6 +131,7 @@ async def process_geofence_event(
 
 
 
+@router.post("/geofence/link", summary="🔗 Привязать геозону к смене")
 def link_geofence_to_shift(
     task_id: int,
     geofence_id: int = Body(...),

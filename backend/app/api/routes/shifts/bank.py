@@ -283,6 +283,7 @@ def manual_match_transaction(
 
 
 
+@router.get("/acts/unpaid", summary="📋 Неоплаченные акты для разнесения")
 def list_unpaid_acts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -313,6 +314,7 @@ def list_unpaid_acts(
 
 
 
+@router.get("/bank/transactions/export", summary="📥 Экспорт транзакций в Excel")
 def export_transactions_excel(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),

@@ -28,6 +28,7 @@ from app.schemas.shift import ShiftTaskCreate, ShiftTaskRead
 
 router = APIRouter()
 
+@router.get("/tasks", response_model=list[ShiftTaskRead])
 def list_shift_tasks(
     request_id: int | None = None,
     limit: int = Query(default=50, ge=1, le=500),
@@ -44,6 +45,7 @@ def list_shift_tasks(
 
 
 
+@router.post("/tasks", response_model=ShiftTaskRead, status_code=201)
 def create_shift_task(
     payload: ShiftTaskCreate,
     db: Session = Depends(get_db),
@@ -59,6 +61,7 @@ def create_shift_task(
 
 
 
+@router.get("/tasks/{task_id}", response_model=ShiftTaskRead)
 def get_shift_task(
     task_id: int,
     db: Session = Depends(get_db),
@@ -74,6 +77,7 @@ def get_shift_task(
 
 
 
+@router.put("/tasks/{task_id}", summary="✏️ Обновить смену")
 async def update_shift_task(
     task_id: int,
     shift_date: str | None = Body(default=None),
@@ -213,6 +217,7 @@ async def update_shift_task(
 
 
 
+@router.get("/calendar/export-ical", summary="📅 Экспорт календаря в iCal (.ics)")
 def export_shift_calendar_ical(
     date_from: str = Query(..., description="Начало периода YYYY-MM-DD"),
     date_to: str = Query(..., description="Конец периода YYYY-MM-DD"),
@@ -288,6 +293,7 @@ def export_shift_calendar_ical(
 
 
 
+@router.get("/calendar/export-pdf", summary="🖨️ PDF календаря смен")
 def export_shift_calendar_pdf(
     date_from: str = Query(..., description="Начало периода YYYY-MM-DD"),
     date_to: str = Query(..., description="Конец периода YYYY-MM-DD"),
@@ -423,6 +429,7 @@ def export_shift_calendar_pdf(
 
 
 
+@router.post("/tasks/{task_id}/create-request", summary="📋 Создать заявку из смены")
 async def create_request_from_shift(
     task_id: int,
     work_type: str = Body(default="earthworks"),
@@ -489,6 +496,7 @@ async def create_request_from_shift(
 
 
 
+@router.get("/daily-summary", summary="📊 Сводка на день")
 def get_daily_summary(
     target_date: str | None = Query(default=None, description="Дата YYYY-MM-DD, по умолчанию сегодня"),
     vehicle_category_id: int | None = Query(default=None, description="Фильтр по категории техники"),
@@ -594,6 +602,7 @@ def get_daily_summary(
 
 
 
+@router.post("/tasks/{task_id}/auto-assign", summary="🤖 Авто-назначение водителя")
 def auto_assign_driver(
     task_id: int,
     db: Session = Depends(get_db),
@@ -712,6 +721,7 @@ def auto_assign_driver(
 
 
 
+@router.get("/tasks/{task_id}/audit-log", summary="📜 История изменений смены")
 def get_shift_audit_log(
     task_id: int,
     db: Session = Depends(get_db),
@@ -754,6 +764,7 @@ def get_shift_audit_log(
 
 
 
+@router.post("/bulk-auto-assign", summary="🤖 Массовое авто-назначение")
 def bulk_auto_assign_drivers(
     date_from: str = Body(...),
     date_to: str = Body(...),
@@ -843,6 +854,7 @@ def bulk_auto_assign_drivers(
 
 
 
+@router.get("/audit-log/export/excel", summary="📥 Экспорт журнала в Excel")
 def export_audit_log_excel(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),

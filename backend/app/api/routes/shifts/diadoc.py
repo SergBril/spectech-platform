@@ -33,6 +33,7 @@ from app.services.digital_signature_service import digital_signature_service
 
 router = APIRouter()
 
+@router.post("/diadoc/send-act", summary="📨 Отправить акт через Diadoc")
 async def send_act_via_diadoc(
     act_id: int = Body(...),
     counterparty_box_id: str = Body(...),
@@ -86,6 +87,7 @@ async def send_act_via_diadoc(
 
 
 
+@router.get("/diadoc/counterparties", summary="👥 Контрагенты Diadoc")
 async def list_diadoc_counterparties(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -103,6 +105,7 @@ async def list_diadoc_counterparties(
 
 
 
+@router.get("/diadoc/status/{message_id}", summary="📊 Статус документа")
 async def get_diadoc_document_status(
     message_id: str,
     db: Session = Depends(get_db),
@@ -121,6 +124,7 @@ async def get_diadoc_document_status(
 
 
 
+@router.post("/diadoc/refresh-statuses", summary="🔄 Обновить все статусы")
 async def refresh_all_diadoc_statuses(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -159,6 +163,7 @@ async def refresh_all_diadoc_statuses(
 
 
 
+@router.post("/diadoc/bulk-send", summary="📨 Массовая отправка актов")
 async def bulk_send_acts_via_diadoc(
     act_ids: list[int] = Body(...),
     counterparty_box_id: str = Body(...),
@@ -221,6 +226,7 @@ async def bulk_send_acts_via_diadoc(
 
 
 
+@router.get("/acts/registry", summary="📋 Реестр актов")
 def get_acts_registry(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
@@ -296,6 +302,7 @@ def get_acts_registry(
 # === Digital Signature (КЭП) ===
 
 
+@router.post("/acts/{act_id}/sign", summary="✍️ Подписать акт КЭП")
 async def sign_act_with_kep(
     act_id: int,
     certificate_thumbprint: str = Body(default=""),
@@ -339,6 +346,7 @@ async def sign_act_with_kep(
 
 
 
+@router.get("/acts/{act_id}/verify-signature", summary="🔍 Проверить подпись")
 async def verify_act_signature(
     act_id: int,
     db: Session = Depends(get_db),
@@ -374,6 +382,7 @@ async def verify_act_signature(
 # === Document Archive ===
 
 
+@router.get("/acts/export/1c", summary="📥 Экспорт для 1С")
 def export_acts_for_1c(
     date_from: str = Query(...),
     date_to: str = Query(...),

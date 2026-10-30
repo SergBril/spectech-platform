@@ -27,6 +27,7 @@ from app.api.deps import get_current_company_id, get_current_user
 
 router = APIRouter()
 
+@router.post("/mobile/report", summary="📱 Отчёт водителя")
 async def submit_mobile_shift_report(
     task_id: int,
     odometer_start: float | None = Body(default=None),
@@ -146,6 +147,7 @@ async def submit_mobile_shift_report(
 
 
 
+@router.post("/mobile/fuel", summary="⛽ Запись топлива")
 def add_shift_fuel_entry(
     task_id: int,
     fuel_type: str = Body(default="diesel"),
@@ -204,6 +206,7 @@ def add_shift_fuel_entry(
 
 
 
+@router.get("/mobile/checklist", summary="📋 Чек-лист перед сменой")
 def get_pre_shift_checklist(
     task_id: int,
     db: Session = Depends(get_db),
@@ -357,6 +360,7 @@ async def submit_pre_shift_checklist(
 
 
 
+@router.post("/mobile/fuel/qr", summary="📷 Топливо по QR")
 def record_fuel_by_qr(
     qr_data: str = Body(...),
     shift_task_id: int = Body(...),
@@ -445,6 +449,7 @@ async def sync_fuel_card_transactions(
 
 
 
+@router.post("/devices/register", summary="📱 Регистрация FCM токена")
 def register_device_token(
     token: str = Body(...),
     platform: str = Body(default="web"),

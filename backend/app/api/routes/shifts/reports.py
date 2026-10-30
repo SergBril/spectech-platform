@@ -45,6 +45,7 @@ class SignReportPayload(BaseModel):
 
 router = APIRouter()
 
+@router.get("/reports", response_model=list[ShiftReportRead])
 def list_shift_reports(
     shift_task_id: int | None = None,
     limit: int = Query(default=50, ge=1, le=500),
@@ -65,6 +66,7 @@ def list_shift_reports(
 
 
 
+@router.post("/reports", response_model=ShiftReportRead, status_code=201)
 def create_shift_report(
     payload: ShiftReportCreate,
     db: Session = Depends(get_db),
@@ -99,6 +101,7 @@ def create_shift_report(
 
 
 
+@router.patch("/reports/{report_id}", response_model=ShiftReportRead)
 def update_shift_report(
     report_id: int,
     payload: ShiftReportUpdate,
@@ -137,6 +140,7 @@ def update_shift_report(
 
 
 
+@router.patch("/reports/{report_id}/approve", response_model=ShiftReportRead)
 def approve_shift_report(
     report_id: int,
     db: Session = Depends(get_db),
@@ -177,6 +181,7 @@ def approve_shift_report(
 
 
 
+@router.patch("/reports/{report_id}/dispute", response_model=ShiftReportRead)
 def dispute_shift_report(
     report_id: int,
     payload: dict,  # {"client_moto_hours": 8.5, "client_comment": "..."}
@@ -214,6 +219,7 @@ def dispute_shift_report(
 
 
 
+@router.post("/reports/{report_id}/photos", response_model=ShiftReportRead)
 async def upload_shift_report_photos(
     report_id: int,
     files: list[UploadFile] = File(...),
@@ -254,6 +260,7 @@ async def upload_shift_report_photos(
 
 
 
+@router.post("/reports/{report_id}/submit", response_model=ShiftReportRead)
 def submit_shift_report(
     report_id: int,
     payload: SubmitReportPayload,
@@ -291,6 +298,7 @@ def submit_shift_report(
 
 
 
+@router.post("/reports/{report_id}/approve-sign", response_model=ShiftReportRead)
 def approve_and_sign_shift_report(
     report_id: int,
     payload: SignReportPayload,
