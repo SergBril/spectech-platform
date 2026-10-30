@@ -14,7 +14,9 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger("spectech.storage")
 
 # Конфигурация (в production — через переменные окружения)
-MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
+MINIO_ENDPOINT_RAW = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
+# Strip protocol prefix to prevent double http://http:/...
+MINIO_ENDPOINT = MINIO_ENDPOINT_RAW.replace("https://", "").replace("http://", "")
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
 MINIO_BUCKET = "spectech-docs"
