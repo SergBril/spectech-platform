@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class FuelCardService:
-    """Сервис интеграции с провайдерами топливных карт (stub)."""
+    """Сервис интеграции с провайдерами топливных карт (Газпромнефть, Лукойл, Роснефть, Татнефть)."""
 
     SUPPORTED_PROVIDERS = ["gazpromneft", "lukoil", "rosneft", "tatneft", "custom"]
 
