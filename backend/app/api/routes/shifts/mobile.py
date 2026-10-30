@@ -1,4 +1,4 @@
-"""Модуль mobile для shifts router."""
+﻿"""Модуль mobile для shifts router."""
 
 from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile
