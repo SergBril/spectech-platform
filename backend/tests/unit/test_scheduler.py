@@ -163,24 +163,20 @@ class TestAutoEscalateOverdue:
 
 class TestScheduler:
 
-@pytest.fixture(autouse=True)
-def _isolated_scheduler(self):
-    """Ensure scheduler state is clean for each test."""
-    from app.tasks.scheduler import scheduler
-    # Stop if running from previous test
-    try:
-        if scheduler.running:
-            scheduler.shutdown(wait=False)
-    except Exception:
-        pass
-    yield
-    # Cleanup after test
-    try:
-        if scheduler.running:
-            scheduler.shutdown(wait=False)
-    except Exception:
-        pass
-
+    @pytest.fixture(autouse=True)
+    def _isolated_scheduler(self):
+        from app.tasks.scheduler import scheduler
+        try:
+            if scheduler.running:
+                scheduler.shutdown(wait=False)
+        except Exception:
+            pass
+        yield
+        try:
+            if scheduler.running:
+                scheduler.shutdown(wait=False)
+        except Exception:
+            pass
     """Тесты планировщика задач."""
 
     def test_scheduler_status_when_disabled(self):
