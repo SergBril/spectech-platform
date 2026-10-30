@@ -69,25 +69,26 @@ async def submit_mobile_shift_report(
     # Update shift status
     task.status = "completed"
 
-        # MAX notification about shift completion
-        try:
-            import asyncio
-            from app.services.max_messenger_service import max_messenger_service, notification_templates
-            vehicle_name = ""
-            if task.vehicle_id:
-                from app.models.catalog import Vehicle
-                v = db.get(Vehicle, task.vehicle_id)
-                vehicle_name = v.name if v else ""
-            title, body = notification_templates.shift_completed(
-                task_id=task.id,
-                vehicle_name=vehicle_name,
-                date=str(task.shift_date) if hasattr(task, "shift_date") else "",
-                hours=float(getattr(task, "actual_hours", 0) or 0),
-            )
-            loop = asyncio.get_running_loop()
-            loop.create_task(max_messenger_service.notify_company_dispatchers(db, company_id, title, body))
-        except Exception:
-            pass
+    # MAX notification about shift completion
+    try:
+        import asyncio
+        from app.services.max_messenger_service import max_messenger_service, notification_templates
+        vehicle_name = ""
+        if task.vehicle_id:
+            from app.models.catalog import Vehicle
+            v = db.get(Vehicle, task.vehicle_id)
+            vehicle_name = v.name if v else ""
+        title, body = notification_templates.shift_completed(
+            task_id=task.id,
+            vehicle_name=vehicle_name,
+            date=str(task.shift_date) if hasattr(task, "shift_date") else "",
+            hours=float(getattr(task, "actual_hours", 0) or 0),
+        )
+        loop = asyncio.get_running_loop()
+        loop.create_task(max_messenger_service.notify_company_dispatchers(db, company_id, title, body))
+    except Exception:
+        pass
+
     if odometer_end and odometer_start:
         task.odometer_distance = round(odometer_end - odometer_start, 1)
 
