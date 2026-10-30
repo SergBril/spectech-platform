@@ -53,7 +53,7 @@ class DiadocService:
                     "Documents": [{
                         "SignedContent": {
                             "Content": base64.b64encode(act_xml).decode(),
-                            "Signature": "",  # TODO: подпись КЭП
+                            "Signature": await self._sign_for_diadoc(act_xml),
                         },
                         "TypeNamedId": "UniversalTransferDocument",
                         "Function": "СЧФДОП",
@@ -77,6 +77,21 @@ class DiadocService:
         except Exception as e:
             logger.error(f"❌ Diadoc send failed: {e}")
             return {"message_id": None, "status": "error", "error": str(e)}
+
+    async def _sign_for_diadoc(self, document_bytes: bytes) -> str:
+        """Подписать документ для Diadoc через DigitalSignatureService."""
+        from app.services.digital_signature_service import digital_signature_service
+        try:
+            result = await digital_signature_service.sign_document(document_bytes)
+            sig = result.get("signature", "")
+            if result.get("status") == "error":
+                logger.error("KEP signing error: %s", result.get("error"))
+                return ""
+            logger.info("✅ Document signed for Diadoc (%s)", result.get("provider"))
+            return sig
+        except Exception as e:
+            logger.error("❌ KEP signing failed: %s", e)
+            return ""
 
     async def get_counterparties(self, token: str) -> list[dict]:
         """Получить список контрагентов из Diadoc."""

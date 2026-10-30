@@ -146,3 +146,56 @@ async def refresh_all_diadoc_statuses(
 
     db.commit()
     return {"checked": len(acts), "updated": updated}
+
+
+@router.post("/webhook/diadoc", summary="🔔 Diadoc webhook callback")
+async def diadoc_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Обработка callback-уведомлений от Diadoc.
+    
+    Diadoc отправляет POST при изменении статуса документа.
+    Обновляем статус акта в БД.
+    """
+    try:
+        body = await request.json()
+        message_id = body.get("MessageId", "")
+        doc_status = body.get("DocflowStatus", {}).get("PrimaryStatus", "")
+        
+        if not message_id:
+            return {"status": "ignored", "reason": "no MessageId"}
+        
+        # Map Diadoc status to internal status
+        status_map = {
+            "WaitingForSenderSignature": "draft",
+            "WaitingForRecipientSignature": "sent_to_edo",
+            "WithRecipientSignature": "signed",
+            "RecipientSignatureRequestRejected": "rejected",
+            "InvalidDocument": "rejected",
+        }
+        internal_status = status_map.get(doc_status, doc_status)
+        
+        # Update act status in DB
+        from app.models.finance import Act
+        act = db.query(Act).filter(Act.edo_message_id == message_id).first()
+        if act:
+            old_status = act.status
+            act.status = internal_status
+            if internal_status == "signed":
+                from datetime import datetime, timezone
+                act.signed_at = datetime.now(timezone.utc)
+            db.commit()
+            logger.info(
+                "📬 Diadoc webhook: Act #%s status %s → %s (msg: %s)",
+                act.id, old_status, internal_status, message_id
+            )
+            return {"status": "updated", "act_id": act.id, "new_status": internal_status}
+        
+        logger.warning("Diadoc webhook: no act found for message_id=%s", message_id)
+        return {"status": "not_found", "message_id": message_id}
+        
+    except Exception as e:
+        logger.error("❌ Diadoc webhook error: %s", e, exc_info=True)
+        return {"status": "error", "detail": str(e)}
