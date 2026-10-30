@@ -1,4 +1,4 @@
-"""Сервис обработки банковских выписок и платежей."""
+﻿"""Сервис обработки банковских выписок и платежей."""
 
 import logging
 from datetime import UTC, datetime
@@ -283,6 +283,23 @@ class PaymentsService:
             f"✅ Payment applied: {payment_amount} to Invoice {invoice.document_number}, "
             f"remaining: {float(invoice.total) - new_paid}"
         )
+
+        # MAX notification about payment
+        try:
+            from app.services.max_messenger_service import max_messenger_service, notification_templates
+            title, body = notification_templates.payment_received(
+                invoice_number=invoice.document_number or str(invoice.id),
+                amount=float(payment_amount),
+                payer_name=tx.counterparty_name or "Неизвестный",
+            )
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(max_messenger_service.notify_company_dispatchers(db, invoice.company_id, title, body))
+            except RuntimeError:
+                pass  # No event loop, skip MAX notification
+        except Exception as max_err:
+            logger.warning("MAX payment notification failed: %s", max_err)
 
         # Уведомления (не блокируем основную операцию)
         try:

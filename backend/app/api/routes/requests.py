@@ -233,6 +233,18 @@ async def create_request(
             channel="in_app",
         )
     except Exception as e:
+        # MAX notification to company dispatchers
+        try:
+            from app.services.max_messenger_service import max_messenger_service, notification_templates
+            title, body = notification_templates.request_created(
+                request_id=request.id,
+                work_type=request.work_type or "без типа",
+                address=request.object_address or "не указан",
+                planned_start=request.planned_start.strftime("%d.%m.%Y %H:%M"),
+            )
+            await max_messenger_service.notify_company_dispatchers(db, company_id, title, body)
+        except Exception as max_err:
+            logger.warning("MAX notification failed: %s", max_err)
         logger.warning("Failed to send notification: %s", e)
 
     return request
