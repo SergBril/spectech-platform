@@ -1,7 +1,7 @@
 """API для ЭДО (Diadoc): отправка документов, статусы, контрагенты."""
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import Request, APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user
