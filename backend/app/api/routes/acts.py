@@ -1,4 +1,4 @@
-"""Роутер для актов выполненных работ (PDF, УПД, ТОРГ-12, счёт-фактура)."""
+﻿"""Роутер для актов выполненных работ (PDF, УПД, ТОРГ-12, счёт-фактура)."""
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,7 +20,7 @@ def download_act_pdf(
 ):
     """Скачать PDF акта."""
     from fastapi.responses import StreamingResponse
-    from app.services.pdf_service import pdf_service
+    from app.services.pdf_service import generate_act_pdf
     import io
 
     act = db.get(Act, act_id)
@@ -28,7 +28,7 @@ def download_act_pdf(
         raise HTTPException(status_code=404, detail="Act not found")
 
     try:
-        pdf_bytes = pdf_service.generate_act_pdf(act)
+        pdf_bytes = generate_act_pdf(act)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",

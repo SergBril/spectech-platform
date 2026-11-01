@@ -1,4 +1,4 @@
-from datetime import date, datetime
+﻿from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 
@@ -220,6 +220,7 @@ class Act(Base):
     )
 
     # PDF файл
+    signature: Mapped[str | None] = mapped_column(Text, nullable=True)
     pdf_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
