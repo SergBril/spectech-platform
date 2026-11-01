@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     Numeric,
@@ -220,6 +221,9 @@ class Act(Base):
     )
 
     # PDF файл
+    hours_worked: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hourly_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    edo_message_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     signature: Mapped[str | None] = mapped_column(Text, nullable=True)
     pdf_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 

@@ -1,4 +1,4 @@
-"""Targeted tests for diadoc.py, mobile.py, max_messenger.py route bodies."""
+﻿"""Targeted tests for diadoc.py, mobile.py, max_messenger.py route bodies."""
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import date
@@ -9,7 +9,6 @@ class TestDiadocRouteBodies:
 
     @patch("app.api.routes.shifts.diadoc.digital_signature_service")
     @patch("app.api.routes.shifts.diadoc.diadoc_service")
-    @pytest.mark.xfail(reason="Bug: Act model missing signature attribute", strict=False)
     def test_send_act_with_real_act(self, mock_diadoc, mock_sign, client, auth_headers, db_session, company, sample_contractor):
         from app.models.finance import Act
         act = Act(
@@ -48,7 +47,6 @@ class TestDiadocRouteBodies:
         assert resp.status_code in (200, 500)
 
     @patch("app.api.routes.shifts.diadoc.digital_signature_service")
-    @pytest.mark.xfail(reason="Bug: Act model missing signature attribute", strict=False)
     def test_verify_signature_route(self, mock_sign, client, auth_headers, db_session, company, sample_contractor):
         from app.models.finance import Act
         act = Act(
