@@ -80,91 +80,17 @@ async def create_request(
     _: None = Depends(require_permission("requests", "create")),
 ):
     """Создать заявку (для своей компании)."""
-    if payload.planned_end <= payload.planned_start:
-        raise HTTPException(
-            status_code=422, detail="planned_end must be after planned_start"
-        )
+    from app.services.request_service import RequestService, RequestServiceError
 
-    # Validate vehicle_category_id exists
-    if payload.vehicle_category_id:
-        from app.models.catalog import Category
-
-        cat = db.get(Category, payload.vehicle_category_id)
-        if not cat:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Vehicle category {payload.vehicle_category_id} not found",
-            )
-
-    # Exclude None values to avoid overriding DB defaults
-    data = payload.model_dump(exclude_none=True)
-    request = Request(
-        **data,
-        company_id=company_id,
-        created_by=current_user.id,
-    )
-    db.add(request)
-    db.flush()
-
-    db.add(
-        RequestStatusLog(
-            request_id=request.id,
-            from_status=None,
-            to_status="new",
-            changed_by_user_id=current_user.id,
-            comment="Заявка создана",
-        )
-    )
-
-    # Auto-calculate estimated amount if not provided
-    if not request.estimated_amount:
-        from app.services.pricing_service import pricing_service
-        try:
-            estimate = pricing_service.calculate_estimate(
-                region=request.region,
-                rate_type=request.rate_type or "per_shift",
-                shift_duration_hours=float(request.shift_duration_hours) if request.shift_duration_hours else None,
-                custom_rate=float(request.client_rate) if request.client_rate else None,
-            )
-            request.estimated_amount = estimate["estimated_amount"]
-            if not request.client_rate:
-                request.client_rate = estimate["rate_used"]
-            if not request.rate_type:
-                request.rate_type = estimate["rate_type"]
-        except Exception as e:
-            logger.warning(f"Auto-pricing failed for request #{request.id}: {e}")
-
-    db.commit()
-    db.refresh(request)
-
-    # Send notification to company admins about new request
-    # Send notification
-    from app.services.notification_service import create_notification
-
+    svc = RequestService(db)
     try:
-        await create_notification(
-            db=db,
+        return await svc.create_request(
+            payload_data=payload.model_dump(exclude_none=True),
+            company_id=company_id,
             user_id=current_user.id,
-            title="Новая заявка создана",
-            body=f"Заявка #{request.id} ({request.work_type or 'без типа'}) на период {request.planned_start:%d.%m} — {request.planned_end:%d.%m}",
-            channel="in_app",
         )
-    except Exception as e:
-        # MAX notification to company dispatchers
-        try:
-            from app.services.max_messenger_service import max_messenger_service, notification_templates
-            title, body = notification_templates.request_created(
-                request_id=request.id,
-                work_type=request.work_type or "без типа",
-                address=request.object_address or "не указан",
-                planned_start=request.planned_start.strftime("%d.%m.%Y %H:%M"),
-            )
-            await max_messenger_service.notify_company_dispatchers(db, company_id, title, body)
-        except Exception as max_err:
-            logger.warning("MAX notification failed: %s", max_err)
-        logger.warning("Failed to send notification: %s", e)
-
-    return request
+    except RequestServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
 @router.get("/{request_id}", response_model=RequestRead)

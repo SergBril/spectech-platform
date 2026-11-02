@@ -443,3 +443,92 @@ class RequestService:
         enriched = self._fetch_requests_for_export(**filters)
         return gen_excel(enriched)
 
+    async def create_request(
+        self,
+        payload_data: dict,
+        company_id: int,
+        user_id: int,
+    ) -> Request:
+        """Create a new request with auto-pricing and notifications."""
+        from app.models.catalog import Category
+        from app.services.notification_service import create_notification
+        from app.services.pricing_service import pricing_service
+
+        # Validate planned dates
+        planned_start = payload_data.get("planned_start")
+        planned_end = payload_data.get("planned_end")
+        if planned_start and planned_end and planned_end <= planned_start:
+            raise RequestServiceError(422, "planned_end must be after planned_start")
+
+        # Validate vehicle_category_id
+        cat_id = payload_data.get("vehicle_category_id")
+        if cat_id:
+            cat = self.db.get(Category, cat_id)
+            if not cat:
+                raise RequestServiceError(422, f"Vehicle category {cat_id} not found")
+
+        # Create request
+        request = Request(
+            **payload_data,
+            company_id=company_id,
+            created_by=user_id,
+        )
+        self.db.add(request)
+        self.db.flush()
+
+        # Status log
+        self.db.add(
+            RequestStatusLog(
+                request_id=request.id,
+                from_status=None,
+                to_status="new",
+                changed_by_user_id=user_id,
+                comment="Заявка создана",
+            )
+        )
+
+        # Auto-calculate estimated amount
+        if not request.estimated_amount:
+            try:
+                estimate = pricing_service.calculate_estimate(
+                    region=request.region,
+                    rate_type=request.rate_type or "per_shift",
+                    shift_duration_hours=float(request.shift_duration_hours) if request.shift_duration_hours else None,
+                    custom_rate=float(request.client_rate) if request.client_rate else None,
+                )
+                request.estimated_amount = estimate["estimated_amount"]
+                if not request.client_rate:
+                    request.client_rate = estimate["rate_used"]
+                if not request.rate_type:
+                    request.rate_type = estimate["rate_type"]
+            except Exception as e:
+                logger.warning(f"Auto-pricing failed for request #{request.id}: {e}")
+
+        self.db.commit()
+        self.db.refresh(request)
+
+        # Notifications
+        try:
+            await create_notification(
+                db=self.db,
+                user_id=user_id,
+                title="Новая заявка создана",
+                body=f"Заявка #{request.id} ({request.work_type or 'без типа'}) на период {request.planned_start:%d.%m} — {request.planned_end:%d.%m}",
+                channel="in_app",
+            )
+        except Exception as e:
+            try:
+                from app.services.max_messenger_service import max_messenger_service, notification_templates
+                title, body = notification_templates.request_created(
+                    request_id=request.id,
+                    work_type=request.work_type or "без типа",
+                    address=request.object_address or "не указан",
+                    planned_start=request.planned_start.strftime("%d.%m.%Y %H:%M"),
+                )
+                await max_messenger_service.notify_company_dispatchers(self.db, company_id, title, body)
+            except Exception as max_err:
+                logger.warning("MAX notification failed: %s", max_err)
+            logger.warning("Failed to send notification: %s", e)
+
+        return request
+
