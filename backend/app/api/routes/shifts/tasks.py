@@ -77,7 +77,7 @@ def get_shift_task(
 
 
 
-@router.put("/tasks/{task_id}", summary="✏️ Обновить смену")
+@router.put("/tasks/{task_id}")
 async def update_shift_task(
     task_id: int,
     shift_date: str | None = Body(default=None),
@@ -90,131 +90,16 @@ async def update_shift_task(
     company_id: int = Depends(get_current_company_id),
 ):
     """Обновить смену (дата, водитель, статус). Используется для drag-and-drop."""
-    from datetime import datetime, date as date_type
+    from app.services.shift_task_service import update_shift_task as svc_update, ShiftTaskServiceError
 
-    task = db.get(ShiftTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Shift task not found")
-
-    # Проверка доступа: владелец техники или диспетчер
-    vehicle = db.get(Vehicle, task.vehicle_id)
-    if vehicle and vehicle.company_id != company_id:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    # Проверка конфликтов
-    target_date = date_type.fromisoformat(shift_date) if shift_date else task.shift_date
-    conflicts = []
-
-    # Конфликт техники: другая смена этой техники в тот же день
-    vehicle_conflict = db.execute(
-        select(ShiftTask).where(
-            ShiftTask.vehicle_id == task.vehicle_id,
-            ShiftTask.shift_date == target_date,
-            ShiftTask.id != task_id,
-            ShiftTask.status.notin_(["cancelled"]),
-        )
-    ).scalar_one_or_none()
-    if vehicle_conflict:
-        v = db.get(Vehicle, task.vehicle_id)
-        conflicts.append(f"Техника «{v.name if v else task.vehicle_id}» уже занята {target_date}")
-
-    # Конфликт водителя: другая смена этого водителя в тот же день
-    check_driver = driver_id if driver_id is not None else task.operator_id
-    driver_conflict = db.execute(
-        select(ShiftTask).where(
-            ShiftTask.operator_id == check_driver,
-            ShiftTask.shift_date == target_date,
-            ShiftTask.id != task_id,
-            ShiftTask.status.notin_(["cancelled"]),
-        )
-    ).scalar_one_or_none()
-
-    if conflicts:
-        raise HTTPException(status_code=409, detail={"conflicts": conflicts})
-
-    changes = []
-    if shift_date is not None:
-        old_date = task.shift_date
-        task.shift_date = date_type.fromisoformat(shift_date)
-        changes.append(f"date: {old_date} → {shift_date}")
-    if planned_start is not None:
-        task.planned_start = datetime.fromisoformat(planned_start)
-    if planned_end is not None:
-        task.planned_end = datetime.fromisoformat(planned_end)
-    if driver_id is not None:
-        task.operator_id = driver_id
-    if status is not None:
-        old_status = task.status
-        task.status = status
-        changes.append(f"status: {old_status} → {status}")
-
-    db.commit()
-    db.refresh(task)
-
-    # Audit log
     try:
-        from app.models.shift import ShiftAuditLog
-        for change in changes:
-            parts = change.split(": ", 1)
-            field = parts[0] if len(parts) > 1 else "unknown"
-            values = parts[1] if len(parts) > 1 else change
-            old_val, new_val = None, None
-            if " → " in values:
-                old_val, new_val = values.split(" → ", 1)
-            db.add(ShiftAuditLog(
-                shift_task_id=task_id,
-                action="updated",
-                field_changed=field,
-                old_value=old_val,
-                new_value=new_val,
-                changed_by_user_id=current_user.id,
-            ))
-        db.commit()
-    except Exception:
-        pass  # Не блокируем если аудит не записался
-
-    # Уведомление водителю о назначении/изменении смены
-    notify_driver = driver_id if driver_id is not None else task.operator_id
-    if notify_driver and changes:
-        change_msg = f"Ваша смена обновлена: {', '.join(changes)}"
-        try:
-            from app.services.notification_service import create_notification
-            from app.models.contractor import DriverProfile
-            profile = db.get(DriverProfile, notify_driver)
-            if profile and hasattr(profile, 'employee_contractor_id'):
-                # In-app notification via employee link
-                from app.models.contractor import Employee
-                emp = db.get(Employee, profile.employee_contractor_id)
-                if emp and hasattr(emp, 'user_id') and emp.user_id:
-                    await create_notification(
-                        db=db, user_id=emp.user_id,
-                        title="📅 Изменение смены",
-                        body=change_msg,
-                        channel="in_app",
-                    )
-            # SMS notification
-            await send_driver_sms_notification(notify_driver, change_msg, db)
-            # Push notification
-            await send_driver_push_notification(notify_driver, "📅 Изменение смены", change_msg, db)
-        except Exception:
-            pass
-
-    # WS broadcast для live-обновления календаря
-    try:
-        from app.services.websocket_manager import manager
-        await manager.broadcast_to_company(company_id, {
-            "type": "shift_updated",
-            "task_id": task_id,
-            "shift_date": str(task.shift_date),
-            "vehicle_id": task.vehicle_id,
-            "driver_id": task.operator_id,
-            "status": task.status,
-        })
-    except Exception:
-        pass
-
-    return {"message": "Смена обновлена", "id": task_id, "changes": changes}
-
+        return await svc_update(
+            db=db, task_id=task_id, company_id=company_id, user_id=current_user.id,
+            shift_date=shift_date, planned_start=planned_start, planned_end=planned_end,
+            driver_id=driver_id, status=status,
+        )
+    except ShiftTaskServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
 @router.get("/calendar/export-ical", summary="📅 Экспорт календаря в iCal (.ics)")
@@ -602,123 +487,20 @@ def get_daily_summary(
 
 
 
-@router.post("/tasks/{task_id}/auto-assign", summary="🤖 Авто-назначение водителя")
+@router.post("/{task_id}/auto-assign")
 def auto_assign_driver(
     task_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """Автоматически назначить лучшего доступного водителя на смену по квалификации и загрузке."""
-    from datetime import date as date_type
-    from app.models.contractor import DriverProfile, Employee
+    """Автоматически назначить лучшего доступного водителя на смену."""
+    from app.services.shift_task_service import auto_assign_driver as svc_auto_assign, ShiftTaskServiceError
 
-    task = db.get(ShiftTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Shift task not found")
-
-    vehicle = db.get(Vehicle, task.vehicle_id)
-    if not vehicle or vehicle.company_id != company_id:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    if task.operator_id:
-        raise HTTPException(status_code=409, detail="Driver already assigned")
-
-    # Get all active driver profiles for this company
-    drivers = db.execute(
-        select(DriverProfile)
-        .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
-        .where(getattr(Employee, 'company_id', None) == company_id)
-    ).scalars().all()
-
-    # Load auto-assign rules for this company
-    from app.models.shift import AutoAssignRule
-    import json
-    rules = db.execute(
-        select(AutoAssignRule)
-        .where(AutoAssignRule.company_id == company_id)
-        .where(AutoAssignRule.is_active == True)
-        .order_by(AutoAssignRule.priority.desc())
-    ).scalars().all()
-
-    blacklist_ids = set()
-    priority_ids = []
-    for rule in rules:
-        try:
-            cfg = json.loads(rule.config_json) if rule.config_json else {}
-        except Exception:
-            cfg = {}
-        if rule.rule_type == "blacklist":
-            blacklist_ids.update(cfg.get("driver_ids", []))
-        elif rule.rule_type == "priority_driver":
-            priority_ids.extend([(did, rule.priority) for did in cfg.get("driver_ids", [])])
-
-    priority_map = {did: prio for did, prio in priority_ids}
-
-    best_driver = None
-    best_score = -1
-
-    for profile in drivers:
-        # Blacklist check
-        if profile.employee_contractor_id in blacklist_ids:
-            continue
-
-        # Check if driver is already busy on this date
-        busy = db.execute(
-            select(ShiftTask).where(
-                ShiftTask.operator_id == profile.employee_contractor_id,
-                ShiftTask.shift_date == task.shift_date,
-                ShiftTask.status.notin_(["cancelled"]),
-            )
-        ).scalar_one_or_none()
-        if busy:
-            continue
-
-        score = 0
-
-        # Priority rule bonus
-        if profile.employee_contractor_id in priority_map:
-            score += priority_map[profile.employee_contractor_id] * 5
-
-        # License category bonus
-        vehicle_cat = getattr(vehicle, 'category', '') or ''
-        driver_license = getattr(profile, 'license_category', '') or ''
-        if vehicle_cat and driver_license and vehicle_cat.upper() in driver_license.upper():
-            score += 10
-
-        # Fewer shifts this week = higher availability score
-        week_start = task.shift_date - __import__('datetime').timedelta(days=task.shift_date.weekday())
-        week_end = week_start + __import__('datetime').timedelta(days=6)
-        week_shifts = db.execute(
-            select(func.count(ShiftTask.id)).where(
-                ShiftTask.operator_id == profile.employee_contractor_id,
-                ShiftTask.shift_date >= week_start,
-                ShiftTask.shift_date <= week_end,
-                ShiftTask.status.notin_(["cancelled"]),
-            )
-        ).scalar() or 0
-        score += max(0, 7 - week_shifts)
-
-        if score > best_score:
-            best_score = score
-            best_driver = profile
-
-    if not best_driver:
-        raise HTTPException(status_code=404, detail="No available drivers found")
-
-    task.operator_id = best_driver.employee_contractor_id
-    db.commit()
-
-    emp = db.get(Employee, best_driver.employee_contractor_id)
-    driver_name = f"{emp.first_name} {emp.last_name}" if emp else f"Driver#{best_driver.employee_contractor_id}"
-
-    return {
-        "message": f"Водитель {driver_name} назначен",
-        "driver_id": best_driver.employee_contractor_id,
-        "driver_name": driver_name,
-        "score": best_score,
-    }
-
+    try:
+        return svc_auto_assign(db, task_id, company_id)
+    except ShiftTaskServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
 @router.get("/tasks/{task_id}/audit-log", summary="📜 История изменений смены")
