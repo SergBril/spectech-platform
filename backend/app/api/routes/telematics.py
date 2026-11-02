@@ -53,7 +53,7 @@ def _check_vehicle_access(db: Session, vehicle_id: int, company_id: int) -> Vehi
     return vehicle
 
 
-@router.post("/gps", status_code=201)
+@router.post("/gps/batch")
 async def receive_gps_points(
     points: list[GpsPointCreate],
     db: Session = Depends(get_db),
@@ -61,65 +61,14 @@ async def receive_gps_points(
     company_id: int = Depends(get_current_company_id),
 ):
     """Принимает массив GPS точек (только для техники своей компании)."""
-    from app.services.websocket_manager import manager
+    from app.services.telematics_service import receive_gps_points_batch
 
-    saved_points = []
-    for point in points:
-        # Проверка доступа к технике
-        _check_vehicle_access(db, point.vehicle_id, company_id)
-
-        gps_point = GpsPoint(
-            vehicle_id=point.vehicle_id,
-            latitude=point.latitude,
-            longitude=point.longitude,
-            speed=point.speed,
-            heading=point.heading,
-            altitude=point.altitude,
-            engine_on=point.engine_on,
-            engine_hours=point.engine_hours,
-            fuel_level=point.fuel_level,
-            recorded_at=point.recorded_at or datetime.now(UTC),
-        )
-        db.add(gps_point)
-        saved_points.append(gps_point)
-
-    db.commit()
-
-    for gps_point in saved_points:
-        try:
-            await manager.broadcast_gps_to_company(
-                company_id=company_id,
-                gps_data={
-                    "vehicle_id": gps_point.vehicle_id,
-                    "lat": float(gps_point.latitude),
-                    "lon": float(gps_point.longitude),
-                    "speed": float(gps_point.speed) if gps_point.speed else 0,
-                    "heading": float(gps_point.heading) if gps_point.heading else 0,
-                    "altitude": float(gps_point.altitude) if gps_point.altitude else 0,
-                    "engine_on": (
-                        bool(gps_point.engine_on)
-                        if gps_point.engine_on is not None
-                        else False
-                    ),
-                    "engine_hours": (
-                        float(gps_point.engine_hours)
-                        if gps_point.engine_hours
-                        else None
-                    ),
-                    "fuel_level": (
-                        float(gps_point.fuel_level) if gps_point.fuel_level else None
-                    ),
-                    "recorded_at": (
-                        gps_point.recorded_at.isoformat()
-                        if gps_point.recorded_at
-                        else None
-                    ),
-                },
-            )
-        except Exception as e:
-            logger.warning("GPS broadcast failed: %s", e)
-
-    return {"status": "ok", "saved": len(saved_points)}
+    result = await receive_gps_points_batch(
+        db=db,
+        points_data=[p.model_dump(exclude_none=True) for p in points],
+        company_id=company_id,
+    )
+    return result
 
 
 @router.post("/gps/single", response_model=GpsPointRead, status_code=201)
@@ -180,86 +129,10 @@ def get_track_stats(
     company_id: int = Depends(get_current_company_id),
 ):
     """Статистика трека (только для техники своей компании)."""
-    import math
+    from app.services.telematics_service import get_track_stats as svc_track_stats
 
     _check_vehicle_access(db, vehicle_id, company_id)
-
-    stmt = (
-        select(GpsPoint)
-        .where(GpsPoint.vehicle_id == vehicle_id)
-        .order_by(GpsPoint.recorded_at.asc())
-    )
-    if date_from:
-        stmt = stmt.where(GpsPoint.recorded_at >= date_from)
-    if date_to:
-        stmt = stmt.where(GpsPoint.recorded_at <= date_to)
-
-    points = db.scalars(stmt).all()
-
-    if not points:
-        return {
-            "vehicle_id": vehicle_id,
-            "points_count": 0,
-            "total_distance_km": 0.0,
-            "avg_speed_kmh": 0.0,
-            "max_speed_kmh": 0.0,
-            "duration_minutes": 0,
-            "stops_count": 0,
-            "started_at": None,
-            "ended_at": None,
-        }
-
-    total_distance_km = 0.0
-    speeds = []
-    stops_count = 0
-    was_stopped = False
-
-    for i in range(1, len(points)):
-        p1, p2 = points[i - 1], points[i]
-        lat1, lon1 = math.radians(p1.latitude), math.radians(p1.longitude)
-        lat2, lon2 = math.radians(p2.latitude), math.radians(p2.longitude)
-        dlat = lat2 - lat1
-        dlon = lon2 - lon1
-        a = (
-            math.sin(dlat / 2) ** 2
-            + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-        )
-        c = 2 * math.asin(math.sqrt(a))
-        distance_km = 6371.0 * c
-        total_distance_km += distance_km
-
-        if p1.speed is not None:
-            speeds.append(p1.speed)
-            if p1.speed < 2 and not was_stopped:
-                stops_count += 1
-                was_stopped = True
-            elif p1.speed >= 2:
-                was_stopped = False
-
-    speeds = [s for s in speeds if s is not None]
-    avg_speed = sum(speeds) / len(speeds) if speeds else 0.0
-    max_speed = max(speeds) if speeds else 0.0
-
-    started_at = points[0].recorded_at
-    ended_at = points[-1].recorded_at
-    duration_minutes = int((ended_at - started_at).total_seconds() / 60)
-
-    return {
-        "vehicle_id": vehicle_id,
-        "points_count": len(points),
-        "total_distance_km": round(total_distance_km, 2),
-        "avg_speed_kmh": round(avg_speed, 1),
-        "max_speed_kmh": round(max_speed, 1),
-        "duration_minutes": duration_minutes,
-        "stops_count": stops_count,
-        "started_at": started_at.isoformat() if started_at else None,
-        "ended_at": ended_at.isoformat() if ended_at else None,
-    }
-
-
-# =========================================
-# === Geofences ===
-# =========================================
+    return svc_track_stats(db, vehicle_id, company_id, date_from, date_to)
 
 
 @router.get("/geofences", response_model=list[GeofenceRead])
