@@ -532,3 +532,103 @@ class RequestService:
 
         return request
 
+    async def bulk_response_action(
+        self,
+        assignment_ids: list[int],
+        action: str,
+        reason: str,
+        company_id: int,
+        user_id: int,
+    ) -> dict:
+        """Bulk approve or reject response assignments."""
+        from app.models.dispatch import RequestAssignment, RequestStatusLog
+        from app.models.shift import ShiftTask, ShiftTaskStatus
+        from app.services.notification_service import create_notification
+        from app.services.websocket_manager import manager
+
+        if action not in ("approve", "reject"):
+            raise RequestServiceError(400, "action must be 'approve' or 'reject'")
+
+        processed = 0
+        errors = []
+
+        for aid in assignment_ids:
+            assignment = self.db.get(RequestAssignment, aid)
+            if not assignment:
+                errors.append({"id": aid, "error": "Not found"})
+                continue
+
+            request = self.db.get(Request, assignment.request_id)
+            if not request or request.company_id != company_id:
+                errors.append({"id": aid, "error": "Access denied"})
+                continue
+
+            if assignment.status != "pending_approval":
+                errors.append({"id": aid, "error": f"Already {assignment.status}"})
+                continue
+
+            if action == "approve":
+                assignment.status = "approved"
+                vehicle = self.db.get(Vehicle, assignment.vehicle_id)
+
+                # Reject other responses for same request
+                others = self.db.execute(
+                    select(RequestAssignment).where(
+                        RequestAssignment.request_id == assignment.request_id,
+                        RequestAssignment.id != aid,
+                        RequestAssignment.status == "pending_approval",
+                    )
+                ).scalars().all()
+                for o in others:
+                    o.status = "rejected"
+
+                # Create ShiftTask
+                shift_task = ShiftTask(
+                    request_id=assignment.request_id,
+                    vehicle_id=assignment.vehicle_id,
+                    driver_id=getattr(vehicle, "current_driver_id", None),
+                    shift_date=request.planned_start.date() if request.planned_start else None,
+                    planned_start=request.planned_start,
+                    planned_end=request.planned_end,
+                    status=ShiftTaskStatus.planned if hasattr(ShiftTaskStatus, "planned") else "planned",
+                    created_by=user_id,
+                )
+                self.db.add(shift_task)
+                request.status = "assigned"
+
+                try:
+                    await create_notification(
+                        db=self.db, user_id=assignment.assigned_by,
+                        title="✅ Ваш отклик одобрен!",
+                        body=f"Заявка #{request.id} подтверждена.",
+                        channel="in_app",
+                    )
+                    await manager.send_to_user(assignment.assigned_by, {"type": "response_approved", "request_id": request.id})
+                except Exception:
+                    pass
+
+            else:  # reject
+                assignment.status = "rejected"
+                try:
+                    await create_notification(
+                        db=self.db, user_id=assignment.assigned_by,
+                        title="❌ Ваш отклик отклонён",
+                        body=f"Заявка #{request.id}: {reason or 'Выбран другой исполнитель'}",
+                        channel="in_app",
+                    )
+                    await manager.send_to_user(assignment.assigned_by, {"type": "response_rejected", "request_id": request.id})
+                except Exception:
+                    pass
+
+            self.db.add(RequestStatusLog(
+                request_id=assignment.request_id,
+                from_status=request.status if action == "reject" else "has_responses",
+                to_status=request.status,
+                changed_by_user_id=user_id,
+                comment=f"Массовое {action}: отклик #{aid}",
+            ))
+            processed += 1
+
+        self.db.commit()
+        return {"processed": processed, "errors": errors, "action": action}
+
