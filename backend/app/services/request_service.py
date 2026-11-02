@@ -675,12 +675,9 @@ class RequestService:
         shift_task = ShiftTask(
             request_id=request_id,
             vehicle_id=assignment.vehicle_id,
-            driver_id=getattr(vehicle, "current_driver_id", None),
             shift_date=request.planned_start.date() if request.planned_start else None,
-            planned_start=request.planned_start,
-            planned_end=request.planned_end,
             status=ShiftTaskStatus.planned if hasattr(ShiftTaskStatus, "planned") else "planned",
-            created_by=user_id,
+            company_id=company_id,
         )
         self.db.add(shift_task)
 
