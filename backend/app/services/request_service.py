@@ -226,3 +226,116 @@ class RequestService:
             self.db.rollback()
             logger.error(f"Unexpected error on request #{request_id} assign: {e}", exc_info=True)
             raise RequestServiceError(500, f"Ошибка при назначении техники: {str(e)}")
+
+    def list_requests(
+        self,
+        company_ids: list[int],
+        status_filter: str | None = None,
+        priority: str | None = None,
+        client_id: int | None = None,
+        vehicle_category_id: int | None = None,
+        assigned_vehicle_id: int | None = None,
+        work_type: str | None = None,
+        search: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        """List requests with filtering, sorting, and enrichment."""
+        from datetime import datetime as dt
+
+        from app.models.catalog import Category, Vehicle
+        from app.models.contractor import Contractor
+
+        stmt = (
+            select(Request)
+            .outerjoin(Contractor, Request.client_id == Contractor.id)
+            .outerjoin(Category, Request.vehicle_category_id == Category.id)
+            .outerjoin(Vehicle, Request.assigned_vehicle_id == Vehicle.id)
+            .where(Request.company_id.in_(company_ids))
+        )
+
+        if status_filter:
+            stmt = stmt.where(Request.status == status_filter)
+        if priority:
+            stmt = stmt.where(Request.priority == priority)
+        if client_id:
+            stmt = stmt.where(Request.client_id == client_id)
+        if vehicle_category_id:
+            stmt = stmt.where(Request.vehicle_category_id == vehicle_category_id)
+        if assigned_vehicle_id:
+            stmt = stmt.where(Request.assigned_vehicle_id == assigned_vehicle_id)
+        if work_type:
+            stmt = stmt.where(Request.work_type.ilike(f"%{work_type}%"))
+        if search:
+            stmt = stmt.where(
+                (Request.work_type.ilike(f"%{search}%"))
+                | (Request.object_address.ilike(f"%{search}%"))
+            )
+        if date_from:
+            stmt = stmt.where(Request.planned_start >= dt.fromisoformat(date_from))
+        if date_to:
+            stmt = stmt.where(Request.planned_end <= dt.fromisoformat(date_to))
+
+        sort_col = getattr(Request, sort_by, Request.created_at)
+        if sort_order == "desc":
+            stmt = stmt.order_by(sort_col.desc()).offset(offset).limit(limit)
+        else:
+            stmt = stmt.order_by(sort_col.asc()).offset(offset).limit(limit)
+
+        requests_list = self.db.scalars(stmt).all()
+
+        # Enrichment
+        enriched = []
+        for req in requests_list:
+            data = {
+                "id": req.id,
+                "client_id": req.client_id,
+                "status": req.status.value if hasattr(req.status, "value") else str(req.status),
+                "request_type": req.request_type,
+                "vehicle_category_id": req.vehicle_category_id,
+                "work_type": req.work_type,
+                "object_address": req.object_address,
+                "planned_start": req.planned_start,
+                "planned_end": req.planned_end,
+                "actual_start": req.actual_start,
+                "actual_end": req.actual_end,
+                "shift_duration_hours": float(req.shift_duration_hours) if req.shift_duration_hours else None,
+                "client_rate": float(req.client_rate) if req.client_rate else None,
+                "rate_type": req.rate_type,
+                "estimated_amount": float(req.estimated_amount) if req.estimated_amount else None,
+                "final_amount": float(req.final_amount) if req.final_amount else None,
+                "assigned_vehicle_id": req.assigned_vehicle_id,
+                "assigned_operator_id": req.assigned_operator_id,
+                "assigned_owner_id": req.assigned_owner_id,
+                "source_channel": req.source_channel,
+                "priority": req.priority,
+                "comment": req.comment,
+                "company_id": req.company_id,
+                "created_by": req.created_by,
+                "created_at": req.created_at,
+                "updated_at": req.updated_at,
+            }
+
+            if req.client_id:
+                contractor = self.db.get(Contractor, req.client_id)
+                if contractor:
+                    data["client_name"] = contractor.name
+
+            if req.vehicle_category_id:
+                category = self.db.get(Category, req.vehicle_category_id)
+                if category:
+                    data["vehicle_category_name"] = category.name
+
+            if req.assigned_vehicle_id:
+                vehicle = self.db.get(Vehicle, req.assigned_vehicle_id)
+                if vehicle:
+                    data["assigned_vehicle_name"] = vehicle.name
+
+            enriched.append(data)
+
+        return enriched
+

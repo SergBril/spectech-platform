@@ -50,6 +50,46 @@ def list_requests(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Список заявок (только своей компании)."""
+    from app.services.request_service import RequestService
+
+    svc = RequestService(db)
+    return svc.list_requests(
+        company_ids=company_ids,
+        status_filter=status_filter,
+        priority=priority,
+        client_id=client_id,
+        vehicle_category_id=vehicle_category_id,
+        assigned_vehicle_id=assigned_vehicle_id,
+        work_type=work_type,
+        search=search,
+        date_from=date_from,
+        date_to=date_to,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def list_requests(
+    status_filter: str | None = Query(default=None, alias="status"),
+    priority: str | None = None,
+    client_id: int | None = None,
+    vehicle_category_id: int | None = None,
+    assigned_vehicle_id: int | None = None,
+    work_type: str | None = None,
+    search: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc"),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_ids: list[int] = Depends(get_user_company_ids),
+):
+    """Список заявок (только своей компании)."""
     from app.models.catalog import Category, Vehicle
     from app.models.contractor import Contractor
 
