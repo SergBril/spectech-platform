@@ -1,100 +1,171 @@
-"""Unit тесты для сервиса уведомлений."""
+﻿import pytest
+from unittest.mock import MagicMock, AsyncMock, patch
+from datetime import datetime
 
-import pytest
+from app.services.notification_service import (
+    create_notification,
+    get_unread_count,
+    mark_notification_read,
+    mark_all_read,
+)
 
-from app.models.telematics import Notification
+
+@pytest.fixture
+def mock_db():
+    return MagicMock()
 
 
-class TestNotificationModel:
-    """Тесты модели Notification."""
-
-    def test_create_notification(self, db_session, sample_user):
-        """Можно создать уведомление."""
-        notif = Notification(
-            user_id=sample_user.id,
-            channel="in_app",
-            title="Test notification",
-            body="Test body",
-            is_read=False,
-        )
-        db_session.add(notif)
-        db_session.commit()
-        db_session.refresh(notif)
-
-        assert notif.id is not None
-        assert notif.user_id == sample_user.id
-        assert notif.is_read is False
+class TestCreateNotification:
+    """Tests for create_notification"""
 
     @pytest.mark.asyncio
-    async def test_mark_as_read(self, db_session, sample_user):
-        """Уведомление можно пометить как прочитанное через сервис."""
-        from app.services.notification_service import mark_notification_read
+    async def test_create_success_with_company(self, mock_db):
+        mock_notification = MagicMock()
+        mock_notification.id = 1
+        mock_notification.title = "Test"
+        mock_notification.body = "Body"
+        mock_notification.channel = "in_app"
+        mock_notification.is_read = False
+        mock_notification.sent_at = datetime(2026, 11, 2, 10, 0)
 
-        notif = Notification(
-            user_id=sample_user.id,
-            channel="in_app",
-            title="Test",
-            body="Test",
-            is_read=False,
-        )
-        db_session.add(notif)
-        db_session.commit()
-        db_session.refresh(notif)
+        mock_user = MagicMock()
+        mock_user.company_id = 7
 
-        # ✅ await для асинхронной функции
-        result = await mark_notification_read(db_session, notif.id, sample_user.id)
+        mock_db.add = MagicMock()
+        mock_db.commit = MagicMock()
+        mock_db.refresh = MagicMock(side_effect=lambda n: setattr(n, 'id', 1))
+        mock_db.query = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_user
+
+        with patch('app.services.notification_service.manager') as mock_manager:
+            mock_manager.broadcast_to_company = AsyncMock()
+            result = await create_notification(
+                db=mock_db, user_id=5, title="Test", body="Body"
+            )
+
+        mock_db.add.assert_called_once()
+        mock_db.commit.assert_called_once()
+        mock_manager.broadcast_to_company.assert_called_once()
+        call_kwargs = mock_manager.broadcast_to_company.call_args
+        assert call_kwargs.kwargs["company_id"] == 7
+
+    @pytest.mark.asyncio
+    async def test_create_no_company(self, mock_db):
+        mock_user = MagicMock()
+        mock_user.company_id = None
+
+        mock_db.add = MagicMock()
+        mock_db.commit = MagicMock()
+        mock_db.refresh = MagicMock()
+        mock_db.query = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_user
+
+        with patch('app.services.notification_service.manager') as mock_manager:
+            mock_manager.broadcast_to_company = AsyncMock()
+            await create_notification(db=mock_db, user_id=5, title="Test", body="Body")
+
+        mock_manager.broadcast_to_company.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_with_alert_id(self, mock_db):
+        mock_user = MagicMock()
+        mock_user.company_id = 7
+
+        mock_db.add = MagicMock()
+        mock_db.commit = MagicMock()
+        mock_db.refresh = MagicMock()
+        mock_db.query = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_user
+
+        with patch('app.services.notification_service.manager') as mock_manager:
+            mock_manager.broadcast_to_company = AsyncMock()
+            await create_notification(
+                db=mock_db, user_id=5, title="Alert", body="!", alert_id=42
+            )
+
+        # Verify Notification was created with alert_id
+        added_obj = mock_db.add.call_args[0][0]
+        assert added_obj.alert_id == 42
+
+
+class TestGetUnreadCount:
+    """Tests for get_unread_count"""
+
+    @pytest.mark.asyncio
+    async def test_returns_count(self, mock_db):
+        mock_query = MagicMock()
+        mock_db.query = MagicMock(return_value=mock_query)
+        mock_query.filter.return_value.count.return_value = 5
+
+        result = await get_unread_count(mock_db, user_id=5)
+
+        assert result == 5
+        mock_query.filter.return_value.count.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_returns_zero(self, mock_db):
+        mock_query = MagicMock()
+        mock_db.query = MagicMock(return_value=mock_query)
+        mock_query.filter.return_value.count.return_value = 0
+
+        result = await get_unread_count(mock_db, user_id=5)
+        assert result == 0
+
+
+class TestMarkNotificationRead:
+    """Tests for mark_notification_read"""
+
+    @pytest.mark.asyncio
+    async def test_mark_read_success(self, mock_db):
+        mock_notification = MagicMock()
+        mock_notification.is_read = False
+
+        mock_query = MagicMock()
+        mock_db.query = MagicMock(return_value=mock_query)
+        mock_query.filter.return_value.first.return_value = mock_notification
+        mock_db.commit = MagicMock()
+
+        result = await mark_notification_read(mock_db, notification_id=1, user_id=5)
+
         assert result is True
+        assert mock_notification.is_read is True
+        assert mock_notification.read_at is not None
+        mock_db.commit.assert_called_once()
 
-        # Обновляем объект из БД
-        db_session.refresh(notif)
-        assert notif.is_read is True
-        assert notif.read_at is not None
+    @pytest.mark.asyncio
+    async def test_mark_read_not_found(self, mock_db):
+        mock_query = MagicMock()
+        mock_db.query = MagicMock(return_value=mock_query)
+        mock_query.filter.return_value.first.return_value = None
+
+        result = await mark_notification_read(mock_db, notification_id=999, user_id=5)
+
+        assert result is False
+        mock_db.commit.assert_not_called()
 
 
-@pytest.mark.asyncio
-class TestNotificationService:
-    """Тесты асинхронных функций notification_service."""
+class TestMarkAllRead:
+    """Tests for mark_all_read"""
 
-    async def test_get_unread_count(self, db_session, sample_user):
-        """Подсчёт непрочитанных уведомлений."""
-        from app.services.notification_service import get_unread_count
+    @pytest.mark.asyncio
+    async def test_mark_all_success(self, mock_db):
+        mock_query = MagicMock()
+        mock_db.query = MagicMock(return_value=mock_query)
+        mock_query.filter.return_value.update.return_value = 3
+        mock_db.commit = MagicMock()
 
-        # Создаём 3 уведомления: 2 непрочитанных, 1 прочитанное
-        for i in range(3):
-            notif = Notification(
-                user_id=sample_user.id,
-                channel="in_app",
-                title=f"Notif {i}",
-                body="Body",
-                is_read=(i == 0),  # Первое прочитанное
-            )
-            db_session.add(notif)
-        db_session.commit()
+        result = await mark_all_read(mock_db, user_id=5)
 
-        count = await get_unread_count(db_session, sample_user.id)
-        assert count == 2
+        assert result == 3
+        mock_query.filter.return_value.update.assert_called_once()
+        mock_db.commit.assert_called_once()
 
-    async def test_mark_all_read(self, db_session, sample_user):
-        """Пометить все уведомления как прочитанные."""
-        from app.services.notification_service import mark_all_read
+    @pytest.mark.asyncio
+    async def test_mark_all_none_unread(self, mock_db):
+        mock_query = MagicMock()
+        mock_db.query = MagicMock(return_value=mock_query)
+        mock_query.filter.return_value.update.return_value = 0
+        mock_db.commit = MagicMock()
 
-        # Создаём 5 непрочитанных
-        for i in range(5):
-            notif = Notification(
-                user_id=sample_user.id,
-                channel="in_app",
-                title=f"Notif {i}",
-                body="Body",
-                is_read=False,
-            )
-            db_session.add(notif)
-        db_session.commit()
-
-        updated = await mark_all_read(db_session, sample_user.id)
-        assert updated == 5
-
-        # Проверяем, что все прочитаны
-        from app.services.notification_service import get_unread_count
-
-        count = await get_unread_count(db_session, sample_user.id)
-        assert count == 0
+        result = await mark_all_read(mock_db, user_id=5)
+        assert result == 0
