@@ -339,3 +339,107 @@ class RequestService:
 
         return enriched
 
+    def _fetch_requests_for_export(
+        self,
+        company_ids: list[int],
+        status_filter: str | None = None,
+        priority: str | None = None,
+        client_id: int | None = None,
+        vehicle_category_id: int | None = None,
+        assigned_vehicle_id: int | None = None,
+        work_type: str | None = None,
+        search: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> list[dict]:
+        """Fetch and enrich requests for export (shared by PDF/Excel)."""
+        from datetime import datetime as dt
+
+        from app.models.catalog import Category, Vehicle
+        from app.models.contractor import Contractor
+
+        stmt = (
+            select(Request)
+            .outerjoin(Contractor, Request.client_id == Contractor.id)
+            .outerjoin(Category, Request.vehicle_category_id == Category.id)
+            .outerjoin(Vehicle, Request.assigned_vehicle_id == Vehicle.id)
+            .where(Request.company_id.in_(company_ids))
+        )
+
+        if status_filter:
+            stmt = stmt.where(Request.status == status_filter)
+        if priority:
+            stmt = stmt.where(Request.priority == priority)
+        if client_id:
+            stmt = stmt.where(Request.client_id == client_id)
+        if vehicle_category_id:
+            stmt = stmt.where(Request.vehicle_category_id == vehicle_category_id)
+        if assigned_vehicle_id:
+            stmt = stmt.where(Request.assigned_vehicle_id == assigned_vehicle_id)
+        if work_type:
+            stmt = stmt.where(Request.work_type.ilike(f"%{work_type}%"))
+        if search:
+            stmt = stmt.where(
+                (Request.work_type.ilike(f"%{search}%"))
+                | (Request.object_address.ilike(f"%{search}%"))
+            )
+        if date_from:
+            stmt = stmt.where(Request.planned_start >= dt.fromisoformat(date_from))
+        if date_to:
+            stmt = stmt.where(Request.planned_end <= dt.fromisoformat(date_to))
+
+        sort_col = getattr(Request, sort_by, Request.created_at)
+        stmt = stmt.order_by(
+            sort_col.desc() if sort_order == "desc" else sort_col.asc()
+        ).limit(5000)
+
+        requests_list = self.db.scalars(stmt).all()
+
+        enriched = []
+        for req in requests_list:
+            cat_name = ""
+            if req.vehicle_category_id:
+                cat = self.db.get(Category, req.vehicle_category_id)
+                if cat:
+                    cat_name = cat.name
+            client_name = ""
+            if req.client_id:
+                contractor = self.db.get(Contractor, req.client_id)
+                if contractor:
+                    client_name = contractor.name
+            vehicle_name = ""
+            if req.assigned_vehicle_id:
+                v = self.db.get(Vehicle, req.assigned_vehicle_id)
+                if v:
+                    vehicle_name = v.name
+            enriched.append({
+                "id": req.id,
+                "work_type": req.work_type,
+                "object_address": req.object_address,
+                "planned_start": req.planned_start,
+                "planned_end": req.planned_end,
+                "status": req.status,
+                "priority": req.priority,
+                "estimated_amount": req.estimated_amount,
+                "final_amount": req.final_amount,
+                "vehicle_category_name": cat_name,
+                "assigned_vehicle_name": vehicle_name,
+                "client_name": client_name,
+            })
+
+        return enriched
+
+    def export_requests_pdf(self, **filters) -> bytes:
+        """Generate PDF export of filtered requests."""
+        from app.utils.export_utils import export_requests_pdf as gen_pdf
+        enriched = self._fetch_requests_for_export(**filters)
+        return gen_pdf(enriched)
+
+    def export_requests_excel(self, **filters) -> bytes:
+        """Generate Excel export of filtered requests."""
+        from app.utils.export_utils import export_requests_excel as gen_excel
+        enriched = self._fetch_requests_for_export(**filters)
+        return gen_excel(enriched)
+
