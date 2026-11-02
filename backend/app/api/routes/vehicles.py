@@ -347,6 +347,7 @@ def list_vehicles(
     summary="Создать технику",
     description="Создаёт новую единицу техники с динамическими атрибутами.",
 )
+@router.post("", response_model=VehicleRead, status_code=status.HTTP_201_CREATED)
 def create_vehicle(
     payload: VehicleCreate,
     db: Session = Depends(get_db),
@@ -355,78 +356,18 @@ def create_vehicle(
     _: None = Depends(require_permission("vehicles", "create")),
 ):
     """Создать новую технику (для своей компании)."""
-    # Проверка уникальности id_value
-    existing = db.scalar(
-        select(Vehicle).where(
-            Vehicle.id_value == payload.id_value,
-            Vehicle.company_id == company_id,
-        )
-    )
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Техника с id_value '{payload.id_value}' уже существует",
-        )
+    from app.services.vehicle_service import create_vehicle as svc_create, VehicleServiceError
 
-    # Проверка подкатегории
-    subcategory_id = payload.subcategory_id
-    category_id = None
-
-    if subcategory_id:
-        sub = db.get(Category, subcategory_id)
-        if not sub or sub.level != 2:
-            raise HTTPException(
-                status_code=400,
-                detail="Некорректная подкатегория (должна быть level=2)",
-            )
-        # Сохраняем subcategory_id в поле category_id (подкатегория — это тоже запись в categories)
-        category_id = subcategory_id
-    elif payload.category_id:
-        # Если нет подкатегории, но есть категория
-        cat = db.get(Category, payload.category_id)
-        if cat and cat.level == 1:
-            category_id = payload.category_id
-
-    # Данные для создания (исключаем все служебные поля)
-    vehicle_data = payload.model_dump(
-        exclude={"attributes", "subcategory_id", "company_id", "category_id"}
-    )
-    vehicle_data["category_id"] = category_id
-    vehicle_data["company_id"] = company_id
-
-    # Переименовываем поля согласно маппингу модели
-    # В модели: model_name → "model" (в БД)
-    if "model" in vehicle_data:
-        vehicle_data["model_name"] = vehicle_data.pop("model")
-
-    vehicle = Vehicle(**vehicle_data)
-    db.add(vehicle)
-    db.flush()
-
-    # Сохраняем динамические атрибуты
     try:
-        _save_vehicle_attributes(db, vehicle.id, subcategory_id, payload.attributes)
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        import logging
-
-        logging.getLogger("spectech.vehicles").exception(
-            f"Failed to save vehicle attributes: {e}"
-        )
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ошибка сохранения атрибутов: {str(e)}",
-        )
-
-    # Перезагружаем с joinedload
-    vehicle = _load_vehicle_with_relations(db, vehicle.id)
-    return _enrich_vehicle(vehicle, db)
+        payload_data = payload.model_dump(exclude={"attributes", "subcategory_id", "company_id", "category_id"})
+        payload_data["subcategory_id"] = payload.subcategory_id
+        payload_data["category_id"] = payload.category_id
+        payload_data["attributes"] = payload.attributes
+        return svc_create(db, payload_data, company_id)
+    except VehicleServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
-# ============================================================
-# GET /vehicles/{id} — получить технику по ID
-# ============================================================
 @router.get(
     "/{vehicle_id}",
     response_model=VehicleRead,
@@ -553,6 +494,7 @@ def update_vehicle_partial(
     summary="Обновить технику",
     description="Обновляет данные техники своей компании.",
 )
+@router.put("/{vehicle_id}")
 def update_vehicle(
     vehicle_id: int,
     payload: VehicleUpdate,
@@ -562,84 +504,15 @@ def update_vehicle(
     _: None = Depends(require_permission("vehicles", "update")),
 ):
     """Обновить технику (только своей компании)."""
-    vehicle = db.get(Vehicle, vehicle_id)
+    from app.services.vehicle_service import update_vehicle as svc_update, VehicleServiceError
 
-    if not vehicle or vehicle.is_deleted or vehicle.company_id != company_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Техника не найдена",
-        )
-
-    update_data = payload.model_dump(exclude_unset=True, exclude={"attributes"})
-
-    # === Уникальность водителя: снять с других машин перед назначением ===
-    old_driver_id = (
-        vehicle.assigned_driver_id if hasattr(vehicle, "assigned_driver_id") else None
-    )
-    if (
-        "assigned_driver_id" in update_data
-        and update_data["assigned_driver_id"] is not None
-    ):
-        db.query(Vehicle).filter(
-            Vehicle.assigned_driver_id == update_data["assigned_driver_id"],
-            Vehicle.id != vehicle_id,
-            Vehicle.company_id == company_id,
-        ).update({"assigned_driver_id": None}, synchronize_session="fetch")
-        db.flush()
-
-    # Запись истории назначения
-    if "assigned_driver_id" in update_data:
-        _log_driver_assignment(
-            db,
-            vehicle_id,
-            old_driver_id,
-            update_data["assigned_driver_id"],
-            current_user.id,
-        )
-
-    # Проверка уникальности id_value
-    if "id_value" in update_data and update_data["id_value"] != vehicle.id_value:
-        existing = db.scalar(
-            select(Vehicle).where(
-                Vehicle.id_value == update_data["id_value"],
-                Vehicle.company_id == company_id,
-                Vehicle.id != vehicle_id,
-            )
-        )
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Техника с id_value '{update_data['id_value']}' уже существует",
-            )
-
-    # Обновление подкатегории
-    subcategory_id = update_data.pop("subcategory_id", None)
-    if subcategory_id:
-        sub = db.get(Category, subcategory_id)
-        if not sub or sub.level != 2:
-            raise HTTPException(
-                status_code=400,
-                detail="Некорректная подкатегория",
-            )
-        update_data["category_id"] = sub.parent_id
-
-    for field, value in update_data.items():
-        setattr(vehicle, field, value)
-
-    # Обновление атрибутов (если пришли)
-    if payload.attributes is not None and subcategory_id:
-        _clear_vehicle_attributes(db, vehicle.id)
-        _save_vehicle_attributes(db, vehicle.id, subcategory_id, payload.attributes)
-
-    db.commit()
-
-    vehicle = _load_vehicle_with_relations(db, vehicle_id)
-    return _enrich_vehicle(vehicle, db)
+    try:
+        update_data = payload.model_dump(exclude_unset=True, exclude={"attributes"})
+        return svc_update(db, vehicle_id, update_data, payload.attributes, company_id, current_user.id)
+    except VehicleServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
-# ============================================================
-# DELETE /vehicles/{id} — удалить технику (soft)
-# ============================================================
 @router.delete(
     "/{vehicle_id}",
     status_code=status.HTTP_204_NO_CONTENT,
