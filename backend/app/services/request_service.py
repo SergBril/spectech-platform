@@ -1,4 +1,4 @@
-﻿"""Request business logic service.
+"""Request business logic service.
 
 Extracted from app/api/routes/requests.py to separate business logic
 from HTTP layer. Route handlers should only handle validation, auth,
@@ -631,4 +631,127 @@ class RequestService:
 
         self.db.commit()
         return {"processed": processed, "errors": errors, "action": action}
+
+    async def approve_response(
+        self,
+        request_id: int,
+        assignment_id: int,
+        company_id: int,
+        user_id: int,
+    ) -> dict:
+        """Approve a marketplace response and create shift task."""
+        from app.models.dispatch import RequestAssignment, RequestStatusLog
+        from app.models.shift import ShiftTask, ShiftTaskStatus
+        from app.services.notification_service import create_notification
+
+        request = self.db.get(Request, request_id)
+        if not request or request.company_id != company_id:
+            raise RequestServiceError(404, "Request not found")
+
+        assignment = self.db.get(RequestAssignment, assignment_id)
+        if not assignment or assignment.request_id != request_id:
+            raise RequestServiceError(404, "Response not found")
+
+        if assignment.status != "pending_approval":
+            raise RequestServiceError(409, f"Response already {assignment.status}")
+
+        vehicle = self.db.get(Vehicle, assignment.vehicle_id)
+
+        assignment.status = "approved"
+        assignment.assigned_by = user_id
+
+        # Reject other pending responses
+        other_responses = self.db.execute(
+            select(RequestAssignment).where(
+                RequestAssignment.request_id == request_id,
+                RequestAssignment.id != assignment_id,
+                RequestAssignment.status == "pending_approval",
+            )
+        ).scalars().all()
+        for resp in other_responses:
+            resp.status = "rejected"
+
+        # Auto-create ShiftTask
+        shift_task = ShiftTask(
+            request_id=request_id,
+            vehicle_id=assignment.vehicle_id,
+            driver_id=getattr(vehicle, "current_driver_id", None),
+            shift_date=request.planned_start.date() if request.planned_start else None,
+            planned_start=request.planned_start,
+            planned_end=request.planned_end,
+            status=ShiftTaskStatus.planned if hasattr(ShiftTaskStatus, "planned") else "planned",
+            created_by=user_id,
+        )
+        self.db.add(shift_task)
+
+        self.db.add(RequestStatusLog(
+            request_id=request_id,
+            from_status=request.status,
+            to_status="assigned",
+            changed_by_user_id=user_id,
+            comment=f"Одобрен отклик: {vehicle.name if vehicle else 'N/A'}",
+        ))
+
+        request.status = "assigned"
+        self.db.commit()
+
+        try:
+            await create_notification(
+                db=self.db,
+                user_id=assignment.assigned_by,
+                title="✅ Ваш отклик одобрен!",
+                body=f"Заявка #{request_id} подтверждена. Техника: {vehicle.name if vehicle else 'N/A'}. Создана смена.",
+                channel="in_app",
+            )
+        except Exception:
+            pass
+
+        return {"message": "Отклик одобрен, смена создана", "shift_task_id": shift_task.id}
+
+    async def reject_response(
+        self,
+        request_id: int,
+        assignment_id: int,
+        reason: str,
+        company_id: int,
+        user_id: int,
+    ) -> dict:
+        """Reject a marketplace response."""
+        from app.models.dispatch import RequestAssignment, RequestStatusLog
+        from app.services.notification_service import create_notification
+
+        request = self.db.get(Request, request_id)
+        if not request or request.company_id != company_id:
+            raise RequestServiceError(404, "Request not found")
+
+        assignment = self.db.get(RequestAssignment, assignment_id)
+        if not assignment or assignment.request_id != request_id:
+            raise RequestServiceError(404, "Response not found")
+
+        if assignment.status != "pending_approval":
+            raise RequestServiceError(409, f"Response already {assignment.status}")
+
+        assignment.status = "rejected"
+
+        self.db.add(RequestStatusLog(
+            request_id=request_id,
+            from_status=request.status,
+            to_status=request.status,
+            changed_by_user_id=user_id,
+            comment=f"Отклик отклонён: {reason or 'Без причины'}",
+        ))
+        self.db.commit()
+
+        try:
+            await create_notification(
+                db=self.db,
+                user_id=assignment.assigned_by,
+                title="❌ Ваш отклик отклонён",
+                body=f"Заявка #{request_id}: {reason or 'Владелец выбрал другого исполнителя'}",
+                channel="in_app",
+            )
+        except Exception:
+            pass
+
+        return {"message": "Отклик отклонён"}
 
