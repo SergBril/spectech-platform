@@ -755,3 +755,164 @@ class RequestService:
 
         return {"message": "Отклик отклонён"}
 
+    def get_request_timeline(
+        self,
+        request_id: int,
+        company_id: int,
+    ) -> list[dict]:
+        """Get status change history for a request."""
+        from app.models.auth import User as UserModel
+        from app.models.dispatch import RequestAssignment, RequestStatusLog
+
+        request = self.db.get(Request, request_id)
+        if not request:
+            raise RequestServiceError(404, "Request not found")
+
+        # Access check: owner or contractor with response
+        has_access = request.company_id == company_id
+        if not has_access:
+            resp = self.db.execute(
+                select(RequestAssignment).join(Vehicle).where(
+                    RequestAssignment.request_id == request_id,
+                    Vehicle.company_id == company_id,
+                )
+            ).scalar_one_or_none()
+            has_access = resp is not None
+
+        if not has_access:
+            raise RequestServiceError(403, "Access denied")
+
+        logs = self.db.execute(
+            select(RequestStatusLog)
+            .where(RequestStatusLog.request_id == request_id)
+            .order_by(RequestStatusLog.changed_at.desc())
+        ).scalars().all()
+
+        result = []
+        for log in logs:
+            user_name = ""
+            if log.changed_by_user_id:
+                user = self.db.get(UserModel, log.changed_by_user_id)
+                user_name = user.full_name or user.email if user else f"User#{log.changed_by_user_id}"
+            result.append({
+                "id": log.id,
+                "from_status": log.from_status,
+                "to_status": log.to_status,
+                "comment": log.comment,
+                "changed_by": user_name,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            })
+
+        return result
+
+    def update_request_put(
+        self,
+        request_id: int,
+        company_id: int,
+        user_id: int,
+        work_type: str | None = None,
+        object_address: str | None = None,
+        planned_start: str | None = None,
+        planned_end: str | None = None,
+        client_rate: float | None = None,
+        rate_type: str | None = None,
+        payment_terms_days: int | None = None,
+        marketplace_mode: str | None = None,
+        priority: str | None = None,
+        requirements: dict | None = None,
+    ) -> dict:
+        """Full update of request fields (PUT semantics)."""
+        from datetime import datetime
+        from decimal import Decimal
+
+        from app.models.dispatch import RequestStatusLog
+
+        request = self.db.get(Request, request_id)
+        if not request or request.company_id != company_id:
+            raise RequestServiceError(404, "Request not found")
+
+        if request.status == "assigned":
+            raise RequestServiceError(409, "Cannot edit assigned request")
+
+        changes = []
+        if work_type is not None and work_type != request.work_type:
+            changes.append(f"work_type: {request.work_type} → {work_type}")
+            request.work_type = work_type
+        if object_address is not None and object_address != request.object_address:
+            changes.append(f"address: {request.object_address} → {object_address}")
+            request.object_address = object_address
+        if planned_start is not None:
+            request.planned_start = datetime.fromisoformat(planned_start)
+        if planned_end is not None:
+            request.planned_end = datetime.fromisoformat(planned_end)
+        if client_rate is not None:
+            request.client_rate = Decimal(str(client_rate))
+        if rate_type is not None:
+            request.rate_type = rate_type
+        if payment_terms_days is not None:
+            request.payment_terms_days = payment_terms_days
+        if marketplace_mode is not None:
+            request.marketplace_mode = marketplace_mode
+        if priority is not None:
+            request.priority = priority
+        if requirements is not None:
+            request.requirements = requirements
+
+        if changes:
+            self.db.add(RequestStatusLog(
+                request_id=request_id,
+                from_status=request.status,
+                to_status=request.status,
+                changed_by_user_id=user_id,
+                comment=f"Редактирование: {'; '.join(changes)}",
+            ))
+
+        self.db.commit()
+        return {"message": "Заявка обновлена", "id": request_id}
+
+    async def update_request_patch(
+        self,
+        request_id: int,
+        update_data: dict,
+        company_id: int,
+        user_id: int,
+    ) -> Request:
+        """Partial update of request (PATCH semantics)."""
+        from app.models.dispatch import RequestStatusLog
+        from app.services.notification_service import create_notification
+
+        request = self.db.get(Request, request_id)
+        if not request or request.company_id != company_id:
+            raise RequestServiceError(404, "Request not found")
+
+        old_status = request.status
+
+        if "status" in update_data and update_data["status"] != old_status:
+            new_status = update_data["status"]
+            old_status_str = old_status.value if hasattr(old_status, "value") else str(old_status)
+            new_status_str = new_status.value if hasattr(new_status, "value") else str(new_status)
+
+            self.db.add(RequestStatusLog(
+                request_id=request.id,
+                from_status=old_status,
+                to_status=new_status,
+                changed_by_user_id=user_id,
+                comment=f"Статус изменён вручную: {old_status_str} -> {new_status_str}",
+            ))
+
+            if request.created_by and request.created_by != user_id:
+                await create_notification(
+                    db=self.db,
+                    user_id=request.created_by,
+                    title=f"Статус заявки #{request.id} изменён",
+                    body=f"Заявка '{request.work_type}' переведена из '{old_status_str}' в '{new_status_str}'",
+                    channel="in_app",
+                )
+
+        for field, value in update_data.items():
+            setattr(request, field, value)
+
+        self.db.commit()
+        self.db.refresh(request)
+        return request
+

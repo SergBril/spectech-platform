@@ -272,7 +272,7 @@ async def bulk_response_action(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
-@router.get("/{request_id}/timeline", summary="📜 История статусов заявки")
+@router.get("/{request_id}/timeline")
 def get_request_timeline(
     request_id: int,
     db: Session = Depends(get_db),
@@ -280,53 +280,16 @@ def get_request_timeline(
     company_id: int = Depends(get_current_company_id),
 ):
     """Возвращает историю изменений статуса заявки."""
-    from app.models.dispatch import RequestStatusLog
+    from app.services.request_service import RequestService, RequestServiceError
 
-    request = db.get(Request, request_id)
-    if not request:
-        raise HTTPException(status_code=404, detail="Request not found")
-
-    # Доступ: владелец заявки или исполнитель с откликом
-    has_access = request.company_id == company_id
-    if not has_access:
-        from app.models.dispatch import RequestAssignment
-        resp = db.execute(
-            select(RequestAssignment).join(Vehicle).where(
-                RequestAssignment.request_id == request_id,
-                Vehicle.company_id == company_id,
-            )
-        ).scalar_one_or_none()
-        has_access = resp is not None
-
-    if not has_access:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    logs = db.execute(
-        select(RequestStatusLog)
-        .where(RequestStatusLog.request_id == request_id)
-        .order_by(RequestStatusLog.changed_at.desc())
-    ).scalars().all()
-
-    result = []
-    for log in logs:
-        user_name = ""
-        if log.changed_by_user_id:
-            from app.models.auth import User as UserModel
-            user = db.get(UserModel, log.changed_by_user_id)
-            user_name = user.full_name or user.email if user else f"User#{log.changed_by_user_id}"
-
-        result.append({
-            "id": log.id,
-            "from_status": log.from_status,
-            "to_status": log.to_status,
-            "comment": log.comment,
-            "changed_by": user_name,
-            "created_at": log.created_at.isoformat() if log.created_at else None,
-        })
-
-    return result
-
-
+    svc = RequestService(db)
+    try:
+        return svc.get_request_timeline(
+            request_id=request_id,
+            company_id=company_id,
+        )
+    except RequestServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
 @router.put("/{request_id}", summary="✏️ Редактировать заявку")
@@ -347,53 +310,27 @@ async def update_request(
     company_id: int = Depends(get_current_company_id),
 ):
     """Редактировать заявку (только владелец, только до назначения)."""
-    from app.models.dispatch import RequestStatusLog
-    from datetime import datetime
+    from app.services.request_service import RequestService, RequestServiceError
 
-    request = db.get(Request, request_id)
-    if not request or request.company_id != company_id:
-        raise HTTPException(status_code=404, detail="Request not found")
-
-    if request.status == "assigned":
-        raise HTTPException(status_code=409, detail="Cannot edit assigned request")
-
-    changes = []
-    if work_type is not None and work_type != request.work_type:
-        changes.append(f"work_type: {request.work_type} → {work_type}")
-        request.work_type = work_type
-    if object_address is not None and object_address != request.object_address:
-        changes.append(f"address: {request.object_address} → {object_address}")
-        request.object_address = object_address
-    if planned_start is not None:
-        request.planned_start = datetime.fromisoformat(planned_start)
-    if planned_end is not None:
-        request.planned_end = datetime.fromisoformat(planned_end)
-    if client_rate is not None:
-        from decimal import Decimal
-        request.client_rate = Decimal(str(client_rate))
-    if rate_type is not None:
-        request.rate_type = rate_type
-    if payment_terms_days is not None:
-        request.payment_terms_days = payment_terms_days
-    if marketplace_mode is not None:
-        request.marketplace_mode = marketplace_mode
-    if priority is not None:
-        request.priority = priority
-    if requirements is not None:
-        request.requirements = requirements
-
-    if changes:
-        db.add(RequestStatusLog(
+    svc = RequestService(db)
+    try:
+        return svc.update_request_put(
             request_id=request_id,
-            from_status=request.status,
-            to_status=request.status,
-            changed_by_user_id=current_user.id,
-            comment=f"Редактирование: {'; '.join(changes)}",
-        ))
-
-    db.commit()
-    return {"message": "Заявка обновлена", "id": request_id}
-
+            company_id=company_id,
+            user_id=current_user.id,
+            work_type=work_type,
+            object_address=object_address,
+            planned_start=planned_start,
+            planned_end=planned_end,
+            client_rate=client_rate,
+            rate_type=rate_type,
+            payment_terms_days=payment_terms_days,
+            marketplace_mode=marketplace_mode,
+            priority=priority,
+            requirements=requirements,
+        )
+    except RequestServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
 @router.patch("/{request_id}", response_model=RequestRead)
@@ -406,53 +343,18 @@ async def update_request(
     _: None = Depends(require_permission("requests", "update")),
 ):
     """Обновить заявку (только своей компании)."""
-    request = db.get(Request, request_id)
-    if not request or request.company_id != company_id:
-        raise HTTPException(status_code=404, detail="Request not found")
+    from app.services.request_service import RequestService, RequestServiceError
 
-    update_data = payload.model_dump(exclude_unset=True)
-    old_status = request.status
-
-    # Если меняется статус — логируем переход
-    if "status" in update_data and update_data["status"] != old_status:
-        new_status = update_data["status"]
-
-        # Безопасная конвертация enum -> string
-        old_status_str = (
-            old_status.value if hasattr(old_status, "value") else str(old_status)
+    svc = RequestService(db)
+    try:
+        return await svc.update_request_patch(
+            request_id=request_id,
+            update_data=payload.model_dump(exclude_unset=True),
+            company_id=company_id,
+            user_id=current_user.id,
         )
-        new_status_str = (
-            new_status.value if hasattr(new_status, "value") else str(new_status)
-        )
-
-        db.add(
-            RequestStatusLog(
-                request_id=request.id,
-                from_status=old_status,
-                to_status=new_status,
-                changed_by_user_id=current_user.id,
-                comment=f"Статус изменён вручную: {old_status_str} -> {new_status_str}",
-            )
-        )
-
-        # Уведомляем создателя заявки (если это не он сам)
-        if request.created_by and request.created_by != current_user.id:
-            from app.services.notification_service import create_notification
-
-            await create_notification(
-                db=db,
-                user_id=request.created_by,
-                title=f"Статус заявки #{request.id} изменён",
-                body=f"Заявка '{request.work_type}' переведена из '{old_status_str}' в '{new_status_str}'",
-                channel="in_app",
-            )
-
-    for field, value in update_data.items():
-        setattr(request, field, value)
-
-    db.commit()
-    db.refresh(request)
-    return request
+    except RequestServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
 @router.get("/{request_id}/history")
