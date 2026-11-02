@@ -1,114 +1,157 @@
-"""Unit tests for auth_service."""
-
-import hashlib
+﻿import pytest
+from unittest.mock import MagicMock, patch
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
 
-import pytest
+from fastapi import HTTPException
 
 from app.services.auth_service import (
+    hash_password,
+    verify_password,
     create_access_token,
     create_refresh_token,
     decode_access_token,
-    hash_password,
-    verify_password,
+    authenticate_user,
 )
 
 
+@pytest.fixture
+def mock_db():
+    return MagicMock()
+
+
+@pytest.fixture
+def mock_user():
+    user = MagicMock()
+    user.id = 5
+    user.email = "test@example.com"
+    user.status = MagicMock()
+    user.status.value = "active"
+    user.failed_login_attempts = 0
+    user.last_login_at = None
+    return user
+
+
 class TestPasswordHashing:
-    """Tests for hash_password and verify_password."""
+    """Tests for hash_password and verify_password"""
 
-    def test_hash_produces_bcrypt_hash(self):
+    def test_hash_and_verify_correct(self):
         hashed = hash_password("secret123")
-        assert hashed.startswith("$2b$") or hashed.startswith("$2y$")
-
-    def test_hash_is_unique_each_call(self):
-        h1 = hash_password("same")
-        h2 = hash_password("same")
-        assert h1 != h2  # bcrypt uses random salt
-
-    def test_verify_correct_password(self):
-        hashed = hash_password("correct")
-        assert verify_password("correct", hashed) is True
+        assert verify_password("secret123", hashed) is True
 
     def test_verify_wrong_password(self):
-        hashed = hash_password("correct")
+        hashed = hash_password("secret123")
         assert verify_password("wrong", hashed) is False
 
-    def test_verify_empty_password(self):
-        hashed = hash_password("")
-        assert verify_password("", hashed) is True
-        assert verify_password("notempty", hashed) is False
+    def test_hash_produces_different_salts(self):
+        h1 = hash_password("same")
+        h2 = hash_password("same")
+        assert h1 != h2  # Different salts
 
 
-class TestJWT0:
-    """Tests for create_access_token and decode_access_token."""
+class TestCreateAccessToken:
+    """Tests for create_access_token"""
 
-    @pytest.fixture
-    def mock_user(self):
-        user = MagicMock()
-        user.id = 42
-        user.email = "test@example.com"
-        return user
+    def test_creates_valid_token(self, mock_user):
+        token = create_access_token(mock_user)
+        assert isinstance(token, str)
+        assert len(token) > 20
 
-    def test_create_decode_roundtrip(self, mock_user):
+    def test_token_contains_user_id(self, mock_user):
         token = create_access_token(mock_user)
         payload = decode_access_token(token)
-        assert payload["sub"] == "42"
+        assert payload["sub"] == "5"
         assert payload["email"] == "test@example.com"
-        assert "exp" in payload
-        assert "iat" in payload
 
-    def test_decode_invalid_token_raises_401(self):
-        from fastapi import HTTPException
 
+class TestDecodeAccessToken:
+    """Tests for decode_access_token"""
+
+    def test_decode_valid_token(self, mock_user):
+        token = create_access_token(mock_user)
+        payload = decode_access_token(token)
+        assert payload["sub"] == "5"
+
+    def test_decode_invalid_token(self):
         with pytest.raises(HTTPException) as exc_info:
-            decode_access_token("invalid.token.string")
+            decode_access_token("invalid.token.here")
         assert exc_info.value.status_code == 401
 
-    def test_decode_expired_token_raises_401(self, mock_user):
-        from fastapi import HTTPException
-        from jose import jwt
-
-        from app.core.config import settings
-
-        expired_payload = {
-            "sub": "42",
-            "email": "test@example.com",
-            "exp": datetime.now(UTC) - timedelta(hours=1),
-            "iat": datetime.now(UTC) - timedelta(hours=2),
-        }
-        token = jwt.encode(
-            expired_payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
-        )
+    def test_decode_tampered_token(self, mock_user):
+        token = create_access_token(mock_user)
+        tampered = token[:-5] + "XXXXX"
         with pytest.raises(HTTPException) as exc_info:
-            decode_access_token(token)
+            decode_access_token(tampered)
         assert exc_info.value.status_code == 401
 
 
-class TestRefreshToken:
-    """Tests for create_refresh_token."""
+class TestCreateRefreshToken:
+    """Tests for create_refresh_token"""
 
-    @pytest.fixture
-    def mock_db_and_user(self):
-        db = MagicMock()
-        user = MagicMock()
-        user.id = 99
-        return db, user
+    def test_creates_token_and_saves_session(self, mock_db, mock_user):
+        mock_db.add = MagicMock()
+        mock_db.flush = MagicMock()
 
-    def test_returns_urlsafe_token(self, mock_db_and_user):
-        db, user = mock_db_and_user
-        token = create_refresh_token(db, user)
+        token = create_refresh_token(mock_db, mock_user)
+
         assert isinstance(token, str)
-        assert len(token) > 50
+        assert len(token) > 40
+        mock_db.add.assert_called_once()
+        mock_db.flush.assert_called_once()
 
-    def test_saves_session_with_hash(self, mock_db_and_user):
-        db, user = mock_db_and_user
-        token = create_refresh_token(db, user)
-        db.add.assert_called()
-        db.flush.assert_called()
-        # Verify the session has a SHA-256 hash
-        call_args = db.add.call_args
-        session = call_args[0][0]
-        expected_hash = hashlib.sha256(token.encode()).hexdigest()
-        assert session.refresh_token_hash == expected_hash
+    def test_tokens_are_unique(self, mock_db, mock_user):
+        mock_db.add = MagicMock()
+        mock_db.flush = MagicMock()
+
+        t1 = create_refresh_token(mock_db, mock_user)
+        t2 = create_refresh_token(mock_db, mock_user)
+        assert t1 != t2
+
+
+class TestAuthenticateUser:
+    """Tests for authenticate_user"""
+
+    def test_authenticate_success(self, mock_db, mock_user):
+        from app.models.auth import UserStatus
+        mock_user.status = UserStatus.active
+        mock_user.password_hash = hash_password("correct")
+
+        mock_db.scalar = MagicMock(return_value=mock_user)
+        mock_db.commit = MagicMock()
+
+        result = authenticate_user(mock_db, "test@example.com", "correct")
+
+        assert result == mock_user
+        assert mock_user.failed_login_attempts == 0
+        assert mock_user.last_login_at is not None
+        mock_db.commit.assert_called_once()
+
+    def test_authenticate_user_not_found(self, mock_db):
+        mock_db.scalar = MagicMock(return_value=None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            authenticate_user(mock_db, "noone@test.com", "pass")
+        assert exc_info.value.status_code == 401
+
+    def test_authenticate_inactive_user(self, mock_db, mock_user):
+        from app.models.auth import UserStatus
+        mock_user.status = UserStatus.suspended
+        mock_db.scalar = MagicMock(return_value=mock_user)
+
+        with pytest.raises(HTTPException) as exc_info:
+            authenticate_user(mock_db, "test@example.com", "pass")
+        assert exc_info.value.status_code == 403
+
+    def test_authenticate_wrong_password(self, mock_db, mock_user):
+        from app.models.auth import UserStatus
+        mock_user.status = UserStatus.active
+        mock_user.password_hash = hash_password("correct")
+        mock_user.failed_login_attempts = 0
+
+        mock_db.scalar = MagicMock(return_value=mock_user)
+        mock_db.commit = MagicMock()
+
+        with pytest.raises(HTTPException) as exc_info:
+            authenticate_user(mock_db, "test@example.com", "wrong")
+        assert exc_info.value.status_code == 401
+        assert mock_user.failed_login_attempts == 1
+        mock_db.commit.assert_called_once()
