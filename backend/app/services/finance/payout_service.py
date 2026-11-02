@@ -263,5 +263,129 @@ class PayoutService:
         return f"{prefix}{new_number:04d}"
 
 
+    def get_payouts_summary(self, db: Session, company_id: int, date_from, date_to) -> dict:
+        """Сводка по выплатам за период."""
+        base_filter = [
+            Payout.company_id == company_id,
+            Payout.payout_date >= date_from,
+            Payout.payout_date <= date_to,
+        ]
+
+        totals = (
+            db.query(
+                func.count(Payout.id).label("total"),
+                func.coalesce(func.sum(Payout.gross_amount), 0).label("gross"),
+                func.coalesce(func.sum(Payout.platform_commission), 0).label("commission"),
+                func.coalesce(func.sum(Payout.net_amount), 0).label("net"),
+            )
+            .filter(*base_filter)
+            .first()
+        )
+
+        pending_count = (
+            db.query(func.count(Payout.id))
+            .filter(*base_filter, Payout.status == DocumentStatus.draft)
+            .scalar()
+            or 0
+        )
+
+        return {
+            "date_from": date_from,
+            "date_to": date_to,
+            "total_payouts": int(totals.total or 0),
+            "total_gross": float(totals.gross or 0),
+            "total_commission": float(totals.commission or 0),
+            "total_net": float(totals.net or 0),
+            "pending_payouts": int(pending_count),
+        }
+
+    def export_payouts_csv(self, db: Session, company_id: int, date_from=None, date_to=None, status=None) -> tuple:
+        """Экспорт выплат в CSV. Возвращает (csv_content, filename)."""
+        import csv
+        import io
+        from datetime import datetime as dt
+        from sqlalchemy import select
+
+        stmt = select(Payout).where(Payout.company_id == company_id)
+
+        if date_from:
+            stmt = stmt.where(Payout.payout_date >= dt.fromisoformat(date_from))
+        if date_to:
+            stmt = stmt.where(Payout.payout_date <= dt.fromisoformat(date_to))
+        if status:
+            stmt = stmt.where(Payout.status == status)
+
+        stmt = stmt.order_by(Payout.created_at.desc())
+        payouts = db.scalars(stmt).all()
+
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=";")
+
+        writer.writerow([
+            "ID", "Номер документа", "Дата выплаты", "Статус",
+            "Собственник (ID)", "Техника (ID)",
+            "Gross (руб)", "Комиссия (%)", "Комиссия (руб)", "Net (руб)",
+            "Дата создания",
+        ])
+
+        for p in payouts:
+            writer.writerow([
+                p.id,
+                p.document_number or "",
+                p.payout_date.isoformat() if p.payout_date else "",
+                p.status.value if hasattr(p.status, "value") else str(p.status),
+                p.owner_id or "",
+                p.vehicle_id or "",
+                float(p.gross_amount or 0),
+                float(p.commission_rate or 0),
+                float(p.platform_commission or 0),
+                float(p.net_amount or 0),
+                p.created_at.isoformat() if p.created_at else "",
+            ])
+
+        output.seek(0)
+        filename = f"payouts_export_{dt.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        return output.getvalue(), filename
+
+    def approve_payout(self, db: Session, payout_id: int, company_id: int) -> dict:
+        """Одобрить выплату (draft -> sent)."""
+        payout = db.get(Payout, payout_id)
+        if not payout or payout.company_id != company_id:
+            raise ValueError("Payout not found")
+
+        if payout.status != DocumentStatus.draft:
+            raise ValueError(f"Only draft payouts can be approved. Current status: {payout.status}")
+
+        old_status = payout.status.value if hasattr(payout.status, "value") else str(payout.status)
+        payout.status = DocumentStatus.sent
+        db.commit()
+        db.refresh(payout)
+
+        # Send email notification (non-blocking)
+        try:
+            from app.models.contractor import Contractor
+            from app.services.email_service import email_service
+
+            owner = db.get(Contractor, payout.owner_id)
+            if owner and owner.contact_email:
+                email_service.send_payout_approved(
+                    payout=payout,
+                    owner_email=owner.contact_email,
+                    owner_name=owner.name,
+                )
+                logger.info(f"Payout notification sent to {owner.contact_email}")
+        except Exception as email_err:
+            logger.warning(f"Failed to send payout email: {email_err}")
+
+        return {
+            "status": "success",
+            "message": f"Payout #{payout_id} approved successfully",
+            "payout_id": payout.id,
+            "old_status": old_status,
+            "new_status": DocumentStatus.sent.value,
+        }
+
+
+
 # Singleton
 payout_service = PayoutService()
