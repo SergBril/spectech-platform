@@ -28,7 +28,8 @@ async def submit_mobile_shift_report(
     photo_files: list | None = None,
 ) -> dict:
     """Submit a completed shift report from mobile app."""
-    from app.models.auth import User as UserModel, UserCompany
+    from app.models.auth import User as UserModel
+    from app.models.user_company import UserCompany
     from app.models.catalog import Vehicle
     from app.models.contractor import DriverProfile, Employee
     from app.models.shift import ShiftReport, ShiftTask
@@ -68,23 +69,25 @@ async def submit_mobile_shift_report(
     if odometer_end and odometer_start:
         task.odometer_distance = round(odometer_end - odometer_start, 1)
 
+    # Get company_id for report and notifications
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    company_id = vehicle.company_id if vehicle else None
+
     # Create shift report
     report = ShiftReport(
         shift_task_id=task_id,
-        submitted_by=user_id,
-        odometer_start=odometer_start,
-        odometer_end=odometer_end,
-        notes=notes,
-        photo_paths=",".join(photo_paths) if photo_paths else None,
-        status="submitted",
+        operator_id=profile.employee_contractor_id,
+        operator_odometer=odometer_end,
+        operator_comment=notes or None,
+        operator_photos=",".join(photo_paths) if photo_paths else None,
+        status="operator_submitted",
+        company_id=company_id,
     )
     db.add(report)
     db.commit()
     db.refresh(report)
 
     # Notify dispatcher via WS + FCM
-    vehicle = db.get(Vehicle, task.vehicle_id)
-    company_id = vehicle.company_id if vehicle else None
     if company_id:
         try:
             await manager.broadcast_to_company(company_id, {
