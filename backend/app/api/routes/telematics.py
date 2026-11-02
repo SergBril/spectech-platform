@@ -122,7 +122,7 @@ async def receive_gps_points(
     return {"status": "ok", "saved": len(saved_points)}
 
 
-@router.post("/gps/single", status_code=201)
+@router.post("/gps/single", response_model=GpsPointRead, status_code=201)
 async def receive_single_gps_point(
     point: GpsPointCreate,
     db: Session = Depends(get_db),
@@ -130,209 +130,17 @@ async def receive_single_gps_point(
     company_id: int = Depends(get_current_company_id),
 ):
     """Принимает одну GPS точку (только для техники своей компании)."""
-    from app.services.websocket_manager import manager
+    from app.services.telematics_service import receive_single_gps_point as svc_receive
 
-    _check_vehicle_access(db, point.vehicle_id, company_id)
-
-    # 🆕 ШАГ 1: Обновляем моточасы техники ПЕРЕД сохранением GPS
-    maintenance_result = {"updated": False}
-    if point.engine_hours is not None:
-        try:
-            from app.services.maintenance_service import maintenance_service
-
-            maintenance_result = maintenance_service.update_vehicle_engine_hours(
-                db=db,
-                vehicle_id=point.vehicle_id,
-                new_engine_hours=float(point.engine_hours),
-                auto_check=True,
-            )
-
-            if maintenance_result.get("maintenance_created"):
-                logger.info(
-                    "🔧 Auto-maintenance triggered by GPS for vehicle %s: %s",
-                    point.vehicle_id,
-                    maintenance_result.get("orders"),
-                )
-        except Exception as e:
-            logger.error(
-                "❌ Failed to update engine_hours for vehicle %s: %s: %s",
-                point.vehicle_id,
-                type(e).__name__,
-                str(e),
-                exc_info=True,
-            )
-
-    # 🆕 ШАГ 2: Сохраняем GPS-точку
-    gps_point = GpsPoint(
-        vehicle_id=point.vehicle_id,
-        latitude=point.latitude,
-        longitude=point.longitude,
-        speed=point.speed,
-        heading=point.heading,
-        altitude=point.altitude,
-        engine_on=point.engine_on,
-        engine_hours=point.engine_hours,
-        fuel_level=point.fuel_level,
-        recorded_at=point.recorded_at or datetime.now(UTC),
-    )
-    db.add(gps_point)
-    db.commit()
-    db.refresh(gps_point)
-
-    logger.info("🚀 GPS point saved for vehicle %s", point.vehicle_id)
-
-    # 🆕 ШАГ 3: Broadcast GPS точки
     try:
-        await manager.broadcast_gps_to_company(
+        result = await svc_receive(
+            db=db,
+            point_data=point.model_dump(exclude_none=True),
             company_id=company_id,
-            gps_data={
-                "vehicle_id": gps_point.vehicle_id,
-                "lat": float(gps_point.latitude),
-                "lon": float(gps_point.longitude),
-                "speed": float(gps_point.speed) if gps_point.speed else 0,
-                "heading": float(gps_point.heading) if gps_point.heading else 0,
-                "altitude": float(gps_point.altitude) if gps_point.altitude else 0,
-                "engine_on": (
-                    bool(gps_point.engine_on)
-                    if gps_point.engine_on is not None
-                    else False
-                ),
-                "engine_hours": (
-                    float(gps_point.engine_hours) if gps_point.engine_hours else None
-                ),
-                "fuel_level": (
-                    float(gps_point.fuel_level) if gps_point.fuel_level else None
-                ),
-                "recorded_at": (
-                    gps_point.recorded_at.isoformat() if gps_point.recorded_at else None
-                ),
-            },
         )
-    except Exception as e:
-        logger.warning("GPS broadcast failed: %s", e)
-
-    # 🆕 ШАГ 4: Broadcast уведомления о созданном ТО
-    if maintenance_result.get("maintenance_created"):
-        try:
-            for order_info in maintenance_result["orders"]:
-                await manager.broadcast_alert_to_company(
-                    company_id,
-                    {
-                        "id": 0,
-                        "alert_type": "maintenance_required",
-                        "severity": "warning",
-                        "status": "active",
-                        "vehicle_id": order_info["vehicle_id"],
-                        "title": f"🔧 Требуется ТО: {order_info['vehicle_name']}",
-                        "description": (
-                            f"Создан наряд-заказ {order_info['order_number']}. "
-                            f"Моточасы: {order_info['engine_hours']:.0f}, "
-                            f"превышение: {order_info['hours_overdue']:.0f}ч, "
-                            f"приоритет: {order_info['priority']}"
-                        ),
-                        "occurred_at": datetime.now(UTC).isoformat(),
-                        "maintenance_order_id": order_info["order_id"],
-                    },
-                )
-        except Exception as e:
-            logger.warning("Failed to broadcast maintenance alert: %s", e)
-
-    # Проверка правил алертов (скорость)
-    try:
-        from datetime import timedelta
-
-        rules = (
-            db.query(AlertRule)
-            .filter(
-                AlertRule.company_id.in_(company_ids),
-                AlertRule.is_active == True,
-            )
-            .all()
-        )
-
-        for rule in rules:
-            triggered = False
-            description = None
-
-            if (
-                rule.rule_type == "speed_limit"
-                and gps_point.speed
-                and gps_point.speed > rule.threshold
-            ):
-                triggered = True
-                description = f"Скорость {gps_point.speed:.0f} км/ч превысила лимит {rule.threshold:.0f} км/ч"
-
-            if triggered:
-                ten_minutes_ago = datetime.now(UTC) - timedelta(seconds=600)
-                existing = (
-                    db.query(Alert)
-                    .filter(
-                        Alert.vehicle_id == gps_point.vehicle_id,
-                        Alert.alert_type == rule.rule_type,
-                        Alert.occurred_at >= ten_minutes_ago,
-                    )
-                    .first()
-                )
-
-                if not existing:
-                    alert = Alert(
-                        company_id=company_id,
-                        vehicle_id=gps_point.vehicle_id,
-                        alert_type=rule.rule_type,
-                        severity=rule.severity,
-                        status=AlertStatus.active,
-                        title=f"Превышение скорости: {gps_point.speed:.0f} км/ч",
-                        description=description,
-                        occurred_at=datetime.now(UTC),
-                    )
-                    db.add(alert)
-                    db.commit()
-                    db.refresh(alert)
-
-                    logger.info("🚨 Alert created: %s", alert.title)
-
-                    alert_data = {
-                        "id": alert.id,
-                        "alert_type": alert.alert_type,
-                        "severity": (
-                            alert.severity.value
-                            if hasattr(alert.severity, "value")
-                            else alert.severity
-                        ),
-                        "status": (
-                            alert.status.value
-                            if hasattr(alert.status, "value")
-                            else alert.status
-                        ),
-                        "vehicle_id": alert.vehicle_id,
-                        "title": alert.title,
-                        "description": alert.description,
-                        "occurred_at": (
-                            alert.occurred_at.isoformat() if alert.occurred_at else None
-                        ),
-                    }
-                    await manager.broadcast_alert_to_company(company_id, alert_data)
-    except Exception as e:
-        logger.warning("Alert processing failed: %s", e)
-
-    # Формируем ответ
-    response = {
-        "status": "ok",
-        "id": gps_point.id,
-        "vehicle_id": gps_point.vehicle_id,
-        "coordinates": [gps_point.latitude, gps_point.longitude],
-    }
-
-    # Добавляем информацию об обновлении моточасов и ТО
-    if maintenance_result.get("updated"):
-        response["engine_hours_update"] = {
-            "old": maintenance_result.get("old_hours"),
-            "new": maintenance_result.get("new_hours"),
-        }
-    if maintenance_result.get("maintenance_created"):
-        response["maintenance_created"] = maintenance_result.get("orders", [])
-
-    return response
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/gps/{vehicle_id}", response_model=list[GpsPointRead])
@@ -957,151 +765,15 @@ def delete_alert_rule(
 # =========================================
 
 
-@router.get("/dashboard/summary")
+@router.get("/dashboard/summary", response_model=TelematicsDashboard)
 def get_dashboard_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Агрегированная статистика для дашборда (только своей компании)."""
-    from datetime import timedelta
-
-    from sqlalchemy import func
-
-    try:
-        now = datetime.now(UTC)
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        week_ago = now - timedelta(days=7)
-
-        # Машины (только своей компании)
-        total_vehicles = (
-            db.query(func.count(Vehicle.id))
-            .filter(Vehicle.company_id.in_(company_ids))
-            .scalar()
-            or 0
-        )
-
-        # GPS точки (только для техники своей компании)
-        total_points = (
-            db.query(func.count(GpsPoint.id))
-            .join(Vehicle, GpsPoint.vehicle_id == Vehicle.id)
-            .filter(Vehicle.company_id.in_(company_ids))
-            .scalar()
-            or 0
-        )
-        today_points = (
-            db.query(func.count(GpsPoint.id))
-            .join(Vehicle, GpsPoint.vehicle_id == Vehicle.id)
-            .filter(
-                Vehicle.company_id.in_(company_ids),
-                GpsPoint.recorded_at >= today_start,
-            )
-            .scalar()
-            or 0
-        )
-
-        # Алерты (только своей компании)
-        total_alerts = (
-            db.query(func.count(Alert.id))
-            .filter(Alert.company_id.in_(company_ids))
-            .scalar()
-            or 0
-        )
-
-        all_alerts = db.query(Alert).filter(Alert.company_id.in_(company_ids)).all()
-        active_alerts = len(
-            [
-                a
-                for a in all_alerts
-                if hasattr(a.status, "value") and a.status.value == "active"
-            ]
-        )
-        critical_alerts = len(
-            [
-                a
-                for a in all_alerts
-                if hasattr(a.severity, "value")
-                and a.severity.value == "critical"
-                and hasattr(a.status, "value")
-                and a.status.value == "active"
-            ]
-        )
-
-        # Топливо за неделю (только для техники своей компании)
-        week_refuels = (
-            db.query(FuelTransaction)
-            .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
-            .filter(
-                Vehicle.company_id.in_(company_ids),
-                FuelTransaction.transaction_type == "refuel",
-                FuelTransaction.occurred_at >= week_ago,
-            )
-            .all()
-        )
-        week_volume = float(sum(t.volume for t in week_refuels))
-        week_cost = float(sum(float(t.total_cost or 0) for t in week_refuels))
-
-        # Всё топливо
-        all_refuels = (
-            db.query(FuelTransaction)
-            .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
-            .filter(
-                Vehicle.company_id.in_(company_ids),
-                FuelTransaction.transaction_type == "refuel",
-            )
-            .all()
-        )
-        total_volume = float(sum(t.volume for t in all_refuels))
-        total_cost = float(sum(float(t.total_cost or 0) for t in all_refuels))
-
-        # Сливы
-        drains_count = (
-            db.query(func.count(FuelTransaction.id))
-            .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
-            .filter(
-                Vehicle.company_id.in_(company_ids),
-                FuelTransaction.transaction_type == "drain",
-            )
-            .scalar()
-            or 0
-        )
-
-        return {
-            "vehicles": {"total": total_vehicles, "active": total_vehicles},
-            "gps_points": {"total": total_points, "today": today_points},
-            "alerts": {
-                "total": total_alerts,
-                "active": active_alerts,
-                "critical": critical_alerts,
-            },
-            "fuel": {
-                "total_volume": round(total_volume, 2),
-                "total_cost": round(total_cost, 2),
-                "week_volume": round(week_volume, 2),
-                "week_cost": round(week_cost, 2),
-                "drains_count": drains_count,
-            },
-            "updated_at": now.isoformat(),
-        }
-    except Exception as e:
-        logger.error(f"Dashboard summary error: {e}", exc_info=True)
-        return {
-            "error": str(e),
-            "vehicles": {"total": 0, "active": 0},
-            "gps_points": {"total": 0, "today": 0},
-            "alerts": {"total": 0, "active": 0, "critical": 0},
-            "fuel": {
-                "total_volume": 0,
-                "total_cost": 0,
-                "week_volume": 0,
-                "week_cost": 0,
-                "drains_count": 0,
-            },
-            "updated_at": None,
-        }
-
-
-# === WIALON ADAPTER ===
+    from app.services.telematics_service import get_dashboard_summary as svc_dashboard
+    return svc_dashboard(db, company_ids)
 
 
 @router.post("/wialon/webhook")
