@@ -596,3 +596,96 @@ async def receive_gps_points_batch(db: Session, points_data: list[dict], company
 
     return {"status": "ok", "saved": len(saved_points)}
 
+
+def get_fuel_stats(db: Session, company_ids: list[int], vehicle_id: int | None = None) -> dict:
+    """Fuel statistics for company vehicles."""
+    from sqlalchemy import select
+
+    from app.models.catalog import Vehicle
+    from app.models.telematics import FuelTransaction
+
+    stmt = (
+        select(FuelTransaction)
+        .join(Vehicle, FuelTransaction.vehicle_id == Vehicle.id)
+        .where(Vehicle.company_id.in_(company_ids))
+    )
+    if vehicle_id:
+        stmt = stmt.where(FuelTransaction.vehicle_id == vehicle_id)
+    transactions = db.scalars(stmt).all()
+
+    if not transactions:
+        return {
+            "transactions_count": 0, "total_volume": 0.0, "total_cost": 0.0,
+            "avg_consumption": None, "last_refuel_at": None, "drains_count": 0,
+        }
+
+    refuels = [t for t in transactions if t.transaction_type == "refuel"]
+    drains = [t for t in transactions if t.transaction_type == "drain"]
+
+    total_volume = float(sum(t.volume for t in refuels))
+    total_cost = float(sum(t.total_cost or 0 for t in refuels))
+
+    avg_consumption = None
+    odometer_readings = [(t.odometer, float(t.volume)) for t in refuels if t.odometer is not None]
+    if len(odometer_readings) >= 2:
+        odometer_readings.sort(key=lambda x: x[0])
+        total_distance = odometer_readings[-1][0] - odometer_readings[0][0]
+        total_fuel = sum(v for _, v in odometer_readings[1:])
+        if total_distance > 0:
+            avg_consumption = round(total_fuel / total_distance * 100, 2)
+
+    last_refuel = max((t.occurred_at for t in refuels), default=None)
+
+    return {
+        "transactions_count": len(transactions),
+        "refuels_count": len(refuels),
+        "drains_count": len(drains),
+        "total_volume": round(total_volume, 2),
+        "total_cost": round(total_cost, 2),
+        "avg_price_per_liter": round(total_cost / total_volume, 2) if total_volume > 0 else 0,
+        "avg_consumption": avg_consumption,
+        "last_refuel_at": last_refuel.isoformat() if last_refuel else None,
+    }
+
+
+def reconcile_shift_data(db: Session, shift_task_id: int, company_id: int) -> dict:
+    """Reconcile operator vs telematics data for a shift task."""
+    from app.models.shift import ShiftTask
+    from app.services.telematics.reconciliation_service import reconciliation_service
+
+    shift_task = db.get(ShiftTask, shift_task_id)
+    if not shift_task or shift_task.company_id != company_id:
+        raise ValueError("ShiftTask not found")
+
+    reconciliation = reconciliation_service.reconcile_shift_task(db, shift_task_id)
+    if not reconciliation:
+        raise ValueError("Failed to perform reconciliation")
+
+    return {
+        "shift_task_id": shift_task_id,
+        "reconciliation_id": reconciliation.id,
+        "status": reconciliation.reconciliation_status,
+        "operator_data": {
+            "moto_hours": reconciliation.operator_moto_hours,
+            "odometer": reconciliation.operator_odometer,
+            "fuel_used": reconciliation.operator_fuel_used,
+        },
+        "telematics_data": {
+            "moto_hours": reconciliation.telematics_moto_hours,
+            "odometer": reconciliation.telematics_odometer,
+            "fuel_used": reconciliation.telematics_fuel_used,
+            "data_points_count": reconciliation.telematics_data_points_count,
+        },
+        "differences": {
+            "moto_hours_diff_percent": reconciliation.moto_hours_diff_percent,
+            "odometer_diff_percent": reconciliation.odometer_diff_percent,
+            "fuel_diff_percent": reconciliation.fuel_diff_percent,
+        },
+        "decision_source": reconciliation.decision_source,
+        "final_values": {
+            "moto_hours": reconciliation.final_moto_hours,
+            "odometer": reconciliation.final_odometer,
+            "fuel_used": reconciliation.final_fuel_used,
+        },
+    }
+
