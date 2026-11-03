@@ -131,7 +131,42 @@ export const DriverDashboardPage: React.FC = () => {
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <div className="flex items-center gap-2">
             <span className="text-2xl">🚜</span>
-            <h1 className="text-lg font-bold">Водитель</h1>
+            <h1 className="text-lg font-bold">
+
+      {/* Offline Indicator */}
+      {!navigator.onLine && (
+        <div style={{
+          background: '#fef3c7', color: '#92400e', padding: '8px 16px',
+          borderRadius: '8px', marginBottom: '12px', fontSize: '13px',
+          display: 'flex', alignItems: 'center', gap: '8px',
+        }}>
+          ⚠️ Нет подключения к интернету. Данные будут синхронизированы при появлении сети.
+        </div>
+      )}
+
+      {/* Quick Status Toggle */}
+      <div style={{
+        display: 'flex', gap: '8px', marginBottom: '16px',
+      }}>
+        {['available', 'busy', 'offline'].map((status) => (
+          <button
+            key={status}
+            onClick={() => {
+              // TODO: call API to update driver status
+              console.log('Status changed to:', status);
+            }}
+            style={{
+              flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
+              fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+              background: status === 'available' ? '#dcfce7' : status === 'busy' ? '#fee2e2' : '#f3f4f6',
+              color: status === 'available' ? '#166534' : status === 'busy' ? '#991b1b' : '#374151',
+            }}
+          >
+            {status === 'available' ? '✅ Свободен' : status === 'busy' ? '🔴 Занят' : '⏸️ Оффлайн'}
+          </button>
+        ))}
+      </div>
+Водитель</h1>
           </div>
           <button onClick={handleLogout} className="text-sm opacity-80 hover:opacity-100">
             Выход

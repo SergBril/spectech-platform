@@ -1,10 +1,18 @@
-﻿"""
+"""
 Сервис подбора техники для заказов маркетплейса.
 Фильтрует по категории, атрибутам, статусу и согласию на комиссию.
 """
+
 import logging
+
 from sqlalchemy.orm import Session
-from app.models.catalog import Vehicle, EquipmentAttributeDefinition, EquipmentAttributeValue, Category
+
+from app.models.catalog import (
+    Category,
+    EquipmentAttributeDefinition,
+    EquipmentAttributeValue,
+    Vehicle,
+)
 from app.models.dispatch import Request
 
 logger = logging.getLogger("spectech.vehicle_matcher")
@@ -14,42 +22,45 @@ class VehicleMatcherService:
 
     # Маппинг: подкатегория заказа → совместимые категории техники
     REQUEST_SUBCAT_TO_VEHICLE_CATS = {
-        8: [2],    # Экскаваторы гусеничные → Экскаваторы
-        9: [2],    # Экскаваторы колёсные → Экскаваторы
-        10: [2],   # Мини-экскаваторы → Экскаваторы
-        11: [6],   # Экскаваторы-погрузчики → Погрузчики
-        12: [5],   # Бульдозеры → Бульдозеры
-        13: [6],   # Фронтальные погрузчики → Погрузчики
-        14: [6],   # Мини-погрузчики → Погрузчики
-        15: [6],   # Телескопические погрузчики → Погрузчики
-        16: [],    # Грейдеры → нет совместимой категории техники
-        17: [],    # Скреперы → нет совместимой категории техники
-        19: [],    # Автовышки (АГП) → отдельная категория, НЕ автокраны
-        20: [4],   # Автокраны → Автокраны
-        21: [],    # Манипуляторы (КМУ) → отдельная категория, НЕ автокраны
-        33: [3],   # Самосвалы → Самосвалы
-        34: [],    # Тралы → отдельная категория, НЕ самосвалы
+        8: [2],  # Экскаваторы гусеничные → Экскаваторы
+        9: [2],  # Экскаваторы колёсные → Экскаваторы
+        10: [2],  # Мини-экскаваторы → Экскаваторы
+        11: [6],  # Экскаваторы-погрузчики → Погрузчики
+        12: [5],  # Бульдозеры → Бульдозеры
+        13: [6],  # Фронтальные погрузчики → Погрузчики
+        14: [6],  # Мини-погрузчики → Погрузчики
+        15: [6],  # Телескопические погрузчики → Погрузчики
+        16: [],  # Грейдеры → нет совместимой категории техники
+        17: [],  # Скреперы → нет совместимой категории техники
+        19: [],  # Автовышки (АГП) → отдельная категория, НЕ автокраны
+        20: [4],  # Автокраны → Автокраны
+        21: [],  # Манипуляторы (КМУ) → отдельная категория, НЕ автокраны
+        33: [3],  # Самосвалы → Самосвалы
+        34: [],  # Тралы → отдельная категория, НЕ самосвалы
     }
 
     # Кросс-категорийные подсказки: техника из этих категорий может подойти
     # даже если не является прямым совпадением (семантическая совместимость)
     CROSS_CATEGORY_SUGGESTIONS = {
         # Экскаваторы колёсные → могут подойти погрузчики и экскаваторы-погрузчики
-        9: [6, 11],   # → Погрузчики, Экскаваторы-погрузчики
+        9: [6, 11],  # → Погрузчики, Экскаваторы-погрузчики
         # Мини-экскаваторы → мини-погрузчики
-        10: [14],     # → Мини-погрузчики
+        10: [14],  # → Мини-погрузчики
         # Экскаваторы-погрузчики → экскаваторы и погрузчики
-        11: [2, 6],   # → Экскаваторы, Погрузчики
+        11: [2, 6],  # → Экскаваторы, Погрузчики
         # Фронтальные погрузчики → экскаваторы-погрузчики
-        13: [11],     # → Экскаваторы-погрузчики
+        13: [11],  # → Экскаваторы-погрузчики
         # Автокраны → манипуляторы (для лёгких грузов)
-        20: [21],     # → Манипуляторы (КМУ)
+        20: [21],  # → Манипуляторы (КМУ)
         # Самосвалы → тралы (для негабарита)
-        33: [34],     # → Тралы
+        33: [34],  # → Тралы
     }
 
     def find_matching_vehicles(
-        self, db: Session, request_id: int, company_id: int | None = None,
+        self,
+        db: Session,
+        request_id: int,
+        company_id: int | None = None,
     ) -> list[dict]:
         request = db.get(Request, request_id)
         if not request:
@@ -79,7 +90,9 @@ class VehicleMatcherService:
                 query = query.filter(Vehicle.category_id.in_(cats_to_check))
 
         # Исключаем недоступные статусы
-        query = query.filter(Vehicle.status.notin_(["maintenance", "repair", "decommissioned"]))
+        query = query.filter(
+            Vehicle.status.notin_(["maintenance", "repair", "decommissioned"])
+        )
 
         # Фильтр по компании
         if company_id:
@@ -95,20 +108,27 @@ class VehicleMatcherService:
         results = []
         for v in vehicles:
             score, matched, missing = self._score_vehicle(db, v, request)
-            results.append({
-                "vehicle_id": v.id,
-                "vehicle_name": v.name,
-                "category_id": v.category_id,
-                "is_cross_suggestion": v.category_id in cross_suggestions and v.category_id not in compatible_vehicle_cats,
-                "status": v.status,
-                "hourly_rate": float(v.hourly_rate) if v.hourly_rate else None,
-                "shift_rate": float(v.shift_rate) if v.shift_rate else None,
-                "match_score": score,
-                "matched_attributes": matched,
-                "missing_attributes": missing,
-                "marketplace_commission_agreed": getattr(v, "marketplace_commission_agreed", False),
-                "marketplace_commission_rate": float(getattr(v, "marketplace_commission_rate", 10)),
-            })
+            results.append(
+                {
+                    "vehicle_id": v.id,
+                    "vehicle_name": v.name,
+                    "category_id": v.category_id,
+                    "is_cross_suggestion": v.category_id in cross_suggestions
+                    and v.category_id not in compatible_vehicle_cats,
+                    "status": v.status,
+                    "hourly_rate": float(v.hourly_rate) if v.hourly_rate else None,
+                    "shift_rate": float(v.shift_rate) if v.shift_rate else None,
+                    "match_score": score,
+                    "matched_attributes": matched,
+                    "missing_attributes": missing,
+                    "marketplace_commission_agreed": getattr(
+                        v, "marketplace_commission_agreed", False
+                    ),
+                    "marketplace_commission_rate": float(
+                        getattr(v, "marketplace_commission_rate", 10)
+                    ),
+                }
+            )
 
         results.sort(key=lambda x: x["match_score"], reverse=True)
         logger.info(f"Found {len(results)} matches for request #{request_id}")
@@ -118,16 +138,21 @@ class VehicleMatcherService:
     # Техника хранится в родительских категориях (2,3,4,5,6),
     # заказы — в подкатегориях (8,9,10...). Нужен явный маппинг.
     VEHICLE_CAT_TO_REQUEST_SUBCATS = {
-        2: [8, 9, 10],       # Экскаваторы → гусеничные, колёсные, мини
-        3: [33],             # Самосвалы → самосвалы (подкатегория)
-        4: [20],             # Автокраны → автокраны (подкатегория)
-        5: [12],             # Бульдозеры → бульдозеры (подкатегория)
-        6: [11, 13, 14, 15], # Погрузчики → экскаваторы-погрузчики, фронтальные, мини, телескопические
+        2: [8, 9, 10],  # Экскаваторы → гусеничные, колёсные, мини
+        3: [33],  # Самосвалы → самосвалы (подкатегория)
+        4: [20],  # Автокраны → автокраны (подкатегория)
+        5: [12],  # Бульдозеры → бульдозеры (подкатегория)
+        6: [
+            11,
+            13,
+            14,
+            15,
+        ],  # Погрузчики → экскаваторы-погрузчики, фронтальные, мини, телескопические
     }
 
     def _get_compatible_categories(self, db: Session, cat_id: int) -> list[int]:
         """Возвращает список категорий, совместимых с данной.
-        
+
         Если cat_id — это подкатегория заказа (например 9=Экскаваторы колёсные),
         возвращаем все подкатегории той же группы + родительскую категорию техники.
         Если cat_id — это категория техники (например 2=Экскаваторы),
@@ -135,31 +160,39 @@ class VehicleMatcherService:
         """
         result = {cat_id}
         cat = db.get(Category, cat_id)
-        
+
         # Если это категория техники (родительская) — добавляем совместимые подкатегории
         if cat_id in self.VEHICLE_CAT_TO_REQUEST_SUBCATS:
             result.update(self.VEHICLE_CAT_TO_REQUEST_SUBCATS[cat_id])
-        
+
         # Если это подкатегория заказа — добавляем sibling-подкатегории и родительскую
         if cat and cat.parent_id:
             result.add(cat.parent_id)
             # Все sibling-подкатегории (другие подкатегории того же родителя)
-            siblings = db.query(Category).filter(Category.parent_id == cat.parent_id).all()
+            siblings = (
+                db.query(Category).filter(Category.parent_id == cat.parent_id).all()
+            )
             for s in siblings:
                 result.add(s.id)
-        
+
         # Дочерние категории (если есть)
         children = db.query(Category).filter(Category.parent_id == cat_id).all()
         for c in children:
             result.add(c.id)
-        
+
         return list(result)
 
     # Атрибуты, где значение техники должно быть >= требуемого
     GTE_ATTRIBUTES = {
-        "Грузоподъёмность", "Вылет стрелы", "Высота подъёма",
-        "Макс. высота подъёма", "Глубина копания", "Объём ковша",
-        "Ширина отвала", "Длина платформы", "Масса",
+        "Грузоподъёмность",
+        "Вылет стрелы",
+        "Высота подъёма",
+        "Макс. высота подъёма",
+        "Глубина копания",
+        "Объём ковша",
+        "Ширина отвала",
+        "Длина платформы",
+        "Масса",
     }
 
     # Маппинг ключей requirements → имена атрибутов
@@ -182,14 +215,18 @@ class VehicleMatcherService:
         6: ["Масса", "Объём ковша"],
     }
 
-    def _score_vehicle(self, db: Session, vehicle: Vehicle, request: Request) -> tuple[int, list[str], list[str]]:
+    def _score_vehicle(
+        self, db: Session, vehicle: Vehicle, request: Request
+    ) -> tuple[int, list[str], list[str]]:
         score = 50
         matched, missing = [], []
         excluded = False
 
-        attrs = db.query(EquipmentAttributeValue).filter(
-            EquipmentAttributeValue.vehicle_id == vehicle.id
-        ).all()
+        attrs = (
+            db.query(EquipmentAttributeValue)
+            .filter(EquipmentAttributeValue.vehicle_id == vehicle.id)
+            .all()
+        )
 
         num_map = {}
         text_map = {}
@@ -235,7 +272,10 @@ class VehicleMatcherService:
 
             elif compare_type == "eq":
                 vehicle_value = text_map.get(attr_name)
-                if vehicle_value and str(vehicle_value).lower() == str(req_value).lower():
+                if (
+                    vehicle_value
+                    and str(vehicle_value).lower() == str(req_value).lower()
+                ):
                     matched.append(f"{attr_name}={req_value}")
                     score += 15
                 elif vehicle_value:
@@ -253,6 +293,43 @@ class VehicleMatcherService:
                 else:
                     missing.append(attr)
                     score -= 5
+
+        # === Региональный скоринг ===
+        request_region = getattr(request, "region", None) or ""
+        vehicle_region = getattr(vehicle, "region", None) or ""
+        if request_region and vehicle_region:
+            req_region_lower = request_region.lower().strip()
+            veh_region_lower = vehicle_region.lower().strip()
+            if req_region_lower == veh_region_lower:
+                score += 15
+                matched.append(f"region={request_region}")
+            elif (
+                req_region_lower in veh_region_lower
+                or veh_region_lower in req_region_lower
+            ):
+                score += 8
+                matched.append(f"region~{request_region}")
+            else:
+                score -= 5
+                missing.append(f"region!={request_region}")
+
+        # === Бонус за близость характеристик (не просто >=, а оптимальный диапазон) ===
+        for req_key, (attr_name, compare_type) in self.REQ_TO_ATTR.items():
+            if compare_type != "gte":
+                continue
+            req_value = requirements.get(req_key)
+            vehicle_value = num_map.get(attr_name)
+            if req_value is not None and vehicle_value is not None:
+                norm_vehicle = vehicle_value
+                norm_req = float(req_value)
+                if norm_vehicle > norm_req * 100:
+                    norm_vehicle = norm_vehicle / 1000
+                elif norm_req > norm_vehicle * 100:
+                    norm_req = norm_req / 1000
+                # Оптимальный диапазон: требование <= техника <= требование*2
+                if norm_req <= norm_vehicle <= norm_req * 2:
+                    score += 5  # Бонус за оптимальность
+                    matched.append(f"{attr_name}≈optimal")
 
         if excluded:
             return 0, matched, missing
