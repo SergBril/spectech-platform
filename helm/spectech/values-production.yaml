@@ -1,0 +1,59 @@
+global:
+  imagePullPolicy: Always
+backend:
+  replicaCount: 3
+  image:
+    repository: ghcr.io/sergbril/spectech-platform/backend
+    tag: latest
+  env:
+    ENVIRONMENT: production
+    DEBUG: 'false'
+    LOG_LEVEL: WARNING
+    UVICORN_WORKERS: '4'
+    SCHEDULER_ENABLED: 'true'
+    SCHEDULER_INTERVAL_MINUTES: '5'
+    MAX_ENABLED: 'true'
+    CORS_ORIGINS: https://spectech.dev,https://www.spectech.dev
+  secrets:
+    DATABASE_URL: postgresql+asyncpg://spectech:CHANGE_ME@postgres:5432/spectech  # pragma: allowlist secret
+    REDIS_URL: redis://redis:6379/0  # pragma: allowlist secret
+    SECRET_KEY: CHANGE_ME_GENERATE_WITH_openssl_rand_hex_32  # pragma: allowlist secret
+    MAX_BOT_TOKEN: CHANGE_ME_FROM_MAX_BOT_API  # pragma: allowlist secret
+    DADATA_API_KEY: CHANGE_ME_FROM_DADATA  # pragma: allowlist secret
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 500m
+    limits:
+      memory: 3Gi
+      cpu: 2000m
+frontend:
+  replicaCount: 3
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+postgres:
+  storage: 50Gi
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 500m
+    limits:
+      memory: 2Gi
+      cpu: 1000m
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+  - host: spectech.dev
+    paths:
+    - path: /
+      pathType: Prefix
+  tls:
+  - secretName: spectech-tls  # pragma: allowlist secret
+    hosts:
+    - spectech.dev
