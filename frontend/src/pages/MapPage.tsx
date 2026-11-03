@@ -43,6 +43,37 @@ L.Icon.Default.mergeOptions({
 const formatSpeed = (speed?: number) => speed != null ? `${Math.round(speed)} км/ч` : '—';
 const formatDate = (iso?: string) => iso ? new Date(iso).toLocaleString('ru-RU') : '—';
 
+
+// === Color Legend Component ===
+const MapLegend: React.FC = () => {
+  const items = [
+    { color: '#10b981', label: 'Двигатель включён' },
+    { color: '#6b7280', label: 'Двигатель выключен' },
+    { color: '#ef4444', label: 'Тревога / Алерт' },
+    { color: '#3b82f6', label: 'В движении' },
+    { color: '#f59e0b', label: 'На ТО' },
+  ];
+
+  return (
+    <div style={{
+      position: 'absolute', bottom: '20px', left: '20px', zIndex: 1000,
+      background: 'rgba(255,255,255,0.95)', borderRadius: '8px', padding: '10px 14px',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.15)', fontSize: '12px', lineHeight: '1.6',
+    }}>
+      <div style={{ fontWeight: 700, marginBottom: '4px', color: '#1e3a5f' }}>Легенда</div>
+      {items.map((item) => (
+        <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{
+            width: '12px', height: '12px', borderRadius: '50%',
+            backgroundColor: item.color, display: 'inline-block', flexShrink: 0,
+          }} />
+          <span>{item.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 export const MapPage: React.FC = () => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
@@ -56,6 +87,8 @@ export const MapPage: React.FC = () => {
   const [trackLoading, setTrackLoading] = useState(false);
   const [vehicleDetail, setVehicleDetail] = useState<any>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [engineHoursHistory, setEngineHoursHistory] = useState<any[]>([]);
+  const [syncLogs, setSyncLogs] = useState<any[]>([]);
 
   // WebSocket real-time positions
   const { subscribe, connected } = useWebSocket();
@@ -73,6 +106,17 @@ export const MapPage: React.FC = () => {
     });
     return unsubscribe;
   }, [subscribe]);
+  // Fetch engine hours history for selected vehicle
+  const fetchEngineHours = async (vehicleId: number) => {
+    try {
+      const res = await apiClient.get(`/telematics/engine-hours/${vehicleId}`, { params: { days: 7 } });
+      setEngineHoursHistory(res.data);
+    } catch {
+      setEngineHoursHistory([]);
+    }
+  };
+
+
 
   // Автообновление
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -798,6 +842,7 @@ export const MapPage: React.FC = () => {
         {/* Map */}
         <div className="flex-1 relative">
           <div ref={mapRef} className="w-full h-full" />
+          <MapLegend />
           {trackLoading && (
             <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow text-sm">
               ⏳ Загрузка маршрута...

@@ -80,3 +80,22 @@ class RequestAssign(BaseModel):
     operator_id: int | None = None
     planned_start: datetime | None = None
     planned_end: datetime | None = None
+
+
+class MarketplaceRequestRead(BaseModel):
+    """Публичная информация о заявке в маркетплейсе."""
+
+    id: int
+    work_type: str | None = None
+    object_address: str | None = None
+    planned_start: datetime
+    planned_end: datetime
+    shift_duration_hours: float | None = None
+    client_rate: float | None = None
+    rate_type: str | None = None
+    estimated_amount: float | None = None
+    priority: str = "normal"
+    vehicle_category_id: int | None = None
+    vehicle_category_name: str | None = None
+    offers_count: int = 0
+    published_at: datetime | None = None

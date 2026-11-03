@@ -1,3 +1,15 @@
 benchmark_report.txt
 profile.svg
 requirements_new.txt
+
+# Test artifacts
+_cov.txt
+_assign_full.txt
+all_imports.txt
+test_output.txt
+*.bak
+celerybeat-schedule.*
+
+# Temp files
+debug.py
+*.db-journal

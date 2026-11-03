@@ -391,3 +391,28 @@ class ShiftDataReconciliation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class GpsSyncLog(Base):
+    """Лог синхронизации с GPS-провайдерами."""
+
+    __tablename__ = "gps_sync_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    vehicle_id: Mapped[int | None] = mapped_column(
+        ForeignKey("vehicles.id"), nullable=True, index=True
+    )
+    provider_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    sync_type: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # last_position, track, test_connection
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # success, error, timeout
+    points_received: Mapped[int] = mapped_column(Integer, default=0)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

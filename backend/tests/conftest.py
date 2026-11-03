@@ -1,7 +1,6 @@
 import os
 import sys
-
-from datetime import datetime, UTC, date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 # === ENV для тестов (ДО любых импортов из app) ===
@@ -53,7 +52,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.db import SessionLocal, Base, get_db
+from app.core.db import Base, get_db
 from app.main import app
 from app.models import *  # noqa: F401, F403
 from app.models.auth import User
@@ -89,6 +88,7 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 @pytest.fixture(scope="function")
 def db_session() -> Generator[Session, None, None]:
     """Чистая сессия БД для каждого теста."""
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     session.execute(text("PRAGMA foreign_keys=OFF"))
@@ -96,7 +96,6 @@ def db_session() -> Generator[Session, None, None]:
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
@@ -170,7 +169,7 @@ def admin_user(db_session: Session, company) -> User:
             db_session.commit()
             db_session.refresh(existing)
         return existing
-    
+
     # Создаём нового с правильным company_id
     user = User(
         email="admin@test.com",
@@ -198,10 +197,11 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
 
     app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app) as test_client:
-        yield test_client
-
-    app.dependency_overrides.clear()
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -223,7 +223,7 @@ def auth_token(auth_headers: dict) -> str:
     """Извлекает JWT токен из auth_headers фикстуры."""
     auth_header = auth_headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
-        return auth_header[len("Bearer "):]
+        return auth_header[len("Bearer ") :]
     raise ValueError("Cannot extract token from auth_headers")
 
 
@@ -311,7 +311,7 @@ def sample_owner(db_session: Session, company):
 def sample_payout(db_session: Session, company, sample_contractor, sample_vehicle):
     """Создаёт тестовую выплату в статусе draft."""
     from app.models.finance import DocumentStatus
-    
+
     payout = Payout(
         document_number=f"PAY-TEST-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
         owner_id=sample_contractor.id,
@@ -330,10 +330,12 @@ def sample_payout(db_session: Session, company, sample_contractor, sample_vehicl
     db_session.refresh(payout)
     return payout
 
+
 @pytest.fixture
 def sample_rental_client(db_session: Session, company):
     """Клиент для аренды (contractor с типом client)."""
     from app.models.contractor import Contractor
+
     client = Contractor(
         name="Rental Client LLC",
         inn="7711111111",
@@ -351,6 +353,7 @@ def sample_rental_client(db_session: Session, company):
 def sample_rental_vehicle(db_session: Session, company, sample_contractor):
     """Техника для аренды с собственником."""
     from app.models.catalog import Vehicle
+
     v = Vehicle(
         name="Самосвал КАМАЗ 65115",
         company_id=company.id,
@@ -372,12 +375,16 @@ def sample_rental(
 ):
     """Базовая аренда в статусе DRAFT с одной позицией."""
     from app.models.rental import (
-        Rental, RentalItem, RentalStatus, RateType, PrepaymentStatus,
+        PrepaymentStatus,
+        RateType,
+        Rental,
+        RentalItem,
+        RentalStatus,
     )
-    
+
     start = datetime.now(UTC).replace(hour=9, minute=0, second=0, microsecond=0)
     end = start + timedelta(hours=8)
-    
+
     rental = Rental(
         client_id=sample_rental_client.id,
         company_id=company.id,
@@ -392,7 +399,7 @@ def sample_rental(
     )
     db_session.add(rental)
     db_session.flush()
-    
+
     item = RentalItem(
         rental_id=rental.id,
         vehicle_id=sample_rental_vehicle.id,
@@ -401,20 +408,21 @@ def sample_rental(
     )
     db_session.add(item)
     db_session.flush()
-    
+
     # Пересчёт стоимости
     rental.base_price = Decimal("20000.00")  # 8 часов × 2500
     rental.total_amount = Decimal("20000.00")
-    
+
     db_session.commit()
     db_session.refresh(rental)
     return rental
+
 
 @pytest.fixture
 def sample_shift_report(db_session: Session, company, sample_shift_task):
     """Создаёт тестовый сменный отчёт."""
     from app.models.shift import ShiftReport, ShiftReportStatus
-    
+
     report = ShiftReport(
         shift_task_id=sample_shift_task.id,
         operator_moto_hours=8.0,
@@ -432,7 +440,7 @@ def sample_shift_report(db_session: Session, company, sample_shift_task):
 def sample_dispute(db_session: Session, company, sample_shift_report, sample_user):
     """Создаёт тестовый спор в статусе dispatcher_review."""
     from app.models.dispute import Dispute, DisputeStatus, DisputeType, InitiatorRole
-    
+
     dispute = Dispute(
         shift_report_id=sample_shift_report.id,
         request_id=sample_shift_report.shift_task.request_id or 1,
@@ -455,9 +463,10 @@ def sample_dispute(db_session: Session, company, sample_shift_report, sample_use
 @pytest.fixture
 def sample_dispute_escalated(db_session, sample_dispute):
     """Спор, эскалированный на уровень manager."""
-    from app.models.dispute import DisputeStatus, AssignedRole
-    from datetime import datetime, UTC, timedelta
-    
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.dispute import AssignedRole, DisputeStatus
+
     sample_dispute.status = DisputeStatus.escalated_to_manager
     sample_dispute.assigned_role = AssignedRole.manager
     sample_dispute.escalated_at = datetime.now(UTC) - timedelta(hours=20)
@@ -466,16 +475,18 @@ def sample_dispute_escalated(db_session, sample_dispute):
     db_session.refresh(sample_dispute)
     return sample_dispute
 
+
 @pytest.fixture
 def dispute_test_data(db_session: Session, company):
     """Создаёт полный набор тестовых данных для тестов диспутов (ORM)."""
-    from datetime import datetime, timedelta, date
+    from datetime import date, datetime, timedelta
     from decimal import Decimal
-    from app.models.shift import ShiftReport, ShiftTask, ShiftReportStatus
-    from app.models.dispatch import Request
-    from app.models.contractor import Contractor, Employee
+
     from app.models.catalog import Vehicle
-    
+    from app.models.contractor import Contractor, Employee
+    from app.models.dispatch import Request
+    from app.models.shift import ShiftReport, ShiftReportStatus, ShiftTask
+
     # Создаём клиента
     client_contractor = Contractor(
         name="Test Client for Dispute",

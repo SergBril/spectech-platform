@@ -4,8 +4,9 @@ Extracted from app/api/routes/requests.py to separate business logic
 from HTTP layer. Route handlers should only handle validation, auth,
 and response formatting.
 """
+
 import logging
-from datetime import date, datetime
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -132,7 +133,9 @@ class RequestService:
         )
 
         if existing:
-            logger.info(f"Request #{request_id} already has active assignment #{existing.id}")
+            logger.info(
+                f"Request #{request_id} already has active assignment #{existing.id}"
+            )
             self.db.refresh(request)
             return request
 
@@ -159,7 +162,9 @@ class RequestService:
             self.db.add(
                 RequestStatusLog(
                     request_id=request.id,
-                    from_status=old_status.value if hasattr(old_status, "value") else old_status,
+                    from_status=(
+                        old_status.value if hasattr(old_status, "value") else old_status
+                    ),
                     to_status="assigned",
                     changed_by_user_id=user_id,
                     comment=f"Назначена техника: {vehicle.name}",
@@ -193,7 +198,9 @@ class RequestService:
                         f"on date {p_start.date()}, operator #{operator_id}"
                     )
             else:
-                logger.info(f"Skipping ShiftTask creation: no operator for request #{request_id}")
+                logger.info(
+                    f"Skipping ShiftTask creation: no operator for request #{request_id}"
+                )
 
             self.db.commit()
             self.db.refresh(request)
@@ -219,12 +226,16 @@ class RequestService:
         except IntegrityError as e:
             self.db.rollback()
             logger.error(f"IntegrityError on request #{request_id} assign: {e}")
-            raise RequestServiceError(409, "Назначение уже существует или нарушена уникальность данных.")
+            raise RequestServiceError(
+                409, "Назначение уже существует или нарушена уникальность данных."
+            )
         except RequestServiceError:
             raise
         except Exception as e:
             self.db.rollback()
-            logger.error(f"Unexpected error on request #{request_id} assign: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error on request #{request_id} assign: {e}", exc_info=True
+            )
             raise RequestServiceError(500, f"Ошибка при назначении техники: {str(e)}")
 
     def list_requests(
@@ -294,7 +305,11 @@ class RequestService:
             data = {
                 "id": req.id,
                 "client_id": req.client_id,
-                "status": req.status.value if hasattr(req.status, "value") else str(req.status),
+                "status": (
+                    req.status.value
+                    if hasattr(req.status, "value")
+                    else str(req.status)
+                ),
                 "request_type": req.request_type,
                 "vehicle_category_id": req.vehicle_category_id,
                 "work_type": req.work_type,
@@ -303,10 +318,16 @@ class RequestService:
                 "planned_end": req.planned_end,
                 "actual_start": req.actual_start,
                 "actual_end": req.actual_end,
-                "shift_duration_hours": float(req.shift_duration_hours) if req.shift_duration_hours else None,
+                "shift_duration_hours": (
+                    float(req.shift_duration_hours)
+                    if req.shift_duration_hours
+                    else None
+                ),
                 "client_rate": float(req.client_rate) if req.client_rate else None,
                 "rate_type": req.rate_type,
-                "estimated_amount": float(req.estimated_amount) if req.estimated_amount else None,
+                "estimated_amount": (
+                    float(req.estimated_amount) if req.estimated_amount else None
+                ),
                 "final_amount": float(req.final_amount) if req.final_amount else None,
                 "assigned_vehicle_id": req.assigned_vehicle_id,
                 "assigned_operator_id": req.assigned_operator_id,
@@ -414,32 +435,36 @@ class RequestService:
                 v = self.db.get(Vehicle, req.assigned_vehicle_id)
                 if v:
                     vehicle_name = v.name
-            enriched.append({
-                "id": req.id,
-                "work_type": req.work_type,
-                "object_address": req.object_address,
-                "planned_start": req.planned_start,
-                "planned_end": req.planned_end,
-                "status": req.status,
-                "priority": req.priority,
-                "estimated_amount": req.estimated_amount,
-                "final_amount": req.final_amount,
-                "vehicle_category_name": cat_name,
-                "assigned_vehicle_name": vehicle_name,
-                "client_name": client_name,
-            })
+            enriched.append(
+                {
+                    "id": req.id,
+                    "work_type": req.work_type,
+                    "object_address": req.object_address,
+                    "planned_start": req.planned_start,
+                    "planned_end": req.planned_end,
+                    "status": req.status,
+                    "priority": req.priority,
+                    "estimated_amount": req.estimated_amount,
+                    "final_amount": req.final_amount,
+                    "vehicle_category_name": cat_name,
+                    "assigned_vehicle_name": vehicle_name,
+                    "client_name": client_name,
+                }
+            )
 
         return enriched
 
     def export_requests_pdf(self, **filters) -> bytes:
         """Generate PDF export of filtered requests."""
         from app.utils.export_utils import export_requests_pdf as gen_pdf
+
         enriched = self._fetch_requests_for_export(**filters)
         return gen_pdf(enriched)
 
     def export_requests_excel(self, **filters) -> bytes:
         """Generate Excel export of filtered requests."""
         from app.utils.export_utils import export_requests_excel as gen_excel
+
         enriched = self._fetch_requests_for_export(**filters)
         return gen_excel(enriched)
 
@@ -467,6 +492,20 @@ class RequestService:
             if not cat:
                 raise RequestServiceError(422, f"Vehicle category {cat_id} not found")
 
+        # === Self-transaction prevention ===
+        # Если указан vehicle_id, проверяем что техника не принадлежит той же компании
+        vehicle_id = payload_data.get("vehicle_id") or payload_data.get(
+            "assigned_vehicle_id"
+        )
+        if vehicle_id:
+            from app.models.catalog import Vehicle as VehicleModel
+
+            vehicle = self.db.get(VehicleModel, vehicle_id)
+            if vehicle and vehicle.company_id == company_id:
+                raise RequestServiceError(
+                    422, "Cannot create request for your own vehicle"
+                )
+
         # Create request
         request = Request(
             **payload_data,
@@ -487,22 +526,24 @@ class RequestService:
             )
         )
 
-        # Auto-calculate estimated amount
-        if not request.estimated_amount:
-            try:
-                estimate = pricing_service.calculate_estimate(
-                    region=request.region,
-                    rate_type=request.rate_type or "per_shift",
-                    shift_duration_hours=float(request.shift_duration_hours) if request.shift_duration_hours else None,
-                    custom_rate=float(request.client_rate) if request.client_rate else None,
-                )
-                request.estimated_amount = estimate["estimated_amount"]
-                if not request.client_rate:
-                    request.client_rate = estimate["rate_used"]
-                if not request.rate_type:
-                    request.rate_type = estimate["rate_type"]
-            except Exception as e:
-                logger.warning(f"Auto-pricing failed for request #{request.id}: {e}")
+        # === Server-Authoritative Pricing ===
+        # ВСЕГДА пересчитываем на сервере, клиентские значения игнорируются
+        try:
+            estimate = pricing_service.calculate_estimate(
+                region=request.region,
+                rate_type=request.rate_type or "per_shift",
+                shift_duration_hours=(
+                    float(request.shift_duration_hours)
+                    if request.shift_duration_hours
+                    else None
+                ),
+                custom_rate=float(request.client_rate) if request.client_rate else None,
+            )
+            request.estimated_amount = estimate["estimated_amount"]
+            request.client_rate = estimate["rate_used"]
+            request.rate_type = estimate["rate_type"]
+        except Exception as e:
+            logger.warning(f"Auto-pricing failed for request #{request.id}: {e}")
 
         self.db.commit()
         self.db.refresh(request)
@@ -518,14 +559,20 @@ class RequestService:
             )
         except Exception as e:
             try:
-                from app.services.max_messenger_service import max_messenger_service, notification_templates
+                from app.services.max_messenger_service import (
+                    max_messenger_service,
+                    notification_templates,
+                )
+
                 title, body = notification_templates.request_created(
                     request_id=request.id,
                     work_type=request.work_type or "без типа",
                     address=request.object_address or "не указан",
                     planned_start=request.planned_start.strftime("%d.%m.%Y %H:%M"),
                 )
-                await max_messenger_service.notify_company_dispatchers(self.db, company_id, title, body)
+                await max_messenger_service.notify_company_dispatchers(
+                    self.db, company_id, title, body
+                )
             except Exception as max_err:
                 logger.warning("MAX notification failed: %s", max_err)
             logger.warning("Failed to send notification: %s", e)
@@ -572,13 +619,17 @@ class RequestService:
                 vehicle = self.db.get(Vehicle, assignment.vehicle_id)
 
                 # Reject other responses for same request
-                others = self.db.execute(
-                    select(RequestAssignment).where(
-                        RequestAssignment.request_id == assignment.request_id,
-                        RequestAssignment.id != aid,
-                        RequestAssignment.status == "pending_approval",
+                others = (
+                    self.db.execute(
+                        select(RequestAssignment).where(
+                            RequestAssignment.request_id == assignment.request_id,
+                            RequestAssignment.id != aid,
+                            RequestAssignment.status == "pending_approval",
+                        )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
                 for o in others:
                     o.status = "rejected"
 
@@ -587,10 +638,16 @@ class RequestService:
                     request_id=assignment.request_id,
                     vehicle_id=assignment.vehicle_id,
                     driver_id=getattr(vehicle, "current_driver_id", None),
-                    shift_date=request.planned_start.date() if request.planned_start else None,
+                    shift_date=(
+                        request.planned_start.date() if request.planned_start else None
+                    ),
                     planned_start=request.planned_start,
                     planned_end=request.planned_end,
-                    status=ShiftTaskStatus.planned if hasattr(ShiftTaskStatus, "planned") else "planned",
+                    status=(
+                        ShiftTaskStatus.planned
+                        if hasattr(ShiftTaskStatus, "planned")
+                        else "planned"
+                    ),
                     created_by=user_id,
                 )
                 self.db.add(shift_task)
@@ -598,12 +655,16 @@ class RequestService:
 
                 try:
                     await create_notification(
-                        db=self.db, user_id=assignment.assigned_by,
+                        db=self.db,
+                        user_id=assignment.assigned_by,
                         title="✅ Ваш отклик одобрен!",
                         body=f"Заявка #{request.id} подтверждена.",
                         channel="in_app",
                     )
-                    await manager.send_to_user(assignment.assigned_by, {"type": "response_approved", "request_id": request.id})
+                    await manager.send_to_user(
+                        assignment.assigned_by,
+                        {"type": "response_approved", "request_id": request.id},
+                    )
                 except Exception:
                     pass
 
@@ -611,22 +672,30 @@ class RequestService:
                 assignment.status = "rejected"
                 try:
                     await create_notification(
-                        db=self.db, user_id=assignment.assigned_by,
+                        db=self.db,
+                        user_id=assignment.assigned_by,
                         title="❌ Ваш отклик отклонён",
                         body=f"Заявка #{request.id}: {reason or 'Выбран другой исполнитель'}",
                         channel="in_app",
                     )
-                    await manager.send_to_user(assignment.assigned_by, {"type": "response_rejected", "request_id": request.id})
+                    await manager.send_to_user(
+                        assignment.assigned_by,
+                        {"type": "response_rejected", "request_id": request.id},
+                    )
                 except Exception:
                     pass
 
-            self.db.add(RequestStatusLog(
-                request_id=assignment.request_id,
-                from_status=request.status if action == "reject" else "has_responses",
-                to_status=request.status,
-                changed_by_user_id=user_id,
-                comment=f"Массовое {action}: отклик #{aid}",
-            ))
+            self.db.add(
+                RequestStatusLog(
+                    request_id=assignment.request_id,
+                    from_status=(
+                        request.status if action == "reject" else "has_responses"
+                    ),
+                    to_status=request.status,
+                    changed_by_user_id=user_id,
+                    comment=f"Массовое {action}: отклик #{aid}",
+                )
+            )
             processed += 1
 
         self.db.commit()
@@ -661,13 +730,17 @@ class RequestService:
         assignment.assigned_by = user_id
 
         # Reject other pending responses
-        other_responses = self.db.execute(
-            select(RequestAssignment).where(
-                RequestAssignment.request_id == request_id,
-                RequestAssignment.id != assignment_id,
-                RequestAssignment.status == "pending_approval",
+        other_responses = (
+            self.db.execute(
+                select(RequestAssignment).where(
+                    RequestAssignment.request_id == request_id,
+                    RequestAssignment.id != assignment_id,
+                    RequestAssignment.status == "pending_approval",
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for resp in other_responses:
             resp.status = "rejected"
 
@@ -676,18 +749,24 @@ class RequestService:
             request_id=request_id,
             vehicle_id=assignment.vehicle_id,
             shift_date=request.planned_start.date() if request.planned_start else None,
-            status=ShiftTaskStatus.planned if hasattr(ShiftTaskStatus, "planned") else "planned",
+            status=(
+                ShiftTaskStatus.planned
+                if hasattr(ShiftTaskStatus, "planned")
+                else "planned"
+            ),
             company_id=company_id,
         )
         self.db.add(shift_task)
 
-        self.db.add(RequestStatusLog(
-            request_id=request_id,
-            from_status=request.status,
-            to_status="assigned",
-            changed_by_user_id=user_id,
-            comment=f"Одобрен отклик: {vehicle.name if vehicle else 'N/A'}",
-        ))
+        self.db.add(
+            RequestStatusLog(
+                request_id=request_id,
+                from_status=request.status,
+                to_status="assigned",
+                changed_by_user_id=user_id,
+                comment=f"Одобрен отклик: {vehicle.name if vehicle else 'N/A'}",
+            )
+        )
 
         request.status = "assigned"
         self.db.commit()
@@ -703,7 +782,10 @@ class RequestService:
         except Exception:
             pass
 
-        return {"message": "Отклик одобрен, смена создана", "shift_task_id": shift_task.id}
+        return {
+            "message": "Отклик одобрен, смена создана",
+            "shift_task_id": shift_task.id,
+        }
 
     async def reject_response(
         self,
@@ -730,13 +812,15 @@ class RequestService:
 
         assignment.status = "rejected"
 
-        self.db.add(RequestStatusLog(
-            request_id=request_id,
-            from_status=request.status,
-            to_status=request.status,
-            changed_by_user_id=user_id,
-            comment=f"Отклик отклонён: {reason or 'Без причины'}",
-        ))
+        self.db.add(
+            RequestStatusLog(
+                request_id=request_id,
+                from_status=request.status,
+                to_status=request.status,
+                changed_by_user_id=user_id,
+                comment=f"Отклик отклонён: {reason or 'Без причины'}",
+            )
+        )
         self.db.commit()
 
         try:
@@ -769,7 +853,9 @@ class RequestService:
         has_access = request.company_id == company_id
         if not has_access:
             resp = self.db.execute(
-                select(RequestAssignment).join(Vehicle).where(
+                select(RequestAssignment)
+                .join(Vehicle)
+                .where(
                     RequestAssignment.request_id == request_id,
                     Vehicle.company_id == company_id,
                 )
@@ -779,26 +865,38 @@ class RequestService:
         if not has_access:
             raise RequestServiceError(403, "Access denied")
 
-        logs = self.db.execute(
-            select(RequestStatusLog)
-            .where(RequestStatusLog.request_id == request_id)
-            .order_by(RequestStatusLog.changed_at.desc())
-        ).scalars().all()
+        logs = (
+            self.db.execute(
+                select(RequestStatusLog)
+                .where(RequestStatusLog.request_id == request_id)
+                .order_by(RequestStatusLog.changed_at.desc())
+            )
+            .scalars()
+            .all()
+        )
 
         result = []
         for log in logs:
             user_name = ""
             if log.changed_by_user_id:
                 user = self.db.get(UserModel, log.changed_by_user_id)
-                user_name = user.full_name or user.email if user else f"User#{log.changed_by_user_id}"
-            result.append({
-                "id": log.id,
-                "from_status": log.from_status,
-                "to_status": log.to_status,
-                "comment": log.comment,
-                "changed_by": user_name,
-                "created_at": log.created_at.isoformat() if log.created_at else None,
-            })
+                user_name = (
+                    user.full_name or user.email
+                    if user
+                    else f"User#{log.changed_by_user_id}"
+                )
+            result.append(
+                {
+                    "id": log.id,
+                    "from_status": log.from_status,
+                    "to_status": log.to_status,
+                    "comment": log.comment,
+                    "changed_by": user_name,
+                    "created_at": (
+                        log.created_at.isoformat() if log.created_at else None
+                    ),
+                }
+            )
 
         return result
 
@@ -856,13 +954,15 @@ class RequestService:
             request.requirements = requirements
 
         if changes:
-            self.db.add(RequestStatusLog(
-                request_id=request_id,
-                from_status=request.status,
-                to_status=request.status,
-                changed_by_user_id=user_id,
-                comment=f"Редактирование: {'; '.join(changes)}",
-            ))
+            self.db.add(
+                RequestStatusLog(
+                    request_id=request_id,
+                    from_status=request.status,
+                    to_status=request.status,
+                    changed_by_user_id=user_id,
+                    comment=f"Редактирование: {'; '.join(changes)}",
+                )
+            )
 
         self.db.commit()
         return {"message": "Заявка обновлена", "id": request_id}
@@ -886,16 +986,22 @@ class RequestService:
 
         if "status" in update_data and update_data["status"] != old_status:
             new_status = update_data["status"]
-            old_status_str = old_status.value if hasattr(old_status, "value") else str(old_status)
-            new_status_str = new_status.value if hasattr(new_status, "value") else str(new_status)
+            old_status_str = (
+                old_status.value if hasattr(old_status, "value") else str(old_status)
+            )
+            new_status_str = (
+                new_status.value if hasattr(new_status, "value") else str(new_status)
+            )
 
-            self.db.add(RequestStatusLog(
-                request_id=request.id,
-                from_status=old_status,
-                to_status=new_status,
-                changed_by_user_id=user_id,
-                comment=f"Статус изменён вручную: {old_status_str} -> {new_status_str}",
-            ))
+            self.db.add(
+                RequestStatusLog(
+                    request_id=request.id,
+                    from_status=old_status,
+                    to_status=new_status,
+                    changed_by_user_id=user_id,
+                    comment=f"Статус изменён вручную: {old_status_str} -> {new_status_str}",
+                )
+            )
 
             if request.created_by and request.created_by != user_id:
                 await create_notification(
@@ -912,4 +1018,3 @@ class RequestService:
         self.db.commit()
         self.db.refresh(request)
         return request
-

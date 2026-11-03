@@ -125,6 +125,20 @@ class ReviewsService:
                 f"for review_type '{review_type}' on rental {rental_id}"
             )
 
+        # === Self-transaction prevention ===
+        # Проверяем что reviewer не оставляет отзыв самому себе
+        if review_type == ReviewTypeError.CLIENT_TO_OWNER:
+            # Client reviews owner: проверяем что reviewer != owner (через vehicle.owner_id)
+            if rental.items:
+                for item in rental.items:
+                    vehicle = db.get(Vehicle, item.vehicle_id)
+                    if vehicle and vehicle.owner_id == reviewer_contractor_id:
+                        raise ValueError("Cannot leave a review for yourself")
+        elif review_type == ReviewTypeError.OWNER_TO_CLIENT:
+            # Owner reviews client: проверяем что reviewer != client
+            if reviewer_contractor_id == rental.client_id:
+                raise ValueError("Cannot leave a review for yourself")
+
         # === Проверка дубликата (один отзыв от reviewer на rental + type) ===
         existing = (
             db.query(Review)

@@ -1,12 +1,16 @@
 ﻿"""Seed script: creates test data for drivers, invoices, maintenance, fuel."""
-import requests
+
 import random
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
+
+import requests
 
 BASE = "http://127.0.0.1:8000/api/v1"
 
 # Auth
-r = requests.post(f"{BASE}/auth/login", json={"email": "admin@spectech.dev", "password": "admin123"})
+r = requests.post(
+    f"{BASE}/auth/login", json={"email": "admin@spectech.dev", "password": "admin123"}
+)
 token = r.json()["access_token"]
 h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
@@ -41,13 +45,26 @@ errors = {"drivers": 0, "invoices": 0, "maintenance": 0, "fuel": 0}
 # =============================================
 print("\n=== Creating Drivers ===")
 driver_names = [
-    "Алексеев Алексей Петрович", "Борисов Борис Иванович", "Волков Виктор Сергеевич",
-    "Григорьев Григорий Андреевич", "Дмитриев Дмитрий Николаевич", "Егоров Егор Владимирович",
-    "Жуков Максим Жукович", "Зайцев Захар Павлович", "Козлов Константин Олегович",
-    "Лебедев Леонид Артёмович", "Михайлов Михаил Дмитриевич", "Новиков Николай Фёдорович",
-    "Орлов Олег Геннадьевич", "Петров Пётр Алексеевич", "Романов Роман Юрьевич",
-    "Семёнов Сергей Викторович", "Тихонов Тимур Рустамович", "Ульянов Ульян Борисович",
-    "Фёдоров Фёдор Михайлович", "Харитонов Харитон Ильич",
+    "Алексеев Алексей Петрович",
+    "Борисов Борис Иванович",
+    "Волков Виктор Сергеевич",
+    "Григорьев Григорий Андреевич",
+    "Дмитриев Дмитрий Николаевич",
+    "Егоров Егор Владимирович",
+    "Жуков Максим Жукович",
+    "Зайцев Захар Павлович",
+    "Козлов Константин Олегович",
+    "Лебедев Леонид Артёмович",
+    "Михайлов Михаил Дмитриевич",
+    "Новиков Николай Фёдорович",
+    "Орлов Олег Геннадьевич",
+    "Петров Пётр Алексеевич",
+    "Романов Роман Юрьевич",
+    "Семёнов Сергей Викторович",
+    "Тихонов Тимур Рустамович",
+    "Ульянов Ульян Борисович",
+    "Фёдоров Фёдор Михайлович",
+    "Харитонов Харитон Ильич",
 ]
 
 phones_used = set()
@@ -100,7 +117,9 @@ for i in range(15):
         "vat_amount": vat_amount,
         "vat_rate": vat_rate,
         "total": total,
-        "paid_amount": total if random.random() > 0.4 else round(random.uniform(0, total), 2),
+        "paid_amount": (
+            total if random.random() > 0.4 else round(random.uniform(0, total), 2)
+        ),
         "tax_system": random.choice(["usn", "osno"]),
         "is_vat_included": vat_rate > 0,
         "invoice_date": inv_date.isoformat(),
@@ -131,9 +150,15 @@ order_types = ["scheduled", "repair", "diagnostic", "inspection"]
 priorities_m = ["low", "medium", "high", "critical"]
 statuses_m = ["planned", "in_progress", "completed", "cancelled"]
 titles = [
-    "Замена масла и фильтров", "Ремонт гидравлики", "Диагностика двигателя",
-    "ТО-2 плановое", "Замена тормозных колодок", "Ремонт ходовой части",
-    "Проверка электрооборудования", "Замена ремней привода", "Смазка узлов и агрегатов",
+    "Замена масла и фильтров",
+    "Ремонт гидравлики",
+    "Диагностика двигателя",
+    "ТО-2 плановое",
+    "Замена тормозных колодок",
+    "Ремонт ходовой части",
+    "Проверка электрооборудования",
+    "Замена ремней привода",
+    "Смазка узлов и агрегатов",
     "Капитальный ремонт КПП",
 ]
 
@@ -146,13 +171,33 @@ for i in range(10):
 
     # Create realistic parts and works lists
     maint_parts = [
-        {"name": "Масло моторное", "quantity": random.randint(5, 20), "unit_price": round(random.uniform(300, 800), 2)},
-        {"name": "Фильтр масляный", "quantity": random.randint(1, 3), "unit_price": round(random.uniform(500, 2000), 2)},
-        {"name": "Фильтр воздушный", "quantity": random.randint(1, 2), "unit_price": round(random.uniform(800, 3000), 2)},
+        {
+            "name": "Масло моторное",
+            "quantity": random.randint(5, 20),
+            "unit_price": round(random.uniform(300, 800), 2),
+        },
+        {
+            "name": "Фильтр масляный",
+            "quantity": random.randint(1, 3),
+            "unit_price": round(random.uniform(500, 2000), 2),
+        },
+        {
+            "name": "Фильтр воздушный",
+            "quantity": random.randint(1, 2),
+            "unit_price": round(random.uniform(800, 3000), 2),
+        },
     ]
     maint_works = [
-        {"work_type": "Замена масла", "labor_hours": round(random.uniform(1, 4), 1), "hourly_rate": round(random.uniform(1000, 3000), 2)},
-        {"work_type": "Диагностика", "labor_hours": round(random.uniform(0.5, 2), 1), "hourly_rate": round(random.uniform(1500, 4000), 2)},
+        {
+            "work_type": "Замена масла",
+            "labor_hours": round(random.uniform(1, 4), 1),
+            "hourly_rate": round(random.uniform(1000, 3000), 2),
+        },
+        {
+            "work_type": "Диагностика",
+            "labor_hours": round(random.uniform(0.5, 2), 1),
+            "hourly_rate": round(random.uniform(1500, 4000), 2),
+        },
     ]
 
     payload = {
@@ -177,7 +222,11 @@ for i in range(10):
             created["maintenance"] += 1
             oid = resp.json().get("id")
             if oid and status != "planned":
-                requests.patch(f"{BASE}/maintenance/orders/{oid}", json={"status": status}, headers=h)
+                requests.patch(
+                    f"{BASE}/maintenance/orders/{oid}",
+                    json={"status": status},
+                    headers=h,
+                )
         else:
             errors["maintenance"] += 1
             if errors["maintenance"] <= 2:
@@ -197,7 +246,9 @@ for i in range(30):
     vid = vehicle["id"]
     vol = round(random.uniform(10, 200), 1)
     price = round(random.uniform(45, 65), 2)
-    occurred = datetime.now() - timedelta(days=random.randint(0, 90), hours=random.randint(0, 23))
+    occurred = datetime.now() - timedelta(
+        days=random.randint(0, 90), hours=random.randint(0, 23)
+    )
 
     payload = {
         "vehicle_id": vid,
@@ -238,5 +289,7 @@ print("SEED COMPLETE")
 print("=" * 50)
 for entity in created:
     icon = "OK" if errors[entity] == 0 else "WARN"
-    print(f"  [{icon}] {entity:15s}: {created[entity]:3d} created, {errors[entity]:3d} errors")
+    print(
+        f"  [{icon}] {entity:15s}: {created[entity]:3d} created, {errors[entity]:3d} errors"
+    )
 print("=" * 50)

@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
@@ -230,6 +231,47 @@ class MaintenanceService:
             old_hours,
             new_engine_hours,
         )
+
+        # === Записываем в EngineHoursLog (дневная агрегация) ===
+        try:
+            from datetime import UTC, datetime
+
+            from app.models.telematics import EngineHoursLog
+
+            today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+            hours_delta = new_engine_hours - old_hours
+
+            existing_log = (
+                db.query(EngineHoursLog)
+                .filter(
+                    EngineHoursLog.vehicle_id == vehicle_id,
+                    EngineHoursLog.date == today,
+                )
+                .first()
+            )
+
+            if existing_log:
+                existing_log.hours = Decimal(
+                    str(float(existing_log.hours) + hours_delta)
+                )
+                existing_log.work_hours = Decimal(
+                    str(float(existing_log.work_hours) + hours_delta)
+                )
+            else:
+                log_entry = EngineHoursLog(
+                    vehicle_id=vehicle_id,
+                    request_id=None,
+                    date=today,
+                    hours=Decimal(str(hours_delta)),
+                    idle_hours=Decimal("0"),
+                    work_hours=Decimal(str(hours_delta)),
+                    company_id=vehicle.company_id,
+                )
+                db.add(log_entry)
+        except Exception as log_err:
+            logger.warning(
+                "Failed to write EngineHoursLog for vehicle %s: %s", vehicle_id, log_err
+            )
 
         result = {
             "updated": True,

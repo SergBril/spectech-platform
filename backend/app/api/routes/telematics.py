@@ -14,9 +14,11 @@ from app.models.telematics import (
     Alert,
     AlertRule,
     AlertStatus,
+    EngineHoursLog,
     FuelTransaction,
     Geofence,
     GpsPoint,
+    GpsSyncLog,
     Notification,
 )
 from app.schemas.telematics import (
@@ -183,7 +185,6 @@ def delete_geofence(
 # =========================================
 # === Fuel ===
 # =========================================
-
 
 
 @router.patch("/geofences/{geofence_id}", response_model=GeofenceRead)
@@ -600,6 +601,7 @@ def get_dashboard_summary(
 ):
     """Агрегированная статистика для дашборда (только своей компании)."""
     from app.services.telematics_service import get_dashboard_summary as svc_dashboard
+
     return svc_dashboard(db, company_ids)
 
 
@@ -737,3 +739,109 @@ def reconcile_shift_data(
         raise HTTPException(status_code=status, detail=str(e))
 
 
+# =========================================
+# === ENGINE HOURS HISTORY ===
+# =========================================
+
+
+@router.get("/engine-hours/{vehicle_id}")
+def get_engine_hours_history(
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+    company_id: int = Depends(get_current_company_id),
+    days: int = Query(default=30, ge=1, le=365, description="Количество дней истории"),
+):
+    """История моточасов техники за указанный период."""
+    from datetime import timedelta
+
+    _check_vehicle_access(db, vehicle_id, company_id)
+
+    since = datetime.now(UTC) - timedelta(days=days)
+    logs = db.scalars(
+        select(EngineHoursLog)
+        .where(
+            EngineHoursLog.vehicle_id == vehicle_id,
+            EngineHoursLog.date >= since,
+        )
+        .order_by(EngineHoursLog.date.desc())
+    ).all()
+
+    return [
+        {
+            "date": log.date.isoformat(),
+            "hours": float(log.hours),
+            "idle_hours": float(log.idle_hours),
+            "work_hours": float(log.work_hours),
+        }
+        for log in logs
+    ]
+
+
+# =========================================
+# === GPS SYNC LOGS ===
+# =========================================
+
+
+@router.get("/sync-logs")
+def list_gps_sync_logs(
+    db: Session = Depends(get_db),
+    company_id: int = Depends(get_current_company_id),
+    provider: str | None = Query(default=None, description="Фильтр по провайдеру"),
+    status: str | None = Query(
+        default=None, description="Фильтр по статусу (success/error/timeout)"
+    ),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """Лог синхронизации с GPS-провайдерами."""
+    stmt = select(GpsSyncLog).where(GpsSyncLog.company_id == company_id)
+
+    if provider:
+        stmt = stmt.where(GpsSyncLog.provider_name == provider)
+    if status:
+        stmt = stmt.where(GpsSyncLog.status == status)
+
+    stmt = stmt.order_by(GpsSyncLog.created_at.desc()).offset(offset).limit(limit)
+    logs = db.scalars(stmt).all()
+
+    return [
+        {
+            "id": log.id,
+            "provider_name": log.provider_name,
+            "sync_type": log.sync_type,
+            "status": log.status,
+            "points_received": log.points_received,
+            "duration_ms": log.duration_ms,
+            "error_message": log.error_message,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        }
+        for log in logs
+    ]
+
+
+@router.get("/sync-logs/stats")
+def get_sync_logs_stats(
+    db: Session = Depends(get_db),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Статистика синхронизации: количество успехов/ошибок по каждому провайдеру."""
+    from sqlalchemy import func
+
+    rows = db.execute(
+        select(
+            GpsSyncLog.provider_name,
+            GpsSyncLog.status,
+            func.count(GpsSyncLog.id).label("count"),
+        )
+        .where(GpsSyncLog.company_id == company_id)
+        .group_by(GpsSyncLog.provider_name, GpsSyncLog.status)
+    ).all()
+
+    stats: dict[str, dict] = {}
+    for provider_name, status_val, count in rows:
+        if provider_name not in stats:
+            stats[provider_name] = {"total": 0}
+        stats[provider_name][status_val] = count
+        stats[provider_name]["total"] += count
+
+    return stats

@@ -92,7 +92,20 @@ class WialonAdapter(GpsProviderAdapter):
 
         return data
 
-    async def get_last_position(self) -> GpsPointData | None:
+    async def get_last_position(
+        self, db=None, company_id: int | None = None, vehicle_id: int | None = None
+    ) -> GpsPointData | None:
+        if db is not None:
+            return await self._logged_call(
+                db=db,
+                sync_type="last_position",
+                func=self._get_last_position_impl,
+                company_id=company_id,
+                vehicle_id=vehicle_id,
+            )
+        return await self._get_last_position_impl()
+
+    async def _get_last_position_impl(self) -> GpsPointData | None:
         positions = await self._fetch_positions()
         if not positions:
             return None
@@ -263,7 +276,17 @@ class WialonAdapter(GpsProviderAdapter):
 
         return results[:limit]
 
-    async def test_connection(self) -> bool:
+    async def test_connection(self, db=None, company_id: int | None = None) -> bool:
+        if db is not None:
+            return await self._logged_call(
+                db=db,
+                sync_type="test_connection",
+                func=self._test_connection_impl,
+                company_id=company_id,
+            )
+        return await self._test_connection_impl()
+
+    async def _test_connection_impl(self) -> bool:
         try:
             async with create_retry_client(timeout=15) as client:
                 token = await self._ensure_token(client)

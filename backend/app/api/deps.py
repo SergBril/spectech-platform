@@ -1,4 +1,4 @@
-﻿from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -108,13 +108,28 @@ def get_current_company_id(
             detail="No active companies found",
         )
 
-    # Обычный пользователь — только своя компания
-    if not user.company_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User is not assigned to any company",
+    # Обычный пользователь — проверяем company_id или user_companies
+    if user.company_id:
+        return user.company_id
+
+    # Multi-company user: ищем активную компанию через user_companies
+    from app.models.user_company import UserCompany
+
+    uc = (
+        db.query(UserCompany)
+        .filter(
+            UserCompany.user_id == user.id,
+            UserCompany.is_active == True,
         )
-    return user.company_id
+        .first()
+    )
+    if uc:
+        return uc.company_id
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="User is not assigned to any company",
+    )
 
 
 def get_current_user_optional(

@@ -86,6 +86,56 @@ class GpsProviderAdapter(ABC):
     @abstractmethod
     async def test_connection(self) -> bool: ...
 
+    async def _logged_call(
+        self,
+        db,
+        sync_type: str,
+        func,
+        *args,
+        company_id: int | None = None,
+        vehicle_id: int | None = None,
+        **kwargs,
+    ):
+        """Обёртка для автоматического логирования вызовов GPS-провайдера."""
+        import time
+
+        start = time.monotonic()
+        try:
+            result = await func(*args, **kwargs)
+            duration_ms = int((time.monotonic() - start) * 1000)
+
+            points_received = 0
+            if isinstance(result, list):
+                points_received = len(result)
+            elif result is not None:
+                points_received = 1
+
+            log_gps_sync(
+                db=db,
+                provider_name=self.provider_name,
+                sync_type=sync_type,
+                status="success",
+                company_id=company_id,
+                vehicle_id=vehicle_id,
+                points_received=points_received,
+                duration_ms=duration_ms,
+            )
+            return result
+        except Exception as e:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            log_gps_sync(
+                db=db,
+                provider_name=self.provider_name,
+                sync_type=sync_type,
+                status="error",
+                company_id=company_id,
+                vehicle_id=vehicle_id,
+                duration_ms=duration_ms,
+                error_message=error_msg,
+            )
+            raise
+
     def normalize_point(self, raw: dict[str, Any]) -> GpsPointData:
         """Нормализует сырые данные в единую структуру."""
         return GpsPointData(
@@ -101,3 +151,36 @@ class GpsProviderAdapter(ABC):
             recorded_at=raw.get("recorded_at"),
             raw_data=raw,
         )
+
+
+def log_gps_sync(
+    db,
+    provider_name: str,
+    sync_type: str,
+    status: str,
+    company_id: int | None = None,
+    vehicle_id: int | None = None,
+    points_received: int = 0,
+    duration_ms: int | None = None,
+    error_message: str | None = None,
+) -> None:
+    """Записывает результат синхронизации в gps_sync_logs."""
+    try:
+        from app.models.telematics import GpsSyncLog
+
+        log_entry = GpsSyncLog(
+            company_id=company_id,
+            vehicle_id=vehicle_id,
+            provider_name=provider_name,
+            sync_type=sync_type,
+            status=status,
+            points_received=points_received,
+            duration_ms=duration_ms,
+            error_message=error_message[:2000] if error_message else None,
+        )
+        db.add(log_entry)
+        db.commit()
+    except Exception as e:
+        import logging
+
+        logging.getLogger("spectech.gps").warning("Failed to write GpsSyncLog: %s", e)
