@@ -19,6 +19,7 @@ const menuItems: MenuItem[] = [
   { label: 'Техника', icon: '🚜', path: '/vehicles', group: 'Основное' },
   { label: 'Водители', icon: '👷', path: '/drivers', group: 'Основное' },
   { label: 'Карта', icon: '🗺️', path: '/map', group: 'Телематика' },
+  { label: 'Логи GPS', icon: '📋', path: '/sync-logs', group: 'Телематика' },
   { label: 'GPS', icon: '📡', path: '/admin/gps', group: 'Телематика' },
   { label: 'Маркетплейс', icon: '🎯', path: '/marketplace', group: 'Бизнес' },
   { label: 'Мои отклики', icon: '✋', path: '/my-responses', group: 'Бизнес' },

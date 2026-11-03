@@ -17,7 +17,20 @@ class ManualAdapter(GpsProviderAdapter):
 
     provider_name = "manual"
 
-    async def get_last_position(self) -> GpsPointData | None:
+    async def get_last_position(
+        self, db=None, company_id: int | None = None, vehicle_id: int | None = None
+    ) -> GpsPointData | None:
+        if db is not None:
+            return await self._logged_call(
+                db=db,
+                sync_type="last_position",
+                func=self._get_last_position_impl,
+                company_id=company_id,
+                vehicle_id=vehicle_id,
+            )
+        return await self._get_last_position_impl()
+
+    async def _get_last_position_impl(self) -> GpsPointData | None:
         # Данные поступают напрямую в gps_points через отдельный endpoint
         logger.info("Manual adapter: use /api/v1/telematics/gps-points to push data")
         return None
@@ -28,5 +41,15 @@ class ManualAdapter(GpsProviderAdapter):
         # Трек берётся из локальной БД gps_points
         return []
 
-    async def test_connection(self) -> bool:
+    async def test_connection(self, db=None, company_id: int | None = None) -> bool:
+        if db is not None:
+            return await self._logged_call(
+                db=db,
+                sync_type="test_connection",
+                func=self._test_connection_impl,
+                company_id=company_id,
+            )
+        return await self._test_connection_impl()
+
+    async def _test_connection_impl(self) -> bool:
         return True  # Всегда доступно

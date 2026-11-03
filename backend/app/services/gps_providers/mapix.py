@@ -246,7 +246,20 @@ class MapixAdapter(GpsProviderAdapter):
             # Способ 2: Парсинг главной страницы (fallback)
             return await self._fetch_positions_from_main_page(client)
 
-    async def get_last_position(self) -> GpsPointData | None:
+    async def get_last_position(
+        self, db=None, company_id: int | None = None, vehicle_id: int | None = None
+    ) -> GpsPointData | None:
+        if db is not None:
+            return await self._logged_call(
+                db=db,
+                sync_type="last_position",
+                func=self._get_last_position_impl,
+                company_id=company_id,
+                vehicle_id=vehicle_id,
+            )
+        return await self._get_last_position_impl()
+
+    async def _get_last_position_impl(self) -> GpsPointData | None:
         positions = await self._fetch_positions()
         return positions[0] if positions else None
 
@@ -291,14 +304,26 @@ class MapixAdapter(GpsProviderAdapter):
                 for pos in positions[:limit]:
                     result.append(pos)
 
-                logger.info(f"Mapix track: {len(result)} points for {date_from} - {date_to}")
+                logger.info(
+                    f"Mapix track: {len(result)} points for {date_from} - {date_to}"
+                )
                 return result
 
         except Exception as e:
             logger.error(f"Mapix get_track error: {e}", exc_info=True)
             return []
 
-    async def test_connection(self) -> bool:
+    async def test_connection(self, db=None, company_id: int | None = None) -> bool:
+        if db is not None:
+            return await self._logged_call(
+                db=db,
+                sync_type="test_connection",
+                func=self._test_connection_impl,
+                company_id=company_id,
+            )
+        return await self._test_connection_impl()
+
+    async def _test_connection_impl(self) -> bool:
         try:
             async with create_retry_client(timeout=15, follow_redirects=True) as client:
                 ok = await self._ensure_session(client)

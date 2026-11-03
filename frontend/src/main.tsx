@@ -78,6 +78,7 @@ const GuestRoute = ({ children }: { children: JSX.Element }) => {
 const BankStatementsPage = lazy(() => import('./pages/BankStatementsPage'));
 const SalariesPage = lazy(() => import('./pages/SalariesPage'));
 const MapPage = lazy(() => import('./pages/MapPage'));
+const SyncLogsPage = lazy(() => import('./pages/SyncLogsPage'));
 const DriverLoginPage = lazy(() => import('./pages/driver/DriverLoginPage'));
 const DriverDashboardPage = lazy(() => import('./pages/driver/DriverDashboardPage'));
 const ShiftReportPage = lazy(() => import('./pages/driver/ShiftReportPage'));
@@ -140,6 +141,7 @@ const AppRoutes = () => {
         <Route path="/my-listings" element={<ProtectedRoute><MyListingsPage /></ProtectedRoute>} />
         <Route path="/salaries" element={<ProtectedRoute><SalariesPage /></ProtectedRoute>} />
         <Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
+          <Route path="/sync-logs" element={<ProtectedRoute><SyncLogsPage /></ProtectedRoute>} />
         <Route path="/bank-statements" element={<ProtectedRoute><BankStatementsPage /></ProtectedRoute>} />
         {/* Driver PWA routes (╨▒╨╡╨╖ ProtectedRoute тАФ ╤Б╨▓╨╛╤П ╨░╨▓╤В╨╛╤А╨╕╨╖╨░╤Ж╨╕╤П) */}
         <Route path="/driver/login" element={<DriverLoginPage />} />

@@ -26,7 +26,20 @@ class GpsTraceAdapter(GpsProviderAdapter):
     def _headers(self) -> dict[str, str]:
         return {"X-API-Key": self.api_key, "Content-Type": "application/json"}
 
-    async def get_last_position(self) -> GpsPointData | None:
+    async def get_last_position(
+        self, db=None, company_id: int | None = None, vehicle_id: int | None = None
+    ) -> GpsPointData | None:
+        if db is not None:
+            return await self._logged_call(
+                db=db,
+                sync_type="last_position",
+                func=self._get_last_position_impl,
+                company_id=company_id,
+                vehicle_id=vehicle_id,
+            )
+        return await self._get_last_position_impl()
+
+    async def _get_last_position_impl(self) -> GpsPointData | None:
         unit_id = self.config["unit_id"]
         async with create_retry_client() as client:
             resp = await client.get(
@@ -56,7 +69,17 @@ class GpsTraceAdapter(GpsProviderAdapter):
             messages = resp.json().get("messages", [])
             return [self.normalize_point(m) for m in messages]
 
-    async def test_connection(self) -> bool:
+    async def test_connection(self, db=None, company_id: int | None = None) -> bool:
+        if db is not None:
+            return await self._logged_call(
+                db=db,
+                sync_type="test_connection",
+                func=self._test_connection_impl,
+                company_id=company_id,
+            )
+        return await self._test_connection_impl()
+
+    async def _test_connection_impl(self) -> bool:
         try:
             async with create_retry_client() as client:
                 resp = await client.get(

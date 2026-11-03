@@ -29,7 +29,20 @@ class GdeMoiAdapter(GpsProviderAdapter):
             "Content-Type": "application/json",
         }
 
-    async def get_last_position(self) -> GpsPointData | None:
+    async def get_last_position(
+        self, db=None, company_id: int | None = None, vehicle_id: int | None = None
+    ) -> GpsPointData | None:
+        if db is not None:
+            return await self._logged_call(
+                db=db,
+                sync_type="last_position",
+                func=self._get_last_position_impl,
+                company_id=company_id,
+                vehicle_id=vehicle_id,
+            )
+        return await self._get_last_position_impl()
+
+    async def _get_last_position_impl(self) -> GpsPointData | None:
         device_id = self.config["device_id"]
         async with create_retry_client() as client:
             resp = await client.get(
@@ -61,7 +74,17 @@ class GdeMoiAdapter(GpsProviderAdapter):
             points = resp.json().get("points", [])
             return [self.normalize_point(p) for p in points]
 
-    async def test_connection(self) -> bool:
+    async def test_connection(self, db=None, company_id: int | None = None) -> bool:
+        if db is not None:
+            return await self._logged_call(
+                db=db,
+                sync_type="test_connection",
+                func=self._test_connection_impl,
+                company_id=company_id,
+            )
+        return await self._test_connection_impl()
+
+    async def _test_connection_impl(self) -> bool:
         try:
             async with create_retry_client() as client:
                 resp = await client.get(
