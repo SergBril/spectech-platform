@@ -347,7 +347,12 @@ def list_vehicles(
     summary="Создать технику",
     description="Создаёт новую единицу техники с динамическими атрибутами.",
 )
-@router.post("", response_model=VehicleRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=VehicleRead,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="create_vehicle_admin",
+)
 def create_vehicle(
     payload: VehicleCreate,
     db: Session = Depends(get_db),
@@ -356,10 +361,13 @@ def create_vehicle(
     _: None = Depends(require_permission("vehicles", "create")),
 ):
     """Создать новую технику (для своей компании)."""
-    from app.services.vehicle_service import create_vehicle as svc_create, VehicleServiceError
+    from app.services.vehicle_service import VehicleServiceError
+    from app.services.vehicle_service import create_vehicle as svc_create
 
     try:
-        payload_data = payload.model_dump(exclude={"attributes", "subcategory_id", "company_id", "category_id"})
+        payload_data = payload.model_dump(
+            exclude={"attributes", "subcategory_id", "company_id", "category_id"}
+        )
         payload_data["subcategory_id"] = payload.subcategory_id
         payload_data["category_id"] = payload.category_id
         payload_data["attributes"] = payload.attributes
@@ -494,7 +502,7 @@ def update_vehicle_partial(
     summary="Обновить технику",
     description="Обновляет данные техники своей компании.",
 )
-@router.put("/{vehicle_id}")
+@router.put("/{vehicle_id}", operation_id="update_vehicle_full")
 def update_vehicle(
     vehicle_id: int,
     payload: VehicleUpdate,
@@ -504,11 +512,14 @@ def update_vehicle(
     _: None = Depends(require_permission("vehicles", "update")),
 ):
     """Обновить технику (только своей компании)."""
-    from app.services.vehicle_service import update_vehicle as svc_update, VehicleServiceError
+    from app.services.vehicle_service import VehicleServiceError
+    from app.services.vehicle_service import update_vehicle as svc_update
 
     try:
         update_data = payload.model_dump(exclude_unset=True, exclude={"attributes"})
-        return svc_update(db, vehicle_id, update_data, payload.attributes, company_id, current_user.id)
+        return svc_update(
+            db, vehicle_id, update_data, payload.attributes, company_id, current_user.id
+        )
     except VehicleServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 

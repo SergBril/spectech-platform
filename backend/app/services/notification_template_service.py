@@ -1,30 +1,63 @@
 """Сервис шаблонов уведомлений."""
+
 import logging
-from sqlalchemy.orm import Session
+
 from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.models.auth import NotificationTemplate
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TEMPLATES = {
     "role_change": {
-        "max": {"subject": "Смена роли", "body": "Ваша роль изменена: {old_role} -> {new_role}"},
-        "email": {"subject": "Spectech: Ваша роль изменена", "body": "Здравствуйте, {name}!\n\nВаша роль изменена: {old_role} -> {new_role}\n\n— Команда Spectech"},
-        "fcm": {"subject": "Смена роли", "body": "Роль изменена: {old_role} -> {new_role}"},
+        "max": {
+            "subject": "Смена роли",
+            "body": "Ваша роль изменена: {old_role} -> {new_role}",
+        },
+        "email": {
+            "subject": "Spectech: Ваша роль изменена",
+            "body": "Здравствуйте, {name}!\n\nВаша роль изменена: {old_role} -> {new_role}\n\n— Команда Spectech",
+        },
+        "fcm": {
+            "subject": "Смена роли",
+            "body": "Роль изменена: {old_role} -> {new_role}",
+        },
     },
     "overdue_acts": {
-        "max": {"subject": "Просроченные акты", "body": "{count} просроченных актов на сумму {amount} RUB"},
-        "email": {"subject": "Spectech: Просроченные платежи", "body": "У вас {count} просроченных актов на сумму {amount} RUB.\n\n— Команда Spectech"},
-        "fcm": {"subject": "Просроченные платежи", "body": "{count} актов на {amount} RUB"},
+        "max": {
+            "subject": "Просроченные акты",
+            "body": "{count} просроченных актов на сумму {amount} RUB",
+        },
+        "email": {
+            "subject": "Spectech: Просроченные платежи",
+            "body": "У вас {count} просроченных актов на сумму {amount} RUB.\n\n— Команда Spectech",
+        },
+        "fcm": {
+            "subject": "Просроченные платежи",
+            "body": "{count} актов на {amount} RUB",
+        },
     },
     "act_signed": {
-        "max": {"subject": "Акт подписан", "body": "Акт {act_number} подписан контрагентом"},
-        "email": {"subject": "Spectech: Акт подписан", "body": "Акт {act_number} подписан контрагентом.\n\n— Команда Spectech"},
+        "max": {
+            "subject": "Акт подписан",
+            "body": "Акт {act_number} подписан контрагентом",
+        },
+        "email": {
+            "subject": "Spectech: Акт подписан",
+            "body": "Акт {act_number} подписан контрагентом.\n\n— Команда Spectech",
+        },
         "fcm": {"subject": "Акт подписан", "body": "Акт {act_number} подписан"},
     },
     "act_rejected": {
-        "max": {"subject": "Акт отклонён", "body": "Акт {act_number} ОТКЛОНЁН контрагентом"},
-        "email": {"subject": "Spectech: Акт отклонён", "body": "Акт {act_number} отклонён контрагентом.\n\n— Команда Spectech"},
+        "max": {
+            "subject": "Акт отклонён",
+            "body": "Акт {act_number} ОТКЛОНЁН контрагентом",
+        },
+        "email": {
+            "subject": "Spectech: Акт отклонён",
+            "body": "Акт {act_number} отклонён контрагентом.\n\n— Команда Spectech",
+        },
         "fcm": {"subject": "Акт отклонён", "body": "Акт {act_number} отклонён"},
     },
 }
@@ -75,8 +108,10 @@ def init_default_templates(db: Session) -> int:
             ).scalar_one_or_none()
             if not existing:
                 tmpl = NotificationTemplate(
-                    code=code, channel=channel,
-                    subject=data["subject"], body=data["body"],
+                    code=code,
+                    channel=channel,
+                    subject=data["subject"],
+                    body=data["body"],
                 )
                 db.add(tmpl)
                 created += 1

@@ -13,7 +13,6 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy import (
-    JSON,
     Enum as SqlEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -110,7 +109,9 @@ class Request(Base):
         comment="Опубликована ли заявка в маркетплейсе",
     )
     published_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, comment="Дата публикации в маркетплейсе",
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Дата публикации в маркетплейсе",
     )
     requirements: Mapped[dict | None] = mapped_column(
         JSON,

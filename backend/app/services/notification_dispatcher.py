@@ -11,9 +11,9 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.services.email_service import email_service
+from app.services.max_service import max_service
 from app.services.notification_service import create_notification
 from app.services.telegram_service import telegram_service
-from app.services.max_service import max_service
 
 logger = logging.getLogger("spectech.notifications")
 

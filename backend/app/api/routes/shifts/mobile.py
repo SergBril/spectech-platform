@@ -1,31 +1,21 @@
 """Модуль mobile для shifts router."""
 
-from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile
-from pydantic import BaseModel
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
-from app.core.db import get_db
+from datetime import UTC
 
-from app.models.catalog import Vehicle
-from app.models.shift import ShiftTask, ShiftReport, ShiftFuelEntry, PreShiftChecklist, VehicleChecklistConfig
-from app.models.notification import DeviceToken
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.api.deps import get_current_company_id, get_current_user
-
-from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile
-from pydantic import BaseModel
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
-from app.models.shift import ShiftTask, ShiftReport, ShiftFuelEntry, PreShiftChecklist, VehicleChecklistConfig
-from app.models.notification import DeviceToken
-from app.models.contractor import DriverProfile, Employee
-from app.api.deps import get_current_company_id, get_current_user
+from app.models.shift import (
+    ShiftTask,
+)
 
 router = APIRouter()
+
 
 @router.post("/report/{task_id}")
 async def submit_mobile_shift_report(
@@ -38,13 +28,20 @@ async def submit_mobile_shift_report(
     current_user: User = Depends(get_current_user),
 ):
     """Отправить отчёт о завершённой смене из мобильного приложения водителя."""
-    from app.services.mobile_shift_service import submit_mobile_shift_report as svc_submit, MobileShiftServiceError
+    from app.services.mobile_shift_service import MobileShiftServiceError
+    from app.services.mobile_shift_service import (
+        submit_mobile_shift_report as svc_submit,
+    )
 
     try:
         return await svc_submit(
-            db=db, task_id=task_id, user_id=current_user.id,
-            odometer_start=odometer_start, odometer_end=odometer_end,
-            notes=notes, photo_files=photos,
+            db=db,
+            task_id=task_id,
+            user_id=current_user.id,
+            odometer_start=odometer_start,
+            odometer_end=odometer_end,
+            notes=notes,
+            photo_files=photos,
         )
     except MobileShiftServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
@@ -90,7 +87,7 @@ def add_shift_fuel_entry(
     # Calculate consumption rate
     consumption_per_km = None
     consumption_per_hour = None
-    distance = getattr(task, 'odometer_distance', None)
+    distance = getattr(task, "odometer_distance", None)
     hours = 0
     if task.planned_start and task.planned_end:
         hours = (task.planned_end - task.planned_start).total_seconds() / 3600
@@ -108,7 +105,6 @@ def add_shift_fuel_entry(
     }
 
 
-
 @router.get("/checklist/{task_id}")
 def get_pre_shift_checklist(
     task_id: int,
@@ -117,7 +113,10 @@ def get_pre_shift_checklist(
     company_id: int = Depends(get_current_company_id),
 ):
     """Получить чеклист приёмки техники перед сменой."""
-    from app.services.mobile_shift_service import get_pre_shift_checklist as svc_checklist, MobileShiftServiceError
+    from app.services.mobile_shift_service import MobileShiftServiceError
+    from app.services.mobile_shift_service import (
+        get_pre_shift_checklist as svc_checklist,
+    )
 
     try:
         return svc_checklist(db, task_id, company_id)
@@ -135,8 +134,10 @@ async def submit_pre_shift_checklist(
     company_id: int = Depends(get_current_company_id),
 ):
     """Отправить заполненный чеклист приёмки техники."""
-    import os, json
+    import json
+    import os
     from datetime import datetime
+
     from app.models.shift import PreShiftChecklist
 
     task = db.get(ShiftTask, task_id)
@@ -183,22 +184,28 @@ async def submit_pre_shift_checklist(
     if has_issues:
         try:
             from app.services.websocket_manager import manager
-            await manager.broadcast_to_company(company_id, {
-                "type": "checklist_issues",
-                "task_id": task_id,
-                "vehicle_name": vehicle.name,
-                "issues_count": sum(1 for it in items if not it.get("passed", True)),
-            })
+
+            await manager.broadcast_to_company(
+                company_id,
+                {
+                    "type": "checklist_issues",
+                    "task_id": task_id,
+                    "vehicle_name": vehicle.name,
+                    "issues_count": sum(
+                        1 for it in items if not it.get("passed", True)
+                    ),
+                },
+            )
         except Exception:
             pass
 
     return {
         "id": checklist.id,
-        "message": "Чеклист отправлен" + (" ⚠️ Есть замечания!" if has_issues else " ✅ Техника принята"),
+        "message": "Чеклист отправлен"
+        + (" ⚠️ Есть замечания!" if has_issues else " ✅ Техника принята"),
         "has_issues": has_issues,
         "photos_uploaded": len(photo_paths),
     }
-
 
 
 @router.post("/mobile/fuel/qr", summary="📷 Топливо по QR")
@@ -210,12 +217,12 @@ def record_fuel_by_qr(
     company_id: int = Depends(get_current_company_id),
 ):
     """Записать расход топлива по отсканированному QR-коду с чека АЗС.
-    
+
     QR формат: FUEL|<plate>|<liters>|<fuel_type>|<odometer>|<datetime>
     Или JSON: {"plate":"...","liters":...,"fuel_type":"...","odometer":...}
     """
     import json
-    from datetime import datetime
+
     from app.models.shift import ShiftFuelEntry
 
     task = db.get(ShiftTask, shift_task_id)
@@ -238,7 +245,9 @@ def record_fuel_by_qr(
                     "plate": parts[1],
                     "liters": float(parts[2]),
                     "fuel_type": parts[3].lower() if len(parts) > 3 else "diesel",
-                    "odometer": float(parts[4]) if len(parts) > 4 and parts[4] else None,
+                    "odometer": (
+                        float(parts[4]) if len(parts) > 4 and parts[4] else None
+                    ),
                 }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Cannot parse QR data: {e}")
@@ -261,7 +270,7 @@ def record_fuel_by_qr(
 
     # Calculate consumption
     consumption = None
-    distance = getattr(task, 'odometer_distance', None)
+    distance = getattr(task, "odometer_distance", None)
     if distance and distance > 0:
         consumption = round(float(parsed["liters"]) / distance * 100, 2)
 
@@ -270,7 +279,6 @@ def record_fuel_by_qr(
         "message": f"⛽ Записано {parsed['liters']} л ({parsed.get('fuel_type', 'diesel')})",
         "consumption_per_100km": consumption,
     }
-
 
 
 async def sync_fuel_card_transactions(
@@ -284,10 +292,11 @@ async def sync_fuel_card_transactions(
     """Синхронизировать транзакции с топливных карт в записи расхода."""
     from app.services.fuel_card_service import fuel_card_service
 
-    transactions = await fuel_card_service.fetch_transactions(date_from, date_to, card_numbers or None)
+    transactions = await fuel_card_service.fetch_transactions(
+        date_from, date_to, card_numbers or None
+    )
     result = await fuel_card_service.sync_to_shift_entries(db, company_id, transactions)
     return {"message": "Синхронизация завершена", **result}
-
 
 
 @router.post("/devices/register", summary="📱 Регистрация FCM токена")
@@ -311,11 +320,10 @@ def register_device_token(
         existing.is_active = True
         existing.platform = platform
     else:
-        dt = DeviceToken(user_id=current_user.id, token=token, platform=platform, is_active=True)
+        dt = DeviceToken(
+            user_id=current_user.id, token=token, platform=platform, is_active=True
+        )
         db.add(dt)
 
     db.commit()
     return {"message": "Device registered"}
-
-
-

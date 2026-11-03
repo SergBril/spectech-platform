@@ -1,7 +1,9 @@
 """API для ЭДО (Diadoc): отправка документов, статусы, контрагенты."""
 
 import logging
-from fastapi import Request, APIRouter, Depends, HTTPException, Query
+from datetime import UTC
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user
@@ -40,11 +42,16 @@ async def send_act_via_diadoc(
     # Generate UPD XML if not already generated
     act_xml = None
     if hasattr(act, "xml_content") and act.xml_content:
-        act_xml = act.xml_content.encode("utf-8") if isinstance(act.xml_content, str) else act.xml_content
+        act_xml = (
+            act.xml_content.encode("utf-8")
+            if isinstance(act.xml_content, str)
+            else act.xml_content
+        )
     else:
         # Try to generate XML from edoxml service
         try:
             from app.services.edoxml.upd_generator import generate_upd_xml
+
             act_xml = generate_upd_xml(db, act)
         except Exception as e:
             logger.warning(f"UPD XML generation failed: {e}")
@@ -56,13 +63,17 @@ async def send_act_via_diadoc(
     # Sign document
     sign_result = await digital_signature_service.sign_document(act_xml)
     if sign_result.get("status") == "error":
-        raise HTTPException(status_code=500, detail=f"Signing failed: {sign_result.get('error')}")
+        raise HTTPException(
+            status_code=500, detail=f"Signing failed: {sign_result.get('error')}"
+        )
 
     # Send via Diadoc
     result = await diadoc_service.send_act(act_xml, counterparty_box_id, token)
 
     if result.get("status") == "error":
-        raise HTTPException(status_code=500, detail=f"Diadoc send failed: {result.get('error')}")
+        raise HTTPException(
+            status_code=500, detail=f"Diadoc send failed: {result.get('error')}"
+        )
 
     # Update act status
     if hasattr(act, "edo_message_id"):
@@ -127,11 +138,15 @@ async def refresh_all_diadoc_statuses(
     if not token:
         raise HTTPException(status_code=503, detail="Diadoc authentication failed")
 
-    acts = db.query(Act).filter(
-        Act.company_id == company_id,
-        Act.edo_message_id.isnot(None),
-        Act.status == "sent_to_edo",
-    ).all()
+    acts = (
+        db.query(Act)
+        .filter(
+            Act.company_id == company_id,
+            Act.edo_message_id.isnot(None),
+            Act.status == "sent_to_edo",
+        )
+        .all()
+    )
 
     updated = 0
     for act in acts:
@@ -155,7 +170,7 @@ async def diadoc_webhook(
 ):
     """
     Обработка callback-уведомлений от Diadoc.
-    
+
     Diadoc отправляет POST при изменении статуса документа.
     Обновляем статус акта в БД.
     """
@@ -163,10 +178,10 @@ async def diadoc_webhook(
         body = await request.json()
         message_id = body.get("MessageId", "")
         doc_status = body.get("DocflowStatus", {}).get("PrimaryStatus", "")
-        
+
         if not message_id:
             return {"status": "ignored", "reason": "no MessageId"}
-        
+
         # Map Diadoc status to internal status
         status_map = {
             "WaitingForSenderSignature": "draft",
@@ -176,26 +191,35 @@ async def diadoc_webhook(
             "InvalidDocument": "rejected",
         }
         internal_status = status_map.get(doc_status, doc_status)
-        
+
         # Update act status in DB
         from app.models.finance import Act
+
         act = db.query(Act).filter(Act.edo_message_id == message_id).first()
         if act:
             old_status = act.status
             act.status = internal_status
             if internal_status == "signed":
-                from datetime import datetime, timezone
-                act.signed_at = datetime.now(timezone.utc)
+                from datetime import datetime
+
+                act.signed_at = datetime.now(UTC)
             db.commit()
             logger.info(
                 "📬 Diadoc webhook: Act #%s status %s → %s (msg: %s)",
-                act.id, old_status, internal_status, message_id
+                act.id,
+                old_status,
+                internal_status,
+                message_id,
             )
-            return {"status": "updated", "act_id": act.id, "new_status": internal_status}
-        
+            return {
+                "status": "updated",
+                "act_id": act.id,
+                "new_status": internal_status,
+            }
+
         logger.warning("Diadoc webhook: no act found for message_id=%s", message_id)
         return {"status": "not_found", "message_id": message_id}
-        
+
     except Exception as e:
         logger.error("❌ Diadoc webhook error: %s", e, exc_info=True)
         return {"status": "error", "detail": str(e)}

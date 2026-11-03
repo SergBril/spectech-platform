@@ -1,7 +1,5 @@
 """API routes for payouts (выплаты собственникам)."""
 
-import csv
-import io
 import logging
 
 logger = logging.getLogger("spectech.payouts")
@@ -10,7 +8,7 @@ from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user
@@ -150,7 +148,9 @@ def get_payouts_summary(
 
 @router.get("/csv")
 def export_payouts_csv(
-    date_from: str | None = Query(default=None, description="Начало периода YYYY-MM-DD"),
+    date_from: str | None = Query(
+        default=None, description="Начало периода YYYY-MM-DD"
+    ),
     date_to: str | None = Query(default=None, description="Конец периода YYYY-MM-DD"),
     status: str | None = Query(default=None, description="Фильтр по статусу"),
     db: Session = Depends(get_db),
@@ -160,7 +160,9 @@ def export_payouts_csv(
     """Экспорт выплат в CSV."""
     from app.services.finance.payout_service import payout_service
 
-    csv_content, filename = payout_service.export_payouts_csv(db, company_id, date_from, date_to, status)
+    csv_content, filename = payout_service.export_payouts_csv(
+        db, company_id, date_from, date_to, status
+    )
     return StreamingResponse(
         iter([csv_content]),
         media_type="text/csv; charset=utf-8-sig",

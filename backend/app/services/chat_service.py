@@ -1,8 +1,10 @@
 """Сервис чата между диспетчером и водителем."""
+
 import logging
-from sqlalchemy.orm import Session
+from datetime import UTC, datetime
+
 from sqlalchemy import select
-from datetime import datetime, UTC
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +46,17 @@ def send_chat_message(
         content=text,
         message_type=message_type,  # ← Используем переданный тип
         sender_type="user",
-        file_url=file_url,          # ← Поддержка URL файла
-        attachments=attachments,    # ← Поддержка вложений
+        file_url=file_url,  # ← Поддержка URL файла
+        attachments=attachments,  # ← Поддержка вложений
         created_at=datetime.now(UTC),
     )
     db.add(msg)
     db.commit()
     db.refresh(msg)
 
-    logger.info(f"Chat message {msg.id}: user {sender_id} → {recipient_id} (type={message_type})")
+    logger.info(
+        f"Chat message {msg.id}: user {sender_id} → {recipient_id} (type={message_type})"
+    )
     return {
         "message_id": msg.id,
         "room_id": room.id,

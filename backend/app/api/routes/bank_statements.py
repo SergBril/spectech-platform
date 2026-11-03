@@ -172,7 +172,7 @@ def rematch_statement(
         raise HTTPException(status_code=403, detail="Access denied")
 
     # Reset unmatched transactions
-    reset_count = (
+    (
         db.query(BankTransaction)
         .filter(
             BankTransaction.statement_id == statement_id,
@@ -183,6 +183,7 @@ def rematch_statement(
     )
 
     from app.services.payments_service import payments_service
+
     matched_count = payments_service.auto_match_transactions(db, statement_id)
 
     statement.matched_transactions = (
@@ -193,11 +194,13 @@ def rematch_statement(
         )
         .count()
     )
-    statement.unmatched_transactions = statement.total_transactions - statement.matched_transactions
+    statement.unmatched_transactions = (
+        statement.total_transactions - statement.matched_transactions
+    )
     db.commit()
 
     return {
-        "message": f"Re-matching complete",
+        "message": "Re-matching complete",
         "matched": matched_count,
         "total_matched": statement.matched_transactions,
         "total_unmatched": statement.unmatched_transactions,

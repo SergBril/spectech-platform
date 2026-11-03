@@ -450,6 +450,7 @@ class MarketplaceService:
 
         # Ищем все Rentals с пересечением дат
         from app.models.rental import RentalItem
+
         stmt = (
             select(Rental)
             .join(RentalItem, RentalItem.rental_id == Rental.id)

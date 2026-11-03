@@ -1,29 +1,22 @@
 """Модуль geofence для shifts router."""
 
-from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile
-from pydantic import BaseModel
-from sqlalchemy import func, select
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+)
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from app.core.db import get_db
 
-from app.models.shift import ShiftTask, ShiftGeofence
-from app.models.catalog import Vehicle
 from app.api.deps import get_current_company_id, get_current_user
-
-from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile, Request
-from pydantic import BaseModel
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.auth import User
-from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
-
-from app.models.shift import ShiftTask, ShiftGeofence
 from app.models.catalog import Vehicle
+from app.models.shift import ShiftTask
 
 router = APIRouter()
+
 
 @router.post("/geofence/event", summary="📍 Обработка события геозоны")
 async def process_geofence_event(
@@ -37,17 +30,22 @@ async def process_geofence_event(
 ):
     """Обработать вход/выход из геозоны: авто-старт/завершение смены."""
     from datetime import datetime as dt
+
     from app.models.shift import ShiftGeofence
 
     ts = dt.fromisoformat(timestamp)
 
     # Find active planned shift for this vehicle today
-    task = db.execute(
-        select(ShiftTask)
-        .where(ShiftTask.vehicle_id == vehicle_id)
-        .where(ShiftTask.shift_date == ts.date())
-        .where(ShiftTask.status.in_(["planned", "confirmed"]))
-    ).scalars().first()
+    task = (
+        db.execute(
+            select(ShiftTask)
+            .where(ShiftTask.vehicle_id == vehicle_id)
+            .where(ShiftTask.shift_date == ts.date())
+            .where(ShiftTask.status.in_(["planned", "confirmed"]))
+        )
+        .scalars()
+        .first()
+    )
 
     if not task:
         return {"message": "No active shift found", "action": "none"}
@@ -61,8 +59,10 @@ async def process_geofence_event(
     if event_type == "enter":
         # Auto-start shift on geofence entry
         sg = ShiftGeofence(
-            shift_task_id=task.id, geofence_id=geofence_id,
-            entered_at=ts, auto_started=True,
+            shift_task_id=task.id,
+            geofence_id=geofence_id,
+            entered_at=ts,
+            auto_started=True,
         )
         db.add(sg)
         task.status = "in_progress"
@@ -73,24 +73,32 @@ async def process_geofence_event(
         # Notify dispatcher
         try:
             from app.services.websocket_manager import manager
-            await manager.broadcast_to_company(company_id, {
-                "type": "shift_auto_started",
-                "task_id": task.id,
-                "vehicle_id": vehicle_id,
-                "geofence_id": geofence_id,
-                "timestamp": ts.isoformat(),
-            })
+
+            await manager.broadcast_to_company(
+                company_id,
+                {
+                    "type": "shift_auto_started",
+                    "task_id": task.id,
+                    "vehicle_id": vehicle_id,
+                    "geofence_id": geofence_id,
+                    "timestamp": ts.isoformat(),
+                },
+            )
         except Exception:
             pass
 
     elif event_type == "exit":
         # Auto-complete shift on geofence exit
-        sg = db.execute(
-            select(ShiftGeofence)
-            .where(ShiftGeofence.shift_task_id == task.id)
-            .where(ShiftGeofence.geofence_id == geofence_id)
-            .where(ShiftGeofence.exited_at.is_(None))
-        ).scalars().first()
+        sg = (
+            db.execute(
+                select(ShiftGeofence)
+                .where(ShiftGeofence.shift_task_id == task.id)
+                .where(ShiftGeofence.geofence_id == geofence_id)
+                .where(ShiftGeofence.exited_at.is_(None))
+            )
+            .scalars()
+            .first()
+        )
 
         if sg:
             sg.exited_at = ts
@@ -103,32 +111,41 @@ async def process_geofence_event(
 
         try:
             from app.services.websocket_manager import manager
-            await manager.broadcast_to_company(company_id, {
-                "type": "shift_auto_completed",
-                "task_id": task.id,
-                "vehicle_id": vehicle_id,
-                "geofence_id": geofence_id,
-                "timestamp": ts.isoformat(),
-            })
+
+            await manager.broadcast_to_company(
+                company_id,
+                {
+                    "type": "shift_auto_completed",
+                    "task_id": task.id,
+                    "vehicle_id": vehicle_id,
+                    "geofence_id": geofence_id,
+                    "timestamp": ts.isoformat(),
+                },
+            )
         except Exception:
             pass
 
         # MAX notification about geofence auto-complete
         try:
-            from app.services.max_messenger_service import max_messenger_service, notification_templates
+            from app.services.max_messenger_service import (
+                max_messenger_service,
+                notification_templates,
+            )
+
             title, body = notification_templates.geofence_alert(
                 vehicle_name=vehicle.name if vehicle else "N/A",
                 geofence_name=getattr(sg, "name", "N/A") if sg else "N/A",
                 event_type="auto_complete",
                 timestamp=ts.isoformat(),
             )
-            await max_messenger_service.notify_company_dispatchers(db, company_id, title, body)
+            await max_messenger_service.notify_company_dispatchers(
+                db, company_id, title, body
+            )
         except Exception:
             pass
 
     db.commit()
     return {"message": f"Shift {action}", "task_id": task.id, "action": action}
-
 
 
 @router.post("/geofence/link", summary="🔗 Привязать геозону к смене")
@@ -157,5 +174,3 @@ def link_geofence_to_shift(
 
 
 # === Dispatcher-Driver Chat ===
-
-

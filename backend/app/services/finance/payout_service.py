@@ -12,9 +12,9 @@ from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from app.models.catalog import Vehicle
+from app.models.dispatch import Request
 from app.models.finance import DocumentStatus, Payout
 from app.models.shift import ShiftTask
-from app.models.dispatch import Request
 from app.models.telematics import ShiftDataReconciliation
 
 logger = logging.getLogger("spectech.payout_service")
@@ -139,17 +139,31 @@ class PayoutService:
             payout_data[key]["shifts_count"] += 1
 
             # Проверяем источник заказа через request_id
-            request = db.get(Request, shift_task.request_id) if shift_task.request_id else None
-            is_marketplace = request and getattr(request, "source_channel", None) == "marketplace"
+            request = (
+                db.get(Request, shift_task.request_id)
+                if shift_task.request_id
+                else None
+            )
+            is_marketplace = (
+                request and getattr(request, "source_channel", None) == "marketplace"
+            )
             commission_agreed = getattr(vehicle, "marketplace_commission_agreed", False)
-            vehicle_commission_rate = getattr(vehicle, "marketplace_commission_rate", Decimal("10.00"))
+            vehicle_commission_rate = getattr(
+                vehicle, "marketplace_commission_rate", Decimal("10.00")
+            )
 
             if is_marketplace and commission_agreed:
                 payout_data[key]["is_marketplace"] = True
                 payout_data[key]["commission_agreed"] = True
-                payout_data[key]["commission_rate"] = Decimal(str(vehicle_commission_rate))
+                payout_data[key]["commission_rate"] = Decimal(
+                    str(vehicle_commission_rate)
+                )
                 # Сохраняем режим маркетплейса из заявки
-                mp_mode = getattr(request, "marketplace_mode", "client") if request else "client"
+                mp_mode = (
+                    getattr(request, "marketplace_mode", "client")
+                    if request
+                    else "client"
+                )
                 payout_data[key]["marketplace_mode"] = mp_mode
                 # Для owner_dispatcher: компания-диспетчер = company_id заявки
                 if mp_mode == "owner_dispatcher" and request:
@@ -167,7 +181,9 @@ class PayoutService:
             effective_commission_rate = Decimal("0")
             if data.get("is_marketplace") and data.get("commission_agreed"):
                 effective_commission_rate = data.get("commission_rate", commission_rate)
-            commission = (gross * effective_commission_rate / 100).quantize(Decimal("0.01"))
+            commission = (gross * effective_commission_rate / 100).quantize(
+                Decimal("0.01")
+            )
             net = gross - commission
 
             # Генерируем номер документа
@@ -262,8 +278,9 @@ class PayoutService:
 
         return f"{prefix}{new_number:04d}"
 
-
-    def get_payouts_summary(self, db: Session, company_id: int, date_from, date_to) -> dict:
+    def get_payouts_summary(
+        self, db: Session, company_id: int, date_from, date_to
+    ) -> dict:
         """Сводка по выплатам за период."""
         base_filter = [
             Payout.company_id == company_id,
@@ -275,7 +292,9 @@ class PayoutService:
             db.query(
                 func.count(Payout.id).label("total"),
                 func.coalesce(func.sum(Payout.gross_amount), 0).label("gross"),
-                func.coalesce(func.sum(Payout.platform_commission), 0).label("commission"),
+                func.coalesce(func.sum(Payout.platform_commission), 0).label(
+                    "commission"
+                ),
                 func.coalesce(func.sum(Payout.net_amount), 0).label("net"),
             )
             .filter(*base_filter)
@@ -299,11 +318,14 @@ class PayoutService:
             "pending_payouts": int(pending_count),
         }
 
-    def export_payouts_csv(self, db: Session, company_id: int, date_from=None, date_to=None, status=None) -> tuple:
+    def export_payouts_csv(
+        self, db: Session, company_id: int, date_from=None, date_to=None, status=None
+    ) -> tuple:
         """Экспорт выплат в CSV. Возвращает (csv_content, filename)."""
         import csv
         import io
         from datetime import datetime as dt
+
         from sqlalchemy import select
 
         stmt = select(Payout).where(Payout.company_id == company_id)
@@ -321,27 +343,38 @@ class PayoutService:
         output = io.StringIO()
         writer = csv.writer(output, delimiter=";")
 
-        writer.writerow([
-            "ID", "Номер документа", "Дата выплаты", "Статус",
-            "Собственник (ID)", "Техника (ID)",
-            "Gross (руб)", "Комиссия (%)", "Комиссия (руб)", "Net (руб)",
-            "Дата создания",
-        ])
+        writer.writerow(
+            [
+                "ID",
+                "Номер документа",
+                "Дата выплаты",
+                "Статус",
+                "Собственник (ID)",
+                "Техника (ID)",
+                "Gross (руб)",
+                "Комиссия (%)",
+                "Комиссия (руб)",
+                "Net (руб)",
+                "Дата создания",
+            ]
+        )
 
         for p in payouts:
-            writer.writerow([
-                p.id,
-                p.document_number or "",
-                p.payout_date.isoformat() if p.payout_date else "",
-                p.status.value if hasattr(p.status, "value") else str(p.status),
-                p.owner_id or "",
-                p.vehicle_id or "",
-                float(p.gross_amount or 0),
-                float(p.commission_rate or 0),
-                float(p.platform_commission or 0),
-                float(p.net_amount or 0),
-                p.created_at.isoformat() if p.created_at else "",
-            ])
+            writer.writerow(
+                [
+                    p.id,
+                    p.document_number or "",
+                    p.payout_date.isoformat() if p.payout_date else "",
+                    p.status.value if hasattr(p.status, "value") else str(p.status),
+                    p.owner_id or "",
+                    p.vehicle_id or "",
+                    float(p.gross_amount or 0),
+                    float(p.commission_rate or 0),
+                    float(p.platform_commission or 0),
+                    float(p.net_amount or 0),
+                    p.created_at.isoformat() if p.created_at else "",
+                ]
+            )
 
         output.seek(0)
         filename = f"payouts_export_{dt.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -354,9 +387,15 @@ class PayoutService:
             raise ValueError("Payout not found")
 
         if payout.status != DocumentStatus.draft:
-            raise ValueError(f"Only draft payouts can be approved. Current status: {payout.status}")
+            raise ValueError(
+                f"Only draft payouts can be approved. Current status: {payout.status}"
+            )
 
-        old_status = payout.status.value if hasattr(payout.status, "value") else str(payout.status)
+        old_status = (
+            payout.status.value
+            if hasattr(payout.status, "value")
+            else str(payout.status)
+        )
         payout.status = DocumentStatus.sent
         db.commit()
         db.refresh(payout)
@@ -384,7 +423,6 @@ class PayoutService:
             "old_status": old_status,
             "new_status": DocumentStatus.sent.value,
         }
-
 
 
 # Singleton

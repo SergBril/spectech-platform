@@ -3,7 +3,6 @@ from decimal import Decimal
 from enum import Enum
 
 from sqlalchemy import (
-    Text,
     JSON,
     Date,
     DateTime,
@@ -14,7 +13,6 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy import (
-    Text,
     Enum as SqlEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -157,12 +155,16 @@ class ShiftTemplate(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), nullable=False)
-    driver_id: Mapped[int | None] = mapped_column(ForeignKey("driver_profiles.employee_contractor_id"), nullable=True)
+    driver_id: Mapped[int | None] = mapped_column(
+        ForeignKey("driver_profiles.employee_contractor_id"), nullable=True
+    )
     weekday: Mapped[int] = mapped_column(nullable=False)  # 0=Mon..6=Sun
     start_time: Mapped[time | None] = mapped_column(nullable=True)
     end_time: Mapped[time | None] = mapped_column(nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
 
@@ -170,10 +172,16 @@ class ShiftTemplateExclusion(Base):
     __tablename__ = "shift_template_exclusions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    template_id: Mapped[int] = mapped_column(ForeignKey("shift_templates.id"), nullable=False)
+    template_id: Mapped[int] = mapped_column(
+        ForeignKey("shift_templates.id"), nullable=False
+    )
     exclusion_date: Mapped[date] = mapped_column(nullable=False)
-    reason: Mapped[str | None] = mapped_column(String(200), nullable=True)  # holiday, vacation, sick, etc.
-    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reason: Mapped[str | None] = mapped_column(
+        String(200), nullable=True
+    )  # holiday, vacation, sick, etc.
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
 
@@ -181,12 +189,18 @@ class ShiftAuditLog(Base):
     __tablename__ = "shift_audit_log"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    shift_task_id: Mapped[int] = mapped_column(ForeignKey("shift_tasks.id"), nullable=False)
-    action: Mapped[str] = mapped_column(String(50), nullable=False)  # created, updated, deleted, driver_assigned, etc.
+    shift_task_id: Mapped[int] = mapped_column(
+        ForeignKey("shift_tasks.id"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # created, updated, deleted, driver_assigned, etc.
     field_changed: Mapped[str | None] = mapped_column(String(100), nullable=True)
     old_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
     new_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    changed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    changed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
 
@@ -197,10 +211,16 @@ class AutoAssignRule(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     priority: Mapped[int] = mapped_column(default=0)  # Higher = checked first
-    rule_type: Mapped[str] = mapped_column(String(30), nullable=False)  # priority_driver, blacklist, category_match
-    config_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: {driver_ids: [...], category: "..."}
+    rule_type: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # priority_driver, blacklist, category_match
+    config_json: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # JSON: {driver_ids: [...], category: "..."}
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
 
@@ -208,7 +228,9 @@ class ShiftGeofence(Base):
     __tablename__ = "shift_geofences"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    shift_task_id: Mapped[int] = mapped_column(ForeignKey("shift_tasks.id"), nullable=False)
+    shift_task_id: Mapped[int] = mapped_column(
+        ForeignKey("shift_tasks.id"), nullable=False
+    )
     geofence_id: Mapped[int] = mapped_column(ForeignKey("geofences.id"), nullable=False)
     entered_at: Mapped[datetime | None] = mapped_column(nullable=True)
     exited_at: Mapped[datetime | None] = mapped_column(nullable=True)
@@ -221,14 +243,18 @@ class ShiftFuelEntry(Base):
     __tablename__ = "shift_fuel_entries"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    shift_task_id: Mapped[int] = mapped_column(ForeignKey("shift_tasks.id"), nullable=False)
+    shift_task_id: Mapped[int] = mapped_column(
+        ForeignKey("shift_tasks.id"), nullable=False
+    )
     vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), nullable=False)
     fuel_type: Mapped[str] = mapped_column(String(20), default="diesel")
     quantity_liters: Mapped[float] = mapped_column(nullable=False)
     odometer_reading: Mapped[float | None] = mapped_column(nullable=True)
     engine_hours: Mapped[float | None] = mapped_column(nullable=True)
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    recorded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    recorded_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
 
@@ -236,8 +262,12 @@ class PreShiftChecklist(Base):
     __tablename__ = "pre_shift_checklists"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    shift_task_id: Mapped[int] = mapped_column(ForeignKey("shift_tasks.id"), nullable=False)
-    submitted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    shift_task_id: Mapped[int] = mapped_column(
+        ForeignKey("shift_tasks.id"), nullable=False
+    )
+    submitted_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     checklist_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     photo_paths: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -250,11 +280,17 @@ class VehicleChecklistConfig(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
-    vehicle_category_id: Mapped[int | None] = mapped_column(nullable=True)  # NULL = default for all
+    vehicle_category_id: Mapped[int | None] = mapped_column(
+        nullable=True
+    )  # NULL = default for all
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    items_json: Mapped[str] = mapped_column(Text, nullable=False)  # JSON array of {key, label, required}
+    items_json: Mapped[str] = mapped_column(
+        Text, nullable=False
+    )  # JSON array of {key, label, required}
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
 
@@ -266,8 +302,12 @@ class CompanyCostRates(Base):
     fuel_price_per_liter: Mapped[float] = mapped_column(default=65.0)
     hourly_wage: Mapped[float] = mapped_column(default=500.0)
     amortization_per_hour: Mapped[float] = mapped_column(default=300.0)
-    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    updated_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
 
 
 class DocumentArchive(Base):
@@ -275,12 +315,22 @@ class DocumentArchive(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
-    doc_type: Mapped[str] = mapped_column(String(30), nullable=False)  # act, invoice, contract, report
+    doc_type: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # act, invoice, contract, report
     doc_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     title: Mapped[str] = mapped_column(String(300), nullable=False)
-    content_text: Mapped[str | None] = mapped_column(Text, nullable=True)  # For full-text search
+    content_text: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # For full-text search
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    related_act_id: Mapped[int | None] = mapped_column(ForeignKey("acts.id"), nullable=True)
-    related_shift_id: Mapped[int | None] = mapped_column(ForeignKey("shift_tasks.id"), nullable=True)
-    uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    related_act_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acts.id"), nullable=True
+    )
+    related_shift_id: Mapped[int | None] = mapped_column(
+        ForeignKey("shift_tasks.id"), nullable=True
+    )
+    uploaded_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))

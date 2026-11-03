@@ -1,5 +1,7 @@
 """Vehicle business logic service."""
+
 import logging
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -8,6 +10,7 @@ logger = logging.getLogger("spectech.vehicles")
 
 class VehicleServiceError(Exception):
     """Business logic error in vehicle operations."""
+
     def __init__(self, status_code: int, detail: str):
         self.status_code = status_code
         self.detail = detail
@@ -67,11 +70,10 @@ def save_vehicle_attributes(
         db.add(attr_value)
 
 
-
-
 def load_vehicle_with_relations(db: Session, vehicle_id: int) -> object | None:
     """Загружает технику с joinedload всех нужных связей."""
     from sqlalchemy.orm import joinedload
+
     from app.models.catalog import Category, EquipmentAttributeValue, Vehicle
 
     return (
@@ -92,12 +94,10 @@ def load_vehicle_with_relations(db: Session, vehicle_id: int) -> object | None:
 # ============================================================
 
 
-
-
 def enrich_vehicle(vehicle: object, db: Session = None) -> dict:
     """Обогащает VehicleRead названиями категории/подкатегории и атрибутами."""
-    from app.schemas.vehicles import VehicleRead
     from app.models.contractor import Employee
+    from app.schemas.vehicles import VehicleRead
 
     # Сначала получаем базовый dict (attribute_values пока с SQLAlchemy-объектами)
     data = VehicleRead.model_validate(vehicle, from_attributes=True).model_dump()
@@ -159,8 +159,6 @@ def enrich_vehicle(vehicle: object, db: Session = None) -> dict:
     return data
 
 
-
-
 def log_driver_assignment(
     db: Session,
     vehicle_id: int,
@@ -195,15 +193,11 @@ def log_driver_assignment(
         db.add(new_log)
 
 
-
-
 def clear_vehicle_attributes(db: Session, vehicle_id: int) -> None:
     """Удаляет все значения атрибутов для техники (перед пересохранением)."""
     db.query(EquipmentAttributeValue).filter(
         EquipmentAttributeValue.vehicle_id == vehicle_id
     ).delete()
-
-
 
 
 def create_vehicle(db: Session, payload_data: dict, company_id: int) -> dict:
@@ -217,7 +211,10 @@ def create_vehicle(db: Session, payload_data: dict, company_id: int) -> dict:
         )
     )
     if existing:
-        raise VehicleServiceError(409, f"id_value '{payload_data.get(chr(105)+chr(100)+chr(95)+chr(118)+chr(97)+chr(108)+chr(117)+chr(101))}' already exists")
+        raise VehicleServiceError(
+            409,
+            f"id_value '{payload_data.get(chr(105)+chr(100)+chr(95)+chr(118)+chr(97)+chr(108)+chr(117)+chr(101))}' already exists",
+        )
 
     subcategory_id = payload_data.pop("subcategory_id", None)
     category_id = None
@@ -232,7 +229,11 @@ def create_vehicle(db: Session, payload_data: dict, company_id: int) -> dict:
         if cat and cat.level == 1:
             category_id = payload_data["category_id"]
 
-    vehicle_data = {k: v for k, v in payload_data.items() if k not in ("attributes", "company_id", "category_id")}
+    vehicle_data = {
+        k: v
+        for k, v in payload_data.items()
+        if k not in ("attributes", "company_id", "category_id")
+    }
     vehicle_data["category_id"] = category_id
     vehicle_data["company_id"] = company_id
 
@@ -256,7 +257,14 @@ def create_vehicle(db: Session, payload_data: dict, company_id: int) -> dict:
     return enrich_vehicle(vehicle, db)
 
 
-def update_vehicle(db: Session, vehicle_id: int, update_data: dict, attributes: dict | None, company_id: int, user_id: int) -> dict:
+def update_vehicle(
+    db: Session,
+    vehicle_id: int,
+    update_data: dict,
+    attributes: dict | None,
+    company_id: int,
+    user_id: int,
+) -> dict:
     """Update a vehicle with validation, driver assignment history, and attributes."""
     from app.models.catalog import Category, Vehicle
 
@@ -286,7 +294,10 @@ def update_vehicle(db: Session, vehicle_id: int, update_data: dict, attributes: 
             )
         )
         if existing:
-            raise VehicleServiceError(409, f"id_value '{update_data[chr(105)+chr(100)+chr(95)+chr(118)+chr(97)+chr(108)+chr(117)+chr(101)]}' already exists")
+            raise VehicleServiceError(
+                409,
+                f"id_value '{update_data[chr(105)+chr(100)+chr(95)+chr(118)+chr(97)+chr(108)+chr(117)+chr(101)]}' already exists",
+            )
 
     subcategory_id = update_data.pop("subcategory_id", None)
     if subcategory_id:

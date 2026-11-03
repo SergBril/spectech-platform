@@ -1,30 +1,22 @@
 """Модуль templates для shifts router."""
 
-from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile
-from pydantic import BaseModel
-from sqlalchemy import func, select
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+)
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from app.core.db import get_db
 
-from app.models.catalog import Vehicle
-from app.models.shift import ShiftTemplate, ShiftTemplateExclusion, ShiftTask, ShiftTaskStatus, AutoAssignRule
 from app.api.deps import get_current_company_id, get_current_user
-
-from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile, Request
-from pydantic import BaseModel
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.auth import User
-from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
-
 from app.models.catalog import Vehicle
-from app.models.shift import ShiftTemplate, ShiftTemplateExclusion, ShiftTask, ShiftTaskStatus, AutoAssignRule
-from app.models.contractor import DriverProfile, Employee
+from app.models.contractor import DriverProfile
 
 router = APIRouter()
+
 
 @router.get("/templates", summary="📋 Шаблоны смен")
 def list_shift_templates(
@@ -35,30 +27,39 @@ def list_shift_templates(
     """Список шаблонов повторяющихся смен."""
     from app.models.shift import ShiftTemplate
 
-    templates = db.execute(
-        select(ShiftTemplate)
-        .join(Vehicle, ShiftTemplate.vehicle_id == Vehicle.id)
-        .where(Vehicle.company_id == company_id)
-        .order_by(ShiftTemplate.weekday, ShiftTemplate.start_time)
-    ).scalars().all()
+    templates = (
+        db.execute(
+            select(ShiftTemplate)
+            .join(Vehicle, ShiftTemplate.vehicle_id == Vehicle.id)
+            .where(Vehicle.company_id == company_id)
+            .order_by(ShiftTemplate.weekday, ShiftTemplate.start_time)
+        )
+        .scalars()
+        .all()
+    )
 
     result = []
     for t in templates:
         vehicle = db.get(Vehicle, t.vehicle_id)
-        driver = db.get(DriverProfile, getattr(t, 'driver_id', None)) if getattr(t, 'driver_id', None) else None
-        result.append({
-            "id": t.id,
-            "vehicle_id": t.vehicle_id,
-            "vehicle_name": vehicle.name if vehicle else "",
-            "driver_id": getattr(t, 'driver_id', None),
-            "driver_name": driver_name,
-            "weekday": t.weekday,
-            "start_time": str(t.start_time) if t.start_time else "",
-            "end_time": str(t.end_time) if t.end_time else "",
-            "is_active": t.is_active,
-        })
+        (
+            db.get(DriverProfile, getattr(t, "driver_id", None))
+            if getattr(t, "driver_id", None)
+            else None
+        )
+        result.append(
+            {
+                "id": t.id,
+                "vehicle_id": t.vehicle_id,
+                "vehicle_name": vehicle.name if vehicle else "",
+                "driver_id": getattr(t, "driver_id", None),
+                "driver_name": driver_name,
+                "weekday": t.weekday,
+                "start_time": str(t.start_time) if t.start_time else "",
+                "end_time": str(t.end_time) if t.end_time else "",
+                "is_active": t.is_active,
+            }
+        )
     return result
-
 
 
 @router.post("/templates", summary="➕ Создать шаблон смены", status_code=201)
@@ -73,8 +74,9 @@ def create_shift_template(
     company_id: int = Depends(get_current_company_id),
 ):
     """Создать шаблон повторяющейся смены. weekday: 0=Пн..6=Вс."""
-    from app.models.shift import ShiftTemplate
     from datetime import time as time_type
+
+    from app.models.shift import ShiftTemplate
 
     vehicle = db.get(Vehicle, vehicle_id)
     if not vehicle or vehicle.company_id != company_id:
@@ -93,7 +95,6 @@ def create_shift_template(
     db.commit()
     db.refresh(template)
     return {"id": template.id, "message": "Шаблон создан"}
-
 
 
 @router.delete("/templates/{template_id}", summary="🗑️ Удалить шаблон смены")
@@ -119,7 +120,6 @@ def delete_shift_template(
     return {"message": "Шаблон удалён", "id": template_id}
 
 
-
 @router.post("/templates/apply", summary="🔄 Применить шаблоны на неделю")
 def apply_shift_templates(
     week_start: str = Body(..., description="Понедельник недели YYYY-MM-DD"),
@@ -128,16 +128,23 @@ def apply_shift_templates(
     company_id: int = Depends(get_current_company_id),
 ):
     """Создать смены из активных шаблонов на указанную неделю."""
-    from app.models.shift import ShiftTemplate, ShiftTask, ShiftTaskStatus
-    from datetime import date as date_type, timedelta, datetime, time as time_type
+    from datetime import date as date_type
+    from datetime import datetime, timedelta
+    from datetime import time as time_type
+
+    from app.models.shift import ShiftTask, ShiftTaskStatus, ShiftTemplate
 
     start = date_type.fromisoformat(week_start)
-    templates = db.execute(
-        select(ShiftTemplate)
-        .join(Vehicle, ShiftTemplate.vehicle_id == Vehicle.id)
-        .where(Vehicle.company_id == company_id)
-        .where(ShiftTemplate.is_active == True)
-    ).scalars().all()
+    templates = (
+        db.execute(
+            select(ShiftTemplate)
+            .join(Vehicle, ShiftTemplate.vehicle_id == Vehicle.id)
+            .where(Vehicle.company_id == company_id)
+            .where(ShiftTemplate.is_active == True)
+        )
+        .scalars()
+        .all()
+    )
 
     created = 0
     skipped = 0
@@ -146,6 +153,7 @@ def apply_shift_templates(
 
         # Пропуск если дата является исключением для этого шаблона
         from app.models.shift import ShiftTemplateExclusion
+
         is_excluded = db.execute(
             select(ShiftTemplateExclusion).where(
                 ShiftTemplateExclusion.template_id == tmpl.id,
@@ -168,8 +176,16 @@ def apply_shift_templates(
             skipped += 1
             continue
 
-        planned_start = datetime.combine(shift_date, tmpl.start_time) if tmpl.start_time else datetime.combine(shift_date, time_type(8, 0))
-        planned_end = datetime.combine(shift_date, tmpl.end_time) if tmpl.end_time else datetime.combine(shift_date, time_type(17, 0))
+        planned_start = (
+            datetime.combine(shift_date, tmpl.start_time)
+            if tmpl.start_time
+            else datetime.combine(shift_date, time_type(8, 0))
+        )
+        planned_end = (
+            datetime.combine(shift_date, tmpl.end_time)
+            if tmpl.end_time
+            else datetime.combine(shift_date, time_type(17, 0))
+        )
 
         task = ShiftTask(
             vehicle_id=tmpl.vehicle_id,
@@ -177,7 +193,11 @@ def apply_shift_templates(
             shift_date=shift_date,
             planned_start=planned_start,
             planned_end=planned_end,
-            status=ShiftTaskStatus.planned if hasattr(ShiftTaskStatus, "planned") else "planned",
+            status=(
+                ShiftTaskStatus.planned
+                if hasattr(ShiftTaskStatus, "planned")
+                else "planned"
+            ),
             created_by=current_user.id,
         )
         db.add(task)
@@ -208,17 +228,27 @@ def list_template_exclusions(
     if not vehicle or vehicle.company_id != company_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    exclusions = db.execute(
-        select(ShiftTemplateExclusion)
-        .where(ShiftTemplateExclusion.template_id == template_id)
-        .order_by(ShiftTemplateExclusion.exclusion_date)
-    ).scalars().all()
+    exclusions = (
+        db.execute(
+            select(ShiftTemplateExclusion)
+            .where(ShiftTemplateExclusion.template_id == template_id)
+            .order_by(ShiftTemplateExclusion.exclusion_date)
+        )
+        .scalars()
+        .all()
+    )
 
-    return [{"id": e.id, "date": str(e.exclusion_date), "reason": e.reason} for e in exclusions]
+    return [
+        {"id": e.id, "date": str(e.exclusion_date), "reason": e.reason}
+        for e in exclusions
+    ]
 
 
-
-@router.post("/templates/{template_id}/exclusions", summary="➕ Добавить исключение", status_code=201)
+@router.post(
+    "/templates/{template_id}/exclusions",
+    summary="➕ Добавить исключение",
+    status_code=201,
+)
 def create_template_exclusion(
     template_id: int,
     exclusion_date: str = Body(...),
@@ -228,8 +258,9 @@ def create_template_exclusion(
     company_id: int = Depends(get_current_company_id),
 ):
     """Добавить исключение (праздник/отпуск) для шаблона смены."""
-    from app.models.shift import ShiftTemplate, ShiftTemplateExclusion
     from datetime import date as date_type
+
+    from app.models.shift import ShiftTemplate, ShiftTemplateExclusion
 
     template = db.get(ShiftTemplate, template_id)
     if not template:
@@ -251,7 +282,6 @@ def create_template_exclusion(
     return {"id": exc.id, "message": "Исключение добавлено"}
 
 
-
 @router.delete("/templates/exclusions/{exclusion_id}", summary="🗑️ Удалить исключение")
 def delete_template_exclusion(
     exclusion_id: int,
@@ -260,7 +290,7 @@ def delete_template_exclusion(
     company_id: int = Depends(get_current_company_id),
 ):
     """Удалить исключение из шаблона."""
-    from app.models.shift import ShiftTemplateExclusion, ShiftTemplate
+    from app.models.shift import ShiftTemplate, ShiftTemplateExclusion
 
     exc = db.get(ShiftTemplateExclusion, exclusion_id)
     if not exc:
@@ -285,21 +315,31 @@ def list_auto_assign_rules(
     company_id: int = Depends(get_current_company_id),
 ):
     """Список правил авто-назначения водителей."""
-    from app.models.shift import AutoAssignRule
     import json
 
-    rules = db.execute(
-        select(AutoAssignRule)
-        .where(AutoAssignRule.company_id == company_id)
-        .order_by(AutoAssignRule.priority.desc())
-    ).scalars().all()
+    from app.models.shift import AutoAssignRule
 
-    return [{
-        "id": r.id, "name": r.name, "priority": r.priority,
-        "rule_type": r.rule_type, "config": json.loads(r.config_json) if r.config_json else {},
-        "is_active": r.is_active,
-    } for r in rules]
+    rules = (
+        db.execute(
+            select(AutoAssignRule)
+            .where(AutoAssignRule.company_id == company_id)
+            .order_by(AutoAssignRule.priority.desc())
+        )
+        .scalars()
+        .all()
+    )
 
+    return [
+        {
+            "id": r.id,
+            "name": r.name,
+            "priority": r.priority,
+            "rule_type": r.rule_type,
+            "config": json.loads(r.config_json) if r.config_json else {},
+            "is_active": r.is_active,
+        }
+        for r in rules
+    ]
 
 
 def create_auto_assign_rule(
@@ -312,19 +352,23 @@ def create_auto_assign_rule(
     company_id: int = Depends(get_current_company_id),
 ):
     """Создать правило авто-назначения. Типы: priority_driver, blacklist, category_match."""
-    from app.models.shift import AutoAssignRule
     import json
 
+    from app.models.shift import AutoAssignRule
+
     rule = AutoAssignRule(
-        company_id=company_id, name=name, rule_type=rule_type,
-        priority=priority, config_json=json.dumps(config),
-        is_active=True, created_by=current_user.id,
+        company_id=company_id,
+        name=name,
+        rule_type=rule_type,
+        priority=priority,
+        config_json=json.dumps(config),
+        is_active=True,
+        created_by=current_user.id,
     )
     db.add(rule)
     db.commit()
     db.refresh(rule)
     return {"id": rule.id, "message": "Правило создано"}
-
 
 
 def delete_auto_assign_rule(
@@ -346,5 +390,3 @@ def delete_auto_assign_rule(
 
 
 # === Alert Notifications ===
-
-

@@ -2,7 +2,6 @@
 
 import logging
 from decimal import Decimal
-from typing import Optional
 
 logger = logging.getLogger("spectech.pricing")
 
@@ -201,12 +200,14 @@ class PricingService:
 
         # Calculate based on rate type
         if rate_type == "per_hour" and shift_duration_hours:
-            base_amount = rate * Decimal(str(shift_duration_hours)) * Decimal(str(num_shifts))
+            base_amount = (
+                rate * Decimal(str(shift_duration_hours)) * Decimal(str(num_shifts))
+            )
         elif rate_type == "per_shift":
             base_amount = rate * Decimal(str(num_shifts))
         else:
             # Default: shift rate * num_shifts
-            hours = shift_duration_hours or preset["min_shift_hours"]
+            shift_duration_hours or preset["min_shift_hours"]
             base_amount = rate * Decimal(str(num_shifts))
 
         # Fuel surcharge
@@ -237,25 +238,39 @@ class PricingService:
         """Список доступных регионов с ценами (для frontend dropdown)."""
         regions = []
         # Moscow first
-        for key in ["Москва", "Московская область", "Санкт-Петербург", "Ленинградская область"]:
+        for key in [
+            "Москва",
+            "Московская область",
+            "Санкт-Петербург",
+            "Ленинградская область",
+        ]:
             if key in REGIONAL_PRICING_PRESETS:
                 p = REGIONAL_PRICING_PRESETS[key]
-                regions.append({
-                    "name": key,
-                    "hourly_rate": p["hourly_rate"],
-                    "shift_rate": p["shift_rate"],
-                    "is_priority": True,
-                })
+                regions.append(
+                    {
+                        "name": key,
+                        "hourly_rate": p["hourly_rate"],
+                        "shift_rate": p["shift_rate"],
+                        "is_priority": True,
+                    }
+                )
         # Rest alphabetically
         for key in sorted(REGIONAL_PRICING_PRESETS.keys()):
-            if key not in ["Москва", "Московская область", "Санкт-Петербург", "Ленинградская область"]:
+            if key not in [
+                "Москва",
+                "Московская область",
+                "Санкт-Петербург",
+                "Ленинградская область",
+            ]:
                 p = REGIONAL_PRICING_PRESETS[key]
-                regions.append({
-                    "name": key,
-                    "hourly_rate": p["hourly_rate"],
-                    "shift_rate": p["shift_rate"],
-                    "is_priority": False,
-                })
+                regions.append(
+                    {
+                        "name": key,
+                        "hourly_rate": p["hourly_rate"],
+                        "shift_rate": p["shift_rate"],
+                        "is_priority": False,
+                    }
+                )
         return regions
 
 

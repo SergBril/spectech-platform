@@ -1,13 +1,13 @@
 """Сервис подписания документов КЭП (CryptoPro / Госуслуги)."""
+
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 class DigitalSignatureService:
     """Подписание документов квалифицированной электронной подписью.
-    
+
     Поддерживает:
     - CryptoPro CSP (через REST API криптопровайдера)
     - Госуслуги ЕПГУ (через ЕСИА API)
@@ -16,15 +16,20 @@ class DigitalSignatureService:
 
     def __init__(self):
         from app.core.config import settings
-        self.provider = getattr(settings, "SIGNATURE_PROVIDER", "stub")  # cryptopro / gosuslugi / stub
+
+        self.provider = getattr(
+            settings, "SIGNATURE_PROVIDER", "stub"
+        )  # cryptopro / gosuslugi / stub
         self.cryptopro_url = getattr(settings, "CRYPTOPRO_URL", "http://localhost:8080")
         self.gosuslugi_client_id = getattr(settings, "GOSUSLUGI_CLIENT_ID", "")
         self.gosuslugi_secret = getattr(settings, "GOSUSLUGI_SECRET", "")
         self.enabled = self.provider != "stub"
 
-    async def sign_document(self, document_bytes: bytes, certificate_thumbprint: str = "") -> dict:
+    async def sign_document(
+        self, document_bytes: bytes, certificate_thumbprint: str = ""
+    ) -> dict:
         """Подписать документ КЭП.
-        
+
         Returns:
             {"signature": base64_string, "status": "signed"} или error
         """
@@ -34,14 +39,21 @@ class DigitalSignatureService:
             return await self._sign_gosuslugi(document_bytes)
         else:
             logger.info("SIGNATURE STUB → signing %d bytes", len(document_bytes))
-            import base64, hashlib
+            import base64
+            import hashlib
+
             # Stub: SHA256 hash как псевдо-подпись
-            fake_sig = base64.b64encode(hashlib.sha256(document_bytes).digest()).decode()
+            fake_sig = base64.b64encode(
+                hashlib.sha256(document_bytes).digest()
+            ).decode()
             return {"signature": fake_sig, "status": "signed_stub", "provider": "stub"}
 
     async def _sign_cryptopro(self, document_bytes: bytes, thumbprint: str) -> dict:
         """Подписание через CryptoPro CSP REST API."""
-        import httpx, base64
+        import base64
+
+        import httpx
+
         try:
             payload = {
                 "certificateThumbprint": thumbprint,
@@ -65,7 +77,10 @@ class DigitalSignatureService:
 
     async def _sign_gosuslugi(self, document_bytes: bytes) -> dict:
         """Подписание через Госуслуги (ЕСИА)."""
-        import httpx, base64
+        import base64
+
+        import httpx
+
         try:
             # Step 1: Get access token via ESIA OAuth
             async with httpx.AsyncClient(timeout=30) as client:

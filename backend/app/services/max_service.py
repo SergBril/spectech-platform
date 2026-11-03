@@ -1,7 +1,6 @@
 ﻿"""MAX (VK) Bot API notification service с graceful degradation."""
 
 import logging
-from typing import Any
 
 import httpx
 
@@ -49,7 +48,9 @@ class MaxService:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 url = MAX_API_URL.format(method="getMe")
-                response = await client.get(url, headers={"Authorization": f"Bearer {self.bot_token}"})
+                response = await client.get(
+                    url, headers={"Authorization": f"Bearer {self.bot_token}"}
+                )
                 self._is_available = response.status_code == 200
                 if self._is_available:
                     logger.info("✅ MAX Bot API is available")
@@ -97,7 +98,9 @@ class MaxService:
                     logger.info(f"✅ MAX alert sent: {title}")
                     return True
                 else:
-                    logger.error(f"❌ MAX API error {response.status_code}: {response.text}")
+                    logger.error(
+                        f"❌ MAX API error {response.status_code}: {response.text}"
+                    )
                     return False
         except Exception as e:
             logger.error(f"❌ Failed to send MAX alert: {e}")

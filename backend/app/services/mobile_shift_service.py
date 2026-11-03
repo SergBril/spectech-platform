@@ -1,4 +1,5 @@
 """Mobile shift operations service."""
+
 import json
 import logging
 import os
@@ -12,6 +13,7 @@ logger = logging.getLogger("spectech.mobile_shift")
 
 class MobileShiftServiceError(Exception):
     """Business logic error in mobile shift operations."""
+
     def __init__(self, status_code: int, detail: str):
         self.status_code = status_code
         self.detail = detail
@@ -29,10 +31,10 @@ async def submit_mobile_shift_report(
 ) -> dict:
     """Submit a completed shift report from mobile app."""
     from app.models.auth import User as UserModel
-    from app.models.user_company import UserCompany
     from app.models.catalog import Vehicle
     from app.models.contractor import DriverProfile, Employee
     from app.models.shift import ShiftReport, ShiftTask
+    from app.models.user_company import UserCompany
     from app.services.fcm_service import fcm_service
     from app.services.websocket_manager import manager
 
@@ -42,7 +44,8 @@ async def submit_mobile_shift_report(
 
     # Verify driver owns this shift
     profile = db.execute(
-        select(DriverProfile).join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
+        select(DriverProfile)
+        .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
         .where(Employee.user_id == user_id)
     ).scalar_one_or_none()
 
@@ -55,10 +58,10 @@ async def submit_mobile_shift_report(
         upload_dir = os.path.join("uploads", "shift_reports", str(task_id))
         os.makedirs(upload_dir, exist_ok=True)
         for i, photo in enumerate(photo_files[:5]):
-            ext = os.path.splitext(getattr(photo, 'filename', None) or "photo.jpg")[1]
+            ext = os.path.splitext(getattr(photo, "filename", None) or "photo.jpg")[1]
             filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{i}{ext}"
             filepath = os.path.join(upload_dir, filename)
-            content_bytes = await photo.read() if hasattr(photo, 'read') else b""
+            content_bytes = await photo.read() if hasattr(photo, "read") else b""
             with open(filepath, "wb") as f:
                 f.write(content_bytes)
             photo_paths.append(filepath)
@@ -90,24 +93,34 @@ async def submit_mobile_shift_report(
     # Notify dispatcher via WS + FCM
     if company_id:
         try:
-            await manager.broadcast_to_company(company_id, {
-                "type": "shift_report_submitted",
-                "task_id": task_id,
-                "report_id": report.id,
-            })
+            await manager.broadcast_to_company(
+                company_id,
+                {
+                    "type": "shift_report_submitted",
+                    "task_id": task_id,
+                    "report_id": report.id,
+                },
+            )
         except Exception:
             pass
 
         try:
-            dispatchers = db.execute(
-                select(UserModel.id).join(UserCompany, UserModel.id == UserCompany.user_id)
-                .where(UserCompany.company_id == company_id)
-            ).scalars().all()
+            dispatchers = (
+                db.execute(
+                    select(UserModel.id)
+                    .join(UserCompany, UserModel.id == UserCompany.user_id)
+                    .where(UserCompany.company_id == company_id)
+                )
+                .scalars()
+                .all()
+            )
             for uid in dispatchers:
                 await fcm_service.send_to_user(
-                    uid, "Отчёт о смене",
+                    uid,
+                    "Отчёт о смене",
                     f"Водитель отправил отчёт по смене #{task_id}",
-                    data={"task_id": str(task_id)}, db=db,
+                    data={"task_id": str(task_id)},
+                    db=db,
                 )
         except Exception:
             pass
@@ -133,7 +146,7 @@ def get_pre_shift_checklist(db: Session, task_id: int, company_id: int) -> dict:
         raise MobileShiftServiceError(403, "Access denied")
 
     # Load checklist config for this vehicle category
-    vehicle_category_id = getattr(vehicle, 'category_id', None)
+    vehicle_category_id = getattr(vehicle, "category_id", None)
     config = None
     if vehicle_category_id:
         config = db.execute(
@@ -161,9 +174,17 @@ def get_pre_shift_checklist(db: Session, task_id: int, company_id: int) -> dict:
             {"key": "tires", "label": "Состояние шин", "required": True},
             {"key": "lights", "label": "Работа фар и сигналов", "required": True},
             {"key": "brakes", "label": "Тормозная система", "required": True},
-            {"key": "fluids", "label": "Уровень жидкостей (масло, ОЖ)", "required": True},
+            {
+                "key": "fluids",
+                "label": "Уровень жидкостей (масло, ОЖ)",
+                "required": True,
+            },
             {"key": "hydraulics", "label": "Гидравлическая система", "required": False},
-            {"key": "body", "label": "Кузов / навесное оборудование", "required": False},
+            {
+                "key": "body",
+                "label": "Кузов / навесное оборудование",
+                "required": False,
+            },
             {"key": "docs", "label": "Документы в кабине", "required": True},
             {"key": "fire_ext", "label": "Огнетушитель / аптечка", "required": True},
             {"key": "cleanliness", "label": "Чистота кабины", "required": False},
@@ -177,8 +198,12 @@ def get_pre_shift_checklist(db: Session, task_id: int, company_id: int) -> dict:
     if existing:
         return {
             "submitted": True,
-            "submitted_at": existing.submitted_at.isoformat() if existing.submitted_at else None,
-            "items": json.loads(existing.checklist_json) if existing.checklist_json else [],
+            "submitted_at": (
+                existing.submitted_at.isoformat() if existing.submitted_at else None
+            ),
+            "items": (
+                json.loads(existing.checklist_json) if existing.checklist_json else []
+            ),
             "notes": existing.notes,
             "has_issues": existing.has_issues,
         }

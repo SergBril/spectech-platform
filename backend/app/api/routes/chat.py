@@ -1,7 +1,7 @@
 """Endpoints для чата по заявке (REST + WebSocket)."""
 
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 from fastapi import (
     APIRouter,
@@ -43,6 +43,7 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 
 class FileUploadResponse(BaseModel):
     """Ответ после загрузки файла в MinIO."""
+
     path: str
     url: str
     size: int
@@ -52,6 +53,7 @@ class FileUploadResponse(BaseModel):
 
 class MessageCreate(BaseModel):
     """Схема создания сообщения."""
+
     content: str = Field(default="", max_length=5000)
     message_type: ChatMessageType = Field(default=ChatMessageType.text)
     attachments: dict | None = None
@@ -62,6 +64,7 @@ class MessageCreate(BaseModel):
 
 class MessageRead(BaseModel):
     """Схема чтения сообщения."""
+
     id: int
     chat_id: int
     sender_id: int | None = None
@@ -80,6 +83,7 @@ class MessageRead(BaseModel):
 
 class ChatRead(BaseModel):
     """Схема чтения чата."""
+
     id: int
     request_id: int
     request_title: str | None = None
@@ -91,6 +95,7 @@ class ChatRead(BaseModel):
 
 class MessagesCursorResponse(BaseModel):
     """Ответ с cursor-based пагинацией."""
+
     messages: list[MessageRead]
     next_cursor: int | None = None
     has_more: bool = False
@@ -110,6 +115,7 @@ def _ensure_chat_exists(db: Session, request_id: int) -> RequestChat:
     if not chat:
         # Проверяем существование заявки
         from app.models.dispatch import Request as DispatchRequest
+
         req = db.get(DispatchRequest, request_id)
         if not req:
             raise ValueError(f"Request {request_id} not found")
@@ -152,13 +158,16 @@ def _add_participant(db: Session, chat_id: int, user_id: int, role: str = "clien
 def _get_unread_count(db: Session, chat_id: int, user_id: int) -> int:
     """Получить количество непрочитанных сообщений."""
     # Упрощённая логика: считаем все сообщения не от текущего пользователя
-    count = db.execute(
-        select(ChatMessage)
-        .where(
-            ChatMessage.chat_id == chat_id,
-            ChatMessage.sender_id != user_id,
+    count = (
+        db.execute(
+            select(ChatMessage).where(
+                ChatMessage.chat_id == chat_id,
+                ChatMessage.sender_id != user_id,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return len(count)
 
 
@@ -198,14 +207,14 @@ def _get_messages_cursor(
 
 def _mark_as_read(db: Session, message_id: int, user_id: int):
     """Пометить сообщение как прочитанное."""
-    from sqlalchemy import select as sa_select
     msg = db.get(ChatMessage, message_id)
     if not msg:
         return
 
     current = msg.is_read_by or {}
     if str(user_id) not in current:
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
+
         current[str(user_id)] = datetime.now(UTC).isoformat()
         msg.is_read_by = current
         db.commit()
@@ -222,18 +231,18 @@ def _message_to_read(msg: ChatMessage, db: Session) -> MessageRead:
         chat_id=msg.chat_id,
         sender_id=msg.sender_id,
         sender_name=sender_name,
-        sender_type=msg.sender_type if hasattr(msg, 'sender_type') else "user",
+        sender_type=msg.sender_type if hasattr(msg, "sender_type") else "user",
         message_type=(
             msg.message_type.value
             if hasattr(msg.message_type, "value")
             else str(msg.message_type)
         ),
         content=msg.content,
-        file_url=getattr(msg, 'file_url', None),
-        attachments=getattr(msg, 'attachments', None),
-        reply_to_message_id=getattr(msg, 'reply_to_message_id', None),
-        is_read_by=getattr(msg, 'is_read_by', None),
-        created_at=msg.created_at if hasattr(msg, 'created_at') else msg.sent_at,
+        file_url=getattr(msg, "file_url", None),
+        attachments=getattr(msg, "attachments", None),
+        reply_to_message_id=getattr(msg, "reply_to_message_id", None),
+        is_read_by=getattr(msg, "is_read_by", None),
+        created_at=msg.created_at if hasattr(msg, "created_at") else msg.sent_at,
     )
 
 
@@ -261,7 +270,16 @@ async def upload_chat_file(
         raise HTTPException(status_code=404, detail="Request not found")
 
     if not _is_participant(db, chat.id, current_user.id):
-        _add_participant(db, chat.id, current_user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
+        _add_participant(
+            db,
+            chat.id,
+            current_user.id,
+            (
+                ChatParticipantRole.client.value
+                if hasattr(ChatParticipantRole, "client")
+                else "client"
+            ),
+        )
 
     try:
         result = storage_service.upload_file(
@@ -295,7 +313,16 @@ async def upload_multiple_chat_files(
         raise HTTPException(status_code=404, detail="Request not found")
 
     if not _is_participant(db, chat.id, current_user.id):
-        _add_participant(db, chat.id, current_user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
+        _add_participant(
+            db,
+            chat.id,
+            current_user.id,
+            (
+                ChatParticipantRole.client.value
+                if hasattr(ChatParticipantRole, "client")
+                else "client"
+            ),
+        )
 
     results = []
     for file in files:
@@ -330,12 +357,25 @@ def get_chat_by_request(
         raise HTTPException(status_code=404, detail="Request not found")
 
     if not _is_participant(db, chat.id, current_user.id):
-        _add_participant(db, chat.id, current_user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
+        _add_participant(
+            db,
+            chat.id,
+            current_user.id,
+            (
+                ChatParticipantRole.client.value
+                if hasattr(ChatParticipantRole, "client")
+                else "client"
+            ),
+        )
 
     last_msg = (
         db.query(ChatMessage)
         .filter(ChatMessage.chat_id == chat.id)
-        .order_by(ChatMessage.created_at.desc() if hasattr(ChatMessage, 'created_at') else ChatMessage.sent_at.desc())
+        .order_by(
+            ChatMessage.created_at.desc()
+            if hasattr(ChatMessage, "created_at")
+            else ChatMessage.sent_at.desc()
+        )
         .first()
     )
     last_message = _message_to_read(last_msg, db) if last_msg else None
@@ -376,7 +416,16 @@ def get_chat_messages_cursor(
         raise HTTPException(status_code=404, detail="Chat not found")
 
     if not _is_participant(db, chat.id, current_user.id):
-        _add_participant(db, chat.id, current_user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
+        _add_participant(
+            db,
+            chat.id,
+            current_user.id,
+            (
+                ChatParticipantRole.client.value
+                if hasattr(ChatParticipantRole, "client")
+                else "client"
+            ),
+        )
 
     messages, has_more = _get_messages_cursor(
         db=db,
@@ -413,43 +462,67 @@ def send_message_to_chat(
         raise HTTPException(status_code=404, detail="Request not found")
 
     if not _is_participant(db, chat.id, current_user.id):
-        _add_participant(db, chat.id, current_user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
+        _add_participant(
+            db,
+            chat.id,
+            current_user.id,
+            (
+                ChatParticipantRole.client.value
+                if hasattr(ChatParticipantRole, "client")
+                else "client"
+            ),
+        )
 
     # Определяем получателя
     recipient_id = None
-    
+
     # Проверяем, является ли текущий пользователь водителем этой смены
     from app.models.contractor import DriverProfile, Employee
+
     my_profile = db.execute(
-        select(DriverProfile).join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
+        select(DriverProfile)
+        .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
         .where(Employee.user_id == current_user.id)
     ).scalar_one_or_none()
-    
+
     # Получаем shift_task из чата (если есть связь)
     task = None
-    if hasattr(chat, 'shift_task_id') and chat.shift_task_id:
+    if hasattr(chat, "shift_task_id") and chat.shift_task_id:
         task = db.get(ShiftTask, chat.shift_task_id)
-    elif hasattr(chat, 'request_id') and chat.request_id:
+    elif hasattr(chat, "request_id") and chat.request_id:
         # Пытаемся найти смену через заявку
         from app.models.shift import ShiftTask as ST
-        task = db.execute(
-            select(ST).where(ST.request_id == chat.request_id)
-        ).scalars().first()
-    
+
+        task = (
+            db.execute(select(ST).where(ST.request_id == chat.request_id))
+            .scalars()
+            .first()
+        )
+
     if my_profile and task and task.operator_id == my_profile.employee_contractor_id:
         # Водитель отправляет диспетчеру (первому пользователю компании)
         from app.models.auth import UserCompany
-        dispatcher_id = db.execute(
-            select(UserCompany.user_id).where(UserCompany.company_id == chat.company_id if hasattr(chat, 'company_id') else 0)
-            .where(UserCompany.user_id != current_user.id)
-        ).scalars().first()
+
+        dispatcher_id = (
+            db.execute(
+                select(UserCompany.user_id)
+                .where(
+                    UserCompany.company_id == chat.company_id
+                    if hasattr(chat, "company_id")
+                    else 0
+                )
+                .where(UserCompany.user_id != current_user.id)
+            )
+            .scalars()
+            .first()
+        )
         recipient_id = dispatcher_id
     elif task and task.operator_id:
         # Диспетчер отправляет водителю
         driver_emp = db.get(Employee, task.operator_id)
         if driver_emp and driver_emp.user_id:
             recipient_id = driver_emp.user_id
-    
+
     # Fallback: если не удалось определить получателя, используем 0 (системное сообщение)
     if recipient_id is None:
         recipient_id = 0
@@ -460,11 +533,15 @@ def send_message_to_chat(
         recipient_id=recipient_id,
         text=data.content,
         shift_task_id=request_id,
-        message_type=data.message_type.value if hasattr(data.message_type, 'value') else str(data.message_type),
+        message_type=(
+            data.message_type.value
+            if hasattr(data.message_type, "value")
+            else str(data.message_type)
+        ),
         file_url=data.file_url,
         attachments=data.attachments,
     )
-    
+
     # Если send_chat_message вернул dict, создаём объект для ответа
     if isinstance(message, dict):
         msg_obj = db.get(ChatMessage, message.get("message_id"))
@@ -507,7 +584,16 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
 
         # 3. Добавляем в участники
         if not _is_participant(db, chat.id, user.id):
-            _add_participant(db, chat.id, user.id, ChatParticipantRole.client.value if hasattr(ChatParticipantRole, 'client') else "client")
+            _add_participant(
+                db,
+                chat.id,
+                user.id,
+                (
+                    ChatParticipantRole.client.value
+                    if hasattr(ChatParticipantRole, "client")
+                    else "client"
+                ),
+            )
 
         # 4. Подключаем
         await manager.connect_chat(websocket, chat_id)
@@ -536,13 +622,17 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
 
             if msg_type == "message":
                 # Определяем получателя
-                participants = db.execute(
-                    select(ChatParticipant.user_id).where(
-                        ChatParticipant.chat_id == chat_id,
-                        ChatParticipant.user_id != user.id,
-                        ChatParticipant.left_at.is_(None),
+                participants = (
+                    db.execute(
+                        select(ChatParticipant.user_id).where(
+                            ChatParticipant.chat_id == chat_id,
+                            ChatParticipant.user_id != user.id,
+                            ChatParticipant.left_at.is_(None),
+                        )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
                 recipient_id = participants[0] if participants else 0
 
                 result = send_chat_message(
@@ -550,7 +640,9 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
                     sender_id=user.id,
                     recipient_id=recipient_id,
                     text=data.get("content", ""),
-                    shift_task_id=chat.request_id if hasattr(chat, 'request_id') else None,
+                    shift_task_id=(
+                        chat.request_id if hasattr(chat, "request_id") else None
+                    ),
                     message_type=data.get("message_type", "text"),
                     file_url=data.get("file_url"),
                     attachments=data.get("attachments"),
@@ -570,11 +662,19 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
                                     "chat_id": chat_id,
                                     "sender_id": user.id,
                                     "sender_email": user.email,
-                                    "message_type": getattr(msg_obj, 'message_type', 'text'),
+                                    "message_type": getattr(
+                                        msg_obj, "message_type", "text"
+                                    ),
                                     "content": msg_obj.content,
-                                    "file_url": getattr(msg_obj, 'file_url', None),
-                                    "attachments": getattr(msg_obj, 'attachments', None),
-                                    "created_at": (msg_obj.created_at if hasattr(msg_obj, 'created_at') else msg_obj.sent_at).isoformat(),
+                                    "file_url": getattr(msg_obj, "file_url", None),
+                                    "attachments": getattr(
+                                        msg_obj, "attachments", None
+                                    ),
+                                    "created_at": (
+                                        msg_obj.created_at
+                                        if hasattr(msg_obj, "created_at")
+                                        else msg_obj.sent_at
+                                    ).isoformat(),
                                 },
                             },
                         )

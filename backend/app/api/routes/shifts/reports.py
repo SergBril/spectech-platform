@@ -1,32 +1,40 @@
 """Модуль reports для shifts router."""
 
 from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile
-from pydantic import BaseModel
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
-from app.core.db import get_db
 
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_company_id, get_current_user
+from app.core.db import get_db
 from app.models.shift import ShiftReport, ShiftReportStatus, ShiftTask
 from app.schemas.shift import ShiftReportCreate, ShiftReportRead, ShiftReportUpdate
 from app.services import storage_service
-from app.api.deps import get_current_company_id, get_current_user
+
 
 class SignReportPayload(BaseModel):
     signature: str  # Base64 строка или URL
 
 
-
-
 from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile, Request
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
-from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
-
 from app.models.shift import ShiftReport, ShiftReportStatus, ShiftTask
 from app.schemas.shift import ShiftReportCreate, ShiftReportRead, ShiftReportUpdate
 from app.services import storage_service
@@ -44,6 +52,7 @@ class SignReportPayload(BaseModel):
 
 
 router = APIRouter()
+
 
 @router.get("/reports", response_model=list[ShiftReportRead])
 def list_shift_reports(
@@ -63,7 +72,6 @@ def list_shift_reports(
         stmt = stmt.where(ShiftReport.shift_task_id == shift_task_id)
     stmt = stmt.order_by(ShiftReport.created_at.desc()).limit(limit)
     return db.scalars(stmt).all()
-
 
 
 @router.post("/reports", response_model=ShiftReportRead, status_code=201)
@@ -98,7 +106,6 @@ def create_shift_report(
     db.commit()
     db.refresh(report)
     return report
-
 
 
 @router.patch("/reports/{report_id}", response_model=ShiftReportRead)
@@ -137,7 +144,6 @@ def update_shift_report(
     db.commit()
     db.refresh(report)
     return report
-
 
 
 @router.patch("/reports/{report_id}/approve", response_model=ShiftReportRead)
@@ -180,7 +186,6 @@ def approve_shift_report(
     return report
 
 
-
 @router.patch("/reports/{report_id}/dispute", response_model=ShiftReportRead)
 def dispute_shift_report(
     report_id: int,
@@ -216,7 +221,6 @@ def dispute_shift_report(
     db.refresh(report)
 
     return report
-
 
 
 @router.post("/reports/{report_id}/photos", response_model=ShiftReportRead)
@@ -259,7 +263,6 @@ async def upload_shift_report_photos(
     return report
 
 
-
 @router.post("/reports/{report_id}/submit", response_model=ShiftReportRead)
 def submit_shift_report(
     report_id: int,
@@ -295,7 +298,6 @@ def submit_shift_report(
     db.commit()
     db.refresh(report)
     return report
-
 
 
 @router.post("/reports/{report_id}/approve-sign", response_model=ShiftReportRead)
@@ -334,5 +336,3 @@ def approve_and_sign_shift_report(
 
 
 # === Shift Templates ===
-
-

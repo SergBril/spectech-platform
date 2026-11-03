@@ -1,9 +1,11 @@
 import asyncio
+
 """Rate limiting middleware для защиты API."""
-import time
 import logging
+import time
 from collections import defaultdict
-from fastapi import Request, HTTPException, status
+
+from fastapi import HTTPException, Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger(__name__)
@@ -64,9 +66,13 @@ class RedisRateLimiter:
             return None
         try:
             import redis.asyncio as aioredis
+
             from app.core.config import settings
+
             url = getattr(settings, "REDIS_URL", "redis://localhost:6379/0")
-            r = aioredis.from_url(url, encoding="utf-8", decode_responses=True, socket_connect_timeout=2)
+            r = aioredis.from_url(
+                url, encoding="utf-8", decode_responses=True, socket_connect_timeout=2
+            )
             await asyncio.wait_for(r.ping(), timeout=2)
             self._redis = r
             logger.info("Redis rate limiter connected")
@@ -126,14 +132,15 @@ class RedisRateLimiter:
 
 redis_rate_limiter = RedisRateLimiter()
 
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """FastAPI middleware for rate limiting."""
 
     # Endpoints with custom limits: (path_prefix, limit, window_seconds)
     CUSTOM_LIMITS = [
-        ("/api/v1/auth/login", 5, 60),       # 5 logins per minute
-        ("/api/v1/auth/register", 3, 300),   # 3 registrations per 5 min
-        ("/api/v1/max/webhook", 100, 60),    # Webhook: higher limit
+        ("/api/v1/auth/login", 5, 60),  # 5 logins per minute
+        ("/api/v1/auth/register", 3, 300),  # 3 registrations per 5 min
+        ("/api/v1/max/webhook", 100, 60),  # Webhook: higher limit
     ]
     DEFAULT_LIMIT = 120  # 120 requests per minute
     DEFAULT_WINDOW = 60
@@ -152,16 +159,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 logger.warning("Blocked login from %s (too many failures)", client_ip)
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Too many failed login attempts. Try again in 15 minutes."
+                    detail="Too many failed login attempts. Try again in 15 minutes.",
                 )
 
         # Determine rate limit
         limit = self.DEFAULT_LIMIT
         window = self.DEFAULT_WINDOW
-        for prefix, l, w in self.CUSTOM_LIMITS:
+        for prefix, lim, win in self.CUSTOM_LIMITS:
             if path.startswith(prefix):
-                limit = l
-                window = w
+                limit = lim
+                window = win
                 break
 
         # Check rate
@@ -171,10 +178,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             logger.warning("Rate limit exceeded: %s (%d/%ds)", key, limit, window)
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Rate limit exceeded. Max {limit} requests per {window}s."
+                detail=f"Rate limit exceeded. Max {limit} requests per {window}s.",
             )
 
         response = await call_next(request)
         return response
-
-

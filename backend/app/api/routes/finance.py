@@ -728,9 +728,11 @@ def download_invoice_pdf(
     company_id: int = Depends(get_current_company_id),
 ):
     """Скачать PDF счёта."""
-    from fastapi.responses import StreamingResponse
-    from app.services.pdf_service import pdf_service
     import io
+
+    from fastapi.responses import StreamingResponse
+
+    from app.services.pdf_service import pdf_service
 
     invoice = db.get(Invoice, invoice_id)
     if not invoice or invoice.company_id != company_id:
@@ -741,7 +743,9 @@ def download_invoice_pdf(
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=invoice_{invoice.document_number}.pdf"}
+            headers={
+                "Content-Disposition": f"attachment; filename=invoice_{invoice.document_number}.pdf"
+            },
         )
     except Exception as e:
         logger.error(f"Failed to generate invoice PDF: {e}")

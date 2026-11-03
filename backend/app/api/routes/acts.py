@@ -1,12 +1,14 @@
 ﻿"""Роутер для актов выполненных работ (PDF, УПД, ТОРГ-12, счёт-фактура)."""
 
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.core.db import get_db
-from app.models.finance import Act
-from app.models.auth import User
+
 from app.api.deps import get_current_user
+from app.core.db import get_db
+from app.models.auth import User
+from app.models.finance import Act
 
 logger = logging.getLogger("spectech.acts")
 router = APIRouter(prefix="/acts", tags=["📄 Acts"])
@@ -19,9 +21,11 @@ def download_act_pdf(
     current_user: User = Depends(get_current_user),
 ):
     """Скачать PDF акта."""
-    from fastapi.responses import StreamingResponse
-    from app.services.pdf_service import generate_act_pdf
     import io
+
+    from fastapi.responses import StreamingResponse
+
+    from app.services.pdf_service import generate_act_pdf
 
     act = db.get(Act, act_id)
     if not act:
@@ -32,7 +36,9 @@ def download_act_pdf(
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=act_{act.document_number}.pdf"}
+            headers={
+                "Content-Disposition": f"attachment; filename=act_{act.document_number}.pdf"
+            },
         )
     except Exception as e:
         logger.error(f"Failed to generate act PDF: {e}")
@@ -46,9 +52,11 @@ def download_invoice_facture_pdf(
     current_user: User = Depends(get_current_user),
 ):
     """Скачать PDF счёта-фактуры."""
-    from fastapi.responses import StreamingResponse
-    from app.services.pdf_generator import generate_invoice_facture_pdf
     import io
+
+    from fastapi.responses import StreamingResponse
+
+    from app.services.pdf_generator import generate_invoice_facture_pdf
 
     act = db.get(Act, act_id)
     if not act:
@@ -59,7 +67,9 @@ def download_invoice_facture_pdf(
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=sf_{act.document_number}.pdf"}
+            headers={
+                "Content-Disposition": f"attachment; filename=sf_{act.document_number}.pdf"
+            },
         )
     except Exception as e:
         logger.error(f"Failed to generate invoice facture PDF: {e}")
@@ -73,9 +83,11 @@ def download_upd_pdf(
     current_user: User = Depends(get_current_user),
 ):
     """Скачать PDF УПД."""
-    from fastapi.responses import StreamingResponse
-    from app.services.pdf_generator import generate_upd_pdf
     import io
+
+    from fastapi.responses import StreamingResponse
+
+    from app.services.pdf_generator import generate_upd_pdf
 
     act = db.get(Act, act_id)
     if not act:
@@ -86,7 +98,9 @@ def download_upd_pdf(
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=upd_{act.document_number}.pdf"}
+            headers={
+                "Content-Disposition": f"attachment; filename=upd_{act.document_number}.pdf"
+            },
         )
     except Exception as e:
         logger.error(f"Failed to generate UPD PDF: {e}")
@@ -100,9 +114,11 @@ def download_torg12_pdf(
     current_user: User = Depends(get_current_user),
 ):
     """Скачать PDF ТОРГ-12."""
-    from fastapi.responses import StreamingResponse
-    from app.services.pdf_generator import generate_torg12_pdf
     import io
+
+    from fastapi.responses import StreamingResponse
+
+    from app.services.pdf_generator import generate_torg12_pdf
 
     act = db.get(Act, act_id)
     if not act:
@@ -113,7 +129,9 @@ def download_torg12_pdf(
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=torg12_{act.document_number}.pdf"}
+            headers={
+                "Content-Disposition": f"attachment; filename=torg12_{act.document_number}.pdf"
+            },
         )
     except Exception as e:
         logger.error(f"Failed to generate TORG-12 PDF: {e}")

@@ -1,25 +1,35 @@
 """Сервис уведомлений о конфликтах и простоях."""
+
 import logging
+from datetime import date as date_type
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
-from datetime import date as date_type, timedelta
 
 logger = logging.getLogger(__name__)
 
 
-async def check_and_notify_idle_vehicles(db: Session, company_id: int, target_date: date_type):
+async def check_and_notify_idle_vehicles(
+    db: Session, company_id: int, target_date: date_type
+):
     """Проверить простаивающую технику и отправить уведомления."""
-    from app.models.vehicle import Vehicle
     from app.models.shift import ShiftTask
+    from app.models.vehicle import Vehicle
 
-    vehicles = db.execute(select(Vehicle).where(Vehicle.company_id == company_id)).scalars().all()
+    vehicles = (
+        db.execute(select(Vehicle).where(Vehicle.company_id == company_id))
+        .scalars()
+        .all()
+    )
     busy_ids = set(
         db.execute(
             select(ShiftTask.vehicle_id).where(
                 ShiftTask.shift_date == target_date,
                 ShiftTask.status.notin_(["cancelled"]),
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
     idle = [v for v in vehicles if v.id not in busy_ids]
@@ -38,10 +48,12 @@ async def check_and_notify_idle_vehicles(db: Session, company_id: int, target_da
     return {"idle_count": len(idle), "notified": True, "message": message}
 
 
-async def check_and_notify_conflicts(db: Session, company_id: int, target_date: date_type):
+async def check_and_notify_conflicts(
+    db: Session, company_id: int, target_date: date_type
+):
     """Проверить конфликты расписания (двойное назначение)."""
+
     from app.models.shift import ShiftTask
-    from sqlalchemy import and_
 
     # Drivers with multiple shifts on same date
     conflicts = db.execute(
@@ -73,12 +85,18 @@ async def send_alert_email(company_id: int, subject: str, body: str, db: Session
 
     # Send FCM push to company dispatchers
     try:
-        from app.services.fcm_service import fcm_service
         from app.models.auth import User, UserCompany
-        dispatcher_ids = db.execute(
-            select(User.id).join(UserCompany, User.id == UserCompany.user_id)
-            .where(UserCompany.company_id == company_id)
-        ).scalars().all()
+        from app.services.fcm_service import fcm_service
+
+        dispatcher_ids = (
+            db.execute(
+                select(User.id)
+                .join(UserCompany, User.id == UserCompany.user_id)
+                .where(UserCompany.company_id == company_id)
+            )
+            .scalars()
+            .all()
+        )
         for uid in dispatcher_ids:
             await fcm_service.send_to_user(uid, subject, body, db=db)
     except Exception as e:

@@ -3,12 +3,13 @@
 from fastapi import APIRouter, Body, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
-from app.api.deps import get_current_company_id, get_current_user
 from app.services.shift_stats_service import shift_stats_service
 
 router = APIRouter()
+
 
 @router.get("/stats/utilization")
 def get_utilization_stats(
@@ -19,7 +20,9 @@ def get_utilization_stats(
     company_id: int = Depends(get_current_company_id),
 ):
     """Статистика использования техники: % дней со сменами, часы работы, простои."""
-    return shift_stats_service.get_utilization_stats(db=db, company_id=company_id, date_from=date_from, date_to=date_to)
+    return shift_stats_service.get_utilization_stats(
+        db=db, company_id=company_id, date_from=date_from, date_to=date_to
+    )
 
 
 @router.get("/stats/utilization/export")
@@ -31,7 +34,9 @@ def export_utilization_excel(
     company_id: int = Depends(get_current_company_id),
 ):
     """Экспорт статистики утилизации техники в Excel."""
-    return shift_stats_service.export_utilization_excel(db=db, company_id=company_id, date_from=date_from, date_to=date_to)
+    return shift_stats_service.export_utilization_excel(
+        db=db, company_id=company_id, date_from=date_from, date_to=date_to
+    )
 
 
 @router.get("/stats/driver-kpi")
@@ -43,7 +48,9 @@ def get_driver_kpi(
     company_id: int = Depends(get_current_company_id),
 ):
     """KPI водителей: часы работы, количество смен, утилизация, рейтинг."""
-    return shift_stats_service.get_driver_kpi(db=db, company_id=company_id, date_from=date_from, date_to=date_to)
+    return shift_stats_service.get_driver_kpi(
+        db=db, company_id=company_id, date_from=date_from, date_to=date_to
+    )
 
 
 @router.get("/stats/driver-kpi/export")
@@ -55,7 +62,9 @@ def export_driver_kpi_excel(
     company_id: int = Depends(get_current_company_id),
 ):
     """Экспорт KPI водителей в Excel с рейтингом."""
-    return shift_stats_service.export_driver_kpi_excel(db=db, company_id=company_id, date_from=date_from, date_to=date_to)
+    return shift_stats_service.export_driver_kpi_excel(
+        db=db, company_id=company_id, date_from=date_from, date_to=date_to
+    )
 
 
 @router.get("/stats/fuel")
@@ -68,7 +77,13 @@ def get_fuel_consumption_stats(
     company_id: int = Depends(get_current_company_id),
 ):
     """Статистика расхода топлива по технике за период."""
-    return shift_stats_service.get_fuel_consumption_stats(db=db, company_id=company_id, date_from=date_from, date_to=date_to, vehicle_id=vehicle_id)
+    return shift_stats_service.get_fuel_consumption_stats(
+        db=db,
+        company_id=company_id,
+        date_from=date_from,
+        date_to=date_to,
+        vehicle_id=vehicle_id,
+    )
 
 
 @router.get("/stats/fuel/export")
@@ -81,7 +96,13 @@ def export_fuel_consumption_excel(
     company_id: int = Depends(get_current_company_id),
 ):
     """Экспорт записей расхода топлива в Excel."""
-    return shift_stats_service.export_fuel_consumption_excel(db=db, company_id=company_id, date_from=date_from, date_to=date_to, vehicle_id=vehicle_id)
+    return shift_stats_service.export_fuel_consumption_excel(
+        db=db,
+        company_id=company_id,
+        date_from=date_from,
+        date_to=date_to,
+        vehicle_id=vehicle_id,
+    )
 
 
 @router.get("/stats/fuel-dashboard")
@@ -93,7 +114,9 @@ def get_fuel_dashboard(
     company_id: int = Depends(get_current_company_id),
 ):
     """Дашборд расхода топлива: тренды, аномалии, топ потребителей."""
-    return shift_stats_service.get_fuel_dashboard(db=db, company_id=company_id, date_from=date_from, date_to=date_to)
+    return shift_stats_service.get_fuel_dashboard(
+        db=db, company_id=company_id, date_from=date_from, date_to=date_to
+    )
 
 
 @router.get("/stats/cost-per-hour")
@@ -105,7 +128,13 @@ def get_cost_per_hour_report(
     company_id: int = Depends(get_current_company_id),
 ):
     """Отчёт себестоимости моточаса: топливо + зарплата водителя + амортизация."""
-    return shift_stats_service.get_cost_per_hour_report(db=db, company_id=company_id, current_user=current_user, date_from=date_from, date_to=date_to)
+    return shift_stats_service.get_cost_per_hour_report(
+        db=db,
+        company_id=company_id,
+        current_user=current_user,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
 
 @router.get("/stats/cost-per-hour/export")
@@ -117,7 +146,13 @@ def export_cost_per_hour_excel(
     company_id: int = Depends(get_current_company_id),
 ):
     """Экспорт отчёта себестоимости моточаса в Excel."""
-    return shift_stats_service.export_cost_per_hour_excel(db=db, company_id=company_id, current_user=current_user, date_from=date_from, date_to=date_to)
+    return shift_stats_service.export_cost_per_hour_excel(
+        db=db,
+        company_id=company_id,
+        current_user=current_user,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
 
 @router.get("/stats/cost-rates")
@@ -140,7 +175,14 @@ def update_cost_rates(
     company_id: int = Depends(get_current_company_id),
 ):
     """Обновить ставки для расчёта себестоимости моточаса."""
-    return shift_stats_service.update_cost_rates(db=db, company_id=company_id, current_user=current_user, fuel_price_per_liter=fuel_price_per_liter, hourly_wage=hourly_wage, amortization_per_hour=amortization_per_hour)
+    return shift_stats_service.update_cost_rates(
+        db=db,
+        company_id=company_id,
+        current_user=current_user,
+        fuel_price_per_liter=fuel_price_per_liter,
+        hourly_wage=hourly_wage,
+        amortization_per_hour=amortization_per_hour,
+    )
 
 
 @router.get("/stats/cost-forecast")
@@ -162,7 +204,13 @@ def get_pnl_per_vehicle(
     company_id: int = Depends(get_current_company_id),
 ):
     """Отчёт прибыльности по каждой единице техники: выручка - расходы = маржа."""
-    return shift_stats_service.get_pnl_per_vehicle(db=db, company_id=company_id, current_user=current_user, date_from=date_from, date_to=date_to)
+    return shift_stats_service.get_pnl_per_vehicle(
+        db=db,
+        company_id=company_id,
+        current_user=current_user,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
 
 @router.get("/stats/pnl/export")
@@ -174,7 +222,13 @@ def export_pnl_excel(
     company_id: int = Depends(get_current_company_id),
 ):
     """Экспорт отчёта прибыльности по технике в Excel."""
-    return shift_stats_service.export_pnl_excel(db=db, company_id=company_id, current_user=current_user, date_from=date_from, date_to=date_to)
+    return shift_stats_service.export_pnl_excel(
+        db=db,
+        company_id=company_id,
+        current_user=current_user,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
 
 @router.get("/stats/platform-overview")
@@ -195,4 +249,6 @@ def get_recent_actions(
     company_id: int = Depends(get_current_company_id),
 ):
     """Последние действия из audit log для dashboard виджета."""
-    return shift_stats_service.get_recent_actions(db=db, company_id=company_id, limit=limit)
+    return shift_stats_service.get_recent_actions(
+        db=db, company_id=company_id, limit=limit
+    )

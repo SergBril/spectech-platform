@@ -1,32 +1,26 @@
 """Модуль tasks для shifts router."""
 
-from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile
-from pydantic import BaseModel
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+)
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from app.core.db import get_db
 
-from app.models.catalog import Vehicle
-from app.models.shift import ShiftTask, ShiftAuditLog
-from app.schemas.shift import ShiftTaskCreate, ShiftTaskRead
 from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
-
-from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile, Request
-from pydantic import BaseModel
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.auth import User
-from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
-
 from app.models.catalog import Vehicle
-from app.models.shift import ShiftTask, ShiftAuditLog, ShiftTemplate, ShiftTemplateExclusion, AutoAssignRule, ShiftTaskStatus
-from app.models.contractor import DriverProfile, Employee
+from app.models.shift import (
+    ShiftTask,
+)
 from app.schemas.shift import ShiftTaskCreate, ShiftTaskRead
 
 router = APIRouter()
+
 
 @router.get("/tasks", response_model=list[ShiftTaskRead])
 def list_shift_tasks(
@@ -44,7 +38,6 @@ def list_shift_tasks(
     return db.scalars(stmt).all()
 
 
-
 @router.post("/tasks", response_model=ShiftTaskRead, status_code=201)
 def create_shift_task(
     payload: ShiftTaskCreate,
@@ -53,12 +46,13 @@ def create_shift_task(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Создать сменное задание (для своей компании)."""
-    task = ShiftTask(**payload.model_dump(), company_id=company_ids[0] if company_ids else None)
+    task = ShiftTask(
+        **payload.model_dump(), company_id=company_ids[0] if company_ids else None
+    )
     db.add(task)
     db.commit()
     db.refresh(task)
     return task
-
 
 
 @router.get("/tasks/{task_id}", response_model=ShiftTaskRead)
@@ -75,8 +69,6 @@ def get_shift_task(
     return task
 
 
-
-
 @router.put("/tasks/{task_id}")
 async def update_shift_task(
     task_id: int,
@@ -90,13 +82,20 @@ async def update_shift_task(
     company_id: int = Depends(get_current_company_id),
 ):
     """Обновить смену (дата, водитель, статус). Используется для drag-and-drop."""
-    from app.services.shift_task_service import update_shift_task as svc_update, ShiftTaskServiceError
+    from app.services.shift_task_service import ShiftTaskServiceError
+    from app.services.shift_task_service import update_shift_task as svc_update
 
     try:
         return await svc_update(
-            db=db, task_id=task_id, company_id=company_id, user_id=current_user.id,
-            shift_date=shift_date, planned_start=planned_start, planned_end=planned_end,
-            driver_id=driver_id, status=status,
+            db=db,
+            task_id=task_id,
+            company_id=company_id,
+            user_id=current_user.id,
+            shift_date=shift_date,
+            planned_start=planned_start,
+            planned_end=planned_end,
+            driver_id=driver_id,
+            status=status,
         )
     except ShiftTaskServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
@@ -111,20 +110,25 @@ def export_shift_calendar_ical(
     company_id: int = Depends(get_current_company_id),
 ):
     """Экспорт календаря смен в формате iCalendar (.ics) для импорта в Google Calendar / Outlook."""
-    from datetime import date as date_type, timedelta
+    from datetime import date as date_type
+
     from fastapi.responses import Response
 
     d_from = date_type.fromisoformat(date_from)
     d_to = date_type.fromisoformat(date_to)
 
-    tasks = db.execute(
-        select(ShiftTask)
-        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
-        .where(Vehicle.company_id == company_id)
-        .where(ShiftTask.shift_date >= d_from)
-        .where(ShiftTask.shift_date <= d_to)
-        .order_by(ShiftTask.shift_date)
-    ).scalars().all()
+    tasks = (
+        db.execute(
+            select(ShiftTask)
+            .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+            .where(Vehicle.company_id == company_id)
+            .where(ShiftTask.shift_date >= d_from)
+            .where(ShiftTask.shift_date <= d_to)
+            .order_by(ShiftTask.shift_date)
+        )
+        .scalars()
+        .all()
+    )
 
     lines = [
         "BEGIN:VCALENDAR",
@@ -142,29 +146,39 @@ def export_shift_calendar_ical(
         driver_name = ""
         if t.operator_id:
             from app.models.contractor import DriverProfile
+
             profile = db.get(DriverProfile, t.operator_id)
             if profile:
                 from app.models.contractor import Employee
+
                 emp = db.get(Employee, profile.employee_contractor_id)
                 driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
 
-        dt_start = getattr(t, 'planned_start', None) or __import__('datetime').datetime.combine(t.shift_date, __import__('datetime').time(8, 0))
-        dt_end = getattr(t, 'planned_end', None) or __import__('datetime').datetime.combine(t.shift_date, __import__('datetime').time(17, 0))
+        dt_start = getattr(t, "planned_start", None) or __import__(
+            "datetime"
+        ).datetime.combine(t.shift_date, __import__("datetime").time(8, 0))
+        dt_end = getattr(t, "planned_end", None) or __import__(
+            "datetime"
+        ).datetime.combine(t.shift_date, __import__("datetime").time(17, 0))
 
         uid = f"shift-{t.id}@spectech.dev"
         summary = f"{v_name}" + (f" — {driver_name}" if driver_name else "")
-        description = f"Статус: {t.status}\nТехника: {v_name}" + (f"\nВодитель: {driver_name}" if driver_name else "")
+        description = f"Статус: {t.status}\nТехника: {v_name}" + (
+            f"\nВодитель: {driver_name}" if driver_name else ""
+        )
 
-        lines.extend([
-            "BEGIN:VEVENT",
-            f"UID:{uid}",
-            f"DTSTART:{dt_start.strftime('%Y%m%dT%H%M%S')}",
-            f"DTEND:{dt_end.strftime('%Y%m%dT%H%M%S')}",
-            f"SUMMARY:{summary}",
-            f"DESCRIPTION:{description}",
-            f"STATUS:{'CONFIRMED' if t.status in ('confirmed', 'in_progress', 'completed') else 'TENTATIVE'}",
-            "END:VEVENT",
-        ])
+        lines.extend(
+            [
+                "BEGIN:VEVENT",
+                f"UID:{uid}",
+                f"DTSTART:{dt_start.strftime('%Y%m%dT%H%M%S')}",
+                f"DTEND:{dt_end.strftime('%Y%m%dT%H%M%S')}",
+                f"SUMMARY:{summary}",
+                f"DESCRIPTION:{description}",
+                f"STATUS:{'CONFIRMED' if t.status in ('confirmed', 'in_progress', 'completed') else 'TENTATIVE'}",
+                "END:VEVENT",
+            ]
+        )
 
     lines.append("END:VCALENDAR")
     ical_content = "\r\n".join(lines)
@@ -177,7 +191,6 @@ def export_shift_calendar_ical(
     )
 
 
-
 @router.get("/calendar/export-pdf", summary="🖨️ PDF календаря смен")
 def export_shift_calendar_pdf(
     date_from: str = Query(..., description="Начало периода YYYY-MM-DD"),
@@ -187,33 +200,48 @@ def export_shift_calendar_pdf(
     company_id: int = Depends(get_current_company_id),
 ):
     """Экспорт календаря смен в PDF для печати."""
-    from datetime import date as date_type, timedelta
-    from fastapi.responses import StreamingResponse
     import io
+    from datetime import date as date_type
+    from datetime import timedelta
+
+    from fastapi.responses import StreamingResponse
 
     try:
-        from reportlab.lib.pagesizes import A4, landscape
         from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import mm
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import (
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
     except ImportError:
         # Fallback: generate simple HTML-based PDF alternative
         # For now return Excel if reportlab not available
-        raise HTTPException(status_code=500, detail="reportlab not installed. Install: pip install reportlab")
+        raise HTTPException(
+            status_code=500,
+            detail="reportlab not installed. Install: pip install reportlab",
+        )
 
     d_from = date_type.fromisoformat(date_from)
     d_to = date_type.fromisoformat(date_to)
 
     # Get shifts
-    tasks = db.execute(
-        select(ShiftTask)
-        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
-        .where(Vehicle.company_id == company_id)
-        .where(ShiftTask.shift_date >= d_from)
-        .where(ShiftTask.shift_date <= d_to)
-        .order_by(ShiftTask.shift_date, Vehicle.name)
-    ).scalars().all()
+    tasks = (
+        db.execute(
+            select(ShiftTask)
+            .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+            .where(Vehicle.company_id == company_id)
+            .where(ShiftTask.shift_date >= d_from)
+            .where(ShiftTask.shift_date <= d_to)
+            .order_by(ShiftTask.shift_date, Vehicle.name)
+        )
+        .scalars()
+        .all()
+    )
 
     # Build calendar grid
     days = []
@@ -223,7 +251,7 @@ def export_shift_calendar_pdf(
         d += timedelta(days=1)
 
     # Get unique vehicles
-    vehicle_ids = list(set(t.vehicle_id for t in tasks))
+    vehicle_ids = list({t.vehicle_id for t in tasks})
     vehicles_map = {}
     for vid in vehicle_ids:
         v = db.get(Vehicle, vid)
@@ -246,13 +274,16 @@ def export_shift_calendar_pdf(
     for vid, vname in sorted(vehicles_map.items(), key=lambda x: x[1]):
         row = [vname]
         for day in days:
-            day_tasks = [t for t in tasks if t.vehicle_id == vid and t.shift_date == day]
+            day_tasks = [
+                t for t in tasks if t.vehicle_id == vid and t.shift_date == day
+            ]
             if day_tasks:
                 t = day_tasks[0]
                 driver_name = ""
                 if t.operator_id:
                     from app.models.driver import Driver
-                    driver = db.get(Driver, getattr(t, 'driver_id', None))
+
+                    driver = db.get(Driver, getattr(t, "driver_id", None))
                     driver_name = driver.full_name if driver else ""
                 cell_text = f"{driver_name}\n{t.status}"
                 row.append(cell_text)
@@ -262,31 +293,43 @@ def export_shift_calendar_pdf(
 
     # Generate PDF
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
-                           leftMargin=10*mm, rightMargin=10*mm,
-                           topMargin=15*mm, bottomMargin=10*mm)
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=landscape(A4),
+        leftMargin=10 * mm,
+        rightMargin=10 * mm,
+        topMargin=15 * mm,
+        bottomMargin=10 * mm,
+    )
 
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, alignment=1)
+    title_style = ParagraphStyle(
+        "Title", parent=styles["Heading1"], fontSize=16, alignment=1
+    )
 
     elements = []
-    elements.append(Paragraph(f"Планирование смен: {d_from.strftime('%d.%m')} — {d_to.strftime('%d.%m.%Y')}", title_style))
-    elements.append(Spacer(1, 10*mm))
+    elements.append(
+        Paragraph(
+            f"Планирование смен: {d_from.strftime('%d.%m')} — {d_to.strftime('%d.%m.%Y')}",
+            title_style,
+        )
+    )
+    elements.append(Spacer(1, 10 * mm))
 
-    col_widths = [35*mm] + [(277*mm - 35*mm) / len(days)] * len(days)
+    col_widths = [35 * mm] + [(277 * mm - 35 * mm) / len(days)] * len(days)
     table = Table(data, colWidths=col_widths, repeatRows=1)
 
     style_cmds = [
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2F5496')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 8),
-        ('FONTSIZE', (0, 1), (-1, -1), 7),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('BACKGROUND', (0, 1), (0, -1), colors.HexColor('#F3F4F6')),
-        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2F5496")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 8),
+        ("FONTSIZE", (0, 1), (-1, -1), 7),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#F3F4F6")),
+        ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
     ]
 
     # Color-code status cells
@@ -295,7 +338,9 @@ def export_shift_calendar_pdf(
             cell_val = str(data[row_idx][col_idx])
             for status, color in status_colors.items():
                 if status in cell_val:
-                    style_cmds.append(('BACKGROUND', (col_idx, row_idx), (col_idx, row_idx), color))
+                    style_cmds.append(
+                        ("BACKGROUND", (col_idx, row_idx), (col_idx, row_idx), color)
+                    )
                     break
 
     table.setStyle(TableStyle(style_cmds))
@@ -304,14 +349,14 @@ def export_shift_calendar_pdf(
     doc.build(elements)
     buf.seek(0)
 
-    filename = f"shift_calendar_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.pdf"
+    filename = (
+        f"shift_calendar_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.pdf"
+    )
     return StreamingResponse(
         buf,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
 
 
 @router.post("/tasks/{task_id}/create-request", summary="📋 Создать заявку из смены")
@@ -324,8 +369,8 @@ async def create_request_from_shift(
     company_id: int = Depends(get_current_company_id),
 ):
     """Автоматически создать заявку маркетплейса на основе запланированной смены."""
+
     from app.models.dispatch import Request, RequestAssignment
-    from decimal import Decimal
 
     task = db.get(ShiftTask, task_id)
     if not task:
@@ -343,7 +388,9 @@ async def create_request_from_shift(
         object_address=object_address or f"Смена {task.shift_date}",
         planned_start=task.planned_start,
         planned_end=task.planned_end,
-        vehicle_category_id=vehicle.category_id if hasattr(vehicle, 'category_id') else None,
+        vehicle_category_id=(
+            vehicle.category_id if hasattr(vehicle, "category_id") else None
+        ),
         status="has_responses",
         source_channel="internal",
     )
@@ -369,29 +416,38 @@ async def create_request_from_shift(
     # Notify via WS
     try:
         from app.services.websocket_manager import manager
-        await manager.broadcast_to_company(company_id, {
-            "type": "request_created_from_shift",
-            "request_id": request.id,
-            "shift_task_id": task_id,
-        })
+
+        await manager.broadcast_to_company(
+            company_id,
+            {
+                "type": "request_created_from_shift",
+                "request_id": request.id,
+                "shift_task_id": task_id,
+            },
+        )
     except Exception:
         pass
 
     return {"message": "Заявка создана из смены", "request_id": request.id}
 
 
-
 @router.get("/daily-summary", summary="📊 Сводка на день")
 def get_daily_summary(
-    target_date: str | None = Query(default=None, description="Дата YYYY-MM-DD, по умолчанию сегодня"),
-    vehicle_category_id: int | None = Query(default=None, description="Фильтр по категории техники"),
+    target_date: str | None = Query(
+        default=None, description="Дата YYYY-MM-DD, по умолчанию сегодня"
+    ),
+    vehicle_category_id: int | None = Query(
+        default=None, description="Фильтр по категории техники"
+    ),
     driver_id: int | None = Query(default=None, description="Фильтр по водителю"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
     """Сводка для диспетчера: смены сегодня, статусы, проблемы, предстоящие задачи."""
-    from datetime import date as date_type, timedelta
+    from datetime import date as date_type
+    from datetime import timedelta
+
     from sqlalchemy import func
 
     today = date_type.fromisoformat(target_date) if target_date else date_type.today()
@@ -411,31 +467,43 @@ def get_daily_summary(
     today_shifts = db.execute(today_stmt).scalars().all()
 
     # Tomorrow's shifts (upcoming)
-    tomorrow_shifts = db.execute(
-        select(ShiftTask)
-        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
-        .where(Vehicle.company_id == company_id)
-        .where(ShiftTask.shift_date == tomorrow)
-    ).scalars().all()
+    tomorrow_shifts = (
+        db.execute(
+            select(ShiftTask)
+            .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+            .where(Vehicle.company_id == company_id)
+            .where(ShiftTask.shift_date == tomorrow)
+        )
+        .scalars()
+        .all()
+    )
 
     # Status breakdown
     status_counts = {}
     for s in today_shifts:
-        st = s.status if hasattr(s, 'status') else 'unknown'
+        st = s.status if hasattr(s, "status") else "unknown"
         status_counts[st] = status_counts.get(st, 0) + 1
 
     # Vehicles without shifts today (potential idle)
-    all_vehicles = db.execute(select(Vehicle).where(Vehicle.company_id == company_id)).scalars().all()
-    busy_vehicle_ids = set(s.vehicle_id for s in today_shifts)
+    all_vehicles = (
+        db.execute(select(Vehicle).where(Vehicle.company_id == company_id))
+        .scalars()
+        .all()
+    )
+    busy_vehicle_ids = {s.vehicle_id for s in today_shifts}
     idle_vehicles = [v for v in all_vehicles if v.id not in busy_vehicle_ids]
 
     # Pending marketplace requests
     from app.models.dispatch import Request
-    pending_requests = db.execute(
-        select(func.count(Request.id))
-        .where(Request.company_id == company_id)
-        .where(Request.status.in_(["new", "processing", "has_responses"]))
-    ).scalar() or 0
+
+    pending_requests = (
+        db.execute(
+            select(func.count(Request.id))
+            .where(Request.company_id == company_id)
+            .where(Request.status.in_(["new", "processing", "has_responses"]))
+        ).scalar()
+        or 0
+    )
 
     # Build response
     shift_details = []
@@ -444,27 +512,32 @@ def get_daily_summary(
         driver_name = ""
         if s.operator_id:
             from app.models.contractor import DriverProfile, Employee
+
             profile = db.get(DriverProfile, s.operator_id)
             if profile:
                 emp = db.get(Employee, profile.employee_contractor_id)
                 driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
 
-        shift_details.append({
-            "id": s.id,
-            "vehicle_name": vehicle.name if vehicle else "",
-            "driver_name": driver_name,
-            "status": s.status,
-            "start": s.planned_start.strftime("%H:%M") if s.planned_start else "",
-            "end": s.planned_end.strftime("%H:%M") if s.planned_end else "",
-        })
+        shift_details.append(
+            {
+                "id": s.id,
+                "vehicle_name": vehicle.name if vehicle else "",
+                "driver_name": driver_name,
+                "status": s.status,
+                "start": s.planned_start.strftime("%H:%M") if s.planned_start else "",
+                "end": s.planned_end.strftime("%H:%M") if s.planned_end else "",
+            }
+        )
 
     upcoming_details = []
     for s in tomorrow_shifts[:10]:
         vehicle = db.get(Vehicle, s.vehicle_id)
-        upcoming_details.append({
-            "vehicle_name": vehicle.name if vehicle else "",
-            "start": s.planned_start.strftime("%H:%M") if s.planned_start else "",
-        })
+        upcoming_details.append(
+            {
+                "vehicle_name": vehicle.name if vehicle else "",
+                "start": s.planned_start.strftime("%H:%M") if s.planned_start else "",
+            }
+        )
 
     return {
         "date": str(today),
@@ -486,7 +559,6 @@ def get_daily_summary(
     }
 
 
-
 @router.post("/{task_id}/auto-assign")
 def auto_assign_driver(
     task_id: int,
@@ -495,7 +567,8 @@ def auto_assign_driver(
     company_id: int = Depends(get_current_company_id),
 ):
     """Автоматически назначить лучшего доступного водителя на смену."""
-    from app.services.shift_task_service import auto_assign_driver as svc_auto_assign, ShiftTaskServiceError
+    from app.services.shift_task_service import ShiftTaskServiceError
+    from app.services.shift_task_service import auto_assign_driver as svc_auto_assign
 
     try:
         return svc_auto_assign(db, task_id, company_id)
@@ -521,11 +594,15 @@ def get_shift_audit_log(
     if not vehicle or vehicle.company_id != company_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    logs = db.execute(
-        select(ShiftAuditLog)
-        .where(ShiftAuditLog.shift_task_id == task_id)
-        .order_by(ShiftAuditLog.created_at.desc())
-    ).scalars().all()
+    logs = (
+        db.execute(
+            select(ShiftAuditLog)
+            .where(ShiftAuditLog.shift_task_id == task_id)
+            .order_by(ShiftAuditLog.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
 
     result = []
     for log in logs:
@@ -533,17 +610,18 @@ def get_shift_audit_log(
         if log.changed_by_user_id:
             u = db.get(User, log.changed_by_user_id)
             user_name = u.email if u else ""
-        result.append({
-            "id": log.id,
-            "action": log.action,
-            "field": log.field_changed,
-            "old_value": log.old_value,
-            "new_value": log.new_value,
-            "changed_by": user_name,
-            "created_at": log.created_at.isoformat() if log.created_at else None,
-        })
+        result.append(
+            {
+                "id": log.id,
+                "action": log.action,
+                "field": log.field_changed,
+                "old_value": log.old_value,
+                "new_value": log.new_value,
+                "changed_by": user_name,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+        )
     return result
-
 
 
 @router.post("/bulk-auto-assign", summary="🤖 Массовое авто-назначение")
@@ -555,33 +633,45 @@ def bulk_auto_assign_drivers(
     company_id: int = Depends(get_current_company_id),
 ):
     """Автоматически назначить водителей на все смены без водителя в указанном периоде."""
-    from datetime import date as date_type, timedelta
+    from datetime import date as date_type
+    from datetime import timedelta
+
     from app.models.contractor import DriverProfile, Employee
 
     d_from = date_type.fromisoformat(date_from)
     d_to = date_type.fromisoformat(date_to)
 
     # Get unassigned shifts
-    tasks = db.execute(
-        select(ShiftTask)
-        .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
-        .where(Vehicle.company_id == company_id)
-        .where(ShiftTask.shift_date >= d_from)
-        .where(ShiftTask.shift_date <= d_to)
-        .where(ShiftTask.operator_id.is_(None))
-        .where(ShiftTask.status.notin_(["cancelled"]))
-        .order_by(ShiftTask.shift_date)
-    ).scalars().all()
+    tasks = (
+        db.execute(
+            select(ShiftTask)
+            .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
+            .where(Vehicle.company_id == company_id)
+            .where(ShiftTask.shift_date >= d_from)
+            .where(ShiftTask.shift_date <= d_to)
+            .where(ShiftTask.operator_id.is_(None))
+            .where(ShiftTask.status.notin_(["cancelled"]))
+            .order_by(ShiftTask.shift_date)
+        )
+        .scalars()
+        .all()
+    )
 
     if not tasks:
         return {"assigned": 0, "skipped": 0, "message": "Нет смен без водителя"}
 
     # Get all active drivers
-    drivers = db.execute(
-        select(DriverProfile)
-        .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
-        .where(getattr(Employee, 'company_id', None) == company_id)
-    ).scalars().all()
+    drivers = (
+        db.execute(
+            select(DriverProfile)
+            .join(
+                Employee, DriverProfile.employee_contractor_id == Employee.contractor_id
+            )
+            .where(getattr(Employee, "company_id", None) == company_id)
+        )
+        .scalars()
+        .all()
+    )
 
     assigned = 0
     skipped = 0
@@ -604,21 +694,28 @@ def bulk_auto_assign_drivers(
                 continue
 
             score = 0
-            vehicle_cat = getattr(vehicle, 'category', '') or ''
-            driver_license = getattr(profile, 'license_category', '') or ''
-            if vehicle_cat and driver_license and vehicle_cat.upper() in driver_license.upper():
+            vehicle_cat = getattr(vehicle, "category", "") or ""
+            driver_license = getattr(profile, "license_category", "") or ""
+            if (
+                vehicle_cat
+                and driver_license
+                and vehicle_cat.upper() in driver_license.upper()
+            ):
                 score += 10
 
             week_start = task.shift_date - timedelta(days=task.shift_date.weekday())
             week_end = week_start + timedelta(days=6)
-            week_shifts = db.execute(
-                select(func.count(ShiftTask.id)).where(
-                    ShiftTask.operator_id == profile.employee_contractor_id,
-                    ShiftTask.shift_date >= week_start,
-                    ShiftTask.shift_date <= week_end,
-                    ShiftTask.status.notin_(["cancelled"]),
-                )
-            ).scalar() or 0
+            week_shifts = (
+                db.execute(
+                    select(func.count(ShiftTask.id)).where(
+                        ShiftTask.operator_id == profile.employee_contractor_id,
+                        ShiftTask.shift_date >= week_start,
+                        ShiftTask.shift_date <= week_end,
+                        ShiftTask.status.notin_(["cancelled"]),
+                    )
+                ).scalar()
+                or 0
+            )
             score += max(0, 7 - week_shifts)
 
             if score > best_score:
@@ -635,7 +732,6 @@ def bulk_auto_assign_drivers(
     return {"assigned": assigned, "skipped": skipped, "total": len(tasks)}
 
 
-
 @router.get("/audit-log/export/excel", summary="📥 Экспорт журнала в Excel")
 def export_audit_log_excel(
     date_from: str | None = Query(default=None),
@@ -648,12 +744,14 @@ def export_audit_log_excel(
     """Экспорт журнала изменений смен в Excel."""
     import io
     from datetime import date as date_type
+
     from fastapi.responses import StreamingResponse
+
     from app.models.shift import ShiftAuditLog
 
     try:
         import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.styles import Alignment, Font, PatternFill
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl not installed")
 
@@ -666,7 +764,9 @@ def export_audit_log_excel(
     if shift_task_id:
         stmt = stmt.where(ShiftAuditLog.shift_task_id == shift_task_id)
     if date_from:
-        stmt = stmt.where(ShiftAuditLog.created_at >= date_type.fromisoformat(date_from))
+        stmt = stmt.where(
+            ShiftAuditLog.created_at >= date_type.fromisoformat(date_from)
+        )
     if date_to:
         stmt = stmt.where(ShiftAuditLog.created_at <= date_type.fromisoformat(date_to))
     stmt = stmt.order_by(ShiftAuditLog.created_at.desc())
@@ -677,10 +777,20 @@ def export_audit_log_excel(
     ws = wb.active
     ws.title = "Журнал изменений"
 
-    header_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+    header_fill = PatternFill(
+        start_color="2F5496", end_color="2F5496", fill_type="solid"
+    )
     header_font = Font(color="FFFFFF", bold=True, size=11)
 
-    headers = ["Дата/Время", "Смена ID", "Действие", "Поле", "Старое значение", "Новое значение", "Пользователь"]
+    headers = [
+        "Дата/Время",
+        "Смена ID",
+        "Действие",
+        "Поле",
+        "Старое значение",
+        "Новое значение",
+        "Пользователь",
+    ]
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=h)
         cell.fill = header_fill
@@ -692,7 +802,11 @@ def export_audit_log_excel(
         if log.changed_by_user_id:
             u = db.get(User, log.changed_by_user_id)
             user_name = u.email if u else ""
-        ws.cell(row=row_idx, column=1, value=log.created_at.strftime("%d.%m.%Y %H:%M") if log.created_at else "")
+        ws.cell(
+            row=row_idx,
+            column=1,
+            value=log.created_at.strftime("%d.%m.%Y %H:%M") if log.created_at else "",
+        )
         ws.cell(row=row_idx, column=2, value=log.shift_task_id)
         ws.cell(row=row_idx, column=3, value=log.action)
         ws.cell(row=row_idx, column=4, value=log.field_changed or "")
@@ -709,10 +823,11 @@ def export_audit_log_excel(
     buf.seek(0)
 
     filename = f"shift_audit_log_{__import__('datetime').datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # === Auto-Assign Rules ===
-
-

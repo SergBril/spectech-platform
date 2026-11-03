@@ -1,15 +1,16 @@
 """Интеграция с банк-клиентом / 1С для выгрузки платёжных поручений."""
+
 import logging
-from sqlalchemy.orm import Session
-from typing import Optional
 from xml.etree.ElementTree import fromstring
+
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 
 class BankIntegrationService:
     """Сервис импорта платёжных документов из банк-клиента / 1С.
-    
+
     Поддерживает форматы:
     - 1C ClientBankExchange (XML)
     - Стандартный формат ЦБ РФ (txt/xml)
@@ -47,7 +48,9 @@ class BankIntegrationService:
 
     def parse_csv(self, csv_content: str) -> list[dict]:
         """Парсинг CSV выгрузки из банк-клиента."""
-        import csv, io
+        import csv
+        import io
+
         payments = []
         try:
             reader = csv.DictReader(io.StringIO(csv_content))
@@ -57,10 +60,14 @@ class BankIntegrationService:
                     "doc_date": row.get("Дата", row.get("date", "")),
                     "payer_inn": row.get("ИННПлательщика", row.get("payer_inn", "")),
                     "payer_name": row.get("Плательщик", row.get("payer_name", "")),
-                    "payer_account": row.get("СчетПлательщика", row.get("payer_account", "")),
+                    "payer_account": row.get(
+                        "СчетПлательщика", row.get("payer_account", "")
+                    ),
                     "payee_inn": row.get("ИННПолучателя", row.get("payee_inn", "")),
                     "payee_name": row.get("Получатель", row.get("payee_name", "")),
-                    "payee_account": row.get("СчетПолучателя", row.get("payee_account", "")),
+                    "payee_account": row.get(
+                        "СчетПолучателя", row.get("payee_account", "")
+                    ),
                     "amount": float(row.get("Сумма", row.get("amount", "0"))),
                     "purpose": row.get("Назначение", row.get("purpose", "")),
                     "status": "processed",
@@ -72,10 +79,12 @@ class BankIntegrationService:
             logger.error(f"Failed to parse CSV: {e}")
         return payments
 
-    def sync_payments_to_db(self, db: Session, company_id: int, payments: list[dict]) -> dict:
+    def sync_payments_to_db(
+        self, db: Session, company_id: int, payments: list[dict]
+    ) -> dict:
         """Сохранить платежи в БД (bank_transactions)."""
+
         from app.models.bank import BankTransaction
-        from datetime import datetime
 
         created = 0
         skipped = 0

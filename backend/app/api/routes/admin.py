@@ -338,10 +338,11 @@ def get_platform_overview(
     """📊 Platform Overview — агрегированная статистика для DashboardPage."""
     _check_platform_owner(current_user)
 
-    from app.models.finance import Invoice, DocumentStatus, Payment
-    from app.models.telematics import GpsPoint
-    from app.models.marketplace import MarketplaceOffer
     from datetime import timedelta
+
+    from app.models.finance import DocumentStatus, Invoice
+    from app.models.marketplace import MarketplaceOffer
+    from app.models.telematics import GpsPoint
 
     now = datetime.now(UTC)
     thirty_days_ago = now - timedelta(days=30)
@@ -349,41 +350,67 @@ def get_platform_overview(
     # Core counts
     total_users = db.query(func.count(User.id)).scalar() or 0
     total_companies = db.query(func.count(Company.id)).scalar() or 0
-    total_vehicles = db.query(func.count(Vehicle.id)).filter(Vehicle.is_deleted == False).scalar() or 0
+    total_vehicles = (
+        db.query(func.count(Vehicle.id)).filter(Vehicle.is_deleted == False).scalar()
+        or 0
+    )
     total_requests = db.query(func.count(Request.id)).scalar() or 0
 
     # Finance (last 30 days)
-    revenue_30d = db.query(func.coalesce(func.sum(Invoice.paid_amount), 0)).filter(
-        Invoice.status == DocumentStatus.paid,
-        Invoice.created_at >= thirty_days_ago,
-    ).scalar() or 0
+    revenue_30d = (
+        db.query(func.coalesce(func.sum(Invoice.paid_amount), 0))
+        .filter(
+            Invoice.status == DocumentStatus.paid,
+            Invoice.created_at >= thirty_days_ago,
+        )
+        .scalar()
+        or 0
+    )
 
-    outstanding = db.query(func.coalesce(func.sum(Invoice.total - Invoice.paid_amount), 0)).filter(
-        Invoice.status.in_([DocumentStatus.sent, DocumentStatus.partially_paid]),
-    ).scalar() or 0
+    outstanding = (
+        db.query(func.coalesce(func.sum(Invoice.total - Invoice.paid_amount), 0))
+        .filter(
+            Invoice.status.in_([DocumentStatus.sent, DocumentStatus.partially_paid]),
+        )
+        .scalar()
+        or 0
+    )
 
     # Fleet / GPS
-    vehicles_with_gps = db.query(func.count(func.distinct(GpsPoint.vehicle_id))).scalar() or 0
+    vehicles_with_gps = (
+        db.query(func.count(func.distinct(GpsPoint.vehicle_id))).scalar() or 0
+    )
     total_gps_points = db.query(func.count(GpsPoint.id)).scalar() or 0
     latest_gps = db.query(func.max(GpsPoint.recorded_at)).scalar()
 
     # Marketplace
-    published_requests = db.query(func.count(Request.id)).filter(
-        Request.is_published == True,
-    ).scalar() or 0
+    published_requests = (
+        db.query(func.count(Request.id))
+        .filter(
+            Request.is_published == True,
+        )
+        .scalar()
+        or 0
+    )
     total_offers = db.query(func.count(MarketplaceOffer.id)).scalar() or 0
-    accepted_offers = db.query(func.count(MarketplaceOffer.id)).filter(
-        MarketplaceOffer.status == "accepted",
-    ).scalar() or 0
+    accepted_offers = (
+        db.query(func.count(MarketplaceOffer.id))
+        .filter(
+            MarketplaceOffer.status == "accepted",
+        )
+        .scalar()
+        or 0
+    )
 
     # Recent activity (last 8 audit entries)
     recent_actions = []
     try:
         from app.models.audit import AuditLog
+
         if hasattr(AuditLog, "created_at"):
-            recent_actions = db.query(AuditLog).order_by(
-                AuditLog.created_at.desc()
-            ).limit(8).all()
+            recent_actions = (
+                db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(8).all()
+            )
     except (ImportError, Exception):
         pass
 
@@ -407,16 +434,23 @@ def get_platform_overview(
             "published_requests": published_requests,
             "total_offers": total_offers,
             "accepted_offers": accepted_offers,
-            "match_rate": round(accepted_offers / total_offers * 100, 1) if total_offers > 0 else 0,
+            "match_rate": (
+                round(accepted_offers / total_offers * 100, 1)
+                if total_offers > 0
+                else 0
+            ),
         },
         "recent_actions": [
             {
                 "action": getattr(a, "action", ""),
                 "entity": getattr(a, "entity_type", ""),
                 "user_id": getattr(a, "user_id", None),
-                "created_at": a.created_at.isoformat() if hasattr(a, "created_at") and a.created_at else None,
+                "created_at": (
+                    a.created_at.isoformat()
+                    if hasattr(a, "created_at") and a.created_at
+                    else None
+                ),
             }
             for a in recent_actions
         ],
     }
-

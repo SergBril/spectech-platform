@@ -9,7 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.services.bank_matching_service import BankMatchingService
 from app.models.bank_statement import (
     BankStatement,
     BankTransaction,
@@ -29,9 +28,9 @@ try:
         extract_invoice_numbers_from_purpose,
     )
 except ImportError:
-        logger.warning("⚠️ Bank statement parser not found. Upload will be disabled.")
-        ClientBankExchangeParser = None  # type: ignore
-        extract_invoice_numbers_from_purpose = None  # type: ignore
+    logger.warning("⚠️ Bank statement parser not found. Upload will be disabled.")
+    ClientBankExchangeParser = None  # type: ignore
+    extract_invoice_numbers_from_purpose = None  # type: ignore
 
 
 class PaymentsService:
@@ -182,7 +181,11 @@ class PaymentsService:
                 )
 
                 if result["matched"]:
-                    tx.matched_invoice_id = result.get("matched_id") if result["match_type"] == "invoice" else None
+                    tx.matched_invoice_id = (
+                        result.get("matched_id")
+                        if result["match_type"] == "invoice"
+                        else None
+                    )
                     tx.matched_amount = tx.amount
                     tx.match_status = MatchStatus.auto_matched
                     tx.match_confidence = Decimal(str(result["confidence"]))
@@ -228,7 +231,9 @@ class PaymentsService:
         if not tx:
             raise ValueError(f"Transaction {transaction_id} not found")
         if tx.match_status == MatchStatus.manual_matched and tx.payment_id:
-            raise ValueError(f"Transaction {transaction_id} already applied to payment #{tx.payment_id}")
+            raise ValueError(
+                f"Transaction {transaction_id} already applied to payment #{tx.payment_id}"
+            )
 
         invoice = db.get(Invoice, invoice_id)
         if not invoice:
@@ -286,16 +291,25 @@ class PaymentsService:
 
         # MAX notification about payment
         try:
-            from app.services.max_messenger_service import max_messenger_service, notification_templates
+            from app.services.max_messenger_service import (
+                max_messenger_service,
+                notification_templates,
+            )
+
             title, body = notification_templates.payment_received(
                 invoice_number=invoice.document_number or str(invoice.id),
                 amount=float(payment_amount),
                 payer_name=tx.counterparty_name or "Неизвестный",
             )
             import asyncio
+
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(max_messenger_service.notify_company_dispatchers(db, invoice.company_id, title, body))
+                loop.create_task(
+                    max_messenger_service.notify_company_dispatchers(
+                        db, invoice.company_id, title, body
+                    )
+                )
             except RuntimeError:
                 pass  # No event loop, skip MAX notification
         except Exception as max_err:

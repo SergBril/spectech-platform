@@ -4,7 +4,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_permission, get_current_company_id
+from app.api.deps import get_current_company_id, get_current_user, require_permission
 from app.core.constants import TaxSystem
 from app.core.db import get_db
 from app.models.auth import User
@@ -176,6 +176,7 @@ async def dadata_suggest(
 
 # === EDO Settings ===
 
+
 @router.get("/edo-settings", summary="EDO settings", tags=["EDO"])
 def get_edo_settings(
     db: Session = Depends(get_db),
@@ -184,10 +185,11 @@ def get_edo_settings(
 ):
     """Получить настройки ЭДО компании."""
     from app.models.company import Company
+
     company = db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    
+
     # Return EDO settings from company model or defaults
     return {
         "operator": getattr(company, "edo_operator", "diadoc") or "diadoc",
@@ -217,23 +219,32 @@ def update_edo_settings(
 ):
     """Обновить настройки ЭДО компании."""
     from app.models.company import Company
+
     company = db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    
+
     updates = {}
-    if operator is not None: updates["edo_operator"] = operator
-    if diadoc_api_key is not None: updates["diadoc_api_key"] = diadoc_api_key
-    if diadoc_box_id is not None: updates["diadoc_box_id"] = diadoc_box_id
-    if diadoc_use_sandbox is not None: updates["diadoc_use_sandbox"] = diadoc_use_sandbox
-    if sbis_token is not None: updates["sbis_token"] = sbis_token
-    if sbis_client_id is not None: updates["sbis_client_id"] = sbis_client_id
-    if auto_send_on_sign is not None: updates["auto_send_on_sign"] = auto_send_on_sign
-    if default_format is not None: updates["default_format"] = default_format
-    
+    if operator is not None:
+        updates["edo_operator"] = operator
+    if diadoc_api_key is not None:
+        updates["diadoc_api_key"] = diadoc_api_key
+    if diadoc_box_id is not None:
+        updates["diadoc_box_id"] = diadoc_box_id
+    if diadoc_use_sandbox is not None:
+        updates["diadoc_use_sandbox"] = diadoc_use_sandbox
+    if sbis_token is not None:
+        updates["sbis_token"] = sbis_token
+    if sbis_client_id is not None:
+        updates["sbis_client_id"] = sbis_client_id
+    if auto_send_on_sign is not None:
+        updates["auto_send_on_sign"] = auto_send_on_sign
+    if default_format is not None:
+        updates["default_format"] = default_format
+
     for key, value in updates.items():
         if hasattr(company, key):
             setattr(company, key, value)
-    
+
     db.commit()
     return {"message": "EDO settings updated"}

@@ -15,25 +15,6 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
-# ⚠️ ВАЖНО: Импорт моделей ДОЛЖЕН быть ПОСЛЕ импорта роутеров,
-# иначе wildcard import затеняет имена модулей роутеров.
-# Поэтому сначала импортируем все роутеры с алиасами,
-# а модели импортируем в самом конце перед lifespan.
-
-from app.core.config import settings
-from app.core.exception_handlers import (
-    general_exception_handler,
-    sqlalchemy_exception_handler,
-    validation_exception_handler,
-)
-from app.core.logging_config import setup_logging
-from app.core.metrics import setup_metrics
-from app.core.middleware import RequestLoggingMiddleware
-from app.core.sentry_config import init_sentry
-from app.services import storage_service
-from app.tasks.scheduler import start_scheduler, stop_scheduler
-from app.middleware.rate_limiter import RateLimitMiddleware
-
 # === Импорты роутеров (все с уникальными алиасами чтобы избежать конфликтов) ===
 from app.api.routes import acts as acts_route
 from app.api.routes import addresses as addresses_route
@@ -52,16 +33,17 @@ from app.api.routes import disputes as disputes_route
 from app.api.routes import downtime as downtime_route
 from app.api.routes import driver as driver_route
 from app.api.routes import drivers as drivers_route
+from app.api.routes import edo as edo_route
 from app.api.routes import email as email_route
 from app.api.routes import email_bulk as email_bulk_route
 from app.api.routes import email_templates as email_templates_route
-from app.api.routes import edo as edo_route
 from app.api.routes import export as export_route
 from app.api.routes import files as files_route
 from app.api.routes import finance as finance_route
 from app.api.routes import gps as gps_route
 from app.api.routes import invoices as invoices_route
 from app.api.routes import maintenance as maintenance_route
+from app.api.routes import map as map_route
 from app.api.routes import marketplace as marketplace_route
 from app.api.routes import marketplace_listings as marketplace_listings_route
 from app.api.routes import me as me_route
@@ -74,16 +56,33 @@ from app.api.routes import requests as requests_route
 from app.api.routes import reviews as reviews_route
 from app.api.routes import salaries as salaries_route
 from app.api.routes import secure_test as secure_test_route
-from app.api.routes.shifts import router as shifts_router
 from app.api.routes import signature as signature_route
 from app.api.routes import system as system_route
 from app.api.routes import tasks as tasks_route
 from app.api.routes import tax as tax_route
 from app.api.routes import telematics as telematics_route
 from app.api.routes import vehicles as vehicles_route
-from app.api.routes import map as map_route
 from app.api.routes import websocket as ws_route
+from app.api.routes.shifts import router as shifts_router
+
+# ⚠️ ВАЖНО: Импорт моделей ДОЛЖЕН быть ПОСЛЕ импорта роутеров,
+# иначе wildcard import затеняет имена модулей роутеров.
+# Поэтому сначала импортируем все роутеры с алиасами,
+# а модели импортируем в самом конце перед lifespan.
+from app.core.config import settings
+from app.core.exception_handlers import (
+    general_exception_handler,
+    sqlalchemy_exception_handler,
+    validation_exception_handler,
+)
+from app.core.logging_config import setup_logging
+from app.core.metrics import setup_metrics
+from app.core.middleware import RequestLoggingMiddleware
+from app.core.sentry_config import init_sentry
+from app.middleware.rate_limiter import RateLimitMiddleware
 from app.models import *  # noqa: F401, F403
+from app.services import storage_service
+from app.tasks.scheduler import start_scheduler, stop_scheduler
 
 # Настройка логирования
 setup_logging("INFO")
@@ -116,6 +115,7 @@ async def lifespan(app: FastAPI):
     # Close DB connections
     try:
         from app.core.db import engine
+
         engine.dispose()
         logger.info("✅ Database connections closed")
     except Exception as e:
@@ -124,6 +124,7 @@ async def lifespan(app: FastAPI):
     # Close Redis
     try:
         from app.core.redis import redis_client
+
         if redis_client:
             redis_client.close()
             logger.info("✅ Redis connection closed")
@@ -208,50 +209,96 @@ app.add_middleware(RequestLoggingMiddleware)
 app.include_router(debug_route.router, prefix="/api/v1", tags=["debug"])
 app.include_router(auth_route.router, prefix="/api/v1", tags=["auth"])
 app.include_router(addresses_route.router, prefix="/api/v1")
-app.include_router(categories_route.router, prefix="/api/v1/categories", tags=["catalog"])
-app.include_router(vehicles_route.router, prefix="/api/v1", tags=["🚜 Vehicles (Спецтехника)"])
-app.include_router(drivers_route.router, prefix="/api/v1/drivers", tags=["👷 Drivers (Водители)"])
+app.include_router(
+    categories_route.router, prefix="/api/v1/categories", tags=["catalog"]
+)
+app.include_router(
+    vehicles_route.router, prefix="/api/v1", tags=["🚜 Vehicles (Спецтехника)"]
+)
+app.include_router(
+    drivers_route.router, prefix="/api/v1/drivers", tags=["👷 Drivers (Водители)"]
+)
 app.include_router(requests_route.router, prefix="/api/v1/requests", tags=["dispatch"])
 app.include_router(shifts_router, prefix="/api/v1/shifts", tags=["dispatch"])
-app.include_router(contractors_route.router, prefix="/api/v1/contractors", tags=["contractors"])
+app.include_router(
+    contractors_route.router, prefix="/api/v1/contractors", tags=["contractors"]
+)
 app.include_router(email_route.router, prefix="/api/v1/email", tags=["email"])
 app.include_router(rbac_route.router, prefix="/api/v1/rbac", tags=["rbac"])
 app.include_router(me_route.router, prefix="/api/v1", tags=["me"])
 app.include_router(invoices_route.router, prefix="/api/v1/invoices", tags=["finance"])
 app.include_router(acts_route.router, prefix="/api/v1/acts", tags=["finance"])
-app.include_router(payouts_route.router, prefix="/api/v1/finance/payouts", tags=["finance"])
+app.include_router(
+    payouts_route.router, prefix="/api/v1/finance/payouts", tags=["finance"]
+)
 app.include_router(payments_route.router, prefix="/api/v1/payments", tags=["finance"])
-app.include_router(telematics_route.router, prefix="/api/v1/telematics", tags=["telematics"])
+app.include_router(
+    telematics_route.router, prefix="/api/v1/telematics", tags=["telematics"]
+)
 app.include_router(tasks_route.router, prefix="/api/v1/tasks", tags=["tasks"])
 app.include_router(system_route.router, prefix="/api/v1/system", tags=["system"])
 app.include_router(files_route.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(ws_route.router, prefix="/api/v1", tags=["websocket"])
 app.include_router(benchmark_route.router, prefix="/api/v1", tags=["benchmark"])
-app.include_router(secure_test_route.router, prefix="/api/v1", tags=["🔒 Secure Test (RBAC)"])
-app.include_router(analytics_route.router, prefix="/api/v1/analytics", tags=["analytics"])
+app.include_router(
+    secure_test_route.router, prefix="/api/v1", tags=["🔒 Secure Test (RBAC)"]
+)
+app.include_router(
+    analytics_route.router, prefix="/api/v1/analytics", tags=["analytics"]
+)
 app.include_router(export_route.router, prefix="/api/v1/export", tags=["export"])
 app.include_router(edo_route.router, prefix="/api/v1", tags=["📡 ЭДО (Diadoc)"])
 app.include_router(tax_route.router, prefix="/api/v1", tags=["📊 Tax & VAT (НДС)"])
 app.include_router(companies_route.router, prefix="/api/v1", tags=["companies"])
-app.include_router(marketplace_route.router, prefix="/api/v1", tags=["🎯 Marketplace (Отклики на заявки)"])
-app.include_router(marketplace_listings_route.router, prefix="/api/v1", tags=["🛒 Marketplace (Управление объявлениями)"])
-app.include_router(chat_route.router, prefix="/api/v1", tags=["💬 Chat (Чат по заявке)"])
-app.include_router(public_route.router, prefix="/api/v1", tags=["🌐 Public (Маркетплейс)"])
-app.include_router(maintenance_route.router, prefix="/api/v1", tags=["🔧 Maintenance (ТО и Ремонты)"])
+app.include_router(
+    marketplace_route.router,
+    prefix="/api/v1",
+    tags=["🎯 Marketplace (Отклики на заявки)"],
+)
+app.include_router(
+    marketplace_listings_route.router,
+    prefix="/api/v1",
+    tags=["🛒 Marketplace (Управление объявлениями)"],
+)
+app.include_router(
+    chat_route.router, prefix="/api/v1", tags=["💬 Chat (Чат по заявке)"]
+)
+app.include_router(
+    public_route.router, prefix="/api/v1", tags=["🌐 Public (Маркетплейс)"]
+)
+app.include_router(
+    maintenance_route.router, prefix="/api/v1", tags=["🔧 Maintenance (ТО и Ремонты)"]
+)
 app.include_router(email_templates_route.router, prefix="/api/v1")
 app.include_router(email_bulk_route.router, prefix="/api/v1")
 app.include_router(catalog_route.router, prefix="/api/v1")
-app.include_router(signature_route.router, prefix="/api/v1/signature", tags=["signature"])
+app.include_router(
+    signature_route.router, prefix="/api/v1/signature", tags=["signature"]
+)
 app.include_router(finance_route.router, prefix="/api/v1/finance", tags=["Финансы"])
 app.include_router(disputes_route.router, prefix="/api/v1/disputes", tags=["disputes"])
 app.include_router(downtime_route.router, prefix="/api/v1/downtime", tags=["downtime"])
 app.include_router(rentals_route.router, prefix="/api/v1", tags=["📋 Rentals (Аренда)"])
-app.include_router(bank_statements_route.router, prefix="/api/v1/banking", tags=["💳 Banking (Банковские выписки)"])
-app.include_router(salaries_route.router, prefix="/api/v1/salaries", tags=["💰 Salaries (Зарплаты)"])
-app.include_router(map_route.router, prefix="/api/v1/map", tags=["🗺️ Map (Карта техники)"])
+app.include_router(
+    bank_statements_route.router,
+    prefix="/api/v1/banking",
+    tags=["💳 Banking (Банковские выписки)"],
+)
+app.include_router(
+    salaries_route.router, prefix="/api/v1/salaries", tags=["💰 Salaries (Зарплаты)"]
+)
+app.include_router(
+    map_route.router, prefix="/api/v1/map", tags=["🗺️ Map (Карта техники)"]
+)
 app.include_router(gps_route.router, prefix="/api/v1/gps", tags=["📡 GPS"])
-app.include_router(driver_route.router, prefix="/api/v1/driver", tags=["📱 Driver (Мобильное приложение)"])
-app.include_router(admin_route.router, prefix="/api/v1/admin", tags=["🔧 Admin (Админ-панель)"])
+app.include_router(
+    driver_route.router,
+    prefix="/api/v1/driver",
+    tags=["📱 Driver (Мобильное приложение)"],
+)
+app.include_router(
+    admin_route.router, prefix="/api/v1/admin", tags=["🔧 Admin (Админ-панель)"]
+)
 app.include_router(reviews_route.router, prefix="/api/v1", tags=["Reviews"])
 
 uploads_dir = Path("uploads")
@@ -356,6 +403,7 @@ def health_check():
 def readiness_check():
     """Проверка готовности (БД)."""
     from sqlalchemy import text
+
     from app.core.db import SessionLocal
 
     try:

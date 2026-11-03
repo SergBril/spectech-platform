@@ -1,7 +1,9 @@
 """Shift task business logic service."""
+
 import json
 import logging
-from datetime import date as date_type, datetime, timedelta
+from datetime import date as date_type
+from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -11,6 +13,7 @@ logger = logging.getLogger("spectech.shift_tasks")
 
 class ShiftTaskServiceError(Exception):
     """Business logic error in shift task operations."""
+
     def __init__(self, status_code: int, detail: str | dict):
         self.status_code = status_code
         self.detail = detail
@@ -57,7 +60,9 @@ async def update_shift_task(
     ).scalar_one_or_none()
     if vehicle_conflict:
         v = db.get(Vehicle, task.vehicle_id)
-        conflicts.append(f"Техника «{v.name if v else task.vehicle_id}» уже занята {target_date}")
+        conflicts.append(
+            f"Техника «{v.name if v else task.vehicle_id}» уже занята {target_date}"
+        )
 
     if conflicts:
         raise ShiftTaskServiceError(409, {"conflicts": conflicts})
@@ -90,14 +95,16 @@ async def update_shift_task(
             old_val, new_val = None, None
             if " → " in values:
                 old_val, new_val = values.split(" → ", 1)
-            db.add(ShiftAuditLog(
-                shift_task_id=task_id,
-                action="updated",
-                field_changed=field,
-                old_value=old_val,
-                new_value=new_val,
-                changed_by_user_id=user_id,
-            ))
+            db.add(
+                ShiftAuditLog(
+                    shift_task_id=task_id,
+                    action="updated",
+                    field_changed=field,
+                    old_value=old_val,
+                    new_value=new_val,
+                    changed_by_user_id=user_id,
+                )
+            )
         db.commit()
     except Exception:
         pass
@@ -108,11 +115,12 @@ async def update_shift_task(
         change_msg = f"Ваша смена обновлена: {', '.join(changes)}"
         try:
             profile = db.get(DriverProfile, notify_driver)
-            if profile and hasattr(profile, 'employee_contractor_id'):
+            if profile and hasattr(profile, "employee_contractor_id"):
                 emp = db.get(Employee, profile.employee_contractor_id)
-                if emp and hasattr(emp, 'user_id') and emp.user_id:
+                if emp and hasattr(emp, "user_id") and emp.user_id:
                     await create_notification(
-                        db=db, user_id=emp.user_id,
+                        db=db,
+                        user_id=emp.user_id,
                         title="📅 Изменение смены",
                         body=change_msg,
                         channel="in_app",
@@ -122,14 +130,17 @@ async def update_shift_task(
 
     # WS broadcast
     try:
-        await manager.broadcast_to_company(company_id, {
-            "type": "shift_updated",
-            "task_id": task_id,
-            "shift_date": str(task.shift_date),
-            "vehicle_id": task.vehicle_id,
-            "driver_id": task.operator_id,
-            "status": task.status,
-        })
+        await manager.broadcast_to_company(
+            company_id,
+            {
+                "type": "shift_updated",
+                "task_id": task_id,
+                "shift_date": str(task.shift_date),
+                "vehicle_id": task.vehicle_id,
+                "driver_id": task.operator_id,
+                "status": task.status,
+            },
+        )
     except Exception:
         pass
 
@@ -153,18 +164,28 @@ def auto_assign_driver(db: Session, task_id: int, company_id: int) -> dict:
     if task.operator_id:
         raise ShiftTaskServiceError(409, "Driver already assigned")
 
-    drivers = db.execute(
-        select(DriverProfile)
-        .join(Employee, DriverProfile.employee_contractor_id == Employee.contractor_id)
-        .where(getattr(Employee, 'company_id', None) == company_id)
-    ).scalars().all()
+    drivers = (
+        db.execute(
+            select(DriverProfile)
+            .join(
+                Employee, DriverProfile.employee_contractor_id == Employee.contractor_id
+            )
+            .where(getattr(Employee, "company_id", None) == company_id)
+        )
+        .scalars()
+        .all()
+    )
 
-    rules = db.execute(
-        select(AutoAssignRule)
-        .where(AutoAssignRule.company_id == company_id)
-        .where(AutoAssignRule.is_active == True)
-        .order_by(AutoAssignRule.priority.desc())
-    ).scalars().all()
+    rules = (
+        db.execute(
+            select(AutoAssignRule)
+            .where(AutoAssignRule.company_id == company_id)
+            .where(AutoAssignRule.is_active == True)
+            .order_by(AutoAssignRule.priority.desc())
+        )
+        .scalars()
+        .all()
+    )
 
     blacklist_ids = set()
     priority_ids = []
@@ -176,9 +197,11 @@ def auto_assign_driver(db: Session, task_id: int, company_id: int) -> dict:
         if rule.rule_type == "blacklist":
             blacklist_ids.update(cfg.get("driver_ids", []))
         elif rule.rule_type == "priority_driver":
-            priority_ids.extend([(did, rule.priority) for did in cfg.get("driver_ids", [])])
+            priority_ids.extend(
+                [(did, rule.priority) for did in cfg.get("driver_ids", [])]
+            )
 
-    priority_map = {did: prio for did, prio in priority_ids}
+    priority_map = dict(priority_ids)
 
     best_driver = None
     best_score = -1
@@ -202,21 +225,28 @@ def auto_assign_driver(db: Session, task_id: int, company_id: int) -> dict:
         if profile.employee_contractor_id in priority_map:
             score += priority_map[profile.employee_contractor_id] * 5
 
-        vehicle_cat = getattr(vehicle, 'category', '') or ''
-        driver_license = getattr(profile, 'license_category', '') or ''
-        if vehicle_cat and driver_license and vehicle_cat.upper() in driver_license.upper():
+        vehicle_cat = getattr(vehicle, "category", "") or ""
+        driver_license = getattr(profile, "license_category", "") or ""
+        if (
+            vehicle_cat
+            and driver_license
+            and vehicle_cat.upper() in driver_license.upper()
+        ):
             score += 10
 
         week_start = task.shift_date - timedelta(days=task.shift_date.weekday())
         week_end = week_start + timedelta(days=6)
-        week_shifts = db.execute(
-            select(func.count(ShiftTask.id)).where(
-                ShiftTask.operator_id == profile.employee_contractor_id,
-                ShiftTask.shift_date >= week_start,
-                ShiftTask.shift_date <= week_end,
-                ShiftTask.status.notin_(["cancelled"]),
-            )
-        ).scalar() or 0
+        week_shifts = (
+            db.execute(
+                select(func.count(ShiftTask.id)).where(
+                    ShiftTask.operator_id == profile.employee_contractor_id,
+                    ShiftTask.shift_date >= week_start,
+                    ShiftTask.shift_date <= week_end,
+                    ShiftTask.status.notin_(["cancelled"]),
+                )
+            ).scalar()
+            or 0
+        )
         score += max(0, 7 - week_shifts)
 
         if score > best_score:
@@ -230,7 +260,11 @@ def auto_assign_driver(db: Session, task_id: int, company_id: int) -> dict:
     db.commit()
 
     emp = db.get(Employee, best_driver.employee_contractor_id)
-    driver_name = f"{emp.first_name} {emp.last_name}" if emp else f"Driver#{best_driver.employee_contractor_id}"
+    driver_name = (
+        f"{emp.first_name} {emp.last_name}"
+        if emp
+        else f"Driver#{best_driver.employee_contractor_id}"
+    )
 
     return {
         "message": f"Водитель {driver_name} назначен",

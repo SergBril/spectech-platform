@@ -2,7 +2,6 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -14,10 +13,9 @@ from app.api.deps import (
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
-from app.models.dispatch import Request, RequestAssignment, RequestStatusLog
-from app.services.marketplace.vehicle_matcher import vehicle_matcher
-from app.models.shift import ShiftTaskStatus
+from app.models.dispatch import Request, RequestStatusLog
 from app.schemas.request import RequestAssign, RequestCreate, RequestRead, RequestUpdate
+from app.services.marketplace.vehicle_matcher import vehicle_matcher
 
 logger = logging.getLogger("spectech.requests")
 
@@ -220,11 +218,15 @@ def list_request_responses(
     if not request or request.company_id != company_id:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    assignments = db.execute(
-        select(RequestAssignment)
-        .where(RequestAssignment.request_id == request_id)
-        .order_by(RequestAssignment.created_at.desc())
-    ).scalars().all()
+    assignments = (
+        db.execute(
+            select(RequestAssignment)
+            .where(RequestAssignment.request_id == request_id)
+            .order_by(RequestAssignment.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
 
     result = []
     for a in assignments:
@@ -232,17 +234,24 @@ def list_request_responses(
         company_name = ""
         if vehicle and vehicle.company_id:
             from app.models.company import Company
+
             comp = db.get(Company, vehicle.company_id)
             company_name = comp.name if comp else ""
 
-        result.append({
-            "id": a.id,
-            "vehicle_id": a.vehicle_id,
-            "vehicle_name": vehicle.name if vehicle else "N/A",
-            "company_name": company_name,
-            "status": a.status,
-            "created_at": a.created_at.isoformat() if hasattr(a, "created_at") and a.created_at else None,
-        })
+        result.append(
+            {
+                "id": a.id,
+                "vehicle_id": a.vehicle_id,
+                "vehicle_name": vehicle.name if vehicle else "N/A",
+                "company_name": company_name,
+                "status": a.status,
+                "created_at": (
+                    a.created_at.isoformat()
+                    if hasattr(a, "created_at") and a.created_at
+                    else None
+                ),
+            }
+        )
 
     return result
 
@@ -409,18 +418,25 @@ def export_requests_pdf(
 ):
     """Экспорт заявок в PDF с теми же фильтрами что и список."""
     import io
+
     from fastapi.responses import StreamingResponse
+
     from app.services.request_service import RequestService
 
     svc = RequestService(db)
     pdf_bytes = svc.export_requests_pdf(
-        company_ids=company_ids, status_filter=status_filter,
-        priority=priority, client_id=client_id,
+        company_ids=company_ids,
+        status_filter=status_filter,
+        priority=priority,
+        client_id=client_id,
         vehicle_category_id=vehicle_category_id,
         assigned_vehicle_id=assigned_vehicle_id,
-        work_type=work_type, search=search,
-        date_from=date_from, date_to=date_to,
-        sort_by=sort_by, sort_order=sort_order,
+        work_type=work_type,
+        search=search,
+        date_from=date_from,
+        date_to=date_to,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
@@ -448,18 +464,25 @@ def export_requests_excel(
 ):
     """Экспорт заявок в Excel с теми же фильтрами что и список."""
     import io
+
     from fastapi.responses import StreamingResponse
+
     from app.services.request_service import RequestService
 
     svc = RequestService(db)
     excel_bytes = svc.export_requests_excel(
-        company_ids=company_ids, status_filter=status_filter,
-        priority=priority, client_id=client_id,
+        company_ids=company_ids,
+        status_filter=status_filter,
+        priority=priority,
+        client_id=client_id,
         vehicle_category_id=vehicle_category_id,
         assigned_vehicle_id=assigned_vehicle_id,
-        work_type=work_type, search=search,
-        date_from=date_from, date_to=date_to,
-        sort_by=sort_by, sort_order=sort_order,
+        work_type=work_type,
+        search=search,
+        date_from=date_from,
+        date_to=date_to,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     return StreamingResponse(
         io.BytesIO(excel_bytes),
@@ -481,7 +504,11 @@ async def get_matching_vehicles(
         raise HTTPException(status_code=404, detail="Request not found")
 
     matches = vehicle_matcher.find_matching_vehicles(db, request_id, company_id)
-    return {"request_id": request_id, "total_matches": len(matches), "vehicles": matches}
+    return {
+        "request_id": request_id,
+        "total_matches": len(matches),
+        "vehicles": matches,
+    }
 
 
 @router.delete("/{request_id}", summary="🗑️ Удалить (отменить) заявку")
@@ -498,20 +525,23 @@ async def delete_request(
 
     # Проверка прав: только своя компания
     if request.company_id not in company_ids:
-        raise HTTPException(status_code=403, detail="Cannot delete another company's request")
+        raise HTTPException(
+            status_code=403, detail="Cannot delete another company's request"
+        )
 
     # Нельзя удалить уже завершённую или отменённую заявку
     if request.status in (RequestStatus.cancelled, RequestStatus.completed):
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot delete request with status '{request.status.value}'"
+            detail=f"Cannot delete request with status '{request.status.value}'",
         )
 
-    old_status = request.status
     request.status = RequestStatus.cancelled
     db.commit()
 
-    logger.info("Request #%s deleted (cancelled) by user #%s", request_id, current_user.id)
+    logger.info(
+        "Request #%s deleted (cancelled) by user #%s", request_id, current_user.id
+    )
     return {"message": "Request deleted successfully", "id": request_id}
 
 
@@ -519,6 +549,7 @@ async def delete_request(
 def get_pricing_presets():
     """Список региональных ценовых пресетов."""
     from app.services.pricing_service import pricing_service
+
     return {"regions": pricing_service.get_available_regions()}
 
 
@@ -532,6 +563,7 @@ def calculate_price(
 ):
     """Рассчитать ориентировочную стоимость заявки."""
     from app.services.pricing_service import pricing_service
+
     return pricing_service.calculate_estimate(
         region=region,
         rate_type=rate_type,

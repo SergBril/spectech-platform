@@ -6,10 +6,29 @@
 
 # === Auth & RBAC ===
 from app.models.auth import (  # noqa: F401
-    User,
     AuditLog,
     NotificationTemplate,
+    User,
     UserNotificationPreference,
+)
+
+# === Bank Statements ===
+from app.models.bank_statement import BankTransaction  # noqa: F401
+
+# === Catalog (Vehicles, Attributes) ===
+from app.models.catalog import (  # noqa: F401
+    Category,
+    EquipmentAttributeDefinition,
+    EquipmentAttributeOption,
+    EquipmentAttributeValue,
+    Vehicle,
+)
+
+# === Chat ===
+from app.models.chat import (  # noqa: F401
+    ChatMessage,
+    ChatParticipant,
+    RequestChat,
 )
 
 # === Company ===
@@ -22,28 +41,10 @@ from app.models.contractor import (  # noqa: F401
     Employee,
 )
 
-# === Catalog (Vehicles, Attributes) ===
-from app.models.catalog import (  # noqa: F401
-    Category,
-    Vehicle,
-    EquipmentAttributeDefinition,
-    EquipmentAttributeOption,
-    EquipmentAttributeValue,
-)
-
-# === Maintenance ===
-from app.models.maintenance import (  # noqa: F401
-    MaintenanceOrder,
-    MaintenancePart,
-    MaintenanceWork,
-)
-
-# === Shifts ===
-from app.models.shift import (  # noqa: F401
-    ShiftTask,
-    ShiftReport,
-    ShiftTemplate,
-    ShiftFuelEntry,
+# === Dispatch / Requests ===
+from app.models.dispatch import (  # noqa: F401
+    Request,
+    RequestAssignment,
 )
 
 # === Finance ===
@@ -53,30 +54,29 @@ from app.models.finance import (  # noqa: F401
     Payout,
 )
 
-# === Bank Statements ===
-from app.models.bank_statement import BankTransaction  # noqa: F401
-
-# === Dispatch / Requests ===
-from app.models.dispatch import (  # noqa: F401
-    Request,
-    RequestAssignment,
+# === Maintenance ===
+from app.models.maintenance import (  # noqa: F401
+    MaintenanceOrder,
+    MaintenancePart,
+    MaintenanceWork,
 )
-
-# === Chat ===
-from app.models.chat import (  # noqa: F401
-    ChatMessage,
-    RequestChat,
-    ChatParticipant,
-)
-
-# === Rental ===
-from app.models.rental import Rental  # noqa: F401
 
 # === Marketplace ===
 from app.models.marketplace import MarketplaceOffer  # noqa: F401
 
-# === UserCompany ===
-from app.models.user_company import UserCompany  # noqa: F401
+# === Rental ===
+from app.models.rental import Rental  # noqa: F401
+
+# === Shifts ===
+from app.models.shift import (  # noqa: F401
+    ShiftFuelEntry,
+    ShiftReport,
+    ShiftTask,
+    ShiftTemplate,
+)
 
 # === Telematics (Geofences, GPS) ===
 from app.models.telematics import Geofence, GpsPoint  # noqa: F401
+
+# === UserCompany ===
+from app.models.user_company import UserCompany  # noqa: F401

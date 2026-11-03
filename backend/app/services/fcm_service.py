@@ -1,8 +1,9 @@
 """Сервис Push-уведомлений через Firebase Cloud Messaging."""
+
 import logging
-from sqlalchemy.orm import Session
+
 from sqlalchemy import select
-from typing import Optional
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,7 @@ class FCMService:
 
     def __init__(self):
         from app.core.config import settings
+
         self.credentials_path = getattr(settings, "FCM_CREDENTIALS_PATH", "")
         self.enabled = bool(self.credentials_path)
         self._app = None
@@ -23,6 +25,7 @@ class FCMService:
             try:
                 import firebase_admin
                 from firebase_admin import credentials
+
                 cred = credentials.Certificate(self.credentials_path)
                 self._app = firebase_admin.initialize_app(cred, name="spectech-fcm")
                 logger.info("✅ FCM initialized")
@@ -31,7 +34,14 @@ class FCMService:
                 self.enabled = False
         return self._app
 
-    async def send_to_user(self, user_id: int, title: str, body: str, data: dict | None = None, db: Session | None = None) -> bool:
+    async def send_to_user(
+        self,
+        user_id: int,
+        title: str,
+        body: str,
+        data: dict | None = None,
+        db: Session | None = None,
+    ) -> bool:
         """Отправить push-уведомление пользователю по device_token."""
         if not self.enabled:
             logger.info(f"FCM STUB → user {user_id}: [{title}] {body}")
@@ -41,12 +51,17 @@ class FCMService:
         tokens = []
         if db:
             from app.models.notification import DeviceToken
-            rows = db.execute(
-                select(DeviceToken.token).where(
-                    DeviceToken.user_id == user_id,
-                    DeviceToken.is_active == True,
+
+            rows = (
+                db.execute(
+                    select(DeviceToken.token).where(
+                        DeviceToken.user_id == user_id,
+                        DeviceToken.is_active == True,
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             tokens = list(rows)
 
         if not tokens:
@@ -55,6 +70,7 @@ class FCMService:
 
         try:
             from firebase_admin import messaging
+
             message = messaging.MulticastMessage(
                 tokens=tokens,
                 notification=messaging.Notification(title=title, body=body),

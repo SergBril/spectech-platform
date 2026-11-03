@@ -1,5 +1,7 @@
 """Email уведомления для RBAC."""
+
 import logging
+
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -7,11 +9,12 @@ logger = logging.getLogger(__name__)
 
 def send_role_change_email(user, old_role: str, new_role: str, db: Session):
     """Отправить email о смене роли пользователя."""
-    from app.models.auth import User
 
-    email = getattr(user, 'email', None)
+    email = getattr(user, "email", None)
     if not email:
-        logger.warning("No email for user %s, skipping role change notification", user.id)
+        logger.warning(
+            "No email for user %s, skipping role change notification", user.id
+        )
         return
 
     subject = f"Spectech: Ваша роль изменена на «{new_role}»"
@@ -28,6 +31,7 @@ def send_role_change_email(user, old_role: str, new_role: str, db: Session):
 
     try:
         from app.services.email_service import send_email
+
         send_email(email, subject, body)
         logger.info("Role change email sent to %s: %s → %s", email, old_role, new_role)
     except ImportError:

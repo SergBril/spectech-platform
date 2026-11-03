@@ -1,33 +1,26 @@
 """Модуль bank для shifts router."""
 
-from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile
-from pydantic import BaseModel
-from sqlalchemy import func, select
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+)
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from app.core.db import get_db
 
-from app.models.bank_statement import BankTransaction
-from app.models.finance import Act
-from app.models.catalog import Vehicle
-from app.services.bank_integration_service import bank_integration_service
 from app.api.deps import get_current_company_id, get_current_user
-
-from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Body, UploadFile, Request
-from pydantic import BaseModel
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.auth import User
-from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
-
 from app.models.bank_statement import BankTransaction
-from app.models.finance import Act
 from app.models.catalog import Vehicle
-from app.services.bank_integration_service import bank_integration_service
+from app.models.finance import Act
 
 router = APIRouter()
+
 
 async def import_bank_payments(
     file: UploadFile = File(...),
@@ -44,7 +37,12 @@ async def import_bank_payments(
 
     # Auto-detect format
     if format == "auto":
-        if filename.endswith(".xml") or content[:5] == b"<?xml" or b"<FileExchange" in content or "<ФайлОбмен" in content.decode("utf-8-sig", errors="ignore"):
+        if (
+            filename.endswith(".xml")
+            or content[:5] == b"<?xml"
+            or b"<FileExchange" in content
+            or "<ФайлОбмен" in content.decode("utf-8-sig", errors="ignore")
+        ):
             format = "1c_xml"
         elif filename.endswith(".csv") or filename.endswith(".txt"):
             format = "csv"
@@ -62,7 +60,6 @@ async def import_bank_payments(
     return {"message": f"Импортировано {result['created']} платежей", **result}
 
 
-
 def auto_match_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -72,22 +69,30 @@ def auto_match_payments(
     # from app.models.finance import BankTransaction  # TODO: find correct module
 
     # Get unmatched incoming payments for this company
-    payments = db.execute(
-        select(BankTransaction).where(
-            BankTransaction.company_id == company_id,
-            BankTransaction.matched_invoice_id.is_(None),
-            BankTransaction.status == "processed",
+    payments = (
+        db.execute(
+            select(BankTransaction).where(
+                BankTransaction.company_id == company_id,
+                BankTransaction.matched_invoice_id.is_(None),
+                BankTransaction.status == "processed",
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     # Get unpaid acts
-    unpaid_acts = db.execute(
-        select(Act).where(
-            Act.company_id == company_id,
-            Act.status.in_(["draft", "sent_to_edo", "signed"]),
-            Act.paid_amount < Act.total_amount,
+    unpaid_acts = (
+        db.execute(
+            select(Act).where(
+                Act.company_id == company_id,
+                Act.status.in_(["draft", "sent_to_edo", "signed"]),
+                Act.paid_amount < Act.total_amount,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     matched = 0
     partial = 0
@@ -109,10 +114,22 @@ def auto_match_payments(
 
             # Match by purpose containing act number
             purpose_match = False
-            if payment.purpose and getattr(act, 'document_number', None) or f'ACT-{act.id}':
-                purpose_match = getattr(act, 'document_number', None) or f'ACT-{act.id}'.replace("-", "") in payment.purpose.replace("-", "").replace(" ", "")
+            if (
+                payment.purpose
+                and getattr(act, "document_number", None)
+                or f"ACT-{act.id}"
+            ):
+                purpose_match = getattr(
+                    act, "document_number", None
+                ) or f"ACT-{act.id}".replace("-", "") in payment.purpose.replace(
+                    "-", ""
+                ).replace(
+                    " ", ""
+                )
 
-            if amount_match and (inn_match or purpose_match or not act.counterparty_inn):
+            if amount_match and (
+                inn_match or purpose_match or not act.counterparty_inn
+            ):
                 best_act = act
                 break
 
@@ -130,23 +147,26 @@ def auto_match_payments(
     return {"matched": matched, "partial": partial, "total_payments": len(payments)}
 
 
-
 def get_receivables_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
     """Дашборд дебиторской задолженности: просроченные акты, ageing buckets."""
-    from datetime import date as date_type, timedelta
+    from datetime import date as date_type
 
     today = date_type.today()
 
-    acts = db.execute(
-        select(Act).where(
-            Act.company_id == company_id,
-            Act.status.in_(["draft", "sent_to_edo", "signed"]),
+    acts = (
+        db.execute(
+            select(Act).where(
+                Act.company_id == company_id,
+                Act.status.in_(["draft", "sent_to_edo", "signed"]),
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     total_outstanding = 0
     overdue_amount = 0
@@ -164,16 +184,19 @@ def get_receivables_dashboard(
         if days_since > 30:
             overdue_amount += outstanding
             vehicle = db.get(Vehicle, act.vehicle_id) if act.vehicle_id else None
-            overdue_acts.append({
-                "id": act.id,
-                "act_number": getattr(act, 'document_number', None) or f'ACT-{act.id}',
-                "act_date": str(act.act_date),
-                "vehicle_name": vehicle.name if vehicle else "",
-                "counterparty": act.counterparty_name or act.driver_name or "",
-                "outstanding": round(outstanding, 2),
-                "days_overdue": days_since - 30,
-                "status": act.status,
-            })
+            overdue_acts.append(
+                {
+                    "id": act.id,
+                    "act_number": getattr(act, "document_number", None)
+                    or f"ACT-{act.id}",
+                    "act_date": str(act.act_date),
+                    "vehicle_name": vehicle.name if vehicle else "",
+                    "counterparty": act.counterparty_name or act.driver_name or "",
+                    "outstanding": round(outstanding, 2),
+                    "days_overdue": days_since - 30,
+                    "status": act.status,
+                }
+            )
 
         if days_since <= 30:
             buckets["current"] += outstanding
@@ -214,8 +237,8 @@ def list_bank_transactions(
     company_id: int = Depends(get_current_company_id),
 ):
     """Список банковских транзакций с фильтрами."""
-    from datetime import date as date_type
     from sqlalchemy import func
+
     # from app.models.finance import BankTransaction  # TODO: find correct module
 
     stmt = select(BankTransaction).where(BankTransaction.company_id == company_id)
@@ -232,25 +255,43 @@ def list_bank_transactions(
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = db.execute(count_stmt).scalar() or 0
 
-    stmt = stmt.order_by(BankTransaction.document_date.desc(), BankTransaction.id.desc())
+    stmt = stmt.order_by(
+        BankTransaction.document_date.desc(), BankTransaction.id.desc()
+    )
     stmt = stmt.offset((page - 1) * per_page).limit(per_page)
     txns = db.execute(stmt).scalars().all()
 
     items = []
     for t in txns:
         act = db.get(Act, t.matched_act_id) if t.matched_act_id else None
-        items.append({
-            "id": t.id, "doc_number": t.document_number, "doc_date": t.document_date,
-            "payer_name": t.payer_name, "payer_inn": t.payer_inn,
-            "payee_name": t.payee_name, "amount": t.amount,
-            "purpose": t.purpose, "status": t.status,
-            "matched_act_id": t.matched_act_id,
-            "matched_act_number": getattr(act, 'document_number', None) or f'ACT-{act.id}' if act else None,
-            "source": t.source,
-        })
+        items.append(
+            {
+                "id": t.id,
+                "doc_number": t.document_number,
+                "doc_date": t.document_date,
+                "payer_name": t.payer_name,
+                "payer_inn": t.payer_inn,
+                "payee_name": t.payee_name,
+                "amount": t.amount,
+                "purpose": t.purpose,
+                "status": t.status,
+                "matched_act_id": t.matched_act_id,
+                "matched_act_number": (
+                    getattr(act, "document_number", None) or f"ACT-{act.id}"
+                    if act
+                    else None
+                ),
+                "source": t.source,
+            }
+        )
 
-    return {"items": items, "total": total, "page": page, "per_page": per_page, "pages": (total + per_page - 1) // per_page if per_page > 0 else 0}
-
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page if per_page > 0 else 0,
+    }
 
 
 def manual_match_transaction(
@@ -279,8 +320,9 @@ def manual_match_transaction(
         act.payment_status = "partial"
 
     db.commit()
-    return {"message": f"Транзакция {txn.doc_number} привязана к акту {getattr(act, 'document_number', None) or f'ACT-{act.id}'}"}
-
+    return {
+        "message": f"Транзакция {txn.doc_number} привязана к акту {getattr(act, 'document_number', None) or f'ACT-{act.id}'}"
+    }
 
 
 @router.get("/acts/unpaid", summary="📋 Неоплаченные акты для разнесения")
@@ -290,28 +332,36 @@ def list_unpaid_acts(
     company_id: int = Depends(get_current_company_id),
 ):
     """Список неоплаченных/частично оплаченных актов для ручного разнесения."""
-    acts = db.execute(
-        select(Act).where(
-            Act.company_id == company_id,
-            Act.status.in_(["draft", "sent_to_edo", "signed"]),
+    acts = (
+        db.execute(
+            select(Act).where(
+                Act.company_id == company_id,
+                Act.status.in_(["draft", "sent_to_edo", "signed"]),
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     result = []
     for a in acts:
         outstanding = (a.total_amount or 0) - (a.paid_amount or 0)
         if outstanding > 0:
             vehicle = db.get(Vehicle, a.vehicle_id) if a.vehicle_id else None
-            result.append({
-                "id": a.id, "act_number": getattr(a, 'document_number', None), "act_date": str(a.act_date),
-                "vehicle_name": vehicle.name if vehicle else "",
-                "total_amount": a.total_amount, "paid_amount": a.paid_amount or 0,
-                "outstanding": round(outstanding, 2),
-            })
+            result.append(
+                {
+                    "id": a.id,
+                    "act_number": getattr(a, "document_number", None),
+                    "act_date": str(a.act_date),
+                    "vehicle_name": vehicle.name if vehicle else "",
+                    "total_amount": a.total_amount,
+                    "paid_amount": a.paid_amount or 0,
+                    "outstanding": round(outstanding, 2),
+                }
+            )
 
     result.sort(key=lambda x: x["outstanding"], reverse=True)
     return result
-
 
 
 @router.get("/bank/transactions/export", summary="📥 Экспорт транзакций в Excel")
@@ -325,12 +375,14 @@ def export_transactions_excel(
 ):
     """Экспорт банковских транзакций в Excel."""
     import io
+
     from fastapi.responses import StreamingResponse
+
     # from app.models.finance import BankTransaction  # TODO: find correct module
 
     try:
         import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.styles import Alignment, Font, PatternFill
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl not installed")
 
@@ -351,10 +403,21 @@ def export_transactions_excel(
     ws = wb.active
     ws.title = "Банковские операции"
 
-    header_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+    header_fill = PatternFill(
+        start_color="2F5496", end_color="2F5496", fill_type="solid"
+    )
     header_font = Font(color="FFFFFF", bold=True, size=11)
 
-    headers = ["Дата", "Номер", "Плательщик", "ИНН", "Сумма", "Назначение", "Акт", "Статус"]
+    headers = [
+        "Дата",
+        "Номер",
+        "Плательщик",
+        "ИНН",
+        "Сумма",
+        "Назначение",
+        "Акт",
+        "Статус",
+    ]
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=h)
         cell.fill = header_fill
@@ -368,15 +431,23 @@ def export_transactions_excel(
         ws.cell(row=row_idx, column=2, value=t.document_number)
         ws.cell(row=row_idx, column=3, value=t.payer_name or "")
         ws.cell(row=row_idx, column=4, value=t.payer_inn or "")
-        ws.cell(row=row_idx, column=5, value=t.amount).number_format = '#,##0'
+        ws.cell(row=row_idx, column=5, value=t.amount).number_format = "#,##0"
         ws.cell(row=row_idx, column=6, value=t.purpose or "")
-        ws.cell(row=row_idx, column=7, value=getattr(act, 'document_number', None) or f'ACT-{act.id}' if act else "")
+        ws.cell(
+            row=row_idx,
+            column=7,
+            value=(
+                getattr(act, "document_number", None) or f"ACT-{act.id}" if act else ""
+            ),
+        )
         ws.cell(row=row_idx, column=8, value="Разнесено" if act else "Не разнесено")
         total_amount += t.amount
 
     last_row = len(txns) + 2
     ws.cell(row=last_row, column=1, value="ИТОГО").font = Font(bold=True)
-    ws.cell(row=last_row, column=5, value=round(total_amount, 2)).number_format = '#,##0'
+    ws.cell(row=last_row, column=5, value=round(total_amount, 2)).number_format = (
+        "#,##0"
+    )
     ws.cell(row=last_row, column=5).font = Font(bold=True)
 
     for col_cells in ws.columns:
@@ -388,8 +459,8 @@ def export_transactions_excel(
     buf.seek(0)
 
     filename = "bank_transactions.xlsx"
-    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
-
-
-
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

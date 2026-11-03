@@ -5,7 +5,7 @@ import re
 
 from sqlalchemy.orm import Session
 
-from app.models.bank_statement import BankTransaction, MatchStatus, TransactionType
+from app.models.bank_statement import BankTransaction, MatchStatus
 from app.models.finance import DocumentStatus, Invoice, Payout
 
 logger = logging.getLogger("spectech.bank_matching")
