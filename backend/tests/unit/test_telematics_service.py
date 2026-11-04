@@ -293,3 +293,210 @@ class TestReceiveGpsPointsBatch:
             result = await receive_gps_points_batch(mock_db, points_data, company_id=7)
 
         assert result["saved"] == 1
+
+
+class TestReceiveSingleGpsPoint:
+    """Cover receive_single_gps_point (lines 293-496)."""
+
+    @pytest.mark.asyncio
+    async def test_basic_gps_point_save(self):
+        from app.services.telematics_service import receive_single_gps_point
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, AsyncMock, patch
+
+        mock_db = MagicMock()
+        vehicle = SimpleNamespace(id=1, company_id=1)
+        mock_db.get.return_value = vehicle
+
+        # Mock GpsPoint creation
+        created_points = []
+        original_gps_init = None
+
+        point_data = {
+            "vehicle_id": 1,
+            "latitude": 55.7558,
+            "longitude": 37.6173,
+            "speed": 45.0,
+            "recorded_at": "2026-11-05T10:00:00+00:00",
+        }
+
+        mock_manager = AsyncMock()
+        mock_maintenance = {"updated": False}
+
+        with patch("app.services.websocket_manager.manager", mock_manager), \
+             patch("app.services.maintenance_service.maintenance_service") as mock_ms:
+            mock_ms.update_vehicle_engine_hours.return_value = mock_maintenance
+            # Mock db.query for AlertRule (returns empty)
+            mock_query = MagicMock()
+            mock_query.filter.return_value.all.return_value = []
+            mock_db.query.return_value = mock_query
+
+            result = await receive_single_gps_point(mock_db, point_data, 1)
+
+        assert result["status"] == "ok"
+        assert result["vehicle_id"] == 1
+        mock_db.add.assert_called()
+        mock_db.commit.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_vehicle_not_found(self):
+        from app.services.telematics_service import receive_single_gps_point
+        from unittest.mock import MagicMock
+
+        mock_db = MagicMock()
+        mock_db.get.return_value = None
+
+        with pytest.raises(ValueError, match="Vehicle not found"):
+            await receive_single_gps_point(
+                mock_db, {"vehicle_id": 999}, 1
+            )
+
+    @pytest.mark.asyncio
+    async def test_with_engine_hours_and_maintenance(self):
+        from app.services.telematics_service import receive_single_gps_point
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, AsyncMock, patch
+
+        mock_db = MagicMock()
+        vehicle = SimpleNamespace(id=1, company_id=1)
+        mock_db.get.return_value = vehicle
+
+        point_data = {
+            "vehicle_id": 1,
+            "latitude": 55.7558,
+            "longitude": 37.6173,
+            "speed": 0,
+            "engine_hours": 1500.5,
+            "recorded_at": "2026-11-05T10:00:00+00:00",
+        }
+
+        maintenance_result = {
+            "updated": True,
+            "old_hours": 1490.0,
+            "new_hours": 1500.5,
+            "maintenance_created": True,
+            "orders": [{
+                "vehicle_id": 1,
+                "vehicle_name": "KAMAZ",
+                "order_number": "MO-001",
+                "engine_hours": 1500.5,
+                "hours_overdue": 50.0,
+                "order_id": 10,
+            }],
+        }
+
+        mock_manager = AsyncMock()
+        mock_query = MagicMock()
+        mock_query.filter.return_value.all.return_value = []
+        mock_db.query.return_value = mock_query
+
+        with patch("app.services.websocket_manager.manager", mock_manager), \
+             patch("app.services.maintenance_service.maintenance_service") as mock_ms:
+            mock_ms.update_vehicle_engine_hours.return_value = maintenance_result
+            result = await receive_single_gps_point(mock_db, point_data, 1)
+
+        assert result["engine_hours_update"]["new"] == 1500.5
+        assert "maintenance_created" in result
+        mock_manager.broadcast_alert_to_company.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_speed_alert_triggered(self):
+        from app.services.telematics_service import receive_single_gps_point
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, AsyncMock, patch
+
+        mock_db = MagicMock()
+        vehicle = SimpleNamespace(id=1, company_id=1)
+        mock_db.get.return_value = vehicle
+
+        point_data = {
+            "vehicle_id": 1,
+            "latitude": 55.7558,
+            "longitude": 37.6173,
+            "speed": 120.0,
+            "recorded_at": "2026-11-05T10:00:00+00:00",
+        }
+
+        rule = SimpleNamespace(
+            rule_type="speed_limit", threshold=90.0,
+            severity="warning", is_active=True
+        )
+
+        mock_manager = AsyncMock()
+        # First query call: AlertRule, second: Alert (existing check)
+        call_count = {"n": 0}
+        def mock_query(model):
+            call_count["n"] += 1
+            mq = MagicMock()
+            if call_count["n"] == 1:
+                mq.filter.return_value.all.return_value = [rule]
+            else:
+                mq.filter.return_value.first.return_value = None  # No existing alert
+            return mq
+
+        mock_db.query.side_effect = mock_query
+
+        with patch("app.services.websocket_manager.manager", mock_manager), \
+             patch("app.services.maintenance_service.maintenance_service") as mock_ms:
+            mock_ms.update_vehicle_engine_hours.return_value = {"updated": False}
+            result = await receive_single_gps_point(mock_db, point_data, 1)
+
+        assert result["status"] == "ok"
+        # Alert should have been created and broadcast
+        assert mock_manager.broadcast_alert_to_company.call_count >= 1
+
+
+class TestGetTelematicsDashboard:
+    """Cover get_telematics_dashboard (lines 233-277)."""
+
+    def test_dashboard_returns_structure(self):
+        from app.services.telematics_service import get_telematics_dashboard
+        from unittest.mock import MagicMock
+
+        mock_db = MagicMock()
+        mock_db.scalar.return_value = 0
+
+        result = get_telematics_dashboard(mock_db, 1)
+        assert "vehicles_online" in result
+        assert "vehicles_moving" in result
+        assert "active_alerts" in result
+
+
+class TestCheckGeofences:
+    """Cover _check_geofences (lines 42-98)."""
+
+    def test_no_geofences(self):
+        from app.services.telematics_service import _check_geofences
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        mock_db = MagicMock()
+        mock_db.scalars.return_value.all.return_value = []
+
+        point = SimpleNamespace(
+            vehicle_id=1, latitude=55.75, longitude=37.61,
+            recorded_at=None
+        )
+        _check_geofences(mock_db, point)
+        mock_db.add.assert_not_called()
+
+    def test_circle_geofence_enter(self):
+        from app.services.telematics_service import _check_geofences
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        geofence = SimpleNamespace(
+            id=1, type=SimpleNamespace(value="circle"),
+            center_latitude=55.7558, center_longitude=37.6173,
+            radius_meters=1000, is_active=True
+        )
+        mock_db = MagicMock()
+        mock_db.scalars.return_value.all.return_value = [geofence]
+        mock_db.scalar.return_value = None  # No last event
+
+        point = SimpleNamespace(
+            vehicle_id=1, latitude=55.7558, longitude=37.6173,
+            recorded_at=None
+        )
+        _check_geofences(mock_db, point)
+        mock_db.add.assert_called()

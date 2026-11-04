@@ -99,7 +99,7 @@ def start_scheduler() -> None:
         from datetime import date as date_type
 
         from app.core.db import SessionLocal
-        from app.models.auth import UserCompany
+        from app.models.user_company import UserCompany
         from app.services.alert_service import (
             check_and_notify_conflicts,
             check_and_notify_idle_vehicles,
@@ -140,9 +140,9 @@ def start_scheduler() -> None:
         from sqlalchemy import select
 
         from app.core.db import SessionLocal
-        from app.models.auth import UserCompany
+        from app.models.user_company import UserCompany
         from app.models.shift import ShiftFuelEntry, ShiftTask
-        from app.models.vehicle import Vehicle
+        from app.models.catalog import Vehicle
         from app.services.alert_service import send_alert_email, send_telegram_alert
 
         yesterday = date_type.today() - timedelta(days=1)
@@ -226,7 +226,7 @@ def start_scheduler() -> None:
         from app.core.db import SessionLocal
         from app.models.finance import Act
         from app.models.shift import ShiftTask
-        from app.models.vehicle import Vehicle
+        from app.models.catalog import Vehicle
 
         today = date_type.today()
         if today.day != 1:
@@ -240,7 +240,7 @@ def start_scheduler() -> None:
             try:
                 from sqlalchemy import select
 
-                from app.models.auth import UserCompany
+                from app.models.user_company import UserCompany
 
                 company_ids = (
                     db.execute(select(UserCompany.company_id).distinct())
@@ -320,7 +320,7 @@ def start_scheduler() -> None:
         from sqlalchemy import select
 
         from app.core.db import SessionLocal
-        from app.models.auth import UserCompany
+        from app.models.user_company import UserCompany
         from app.models.finance import Act
         from app.services.diadoc_service import diadoc_service
         from app.services.fcm_service import fcm_service
@@ -413,7 +413,7 @@ def start_scheduler() -> None:
         from sqlalchemy import select
 
         from app.core.db import SessionLocal
-        from app.models.auth import UserCompany
+        from app.models.user_company import UserCompany
         from app.models.finance import Act
         from app.services.fcm_service import fcm_service
 
@@ -539,7 +539,7 @@ def start_scheduler() -> None:
         from sqlalchemy import select
 
         from app.core.db import SessionLocal
-        from app.models.auth import UserCompany
+        from app.models.user_company import UserCompany
         from app.models.bank_statement import BankTransaction
         from app.models.finance import Act
 
@@ -558,7 +558,7 @@ def start_scheduler() -> None:
                             select(BankTransaction).where(
                                 BankTransaction.company_id == cid,
                                 BankTransaction.matched_invoice_id.is_(None),
-                                BankTransaction.status == "processed",
+                                BankTransaction.match_status == "unmatched",
                             )
                         )
                         .scalars()
@@ -642,7 +642,7 @@ def start_scheduler() -> None:
 
         from app.core.db import SessionLocal
         from app.models.telematics import EngineHoursLog
-        from app.models.vehicle import Vehicle
+        from app.models.catalog import Vehicle
 
         db = SessionLocal()
         try:

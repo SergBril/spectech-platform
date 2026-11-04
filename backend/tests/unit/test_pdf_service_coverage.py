@@ -161,3 +161,149 @@ class TestPdfGenerationWithMocks:
             result = generate_act_maintenance_pdf(order_data)
         except Exception:
             pass
+
+
+class TestGenerateInvoicePdfFpdf:
+    """Cover _generate_invoice_pdf_fpdf (lines 234-347)."""
+
+    def test_invoice_with_contractor_osno(self):
+        from types import SimpleNamespace
+        from app.services.pdf_service import _generate_invoice_pdf_fpdf
+
+        item = SimpleNamespace(
+            description="Аренда крана", unit="шт", quantity=2,
+            unit_price=5000.0, amount=10000.0
+        )
+        invoice = SimpleNamespace(
+            document_number="INV-001", invoice_date="2026-11-01",
+            items=[item], subtotal=10000.0, total=12000.0,
+            vat_amount=2000.0, vat_rate=20, tax_system="osno"
+        )
+        contractor = SimpleNamespace(
+            name="ООО Клиент", legal_address="г. Москва, ул. Тест, 1",
+            inn="7700111222", kpp="770001001",
+            bank_details={"account": "40702810000000099999", "bank_name": "Банк Тест", "bik": "044525000"},
+            tax_system="osno"
+        )
+
+        result = _generate_invoice_pdf_fpdf(invoice, contractor)
+        assert isinstance(result, bytes)
+        assert len(result) > 100
+
+    def test_invoice_without_contractor_usn(self):
+        from types import SimpleNamespace
+        from app.services.pdf_service import _generate_invoice_pdf_fpdf
+
+        item = SimpleNamespace(
+            description="Услуга", unit="усл", quantity=1,
+            unit_price=3000.0, amount=3000.0
+        )
+        invoice = SimpleNamespace(
+            document_number="INV-002", invoice_date="2026-11-05",
+            items=[item], subtotal=3000.0, total=3000.0,
+            vat_amount=0, vat_rate=0, tax_system="usn"
+        )
+
+        result = _generate_invoice_pdf_fpdf(invoice, None)
+        assert isinstance(result, bytes)
+        assert len(result) > 100
+
+    def test_invoice_multiple_items(self):
+        from types import SimpleNamespace
+        from app.services.pdf_service import _generate_invoice_pdf_fpdf
+
+        items = [
+            SimpleNamespace(description=f"Позиция {i}", unit="шт", quantity=i,
+                            unit_price=1000.0 * i, amount=1000.0 * i * i)
+            for i in range(1, 6)
+        ]
+        invoice = SimpleNamespace(
+            document_number="INV-003", invoice_date="2026-11-10",
+            items=items, subtotal=55000.0, total=66000.0,
+            vat_amount=11000.0, vat_rate=20, tax_system="osno"
+        )
+
+        result = _generate_invoice_pdf_fpdf(invoice, None)
+        assert isinstance(result, bytes)
+
+
+class TestGenerateActPdfFpdf:
+    """Cover _generate_act_pdf_fpdf (lines 350-456)."""
+
+    def test_act_with_contractor_osno_vat_included(self):
+        from types import SimpleNamespace
+        from app.services.pdf_service import _generate_act_pdf_fpdf
+
+        act = SimpleNamespace(
+            document_number="ACT-001", act_date="2026-11-01",
+            total_amount=12000.0, tax_system="osno",
+            vat_rate=20, is_vat_included=True
+        )
+        contractor = SimpleNamespace(
+            name="ООО Заказчик", legal_address="г. Москва",
+            inn="7700333444", kpp="770001001",
+            bank_details={"account": "40702810000000088888", "bank_name": "Банк", "bik": "044525000"},
+            tax_system="osno"
+        )
+
+        result = _generate_act_pdf_fpdf(act, contractor)
+        assert isinstance(result, bytes)
+        assert len(result) > 100
+
+    def test_act_osno_vat_not_included(self):
+        from types import SimpleNamespace
+        from app.services.pdf_service import _generate_act_pdf_fpdf
+
+        act = SimpleNamespace(
+            document_number="ACT-002", act_date="2026-11-05",
+            total_amount=10000.0, tax_system="osno",
+            vat_rate=20, is_vat_included=False
+        )
+
+        result = _generate_act_pdf_fpdf(act, None)
+        assert isinstance(result, bytes)
+
+    def test_act_usn_no_vat(self):
+        from types import SimpleNamespace
+        from app.services.pdf_service import _generate_act_pdf_fpdf
+
+        act = SimpleNamespace(
+            document_number="ACT-003", act_date="2026-11-10",
+            total_amount=5000.0, tax_system="usn"
+        )
+
+        result = _generate_act_pdf_fpdf(act, None)
+        assert isinstance(result, bytes)
+
+
+class TestMaintenanceOrderPdfs:
+    """Cover generate_maintenance_order_pdf and generate_act_maintenance_pdf fallback paths."""
+
+    def test_maintenance_order_fallback(self):
+        from app.services.pdf_service import generate_maintenance_order_pdf
+
+        order_data = {
+            "order_number": "MO-001",
+            "vehicle_name": "KAMAZ-65115",
+            "status": "in_progress",
+            "title": "Замена масла",
+            "total_cost": 15000,
+        }
+
+        # WeasyPrint likely not installed -> fallback path
+        result = generate_maintenance_order_pdf(order_data)
+        assert isinstance(result, bytes)
+        assert b"MO-001" in result or b"KAMAZ" in result
+
+    def test_act_maintenance_fallback(self):
+        from app.services.pdf_service import generate_act_maintenance_pdf
+
+        order_data = {
+            "order_number": "ACT-MO-001",
+            "vehicle_name": "Экскаватор JCB",
+            "total_cost": 25000,
+        }
+
+        result = generate_act_maintenance_pdf(order_data)
+        assert isinstance(result, bytes)
+        assert b"ACT-MO-001" in result or b"JCB" in result

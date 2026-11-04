@@ -22,13 +22,12 @@ if config.config_file_name is not None:
 database_url = os.environ.get("DATABASE_URL")
 if database_url:
     # Заменяем postgresql+psycopg на postgresql для Alembic (использует psycopg напрямую)
-    if database_url.startswith("postgresql+psycopg://"):
-        database_url = database_url.replace("postgresql+psycopg://", "postgresql://", 1)
+    # Keep original driver (psycopg or psycopg2)
     config.set_main_option("sqlalchemy.url", database_url)
 else:
     # Fallback для локальной разработки без Docker
     config.set_main_option(
-        "sqlalchemy.url", "postgresql://spectech:spectech@localhost:5432/spectech"
+        "sqlalchemy.url", "postgresql://spectech:spectech@localhost:5470/spectech"
     )
 
 # Model metadata for 'autogenerate' support

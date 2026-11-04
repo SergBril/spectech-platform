@@ -119,6 +119,14 @@ def _register_dejavu_fonts(pdf) -> bool:
             pdf.add_font("DejaVu", "", str(regular), uni=True)
             bold_path = str(bold) if Path(bold).exists() else str(regular)
             pdf.add_font("DejaVu", "B", bold_path, uni=True)
+            # Register italic (fallback to regular if no italic file)
+            italic_p = Path(regular).parent / "DejaVuSans-Oblique.ttf"
+            italic_path = str(italic_p) if italic_p.exists() else str(regular)
+            pdf.add_font("DejaVu", "I", italic_path, uni=True)
+            # Register bold-italic (fallback to bold)
+            bi_p = Path(regular).parent / "DejaVuSans-BoldOblique.ttf"
+            bi_path = str(bi_p) if bi_p.exists() else bold_path
+            pdf.add_font("DejaVu", "BI", bi_path, uni=True)
             logger.info("✅ FPDF font loaded: %s", regular)
             return True
         except Exception as e:

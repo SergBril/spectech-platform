@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.db import get_db
 from app.models.auth import User
+from app.services.max_messenger_service import max_messenger_service
 
 router = APIRouter()
 

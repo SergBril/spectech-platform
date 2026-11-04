@@ -16,6 +16,8 @@ from app.models.auth import User
 from app.models.catalog import Vehicle
 from app.models.finance import Act
 from app.models.shift import ShiftTask
+from app.services.diadoc_service import diadoc_service
+from app.services.digital_signature_service import digital_signature_service
 
 router = APIRouter()
 

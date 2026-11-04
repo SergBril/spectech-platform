@@ -11,8 +11,9 @@ from app.models.catalog import Category, Vehicle
 from app.models.company import Company
 from app.models.contractor import Contractor
 from app.models.dispatch import Request as DispatchRequest
-from app.models.dispatch import RequestAssignment
+from app.models.dispatch import RequestAssignment, RequestStatusLog
 from app.models.review import Review
+from app.models.finance import Payout
 
 logger = logging.getLogger("spectech.public")
 
@@ -745,10 +746,13 @@ class PublicService:
                 status_code=409, detail="Already responded with this vehicle"
             )
 
+        from datetime import datetime as dt, timezone
         assignment = RequestAssignment(
             request_id=request_id,
             vehicle_id=vehicle_id,
-            assigned_by=current_user.id,
+            operator_id=getattr(current_user, "id", None),
+            planned_start=request.planned_start if hasattr(request, "planned_start") and request.planned_start else dt.now(timezone.utc),
+            planned_end=request.planned_end if hasattr(request, "planned_end") and request.planned_end else dt.now(timezone.utc),
             status="pending_approval",
         )
         db.add(assignment)
@@ -833,17 +837,16 @@ class PublicService:
 
         stmt = (
             select(Payout)
-            .join(RequestAssignment, Payout.assignment_id == RequestAssignment.id)
-            .join(DispatchRequest, RequestAssignment.request_id == DispatchRequest.id)
+            .join(DispatchRequest, Payout.request_id == DispatchRequest.id)
             .where(DispatchRequest.source_channel == "marketplace")
         )
 
         if date_from:
-            stmt = stmt.where(Payout.period_start >= date.fromisoformat(date_from))
+            stmt = stmt.where(Payout.payout_date >= date.fromisoformat(date_from))
         if date_to:
-            stmt = stmt.where(Payout.period_end <= date.fromisoformat(date_to))
+            stmt = stmt.where(Payout.payout_date <= date.fromisoformat(date_to))
 
-        stmt = stmt.order_by(Payout.period_start.desc())
+        stmt = stmt.order_by(Payout.payout_date.desc())
         payouts = db.scalars(stmt).all()
 
         wb = openpyxl.Workbook()
@@ -878,33 +881,24 @@ class PublicService:
         total_net = 0
 
         for row_idx, p in enumerate(payouts, 2):
-            assignment = (
-                db.get(RequestAssignment, p.assignment_id)
-                if hasattr(p, "assignment_id") and p.assignment_id
-                else None
-            )
-            request = (
-                db.get(DispatchRequest, assignment.request_id) if assignment else None
-            )
-            vehicle = db.get(Vehicle, assignment.vehicle_id) if assignment else None
+            request = db.get(DispatchRequest, p.request_id) if p.request_id else None
+            vehicle = db.get(Vehicle, p.vehicle_id) if p.vehicle_id else None
 
-            amount = float(p.amount) if p.amount else 0
-            commission = round(amount * 0.1, 2)
-            net = round(amount - commission, 2)
+            amount = float(p.gross_amount) if p.gross_amount else 0
+            commission = float(p.platform_commission) if p.platform_commission else 0
+            net = float(p.net_amount) if p.net_amount else 0
             total_amount += amount
             total_commission += commission
             total_net += net
 
-            period = ""
-            if p.period_start and p.period_end:
-                period = f"{p.period_start.strftime('%d.%m')} — {p.period_end.strftime('%d.%m')}"
+            period = p.payout_date.strftime("%d.%m.%Y") if p.payout_date else ""
 
             ws.cell(row=row_idx, column=1, value=p.id)
             ws.cell(row=row_idx, column=2, value=period)
             ws.cell(row=row_idx, column=3, value=f"#{request.id}" if request else "")
             ws.cell(row=row_idx, column=4, value=vehicle.name if vehicle else "")
             ws.cell(
-                row=row_idx, column=5, value=getattr(p, "performer_company_name", "")
+                row=row_idx, column=5, value=getattr(p, "owner_name", "") or ""
             )
             ws.cell(row=row_idx, column=6, value=amount)
             ws.cell(row=row_idx, column=7, value=commission)
