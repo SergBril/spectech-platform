@@ -256,78 +256,170 @@ class TestListRentals:
     def test_basic(self, mock_db):
         from app.services.rental_service import RentalService
         rental = SimpleNamespace(id=1)
+        # Chain: query(Rental).options(...).filter(...).order_by(...).offset(...).limit(...).all()
         q = MagicMock()
-        q.options.return_value.filter.return_value.order_by.return_value.limit.return_value.offset.return_value.all.return_value = [rental]
+        opts = MagicMock()
+        filt = MagicMock()
+        ordered = MagicMock()
+        offseted = MagicMock()
+        limited = MagicMock()
+        limited.all.return_value = [rental]
+        offseted.limit.return_value = limited
+        ordered.offset.return_value = offseted
+        filt.order_by.return_value = ordered
+        opts.filter.return_value = filt
+        q.options.return_value = opts
         mock_db.query.return_value = q
         result = RentalService.list_rentals(mock_db, [7])
         assert len(result) == 1
 
-    def test_with_filters(self, mock_db):
+    def test_with_status_filter(self, mock_db):
+        from app.services.rental_service import RentalService
         from app.models.rental import RentalStatus
+        q = MagicMock()
+        opts = MagicMock()
+        filt1 = MagicMock()
+        filt2 = MagicMock()
+        ordered = MagicMock()
+        offseted = MagicMock()
+        limited = MagicMock()
+        limited.all.return_value = []
+        offseted.limit.return_value = limited
+        ordered.offset.return_value = offseted
+        filt2.order_by.return_value = ordered
+        filt1.filter.return_value = filt2
+        opts.filter.return_value = filt1
+        q.options.return_value = opts
+        mock_db.query.return_value = q
+        result = RentalService.list_rentals(mock_db, [7], status=RentalStatus.ACTIVE)
+        assert result == []
+
+    def test_with_client_filter(self, mock_db):
         from app.services.rental_service import RentalService
         q = MagicMock()
-        q.options.return_value.filter.return_value.filter.return_value.filter.return_value.order_by.return_value.limit.return_value.offset.return_value.all.return_value = []
+        opts = MagicMock()
+        filt1 = MagicMock()
+        filt2 = MagicMock()
+        ordered = MagicMock()
+        offseted = MagicMock()
+        limited = MagicMock()
+        limited.all.return_value = []
+        offseted.limit.return_value = limited
+        ordered.offset.return_value = offseted
+        filt2.order_by.return_value = ordered
+        filt1.filter.return_value = filt2
+        opts.filter.return_value = filt1
+        q.options.return_value = opts
         mock_db.query.return_value = q
-        result = RentalService.list_rentals(mock_db, [7], status=RentalStatus.ACTIVE, client_id=10)
+        result = RentalService.list_rentals(mock_db, [7], client_id=10)
         assert result == []
+
+
+def _mock_get_rental(mock_db, rental):
+    """Helper to mock get_rental query chain used by update/activate/cancel/close/add/remove."""
+    q = MagicMock()
+    opts = MagicMock()
+    filt = MagicMock()
+    filt.first.return_value = rental
+    opts.filter.return_value = filt
+    q.options.return_value = opts
+    mock_db.query.return_value = q
 
 
 class TestUpdateRental:
     """Cover update_rental (lines 317-367)."""
 
     def test_success(self, mock_db):
-        from app.schemas.rental import RentalUpdate
         from app.services.rental_service import RentalService
-        rental = _make_rental("HOURLY")
+        from app.schemas.rental import RentalUpdate
+        from app.models.rental import RentalStatus
+        item = _make_item(unit_price=1000)
+        rental = _make_rental("HOURLY", items=[item])
+        rental.status = RentalStatus.DRAFT
         rental.comment = "old"
-        q = MagicMock()
-        q.options.return_value.filter.return_value.first.return_value = rental
-        mock_db.query.return_value = q
+        _mock_get_rental(mock_db, rental)
 
         update_data = RentalUpdate(comment="new comment")
-        result = RentalService.update_rental(mock_db, 1, [7], update_data)
+        result = RentalService.update_rental(mock_db, 1, update_data, 7)
         assert result.comment == "new comment"
         mock_db.commit.assert_called()
 
-    def test_not_found_raises(self, mock_db):
-        from fastapi import HTTPException
-
-        from app.schemas.rental import RentalUpdate
+    def test_not_draft_raises(self, mock_db):
         from app.services.rental_service import RentalService
-        q = MagicMock()
-        q.options.return_value.filter.return_value.first.return_value = None
-        mock_db.query.return_value = q
+        from app.schemas.rental import RentalUpdate
+        from app.models.rental import RentalStatus
+        from fastapi import HTTPException
+        rental = _make_rental("HOURLY")
+        rental.status = RentalStatus.ACTIVE
+        _mock_get_rental(mock_db, rental)
         with pytest.raises(HTTPException) as exc_info:
-            RentalService.update_rental(mock_db, 999, [7], RentalUpdate())
-        assert exc_info.value.status_code == 404
+            RentalService.update_rental(mock_db, 1, RentalUpdate(), 7)
+        assert exc_info.value.status_code == 400
+
+    def test_invalid_dates_raises(self, mock_db):
+        from app.services.rental_service import RentalService
+        from app.schemas.rental import RentalUpdate
+        from app.models.rental import RentalStatus
+        from fastapi import HTTPException
+        rental = _make_rental("HOURLY")
+        rental.status = RentalStatus.DRAFT
+        _mock_get_rental(mock_db, rental)
+        update_data = RentalUpdate(
+            start_date=datetime(2026, 12, 1, tzinfo=UTC),
+            end_date=datetime(2026, 11, 1, tzinfo=UTC),
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            RentalService.update_rental(mock_db, 1, update_data, 7)
+        assert exc_info.value.status_code == 400
 
 
 class TestActivateRental:
     """Cover activate_rental (lines 456-488)."""
 
     def test_success(self, mock_db):
-        from app.models.rental import RentalStatus
         from app.services.rental_service import RentalService
-        rental = _make_rental("HOURLY")
+        from app.models.rental import RentalStatus, PrepaymentStatus
+        item = _make_item(unit_price=1000)
+        rental = _make_rental("HOURLY", items=[item])
         rental.status = RentalStatus.DRAFT
-        q = MagicMock()
-        q.options.return_value.filter.return_value.first.return_value = rental
-        mock_db.query.return_value = q
+        rental.prepayment_status = PrepaymentStatus.NONE
+        rental.prepayment_paid_at = None
+        _mock_get_rental(mock_db, rental)
 
         result = RentalService.activate_rental(mock_db, 1, 7)
         assert result.status == RentalStatus.ACTIVE
         mock_db.commit.assert_called()
 
     def test_wrong_status_raises(self, mock_db):
-        from fastapi import HTTPException
-
-        from app.models.rental import RentalStatus
         from app.services.rental_service import RentalService
+        from app.models.rental import RentalStatus
+        from fastapi import HTTPException
         rental = _make_rental("HOURLY")
-        rental.status = RentalStatus.CLOSED
-        q = MagicMock()
-        q.options.return_value.filter.return_value.first.return_value = rental
-        mock_db.query.return_value = q
+        rental.status = RentalStatus.COMPLETED
+        _mock_get_rental(mock_db, rental)
+        with pytest.raises(HTTPException):
+            RentalService.activate_rental(mock_db, 1, 7)
+
+    def test_no_items_raises(self, mock_db):
+        from app.services.rental_service import RentalService
+        from app.models.rental import RentalStatus
+        from fastapi import HTTPException
+        rental = _make_rental("HOURLY", items=[])
+        rental.status = RentalStatus.DRAFT
+        _mock_get_rental(mock_db, rental)
+        with pytest.raises(HTTPException):
+            RentalService.activate_rental(mock_db, 1, 7)
+
+    def test_prepayment_required_raises(self, mock_db):
+        from app.services.rental_service import RentalService
+        from app.models.rental import RentalStatus, PrepaymentStatus
+        from fastapi import HTTPException
+        item = _make_item(unit_price=1000)
+        rental = _make_rental("HOURLY", items=[item])
+        rental.status = RentalStatus.DRAFT
+        rental.prepayment_status = PrepaymentStatus.REQUIRED
+        rental.prepayment_paid_at = None
+        _mock_get_rental(mock_db, rental)
         with pytest.raises(HTTPException):
             RentalService.activate_rental(mock_db, 1, 7)
 
@@ -336,73 +428,138 @@ class TestCancelRental:
     """Cover cancel_rental (lines 490-511)."""
 
     def test_success(self, mock_db):
-        from app.models.rental import RentalStatus
         from app.services.rental_service import RentalService
+        from app.models.rental import RentalStatus
         rental = _make_rental("HOURLY")
         rental.status = RentalStatus.DRAFT
-        q = MagicMock()
-        q.options.return_value.filter.return_value.first.return_value = rental
-        mock_db.query.return_value = q
+        rental.prepayment_paid_at = None
+        _mock_get_rental(mock_db, rental)
 
         result = RentalService.cancel_rental(mock_db, 1, 7)
         assert result.status == RentalStatus.CANCELLED
         mock_db.commit.assert_called()
+
+    def test_with_prepayment_refund(self, mock_db):
+        from app.services.rental_service import RentalService
+        from app.models.rental import RentalStatus, PrepaymentStatus
+        rental = _make_rental("HOURLY")
+        rental.status = RentalStatus.ACTIVE
+        rental.prepayment_paid_at = datetime.now(UTC)
+        rental.prepayment_status = PrepaymentStatus.PAID
+        _mock_get_rental(mock_db, rental)
+
+        result = RentalService.cancel_rental(mock_db, 1, 7)
+        assert result.prepayment_status == PrepaymentStatus.REFUNDED
+
+    def test_wrong_status_raises(self, mock_db):
+        from app.services.rental_service import RentalService
+        from app.models.rental import RentalStatus
+        from fastapi import HTTPException
+        rental = _make_rental("HOURLY")
+        rental.status = RentalStatus.COMPLETED
+        _mock_get_rental(mock_db, rental)
+        with pytest.raises(HTTPException):
+            RentalService.cancel_rental(mock_db, 1, 7)
 
 
 class TestCloseRental:
     """Cover close_rental (lines 513-608)."""
 
     def test_success(self, mock_db):
+        from app.services.rental_service import RentalService
         from app.models.rental import RentalStatus
         from app.schemas.rental import RentalClose
-        from app.services.rental_service import RentalService
         item = _make_item(unit_price=1000, actual_moto_hours=8)
+        item.id = 1
         rental = _make_rental("HOURLY", items=[item])
         rental.status = RentalStatus.ACTIVE
         rental.actual_return_date = None
-
-        q = MagicMock()
-        q.options.return_value.filter.return_value.first.return_value = rental
-        mock_db.query.return_value = q
+        _mock_get_rental(mock_db, rental)
 
         close_data = RentalClose(actual_return_date=datetime(2026, 11, 2, tzinfo=UTC))
 
-        with patch.object(RentalService, "_create_documents_from_rental", return_value=(None, None)), \
-             patch.object(RentalService, "_create_payouts_from_rental", return_value=[]), \
-             patch.object(RentalService, "_send_rental_notifications", return_value=None):
-            result = RentalService.close_rental(mock_db, 1, 7, close_data)
+        with patch.object(RentalService, "_create_documents_from_rental", return_value=(None, None)):
+            result = RentalService.close_rental(mock_db, 1, close_data, 7)
 
-        assert result.status == RentalStatus.CLOSED
+        assert result.status == RentalStatus.COMPLETED
         mock_db.commit.assert_called()
+
+    def test_wrong_status_raises(self, mock_db):
+        from app.services.rental_service import RentalService
+        from app.models.rental import RentalStatus
+        from app.schemas.rental import RentalClose
+        from fastapi import HTTPException
+        rental = _make_rental("HOURLY")
+        rental.status = RentalStatus.DRAFT
+        _mock_get_rental(mock_db, rental)
+        close_data = RentalClose(actual_return_date=datetime(2026, 11, 2, tzinfo=UTC))
+        with pytest.raises(HTTPException):
+            RentalService.close_rental(mock_db, 1, close_data, 7)
+
+    def test_doc_creation_error_logged(self, mock_db):
+        from app.services.rental_service import RentalService
+        from app.models.rental import RentalStatus
+        from app.schemas.rental import RentalClose
+        item = _make_item(unit_price=1000, actual_moto_hours=8)
+        item.id = 1
+        rental = _make_rental("HOURLY", items=[item])
+        rental.status = RentalStatus.ACTIVE
+        rental.actual_return_date = None
+        _mock_get_rental(mock_db, rental)
+
+        close_data = RentalClose(actual_return_date=datetime(2026, 11, 2, tzinfo=UTC))
+
+        with patch.object(RentalService, "_create_documents_from_rental", side_effect=Exception("DB fail")):
+            result = RentalService.close_rental(mock_db, 1, close_data, 7)
+
+        # Should still complete despite doc creation error
+        assert result.status == RentalStatus.COMPLETED
 
 
 class TestAddRentalItem:
     """Cover add_rental_item (lines 369-416)."""
 
     def test_success(self, mock_db):
-        from app.schemas.rental import RentalItemAdd
         from app.services.rental_service import RentalService
+        from app.schemas.rental import RentalItemAdd
+        from app.models.rental import RentalStatus
         rental = _make_rental("HOURLY")
-        rental.status = SimpleNamespace(value="draft")
+        rental.status = RentalStatus.DRAFT
+        _mock_get_rental(mock_db, rental)
 
-        q_rental = MagicMock()
-        q_rental.options.return_value.filter.return_value.first.return_value = rental
-        q_avail = MagicMock()
-        q_avail.join.return_value.filter.return_value.first.return_value = None
+        # Mock _check_vehicle_availability to return True (available)
+        with patch.object(RentalService, "_check_vehicle_availability", return_value=True):
+            item_in = RentalItemAdd(vehicle_id=2, unit_price=2000, quantity=1)
+            result = RentalService.add_rental_item(mock_db, 1, item_in, 7)
 
-        call_count = {"n": 0}
-        def mock_query(model):
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                return q_rental
-            return q_avail
-
-        mock_db.query.side_effect = mock_query
-
-        item_in = RentalItemAdd(vehicle_id=2, unit_price=2000, quantity=1)
-        RentalService.add_rental_item(mock_db, 1, [7], item_in)
         mock_db.add.assert_called()
         mock_db.commit.assert_called()
+
+    def test_not_draft_raises(self, mock_db):
+        from app.services.rental_service import RentalService
+        from app.schemas.rental import RentalItemAdd
+        from app.models.rental import RentalStatus
+        from fastapi import HTTPException
+        rental = _make_rental("HOURLY")
+        rental.status = RentalStatus.ACTIVE
+        _mock_get_rental(mock_db, rental)
+        item_in = RentalItemAdd(vehicle_id=2, unit_price=2000)
+        with pytest.raises(HTTPException):
+            RentalService.add_rental_item(mock_db, 1, item_in, 7)
+
+    def test_vehicle_unavailable_raises(self, mock_db):
+        from app.services.rental_service import RentalService
+        from app.schemas.rental import RentalItemAdd
+        from app.models.rental import RentalStatus
+        from fastapi import HTTPException
+        rental = _make_rental("HOURLY")
+        rental.status = RentalStatus.DRAFT
+        _mock_get_rental(mock_db, rental)
+        with patch.object(RentalService, "_check_vehicle_availability", return_value=False):
+            item_in = RentalItemAdd(vehicle_id=2, unit_price=2000)
+            with pytest.raises(HTTPException) as exc_info:
+                RentalService.add_rental_item(mock_db, 1, item_in, 7)
+            assert exc_info.value.status_code == 409
 
 
 class TestRemoveRentalItem:
@@ -410,30 +567,33 @@ class TestRemoveRentalItem:
 
     def test_success(self, mock_db):
         from app.services.rental_service import RentalService
-        rental = _make_rental("HOURLY")
-        rental.status = SimpleNamespace(value="draft")
-        item = SimpleNamespace(id=5, rental_id=1)
-        rental.items = [item]
+        from app.models.rental import RentalStatus
+        item = SimpleNamespace(id=5, unit_price=1000, quantity=1)
+        rental = _make_rental("HOURLY", items=[item])
+        rental.status = RentalStatus.DRAFT
+        _mock_get_rental(mock_db, rental)
 
-        q_rental = MagicMock()
-        q_rental.options.return_value.filter.return_value.first.return_value = rental
-        mock_db.query.return_value = q_rental
-
-        RentalService.remove_rental_item(mock_db, 1, [7], 5)
+        RentalService.remove_rental_item(mock_db, 1, 5, 7)
         mock_db.delete.assert_called()
         mock_db.commit.assert_called()
 
     def test_item_not_found_raises(self, mock_db):
-        from fastapi import HTTPException
-
         from app.services.rental_service import RentalService
+        from app.models.rental import RentalStatus
+        from fastapi import HTTPException
+        rental = _make_rental("HOURLY", items=[])
+        rental.status = RentalStatus.DRAFT
+        _mock_get_rental(mock_db, rental)
+        with pytest.raises(HTTPException) as exc_info:
+            RentalService.remove_rental_item(mock_db, 1, 999, 7)
+        assert exc_info.value.status_code == 404
+
+    def test_not_draft_raises(self, mock_db):
+        from app.services.rental_service import RentalService
+        from app.models.rental import RentalStatus
+        from fastapi import HTTPException
         rental = _make_rental("HOURLY")
-        rental.status = SimpleNamespace(value="draft")
-        rental.items = []
-
-        q_rental = MagicMock()
-        q_rental.options.return_value.filter.return_value.first.return_value = rental
-        mock_db.query.return_value = q_rental
-
+        rental.status = RentalStatus.ACTIVE
+        _mock_get_rental(mock_db, rental)
         with pytest.raises(HTTPException):
-            RentalService.remove_rental_item(mock_db, 1, [7], 999)
+            RentalService.remove_rental_item(mock_db, 1, 5, 7)
