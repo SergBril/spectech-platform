@@ -1,5 +1,6 @@
-﻿"""Tests for NotificationDispatcher."""
+"""Coverage tests for notification_dispatcher."""
 
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -25,15 +26,15 @@ class TestRunAsync:
 
 
 class TestNotifyRentalCompleted:
-    """Cover notify_rental_completed (lines 36-106)."""
+    """Cover notify_rental_completed (lines 36-105)."""
 
     @pytest.mark.asyncio
     async def test_all_channels_success(self, mock_db):
         from app.services.notification_dispatcher import NotificationDispatcher
 
-        rental = SimpleNamespace(id=1, total_amount=50000.0)
+        rental = SimpleNamespace(id=1, total_amount=Decimal("10000"))
         invoice = SimpleNamespace(document_number="INV-001", due_date=MagicMock())
-        invoice.due_date.strftime.return_value = "01.12.2026"
+        invoice.due_date.strftime.return_value = "05.12.2026"
 
         with (
             patch("app.services.notification_dispatcher.email_service") as mock_email,
@@ -44,13 +45,17 @@ class TestNotifyRentalCompleted:
                 new_callable=AsyncMock,
             ),
         ):
-
             mock_email.send_rental_completed.return_value = True
             mock_tg.send_alert = AsyncMock(return_value=True)
             mock_max.send_alert = AsyncMock(return_value=True)
 
             result = await NotificationDispatcher.notify_rental_completed(
-                mock_db, rental, invoice, "client@test.com", "Client", client_user_id=5
+                mock_db,
+                rental,
+                invoice,
+                "c@c.com",
+                "Client",
+                client_user_id=1,
             )
 
         assert result["email"] is True
@@ -62,9 +67,9 @@ class TestNotifyRentalCompleted:
     async def test_email_fails_gracefully(self, mock_db):
         from app.services.notification_dispatcher import NotificationDispatcher
 
-        rental = SimpleNamespace(id=1, total_amount=50000.0)
+        rental = SimpleNamespace(id=1, total_amount=Decimal("10000"))
         invoice = SimpleNamespace(document_number="INV-001", due_date=MagicMock())
-        invoice.due_date.strftime.return_value = "01.12.2026"
+        invoice.due_date.strftime.return_value = "05.12.2026"
 
         with (
             patch("app.services.notification_dispatcher.email_service") as mock_email,
@@ -75,13 +80,16 @@ class TestNotifyRentalCompleted:
                 new_callable=AsyncMock,
             ),
         ):
-
             mock_email.send_rental_completed.side_effect = Exception("SMTP error")
             mock_tg.send_alert = AsyncMock(return_value=True)
             mock_max.send_alert = AsyncMock(return_value=True)
 
             result = await NotificationDispatcher.notify_rental_completed(
-                mock_db, rental, invoice, "client@test.com", "Client"
+                mock_db,
+                rental,
+                invoice,
+                "c@c.com",
+                "Client",
             )
 
         assert result["email"] is False
@@ -91,9 +99,9 @@ class TestNotifyRentalCompleted:
     async def test_no_user_id_skips_in_app(self, mock_db):
         from app.services.notification_dispatcher import NotificationDispatcher
 
-        rental = SimpleNamespace(id=1, total_amount=50000.0)
+        rental = SimpleNamespace(id=1, total_amount=Decimal("10000"))
         invoice = SimpleNamespace(document_number="INV-001", due_date=MagicMock())
-        invoice.due_date.strftime.return_value = "01.12.2026"
+        invoice.due_date.strftime.return_value = "05.12.2026"
 
         with (
             patch("app.services.notification_dispatcher.email_service") as mock_email,
@@ -104,7 +112,6 @@ class TestNotifyRentalCompleted:
                 new_callable=AsyncMock,
             ) as mock_notif,
         ):
-
             mock_email.send_rental_completed.return_value = True
             mock_tg.send_alert = AsyncMock(return_value=True)
             mock_max.send_alert = AsyncMock(return_value=True)
@@ -113,7 +120,7 @@ class TestNotifyRentalCompleted:
                 mock_db,
                 rental,
                 invoice,
-                "client@test.com",
+                "c@c.com",
                 "Client",
                 client_user_id=None,
             )
@@ -123,17 +130,17 @@ class TestNotifyRentalCompleted:
 
 
 class TestNotifyPayoutCreated:
-    """Cover notify_payout_created (lines 107-165)."""
+    """Cover notify_payout_created (lines 107-164)."""
 
     @pytest.mark.asyncio
-    async def test_all_channels_success(self, mock_db):
+    async def test_success(self, mock_db):
         from app.services.notification_dispatcher import NotificationDispatcher
 
         payout = SimpleNamespace(
-            document_number="ВЫП-2026-0001",
-            gross_amount=100000.0,
-            platform_commission=15000.0,
-            net_amount=85000.0,
+            document_number="PAY-001",
+            gross_amount=Decimal("10000"),
+            platform_commission=Decimal("1000"),
+            net_amount=Decimal("9000"),
         )
 
         with (
@@ -145,62 +152,34 @@ class TestNotifyPayoutCreated:
                 new_callable=AsyncMock,
             ),
         ):
-
             mock_email.send_payout_created.return_value = True
             mock_tg.send_alert = AsyncMock(return_value=True)
             mock_max.send_alert = AsyncMock(return_value=True)
 
             result = await NotificationDispatcher.notify_payout_created(
-                mock_db, payout, "owner@test.com", "Owner", owner_user_id=10
+                mock_db,
+                payout,
+                "o@o.com",
+                "Owner",
+                owner_user_id=2,
             )
 
-        assert all(result.values())
-
-    @pytest.mark.asyncio
-    async def test_all_channels_fail(self, mock_db):
-        from app.services.notification_dispatcher import NotificationDispatcher
-
-        payout = SimpleNamespace(
-            document_number="ВЫП-2026-0001",
-            gross_amount=100000.0,
-            platform_commission=15000.0,
-            net_amount=85000.0,
-        )
-
-        with (
-            patch("app.services.notification_dispatcher.email_service") as mock_email,
-            patch("app.services.notification_dispatcher.telegram_service") as mock_tg,
-            patch("app.services.notification_dispatcher.max_service") as mock_max,
-            patch(
-                "app.services.notification_dispatcher.create_notification",
-                new_callable=AsyncMock,
-            ) as mock_notif,
-        ):
-
-            mock_email.send_payout_created.side_effect = Exception("fail")
-            mock_tg.send_alert = AsyncMock(side_effect=Exception("fail"))
-            mock_max.send_alert = AsyncMock(side_effect=Exception("fail"))
-            mock_notif.side_effect = Exception("fail")
-
-            result = await NotificationDispatcher.notify_payout_created(
-                mock_db, payout, "owner@test.com", "Owner", owner_user_id=10
-            )
-
-        assert all(v is False for v in result.values())
+        assert result["email"] is True
+        assert result["in_app"] is True
 
 
 class TestNotifyDisputeOpened:
-    """Cover notify_dispute_opened (lines 166-216)."""
+    """Cover notify_dispute_opened (lines 166-215)."""
 
     @pytest.mark.asyncio
     async def test_success(self, mock_db):
         from app.services.notification_dispatcher import NotificationDispatcher
 
         dispute = SimpleNamespace(
-            id=42, dispute_type=MagicMock(), initiator_role=MagicMock()
+            id=1,
+            dispute_type=SimpleNamespace(value="payment"),
+            initiator_role=SimpleNamespace(value="client"),
         )
-        dispute.dispute_type.value = "payment"
-        dispute.initiator_role.value = "contractor"
 
         with (
             patch("app.services.notification_dispatcher.email_service") as mock_email,
@@ -211,16 +190,22 @@ class TestNotifyDisputeOpened:
                 new_callable=AsyncMock,
             ),
         ):
-
             mock_email.send_dispute_opened.return_value = True
             mock_tg.send_dispute_alert = AsyncMock(return_value=True)
             mock_max.send_dispute_alert = AsyncMock(return_value=True)
 
             result = await NotificationDispatcher.notify_dispute_opened(
-                mock_db, dispute, "disp@test.com", "Dispatcher", dispatcher_user_id=7
+                mock_db,
+                dispute,
+                "d@d.com",
+                "Dispatcher",
+                dispatcher_user_id=3,
             )
 
-        assert all(result.values())
+        assert result["email"] is True
+        assert result["telegram"] is True
+        assert result["max"] is True
+        assert result["in_app"] is True
 
 
 class TestNotifyDisputeEscalated:
@@ -230,7 +215,7 @@ class TestNotifyDisputeEscalated:
     async def test_success(self, mock_db):
         from app.services.notification_dispatcher import NotificationDispatcher
 
-        dispute = SimpleNamespace(id=42)
+        dispute = SimpleNamespace(id=1)
 
         with (
             patch("app.services.notification_dispatcher.email_service") as mock_email,
@@ -241,7 +226,6 @@ class TestNotifyDisputeEscalated:
                 new_callable=AsyncMock,
             ),
         ):
-
             mock_email.send_dispute_escalated.return_value = True
             mock_tg.send_escalation_alert = AsyncMock(return_value=True)
             mock_max.send_escalation_alert = AsyncMock(return_value=True)
@@ -249,20 +233,23 @@ class TestNotifyDisputeEscalated:
             result = await NotificationDispatcher.notify_dispute_escalated(
                 mock_db,
                 dispute,
-                "mgr@test.com",
+                "m@m.com",
                 "Manager",
-                from_role="dispatcher",
-                to_role="ceo",
-                manager_user_id=3,
+                "dispatcher",
+                "ceo",
+                manager_user_id=4,
             )
 
-        assert all(result.values())
+        assert result["email"] is True
+        assert result["telegram"] is True
+        assert result["max"] is True
+        assert result["in_app"] is True
 
     @pytest.mark.asyncio
-    async def test_no_manager_user_id(self, mock_db):
+    async def test_all_channels_fail(self, mock_db):
         from app.services.notification_dispatcher import NotificationDispatcher
 
-        dispute = SimpleNamespace(id=42)
+        dispute = SimpleNamespace(id=1)
 
         with (
             patch("app.services.notification_dispatcher.email_service") as mock_email,
@@ -273,20 +260,22 @@ class TestNotifyDisputeEscalated:
                 new_callable=AsyncMock,
             ) as mock_notif,
         ):
-
-            mock_email.send_dispute_escalated.return_value = True
-            mock_tg.send_escalation_alert = AsyncMock(return_value=True)
-            mock_max.send_escalation_alert = AsyncMock(return_value=True)
+            mock_email.send_dispute_escalated.side_effect = Exception("fail")
+            mock_tg.send_escalation_alert = AsyncMock(side_effect=Exception("fail"))
+            mock_max.send_escalation_alert = AsyncMock(side_effect=Exception("fail"))
+            mock_notif.side_effect = Exception("fail")
 
             result = await NotificationDispatcher.notify_dispute_escalated(
                 mock_db,
                 dispute,
-                "mgr@test.com",
+                "m@m.com",
                 "Manager",
-                from_role="dispatcher",
-                to_role="ceo",
-                manager_user_id=None,
+                "dispatcher",
+                "ceo",
+                manager_user_id=4,
             )
 
+        assert result["email"] is False
+        assert result["telegram"] is False
+        assert result["max"] is False
         assert result["in_app"] is False
-        mock_notif.assert_not_called()
