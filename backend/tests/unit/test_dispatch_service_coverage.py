@@ -252,14 +252,43 @@ class TestValidateRequestForAssignment:
         from app.services.dispatch_service import validate_request_for_assignment
 
         mock_db.get.return_value = None
-        result = validate_request_for_assignment(mock_db, 999, 1)
-        assert result.available is False
+        request, error = validate_request_for_assignment(mock_db, 999, 1)
+        assert request is None
+        assert "not found" in error.lower()
 
-    def test_request_closed(self, mock_db):
-        from app.models.dispatch import RequestStatus
+    def test_wrong_company(self, mock_db):
         from app.services.dispatch_service import validate_request_for_assignment
 
-        request = SimpleNamespace(status=RequestStatus.completed, id=1, company_id=1)
+        request = SimpleNamespace(status="new", id=1, company_id=2)
         mock_db.get.return_value = request
-        result = validate_request_for_assignment(mock_db, 1, 1)
-        assert result.available is False
+        req, error = validate_request_for_assignment(mock_db, 1, 1)
+        assert req is None
+        assert "another company" in error.lower()
+
+    def test_closed_status(self, mock_db):
+        from app.services.dispatch_service import validate_request_for_assignment
+
+        request = SimpleNamespace(status="closed", id=1, company_id=1)
+        mock_db.get.return_value = request
+        req, error = validate_request_for_assignment(mock_db, 1, 1)
+        assert req is None
+        assert "closed" in error.lower()
+
+    def test_cancelled_status(self, mock_db):
+        from app.services.dispatch_service import validate_request_for_assignment
+
+        request = SimpleNamespace(status="cancelled", id=1, company_id=1)
+        mock_db.get.return_value = request
+        req, error = validate_request_for_assignment(mock_db, 1, 1)
+        assert req is None
+        assert "cancelled" in error.lower()
+
+    def test_valid_request(self, mock_db):
+        from app.services.dispatch_service import validate_request_for_assignment
+
+        request = SimpleNamespace(status="new", id=1, company_id=1)
+        mock_db.get.return_value = request
+        req, error = validate_request_for_assignment(mock_db, 1, 1)
+        assert req is not None
+        assert req.id == 1
+        assert error is None
