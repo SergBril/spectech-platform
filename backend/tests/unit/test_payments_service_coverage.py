@@ -341,3 +341,115 @@ class TestApplyPaymentNotifications:
                 del sys.modules["app.services.max_messenger_service"]
 
         assert result is not None
+
+
+
+class TestUploadStatementFull:
+    """Cover upload_statement full flow (lines 82-162)."""
+
+    def test_success(self, mock_db, service, tmp_path):
+        from datetime import date
+        # Create temp file
+        test_file = tmp_path / "statement.xml"
+        test_file.write_text("<xml>test</xml>")
+
+        parsed_tx = SimpleNamespace(
+            bank_transaction_id="BT001", document_type="payment_order",
+            number="123", date=date(2026, 11, 1), direction="incoming",
+            amount=Decimal("1000"), processed_date=date(2026, 11, 1),
+            counterparty_name="OOO Test", counterparty_inn="1234567890",
+            counterparty_kpp="", counterparty_account="40702810000000000001",
+            counterparty_bank="Sberbank", counterparty_bik="044525225",
+            purpose="Payment", should_be_excluded=lambda: (False, None),
+        )
+        parsed = SimpleNamespace(
+            account_number="40702810000000000001", bank_name="Sberbank",
+            date_start=date(2026, 11, 1), date_end=date(2026, 11, 5),
+            opening_balance=Decimal("10000"), closing_balance=Decimal("11000"),
+            total_incoming=Decimal("1000"), total_outgoing=Decimal("0"),
+            transactions=[parsed_tx],
+        )
+        service.parser.parse_file.return_value = parsed
+
+        # No duplicate
+        q_dup = MagicMock()
+        q_dup.filter.return_value.first.return_value = None
+        mock_db.query.return_value = q_dup
+        mock_db.flush.side_effect = lambda: None
+
+        # auto_match returns 0
+        with patch.object(service, "auto_match_transactions", return_value=0):
+            with patch("app.services.payments_service.settings") as mock_settings:
+                mock_settings.local_storage_dir = str(tmp_path)
+                result = service.upload_statement(mock_db, test_file, 7, uploaded_by=1)
+
+        assert result is not None
+        mock_db.commit.assert_called()
+
+    def test_parse_error_rollback(self, mock_db, service, tmp_path):
+        test_file = tmp_path / "bad.xml"
+        test_file.write_text("<xml>bad</xml>")
+
+        parsed = SimpleNamespace(
+            account_number="40702810000000000001", bank_name="Bank",
+            date_start=datetime.now(UTC).date(), date_end=datetime.now(UTC).date(),
+            opening_balance=0, closing_balance=0,
+            total_incoming=0, total_outgoing=0, transactions=[],
+        )
+        service.parser.parse_file.return_value = parsed
+
+        q_dup = MagicMock()
+        q_dup.filter.return_value.first.return_value = None
+        mock_db.query.return_value = q_dup
+
+        # Make flush raise after statement is added
+        call_count = {"n": 0}
+        def mock_flush():
+            call_count["n"] += 1
+            if call_count["n"] > 1:
+                raise Exception("DB error")
+        mock_db.flush.side_effect = mock_flush
+
+        with patch("app.services.payments_service.settings") as mock_settings:
+            mock_settings.local_storage_dir = str(tmp_path)
+            with pytest.raises(Exception, match="DB error"):
+                service.upload_statement(mock_db, test_file, 7)
+        mock_db.rollback.assert_called()
+
+
+class TestApplyPaymentNotificationError:
+    """Cover apply_payment notification exception path (line 281, 339-342)."""
+
+    def test_max_notification_error(self, mock_db, service):
+        from app.models.bank_statement import MatchStatus
+        tx = SimpleNamespace(
+            id=1, match_status=MatchStatus.unmatched, payment_id=None,
+            company_id=7, amount=Decimal("1000"), processed_date=datetime.now(UTC),
+            bank_transaction_id="BT001", counterparty_name="Test",
+            counterparty_inn="123", counterparty_account="407",
+            purpose="Pay",
+        )
+        invoice = SimpleNamespace(
+            id=10, company_id=7, total="1000", paid_amount="0",
+            status="draft", document_number="INV-001",
+        )
+        call_count = {"n": 0}
+        def mock_get(model, obj_id):
+            call_count["n"] += 1
+            return tx if call_count["n"] == 1 else invoice
+        mock_db.get.side_effect = mock_get
+        mock_db.flush.side_effect = lambda: None
+        mock_db.refresh.side_effect = lambda r: None
+
+        # Make max_messenger_service import succeed but notify fail
+        mock_max = MagicMock()
+        mock_max.notify_company_dispatchers = AsyncMock(side_effect=Exception("MAX fail"))
+        mock_templates = MagicMock()
+        mock_templates.payment_received.return_value = ("Title", "Body")
+
+        with patch("app.services.max_messenger_service.max_messenger_service", mock_max), \
+             patch("app.services.max_messenger_service.notification_templates", mock_templates):
+            result = service.apply_payment(mock_db, 1, 10)
+
+        # Should still succeed despite notification error
+        assert result is not None
