@@ -53,7 +53,7 @@ class TestPublishVehicle:
         )
         mock_db.get.return_value = vehicle
         mock_db.refresh.side_effect = lambda r: None
-        result = MarketplaceService.publish_vehicle(
+        MarketplaceService.publish_vehicle(
             mock_db, 1, 7, hourly_rate=Decimal("1500"), description="Test",
         )
         assert vehicle.is_available_for_rent is True
@@ -193,7 +193,7 @@ class TestCreateRequestFromListing:
         mock_db.get.return_value = vehicle
         mock_db.refresh.side_effect = lambda r: setattr(r, "id", 1) if not getattr(r, "id", None) else None
         with patch.object(MarketplaceService, "_filter_available", return_value={1}):
-            result = MarketplaceService.create_request_from_listing(
+            MarketplaceService.create_request_from_listing(
                 mock_db, 1, 10, 7, "earthworks",
                 datetime(2026, 11, 10, tzinfo=UTC), datetime(2026, 11, 11, tzinfo=UTC),
             )
@@ -417,7 +417,7 @@ class TestCreateRequestWithOwnerNotification:
         mock_db.refresh.side_effect = lambda r: setattr(r, "id", 1) if not getattr(r, "id", None) else None
 
         with patch.object(MarketplaceService, "_filter_available", return_value={1}), \
-             patch.object(MarketplaceService, "_notify_owner_new_request", new_callable=AsyncMock) as mock_notify:
+             patch.object(MarketplaceService, "_notify_owner_new_request", new_callable=AsyncMock):
             result = MarketplaceService.create_request_from_listing(
                 mock_db, 1, 10, 7, "earthworks",
                 datetime(2026, 11, 10, tzinfo=UTC), datetime(2026, 11, 11, tzinfo=UTC),
@@ -444,3 +444,30 @@ class TestCreateRequestWithOwnerNotification:
                 datetime(2026, 11, 10, tzinfo=UTC), datetime(2026, 11, 11, tzinfo=UTC),
             )
         assert result is not None
+
+
+
+class TestCreateRequestOwnerNotificationError:
+    """Cover lines 403-404: except Exception on owner notification."""
+
+    def test_notification_exception_caught(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        vehicle = SimpleNamespace(id=1, name="KAMAZ", is_available_for_rent=True, owner_id=5)
+        # Make db.get raise when fetching owner to trigger outer except
+        call_count = {"n": 0}
+        def mock_get(model, obj_id):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return vehicle
+            raise Exception("DB connection lost")
+        mock_db.get.side_effect = mock_get
+        mock_db.refresh.side_effect = lambda r: setattr(r, "id", 1) if not getattr(r, "id", None) else None
+
+        with patch.object(MarketplaceService, "_filter_available", return_value={1}):
+            # Should NOT raise - exception is caught and logged
+            result = MarketplaceService.create_request_from_listing(
+                mock_db, 1, 10, 7, "earthworks",
+                datetime(2026, 11, 10, tzinfo=UTC), datetime(2026, 11, 11, tzinfo=UTC),
+            )
+        assert result is not None
+        mock_db.commit.assert_called()
