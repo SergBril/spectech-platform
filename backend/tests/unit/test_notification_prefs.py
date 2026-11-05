@@ -1,6 +1,7 @@
 """Unit tests for notification_prefs_helper."""
-import pytest
-from unittest.mock import MagicMock, patch
+
+from unittest.mock import MagicMock
+
 from app.services.notification_prefs_helper import should_notify
 
 

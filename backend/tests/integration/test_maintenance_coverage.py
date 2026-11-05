@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -17,6 +18,7 @@ def auth_headers(auth_token):
 @pytest.fixture
 def admin_auth_token(admin_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(admin_user)
 
 
@@ -36,15 +38,21 @@ class TestListMaintenanceOrders:
         assert "total" in data
 
     def test_filter_by_status(self, client, auth_headers):
-        resp = client.get("/api/v1/maintenance/orders?status=planned", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/maintenance/orders?status=planned", headers=auth_headers
+        )
         assert resp.status_code == 200
 
     def test_filter_by_priority(self, client, auth_headers):
-        resp = client.get("/api/v1/maintenance/orders?priority=high", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/maintenance/orders?priority=high", headers=auth_headers
+        )
         assert resp.status_code == 200
 
     def test_pagination(self, client, auth_headers):
-        resp = client.get("/api/v1/maintenance/orders?skip=0&limit=10", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/maintenance/orders?skip=0&limit=10", headers=auth_headers
+        )
         assert resp.status_code == 200
 
 
@@ -59,7 +67,9 @@ class TestCreateMaintenanceOrder:
             "title": "Test maintenance order",
             "description": "Test description",
         }
-        resp = client.post("/api/v1/maintenance/orders", json=payload, headers=admin_auth_headers)
+        resp = client.post(
+            "/api/v1/maintenance/orders", json=payload, headers=admin_auth_headers
+        )
         assert resp.status_code == 201
         data = resp.json()
         assert data["id"] is not None
@@ -82,10 +92,14 @@ class TestGetMaintenanceOrder:
             "title": "Test order for get",
             "description": "Test description",
         }
-        create_resp = client.post("/api/v1/maintenance/orders", json=payload, headers=admin_auth_headers)
+        create_resp = client.post(
+            "/api/v1/maintenance/orders", json=payload, headers=admin_auth_headers
+        )
         order_id = create_resp.json()["id"]
 
-        resp = client.get(f"/api/v1/maintenance/orders/{order_id}", headers=admin_auth_headers)
+        resp = client.get(
+            f"/api/v1/maintenance/orders/{order_id}", headers=admin_auth_headers
+        )
         assert resp.status_code == 200
         assert resp.json()["id"] == order_id
 
@@ -94,7 +108,9 @@ class TestGetTco:
     """Cover get_tco endpoint (lines 435-480)."""
 
     def test_tco(self, client, auth_headers, sample_vehicle):
-        resp = client.get(f"/api/v1/maintenance/tco/{sample_vehicle.id}", headers=auth_headers)
+        resp = client.get(
+            f"/api/v1/maintenance/tco/{sample_vehicle.id}", headers=auth_headers
+        )
         assert resp.status_code == 200
 
 
@@ -103,14 +119,16 @@ class TestHelperFunctions:
 
     def test_generate_order_number(self, db_session):
         from app.api.routes.maintenance import _generate_order_number
+
         num = _generate_order_number(db_session)
         assert "2026" in num or "2025" in num  # Contains year
         assert len(num.split("-")) == 3
 
     def test_calculate_costs(self, db_session):
+        from decimal import Decimal
+
         from app.api.routes.maintenance import _calculate_costs
         from app.models.maintenance import MaintenanceOrder
-        from decimal import Decimal
 
         order = MaintenanceOrder(
             company_id=1,

@@ -1,6 +1,6 @@
 """Final coverage boost: target specific uncovered lines."""
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+
+from unittest.mock import MagicMock, patch
 
 
 class TestAnalyticsUncoveredLines:
@@ -101,13 +101,16 @@ class TestSalaryServiceUncoveredLines:
     def test_calculate_salary_no_driver(self, mock_session):
         # Lines 120-121: driver not found
         from app.services.salary_service import SalaryService
+
         svc = SalaryService()
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
         mock_session.return_value.__enter__ = MagicMock(return_value=mock_db)
         mock_session.return_value.__exit__ = MagicMock(return_value=False)
         try:
-            svc.calculate_salary(driver_id=999999, period_start="2026-01-01", period_end="2026-01-31")
+            svc.calculate_salary(
+                driver_id=999999, period_start="2026-01-01", period_end="2026-01-31"
+            )
         except Exception:
             pass
 
@@ -115,6 +118,7 @@ class TestSalaryServiceUncoveredLines:
     def test_generate_payslip_edge(self, mock_session):
         # Lines 141-144: payslip generation edge case
         from app.services.salary_service import SalaryService
+
         svc = SalaryService()
         mock_db = MagicMock()
         mock_session.return_value.__enter__ = MagicMock(return_value=mock_db)
@@ -128,6 +132,7 @@ class TestSalaryServiceUncoveredLines:
     def test_bulk_calculate_empty(self, mock_session):
         # Lines 245-247, 252: bulk calculate with no drivers
         from app.services.salary_service import SalaryService
+
         svc = SalaryService()
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.all.return_value = []

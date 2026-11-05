@@ -12,9 +12,8 @@ from app.models.bank_statement import (
     BankTransaction,
     MatchStatus,
     StatementStatus,
-    TransactionDirection,
 )
-from app.models.finance import Invoice, DocumentStatus
+from app.models.finance import DocumentStatus, Invoice
 
 
 class TestBankStatementsAPI:
@@ -56,9 +55,7 @@ class TestBankStatementsAPI:
         assert statement.status == StatementStatus.parsed
         assert len(statement.transactions) == data["total_transactions"]
 
-    def test_upload_invalid_file_type(
-        self, auth_client: TestClient, tmp_path: Path
-    ):
+    def test_upload_invalid_file_type(self, auth_client: TestClient, tmp_path: Path):
         """❌ Загрузка не-TXT файла возвращает ошибку."""
         invalid_file = tmp_path / "statement.pdf"
         invalid_file.write_bytes(b"not a txt file")
@@ -157,14 +154,19 @@ class TestBankStatementsAPI:
         data = response.json()
 
         # Должна быть хотя бы одна авто-привязка
-        assert data["matched_transactions"] >= 1, \
-            f"Expected at least 1 auto-match, got {data['matched_transactions']}"
+        assert (
+            data["matched_transactions"] >= 1
+        ), f"Expected at least 1 auto-match, got {data['matched_transactions']}"
 
         # Проверяем, что транзакция действительно привязана
-        matched = db_session.query(BankTransaction).filter(
-            BankTransaction.statement_id == data["id"],
-            BankTransaction.match_status == MatchStatus.auto_matched,
-        ).count()
+        matched = (
+            db_session.query(BankTransaction)
+            .filter(
+                BankTransaction.statement_id == data["id"],
+                BankTransaction.match_status == MatchStatus.auto_matched,
+            )
+            .count()
+        )
         assert matched >= 1
 
     def test_apply_payment_to_invoice(
@@ -249,10 +251,12 @@ class TestBankStatementsAPI:
 
         # В unmatched не должно быть банковских комиссий
         for tx in unmatched["items"]:
-            assert "обслуживание" not in (tx.get("purpose") or "").lower(), \
-                f"Bank commission should be excluded: {tx}"
-            assert "пакет" not in (tx.get("purpose") or "").lower(), \
-                f"Bank package should be excluded: {tx}"
+            assert (
+                "обслуживание" not in (tx.get("purpose") or "").lower()
+            ), f"Bank commission should be excluded: {tx}"
+            assert (
+                "пакет" not in (tx.get("purpose") or "").lower()
+            ), f"Bank package should be excluded: {tx}"
 
     def test_apply_payment_sends_email_notification(
         self,
@@ -263,12 +267,17 @@ class TestBankStatementsAPI:
         """✅ Применение платежа отправляет email-уведомление клиенту."""
         from datetime import date, timedelta
         from unittest.mock import patch
-        from app.models.contractor import Contractor
-        from app.models.finance import Invoice, DocumentStatus
+
         from app.models.bank_statement import (
-            BankStatement, BankTransaction, MatchStatus,
-            StatementStatus, TransactionDirection, TransactionType,
+            BankStatement,
+            BankTransaction,
+            MatchStatus,
+            StatementStatus,
+            TransactionDirection,
+            TransactionType,
         )
+        from app.models.contractor import Contractor
+        from app.models.finance import DocumentStatus, Invoice
 
         # Создаём клиента с email
         client = Contractor(

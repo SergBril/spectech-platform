@@ -1,11 +1,12 @@
-﻿import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime, UTC
+﻿from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.services.mobile_shift_service import (
-    submit_mobile_shift_report,
-    get_pre_shift_checklist,
     MobileShiftServiceError,
+    get_pre_shift_checklist,
+    submit_mobile_shift_report,
 )
 
 
@@ -31,10 +32,10 @@ class TestSubmitMobileShiftReport:
         mock_vehicle.company_id = 7
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -52,16 +53,23 @@ class TestSubmitMobileShiftReport:
 
         mock_report = MagicMock()
         mock_report.id = 99
-        mock_db.refresh.side_effect = lambda r: setattr(r, 'id', 99) if not hasattr(r, 'id') or r.id is None else None
+        mock_db.refresh.side_effect = lambda r: (
+            setattr(r, "id", 99) if not hasattr(r, "id") or r.id is None else None
+        )
 
-        with patch('app.services.websocket_manager.manager') as mock_manager, \
-             patch('app.services.fcm_service.fcm_service') as mock_fcm:
+        with (
+            patch("app.services.websocket_manager.manager") as mock_manager,
+            patch("app.services.fcm_service.fcm_service") as mock_fcm,
+        ):
             mock_manager.broadcast_to_company = AsyncMock()
             mock_fcm.send_to_user = AsyncMock()
 
             result = await submit_mobile_shift_report(
-                db=mock_db, task_id=1, user_id=5,
-                odometer_start=10000.0, odometer_end=10150.5,
+                db=mock_db,
+                task_id=1,
+                user_id=5,
+                odometer_start=10000.0,
+                odometer_end=10150.5,
                 notes="All good",
             )
 
@@ -123,10 +131,10 @@ class TestSubmitMobileShiftReport:
         mock_vehicle.company_id = 7
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -145,15 +153,19 @@ class TestSubmitMobileShiftReport:
         mock_photo.filename = "test.jpg"
         mock_photo.read = AsyncMock(return_value=b"fake_image_data")
 
-        with patch('app.services.websocket_manager.manager') as mock_manager, \
-             patch('app.services.fcm_service.fcm_service') as mock_fcm, \
-             patch('app.services.mobile_shift_service.os.makedirs'), \
-             patch('builtins.open', MagicMock()):
+        with (
+            patch("app.services.websocket_manager.manager") as mock_manager,
+            patch("app.services.fcm_service.fcm_service") as mock_fcm,
+            patch("app.services.mobile_shift_service.os.makedirs"),
+            patch("builtins.open", MagicMock()),
+        ):
             mock_manager.broadcast_to_company = AsyncMock()
             mock_fcm.send_to_user = AsyncMock()
 
             result = await submit_mobile_shift_report(
-                db=mock_db, task_id=1, user_id=5,
+                db=mock_db,
+                task_id=1,
+                user_id=5,
                 photo_files=[mock_photo],
             )
 
@@ -178,10 +190,10 @@ class TestGetPreShiftChecklist:
         mock_vehicle.company_id = 99
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -200,10 +212,10 @@ class TestGetPreShiftChecklist:
         mock_vehicle.category_id = None
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -233,10 +245,10 @@ class TestGetPreShiftChecklist:
         mock_existing.has_issues = False
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -246,7 +258,9 @@ class TestGetPreShiftChecklist:
         config_result.scalar_one_or_none.return_value = None
         existing_result = MagicMock()
         existing_result.scalar_one_or_none.return_value = mock_existing
-        mock_db.execute = MagicMock(side_effect=[config_result, config_result, existing_result])
+        mock_db.execute = MagicMock(
+            side_effect=[config_result, config_result, existing_result]
+        )
 
         result = get_pre_shift_checklist(mock_db, task_id=1, company_id=7)
 

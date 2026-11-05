@@ -1,6 +1,5 @@
 ﻿"""Tests for contractor INN suggestion endpoint."""
 
-import pytest
 from fastapi.testclient import TestClient
 
 

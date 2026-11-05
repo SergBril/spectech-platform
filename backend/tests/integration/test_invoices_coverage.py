@@ -1,5 +1,4 @@
 """Integration tests for invoices.py endpoints."""
-import pytest
 
 
 class TestInvoicesEndpoints:

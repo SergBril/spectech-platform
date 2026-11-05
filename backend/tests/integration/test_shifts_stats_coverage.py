@@ -1,6 +1,6 @@
 """Integration tests for shifts/stats.py endpoints (coverage boost)."""
-import pytest
-from datetime import date, timedelta
+
+from datetime import date
 
 
 class TestStatsEndpoints:
@@ -114,9 +114,13 @@ class TestStatsEndpoints:
         assert resp.status_code == 200
 
     def test_platform_overview(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/stats/platform-overview", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/shifts/stats/platform-overview", headers=auth_headers
+        )
         assert resp.status_code == 200
 
     def test_recent_actions(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/stats/recent-actions?limit=5", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/shifts/stats/recent-actions?limit=5", headers=auth_headers
+        )
         assert resp.status_code == 200

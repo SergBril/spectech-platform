@@ -1,11 +1,12 @@
-﻿import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import date, datetime, UTC
+﻿from datetime import date
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.services.shift_task_service import (
-    update_shift_task,
-    auto_assign_driver,
     ShiftTaskServiceError,
+    auto_assign_driver,
+    update_shift_task,
 )
 
 
@@ -30,10 +31,10 @@ class TestUpdateShiftTask:
         mock_vehicle.name = "CAT 320"
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -44,10 +45,13 @@ class TestUpdateShiftTask:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
 
-        with patch('app.services.websocket_manager.manager') as mock_manager:
+        with patch("app.services.websocket_manager.manager") as mock_manager:
             mock_manager.broadcast_to_company = AsyncMock()
             result = await update_shift_task(
-                db=mock_db, task_id=1, company_id=7, user_id=1,
+                db=mock_db,
+                task_id=1,
+                company_id=7,
+                user_id=1,
                 status="completed",
             )
 
@@ -73,10 +77,10 @@ class TestUpdateShiftTask:
         mock_vehicle.company_id = 99  # Different company
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -100,10 +104,10 @@ class TestUpdateShiftTask:
         mock_conflict = MagicMock()
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -113,7 +117,10 @@ class TestUpdateShiftTask:
 
         with pytest.raises(ShiftTaskServiceError) as exc_info:
             await update_shift_task(
-                db=mock_db, task_id=1, company_id=7, user_id=1,
+                db=mock_db,
+                task_id=1,
+                company_id=7,
+                user_id=1,
                 shift_date="2026-11-01",
             )
         assert exc_info.value.status_code == 409
@@ -131,10 +138,10 @@ class TestUpdateShiftTask:
         mock_vehicle.company_id = 7
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -145,10 +152,13 @@ class TestUpdateShiftTask:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
 
-        with patch('app.services.websocket_manager.manager') as mock_manager:
+        with patch("app.services.websocket_manager.manager") as mock_manager:
             mock_manager.broadcast_to_company = AsyncMock()
             result = await update_shift_task(
-                db=mock_db, task_id=1, company_id=7, user_id=1,
+                db=mock_db,
+                task_id=1,
+                company_id=7,
+                user_id=1,
                 shift_date="2026-11-05",
             )
 
@@ -173,10 +183,10 @@ class TestAutoAssignDriver:
         mock_vehicle.company_id = 99
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -195,10 +205,10 @@ class TestAutoAssignDriver:
         mock_vehicle.company_id = 7
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -218,10 +228,10 @@ class TestAutoAssignDriver:
         mock_vehicle.company_id = 7
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -254,12 +264,12 @@ class TestAutoAssignDriver:
         mock_emp.last_name = "Petrov"
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'ShiftTask':
+            name = getattr(model, "__name__", str(model))
+            if name == "ShiftTask":
                 return mock_task
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
-            if name == 'Employee':
+            if name == "Employee":
                 return mock_emp
             return None
 
@@ -278,7 +288,9 @@ class TestAutoAssignDriver:
         week_result = MagicMock()
         week_result.scalar.return_value = 2
 
-        mock_db.execute = MagicMock(side_effect=[drivers_result, rules_result, busy_result, week_result])
+        mock_db.execute = MagicMock(
+            side_effect=[drivers_result, rules_result, busy_result, week_result]
+        )
         mock_db.commit = MagicMock()
 
         result = auto_assign_driver(mock_db, task_id=1, company_id=7)

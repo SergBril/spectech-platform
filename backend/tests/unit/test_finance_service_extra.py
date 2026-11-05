@@ -1,6 +1,7 @@
-﻿import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
-from decimal import Decimal
+﻿from decimal import Decimal
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.services.finance_service import register_payment
 
@@ -60,11 +61,16 @@ class TestRegisterPayment:
         mock_payment.amount = Decimal("100")
 
         def side_effect(model, id):
-            if hasattr(model, '__tablename__') and 'payout' in str(model.__tablename__).lower():
+            if (
+                hasattr(model, "__tablename__")
+                and "payout" in str(model.__tablename__).lower()
+            ):
                 return mock_payout
             return None
 
-        mock_db.get = MagicMock(side_effect=lambda m, i: mock_payout if i == 5 else None)
+        mock_db.get = MagicMock(
+            side_effect=lambda m, i: mock_payout if i == 5 else None
+        )
         mock_db.commit = MagicMock()
 
         register_payment(mock_db, mock_payment)
@@ -98,8 +104,8 @@ class TestRegisterPayment:
 class TestGenerateAndSaveInvoicePdf:
     """Tests for generate_and_save_invoice_pdf"""
 
-    @patch('app.services.finance_service.storage_service')
-    @patch('app.services.pdf_generator.generate_invoice_pdf')
+    @patch("app.services.finance_service.storage_service")
+    @patch("app.services.pdf_generator.generate_invoice_pdf")
     def test_generate_success(self, mock_gen_pdf, mock_storage, mock_db):
         from app.services.finance_service import generate_and_save_invoice_pdf
 
@@ -116,7 +122,9 @@ class TestGenerateAndSaveInvoicePdf:
         mock_db.commit = MagicMock()
 
         mock_gen_pdf.return_value = b"pdf_content"
-        mock_storage.upload_bytes = MagicMock(return_value={"path": "finance/invoices/INV-001.pdf", "size": 1234})
+        mock_storage.upload_bytes = MagicMock(
+            return_value={"path": "finance/invoices/INV-001.pdf", "size": 1234}
+        )
 
         result = generate_and_save_invoice_pdf(1, mock_db)
 
@@ -139,8 +147,8 @@ class TestGenerateAndSaveInvoicePdf:
 class TestGenerateAndSaveActPdf:
     """Tests for generate_and_save_act_pdf"""
 
-    @patch('app.services.finance_service.storage_service')
-    @patch('app.services.finance_service.generate_act_pdf')
+    @patch("app.services.finance_service.storage_service")
+    @patch("app.services.finance_service.generate_act_pdf")
     def test_generate_act_success(self, mock_gen_pdf, mock_storage, mock_db):
         from app.services.finance_service import generate_and_save_act_pdf
 
@@ -151,12 +159,16 @@ class TestGenerateAndSaveActPdf:
         mock_act.created_by = 5
         mock_act.company_id = 7
 
-        mock_db.get = MagicMock(side_effect=lambda model, id: mock_act if id == 1 else MagicMock())
+        mock_db.get = MagicMock(
+            side_effect=lambda model, id: mock_act if id == 1 else MagicMock()
+        )
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
 
         mock_gen_pdf.return_value = b"pdf_content"
-        mock_storage.upload_bytes = MagicMock(return_value={"path": "finance/acts/ACT-001.pdf", "size": 2345})
+        mock_storage.upload_bytes = MagicMock(
+            return_value={"path": "finance/acts/ACT-001.pdf", "size": 2345}
+        )
 
         result = generate_and_save_act_pdf(1, mock_db)
 

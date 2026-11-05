@@ -1,7 +1,7 @@
 ﻿"""Targeted tests for diadoc.py, mobile.py, max_messenger.py route bodies."""
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+
 from datetime import date
+from unittest.mock import AsyncMock, patch
 
 
 class TestDiadocRouteBodies:
@@ -9,8 +9,18 @@ class TestDiadocRouteBodies:
 
     @patch("app.api.routes.shifts.diadoc.digital_signature_service")
     @patch("app.api.routes.shifts.diadoc.diadoc_service")
-    def test_send_act_with_real_act(self, mock_diadoc, mock_sign, client, auth_headers, db_session, company, sample_contractor):
+    def test_send_act_with_real_act(
+        self,
+        mock_diadoc,
+        mock_sign,
+        client,
+        auth_headers,
+        db_session,
+        company,
+        sample_contractor,
+    ):
         from app.models.finance import Act
+
         act = Act(
             company_id=company.id,
             client_id=sample_contractor.id,
@@ -22,7 +32,9 @@ class TestDiadocRouteBodies:
         db_session.commit()
         db_session.refresh(act)
 
-        mock_diadoc.send_act = AsyncMock(return_value={"message_id": "msg-1", "status": "sent"})
+        mock_diadoc.send_act = AsyncMock(
+            return_value={"message_id": "msg-1", "status": "sent"}
+        )
         resp = client.post(
             "/api/v1/shifts/diadoc/send-act",
             json={"act_id": act.id, "counterparty_box_id": "test-box"},
@@ -42,13 +54,20 @@ class TestDiadocRouteBodies:
 
     @patch("app.api.routes.shifts.diadoc.diadoc_service")
     def test_refresh_statuses(self, mock_diadoc, client, auth_headers):
-        mock_diadoc.get_document_status = AsyncMock(return_value={"status": "delivered"})
-        resp = client.post("/api/v1/shifts/diadoc/refresh-statuses", headers=auth_headers)
+        mock_diadoc.get_document_status = AsyncMock(
+            return_value={"status": "delivered"}
+        )
+        resp = client.post(
+            "/api/v1/shifts/diadoc/refresh-statuses", headers=auth_headers
+        )
         assert resp.status_code in (200, 500)
 
     @patch("app.api.routes.shifts.diadoc.digital_signature_service")
-    def test_verify_signature_route(self, mock_sign, client, auth_headers, db_session, company, sample_contractor):
+    def test_verify_signature_route(
+        self, mock_sign, client, auth_headers, db_session, company, sample_contractor
+    ):
         from app.models.finance import Act
+
         act = Act(
             company_id=company.id,
             client_id=sample_contractor.id,
@@ -61,7 +80,9 @@ class TestDiadocRouteBodies:
         db_session.refresh(act)
 
         mock_sign.verify_signature.return_value = {"valid": True}
-        resp = client.get(f"/api/v1/shifts/acts/{act.id}/verify-signature", headers=auth_headers)
+        resp = client.get(
+            f"/api/v1/shifts/acts/{act.id}/verify-signature", headers=auth_headers
+        )
         assert resp.status_code in (200, 404, 500)
 
 
@@ -71,6 +92,7 @@ class TestMaxMessengerRouteBodies:
     @patch("app.api.routes.shifts.max_messenger.max_messenger_service")
     def test_webhook_message_processing(self, mock_svc, client, db_session, company):
         from app.models.auth import User
+
         user = User(
             email="maxtest@test.com",
             full_name="Max Test",
@@ -173,7 +195,11 @@ class TestMobileRouteBodies:
     def test_register_device_token_mobile(self, client, auth_headers):
         resp = client.post(
             "/api/v1/shifts/devices/register",
-            json={"token": "fcm-token-123", "platform": "android", "device_model": "Pixel 7"},
+            json={
+                "token": "fcm-token-123",
+                "platform": "android",
+                "device_model": "Pixel 7",
+            },
             headers=auth_headers,
         )
         assert resp.status_code in (200, 201, 422)

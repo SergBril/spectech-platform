@@ -1,5 +1,4 @@
 """Integration tests for shifts/diadoc.py endpoints."""
-import pytest
 
 
 class TestDiadocEndpoints:
@@ -10,11 +9,15 @@ class TestDiadocEndpoints:
         assert resp.status_code in (200, 500)
 
     def test_get_document_status(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/diadoc/status/fake-msg-id", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/shifts/diadoc/status/fake-msg-id", headers=auth_headers
+        )
         assert resp.status_code in (200, 404, 500)
 
     def test_refresh_statuses(self, client, auth_headers):
-        resp = client.post("/api/v1/shifts/diadoc/refresh-statuses", headers=auth_headers)
+        resp = client.post(
+            "/api/v1/shifts/diadoc/refresh-statuses", headers=auth_headers
+        )
         assert resp.status_code in (200, 500)
 
     def test_acts_registry(self, client, auth_headers):
@@ -26,7 +29,9 @@ class TestDiadocEndpoints:
         assert resp.status_code in (404, 403, 500)
 
     def test_verify_signature_not_found(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/acts/99999/verify-signature", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/shifts/acts/99999/verify-signature", headers=auth_headers
+        )
         assert resp.status_code in (404, 403, 500)
 
     def test_export_acts_1c(self, client, auth_headers):

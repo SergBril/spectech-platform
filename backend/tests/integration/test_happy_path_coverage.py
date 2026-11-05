@@ -1,6 +1,8 @@
 """Happy-path integration tests with real DB data for coverage boost."""
-import pytest
+
 from datetime import date, timedelta
+
+import pytest
 
 
 class TestShiftTasksHappyPath:
@@ -25,12 +27,17 @@ class TestShiftTasksHappyPath:
     @pytest.mark.xfail(reason="Bug: ShiftTask missing planned_start attr", strict=False)
     def test_daily_summary_with_data(self, client, auth_headers, dispute_test_data):
         today = dispute_test_data["shift_task"].shift_date.isoformat()
-        resp = client.get(f"/api/v1/shifts/daily-summary?target_date={today}", headers=auth_headers)
+        resp = client.get(
+            f"/api/v1/shifts/daily-summary?target_date={today}", headers=auth_headers
+        )
         assert resp.status_code in (200, 500)
 
     @pytest.mark.xfail(reason="Bug: UTC not defined in shift.py model", strict=False)
-    def test_audit_log_with_data(self, client, auth_headers, db_session, dispute_test_data):
+    def test_audit_log_with_data(
+        self, client, auth_headers, db_session, dispute_test_data
+    ):
         from app.models.shift import ShiftAuditLog
+
         task = dispute_test_data["shift_task"]
         log = ShiftAuditLog(
             shift_task_id=task.id,
@@ -43,7 +50,9 @@ class TestShiftTasksHappyPath:
         db_session.add(log)
         db_session.commit()
 
-        resp = client.get(f"/api/v1/shifts/tasks/{task.id}/audit-log", headers=auth_headers)
+        resp = client.get(
+            f"/api/v1/shifts/tasks/{task.id}/audit-log", headers=auth_headers
+        )
         assert resp.status_code == 200
         assert len(resp.json()) >= 1
 
@@ -93,7 +102,9 @@ class TestStatsHappyPath:
         assert resp.status_code == 200
 
     def test_platform_overview(self, client, auth_headers, sample_vehicle):
-        resp = client.get("/api/v1/shifts/stats/platform-overview", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/shifts/stats/platform-overview", headers=auth_headers
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "vehicles" in data

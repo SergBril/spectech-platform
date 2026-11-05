@@ -1,7 +1,6 @@
 """Final happy-path tests for 65% coverage target."""
-import pytest
-from datetime import date, timedelta
-from decimal import Decimal
+
+from datetime import date
 
 
 class TestInvoicesHappyPath:

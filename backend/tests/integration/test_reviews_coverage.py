@@ -1,17 +1,14 @@
 ﻿"""Tests for reviews_service coverage improvement."""
 
 import pytest
-from decimal import Decimal
-from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 
 
 class TestCreateReviewValidation:
     """Cover validation branches in create_review (lines 88-117)."""
 
     def test_comment_too_short_raises(self, db_session, sample_rental, company):
-        from app.services.reviews_service import ReviewsService
         from app.models.rental import RentalStatus
+        from app.services.reviews_service import ReviewsService
 
         sample_rental.status = RentalStatus.COMPLETED
         db_session.commit()
@@ -27,8 +24,8 @@ class TestCreateReviewValidation:
             )
 
     def test_too_many_photos_raises(self, db_session, sample_rental, company):
-        from app.services.reviews_service import ReviewsService
         from app.models.rental import RentalStatus
+        from app.services.reviews_service import ReviewsService
 
         sample_rental.status = RentalStatus.COMPLETED
         db_session.commit()
@@ -45,8 +42,8 @@ class TestCreateReviewValidation:
             )
 
     def test_invalid_review_type_raises(self, db_session, sample_rental, company):
-        from app.services.reviews_service import ReviewsService
         from app.models.rental import RentalStatus
+        from app.services.reviews_service import ReviewsService
 
         sample_rental.status = RentalStatus.COMPLETED
         db_session.commit()
@@ -61,8 +58,8 @@ class TestCreateReviewValidation:
             )
 
     def test_non_completed_rental_raises(self, db_session, sample_rental, company):
-        from app.services.reviews_service import ReviewsService
         from app.models.rental import RentalStatus
+        from app.services.reviews_service import ReviewsService
 
         sample_rental.status = RentalStatus.ACTIVE
         db_session.commit()
@@ -100,10 +97,12 @@ class TestGetCompanyRating:
         assert result["total_reviews"] == 0
         assert result["distribution"]["5"] == 0
 
-    def test_with_reviews_returns_stats(self, db_session, company, sample_rental, sample_rental_client):
-        from app.services.reviews_service import ReviewsService
-        from app.models.review import Review
+    def test_with_reviews_returns_stats(
+        self, db_session, company, sample_rental, sample_rental_client
+    ):
         from app.models.rental import RentalStatus
+        from app.models.review import Review
+        from app.services.reviews_service import ReviewsService
 
         sample_rental.status = RentalStatus.COMPLETED
         db_session.commit()
@@ -135,7 +134,9 @@ class TestGetCompanyRating:
 class TestVerifyParticipant:
     """Cover _verify_participant (lines 491-528)."""
 
-    def test_client_to_owner_valid(self, db_session, sample_rental, sample_rental_client):
+    def test_client_to_owner_valid(
+        self, db_session, sample_rental, sample_rental_client
+    ):
         from app.services.reviews_service import ReviewsService
 
         result = ReviewsService._verify_participant(
@@ -174,19 +175,23 @@ class TestValidateOptionalRating:
 
     def test_none_is_valid(self):
         from app.services.reviews_service import ReviewsService
+
         ReviewsService._validate_optional_rating(None, "test_field")
 
     def test_valid_value(self):
         from app.services.reviews_service import ReviewsService
+
         ReviewsService._validate_optional_rating(4, "test_field")
 
     def test_non_integer_raises(self):
         from app.services.reviews_service import ReviewsService
+
         with pytest.raises(ValueError, match="must be an integer"):
             ReviewsService._validate_optional_rating("5", "test_field")
 
     def test_out_of_range_raises(self):
         from app.services.reviews_service import ReviewsService
+
         with pytest.raises(ValueError, match="must be between"):
             ReviewsService._validate_optional_rating(10, "test_field")
 

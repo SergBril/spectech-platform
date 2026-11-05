@@ -1,15 +1,15 @@
 """Integration tests for disputes API."""
 
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models.shift import ShiftReport, ShiftTask, ShiftReportStatus
-from app.models.dispatch import Request
 from app.models.contractor import Contractor, Employee
+from app.models.dispatch import Request
+from app.models.shift import ShiftReport, ShiftReportStatus, ShiftTask
 
 
 @pytest.fixture
@@ -48,6 +48,7 @@ def dispute_test_data(db_session: Session, company):
 
     # Создаём технику
     from app.models.catalog import Vehicle
+
     vehicle = Vehicle(
         name="Test Excavator for Dispute",
         id_type="internal",
@@ -116,9 +117,7 @@ def dispute_test_data(db_session: Session, company):
 class TestDisputesAPI:
     """Test dispute management endpoints."""
 
-    def test_create_dispute_success(
-        self, auth_client: TestClient, dispute_test_data
-    ):
+    def test_create_dispute_success(self, auth_client: TestClient, dispute_test_data):
         """Test successful dispute creation."""
         shift_report = dispute_test_data["shift_report"]
 
@@ -138,9 +137,7 @@ class TestDisputesAPI:
         assert data["dispute_type"] == "hours"
         assert "sla_deadline" in data
 
-    def test_create_dispute_invalid_shift_report(
-        self, auth_client: TestClient
-    ):
+    def test_create_dispute_invalid_shift_report(self, auth_client: TestClient):
         """Test dispute creation with invalid shift report."""
         response = auth_client.post(
             "/api/v1/disputes",
@@ -269,11 +266,7 @@ class TestDisputesAPI:
         )
 
         # Filter by dispatcher_review
-        response = auth_client.get(
-            "/api/v1/disputes?status=dispatcher_review"
-        )
+        response = auth_client.get("/api/v1/disputes?status=dispatcher_review")
         assert response.status_code == 200
         data = response.json()
-        assert all(
-            item["status"] == "dispatcher_review" for item in data["items"]
-        )
+        assert all(item["status"] == "dispatcher_review" for item in data["items"])

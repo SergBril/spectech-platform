@@ -4,12 +4,11 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
-from unittest.mock import Mock, patch
 
-from app.models.dispute import Dispute, DisputeStatus, DisputeType
-from app.models.shift import ShiftReport, ShiftTask, ShiftReportStatus
-from app.models.dispatch import Request
 from app.models.contractor import Contractor, Employee
+from app.models.dispatch import Request
+from app.models.dispute import Dispute, DisputeStatus, DisputeType
+from app.models.shift import ShiftReport, ShiftReportStatus, ShiftTask
 from app.tasks.dispute_tasks import (
     auto_escalate_overdue_disputes,
     check_sla_breaches,
@@ -292,7 +291,9 @@ class TestGenerateDisputeMetrics:
                 shift_report_id=shift_report.id,
                 request_id=dispute_test_data["request"].id,
                 company_id=dispute_test_data["company"].id,
-                status=DisputeStatus.resolved if i < 2 else DisputeStatus.dispatcher_review,
+                status=(
+                    DisputeStatus.resolved if i < 2 else DisputeStatus.dispatcher_review
+                ),
                 dispute_type=DisputeType.hours if i < 2 else DisputeType.mileage,
                 opened_at=now - timedelta(days=10 - i),
                 sla_deadline=now - timedelta(days=10 - i, hours=-3),

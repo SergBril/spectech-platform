@@ -1,35 +1,39 @@
 ﻿"""Tests for telematics_service and remaining alert_engine coverage."""
 
-import pytest
-
-
 # ==================== TELEMATICS SERVICE ====================
+from datetime import UTC
+
 
 class TestTelematicsService:
     def test_save_gps_points_empty(self, db_session):
         from app.services.telematics_service import save_gps_points
+
         result = save_gps_points(db_session, points_data=[], company_id=1)
         assert isinstance(result, list)
         assert len(result) == 0
 
     def test_haversine(self):
         from app.services.telematics_service import _haversine
+
         dist = _haversine(55.7558, 37.6173, 59.9343, 30.3351)
         assert isinstance(dist, float)
         assert 600000 < dist < 700000  # returns meters
 
     def test_haversine_same_point(self):
         from app.services.telematics_service import _haversine
+
         dist = _haversine(55.0, 37.0, 55.0, 37.0)
         assert dist == 0.0
 
     def test_get_telematics_dashboard(self, db_session):
         from app.services.telematics_service import get_telematics_dashboard
+
         result = get_telematics_dashboard(db_session, company_id=1)
         assert isinstance(result, dict)
 
     def test_create_alert(self, db_session):
         from app.services.telematics_service import _create_alert
+
         try:
             result = _create_alert(
                 db_session,
@@ -48,18 +52,20 @@ class TestTelematicsService:
 
 # ==================== ALERT ENGINE REMAINING ====================
 
+
 class TestAlertEngineRemaining:
     def test_check_speed_no_prev(self, db_session, sample_vehicle):
+        from datetime import datetime
+
+        from app.models.telematics import AlertRule, GpsPoint
         from app.services.alert_engine import _check_speed
-        from app.models.telematics import GpsPoint, AlertRule
-        from datetime import datetime, timezone
 
         point = GpsPoint(
             vehicle_id=sample_vehicle.id,
             latitude=55.7558,
             longitude=37.6173,
             speed=50.0,
-            recorded_at=datetime.now(timezone.utc),
+            recorded_at=datetime.now(UTC),
         )
         db_session.add(point)
         db_session.flush()
@@ -74,16 +80,17 @@ class TestAlertEngineRemaining:
         assert result is None  # Below threshold
 
     def test_check_fuel_no_prev(self, db_session, sample_vehicle):
+        from datetime import datetime
+
+        from app.models.telematics import AlertRule, GpsPoint
         from app.services.alert_engine import _check_fuel
-        from app.models.telematics import GpsPoint, AlertRule
-        from datetime import datetime, timezone
 
         point = GpsPoint(
             vehicle_id=sample_vehicle.id,
             latitude=55.7558,
             longitude=37.6173,
             fuel_level=80.0,
-            recorded_at=datetime.now(timezone.utc),
+            recorded_at=datetime.now(UTC),
         )
         db_session.add(point)
         db_session.flush()

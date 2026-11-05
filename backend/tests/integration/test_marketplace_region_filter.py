@@ -1,12 +1,10 @@
 """Тесты региональной фильтрации маркетплейса."""
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.catalog import Vehicle
 from app.models.dispatch import Request as DispatchRequest
-from app.models.marketplace import MarketplaceOffer
 
 
 class TestMarketplaceRegionFilter:
@@ -15,7 +13,8 @@ class TestMarketplaceRegionFilter:
     def _create_marketplace_request(
         self, db: Session, company_id: int, region: str, category_id: int | None = None
     ) -> DispatchRequest:
-        from datetime import datetime, timedelta, UTC
+        from datetime import UTC, datetime, timedelta
+
         req = DispatchRequest(
             company_id=company_id,
             source_channel="marketplace",
@@ -50,9 +49,15 @@ class TestMarketplaceRegionFilter:
 
         # Создаём заявки в разных регионах от другой компании
         other_company_id = sample_vehicle.company_id + 999  # другая компания
-        moscow_req = self._create_marketplace_request(db_session, other_company_id, "Москва")
-        spb_req = self._create_marketplace_request(db_session, other_company_id, "Санкт-Петербург")
-        lenobl_req = self._create_marketplace_request(db_session, other_company_id, "Ленинградская область")
+        moscow_req = self._create_marketplace_request(
+            db_session, other_company_id, "Москва"
+        )
+        spb_req = self._create_marketplace_request(
+            db_session, other_company_id, "Санкт-Петербург"
+        )
+        lenobl_req = self._create_marketplace_request(
+            db_session, other_company_id, "Ленинградская область"
+        )
 
         # Запрашиваем список заявок как владелец техники
         response = auth_client.get("/api/v1/public/marketplace/requests")
@@ -64,7 +69,9 @@ class TestMarketplaceRegionFilter:
         # Должна быть видна только московская заявка
         assert moscow_req.id in request_ids, "Московская заявка должна быть видна"
         assert spb_req.id not in request_ids, "Питерская заявка НЕ должна быть видна"
-        assert lenobl_req.id not in request_ids, "Заявка Ленобласти НЕ должна быть видна"
+        assert (
+            lenobl_req.id not in request_ids
+        ), "Заявка Ленобласти НЕ должна быть видна"
 
     def test_unauthenticated_user_sees_all_requests(
         self,
@@ -74,7 +81,9 @@ class TestMarketplaceRegionFilter:
         """Неавторизованный пользователь видит все заявки (без фильтрации по региону)."""
         other_company_id = 9999
         self._create_marketplace_request(db_session, other_company_id, "Москва")
-        self._create_marketplace_request(db_session, other_company_id, "Санкт-Петербург")
+        self._create_marketplace_request(
+            db_session, other_company_id, "Санкт-Петербург"
+        )
 
         response = client.get("/api/v1/public/marketplace/requests")
         assert response.status_code == 200
@@ -91,7 +100,9 @@ class TestMarketplaceRegionFilter:
         """Авторизованный пользователь без техники видит все заявки."""
         other_company_id = 9999
         self._create_marketplace_request(db_session, other_company_id, "Москва")
-        self._create_marketplace_request(db_session, other_company_id, "Санкт-Петербург")
+        self._create_marketplace_request(
+            db_session, other_company_id, "Санкт-Петербург"
+        )
 
         response = auth_client.get("/api/v1/public/marketplace/requests")
         assert response.status_code == 200

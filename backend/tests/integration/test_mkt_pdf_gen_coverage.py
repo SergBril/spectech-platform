@@ -1,15 +1,17 @@
 ﻿"""Tests for MarketplaceService remaining methods and pdf_generator generate functions."""
 
-import pytest
-from datetime import date, datetime, timezone
+from datetime import date
 from decimal import Decimal
 
+import pytest
 
 # ==================== MARKETPLACE SERVICE REMAINING ====================
+
 
 class TestMarketplacePublishVehicle:
     def test_publish_not_found(self, db_session):
         from app.services.marketplace_service import MarketplaceService
+
         with pytest.raises(Exception):
             MarketplaceService.publish_vehicle(
                 db_session, vehicle_id=99999, company_id=1
@@ -19,6 +21,7 @@ class TestMarketplacePublishVehicle:
 class TestMarketplaceUpdateListing:
     def test_update_not_found(self, db_session):
         from app.services.marketplace_service import MarketplaceService
+
         with pytest.raises(ValueError):
             MarketplaceService.update_listing(
                 db_session, vehicle_id=99999, company_id=1
@@ -28,6 +31,7 @@ class TestMarketplaceUpdateListing:
 class TestMarketplaceAvailabilityCalendar:
     def test_calendar_not_found(self, db_session):
         from app.services.marketplace_service import MarketplaceService
+
         result = MarketplaceService.get_availability_calendar(
             db_session, vehicle_id=99999
         )
@@ -35,6 +39,7 @@ class TestMarketplaceAvailabilityCalendar:
 
     def test_calendar_with_dates(self, db_session):
         from app.services.marketplace_service import MarketplaceService
+
         result = MarketplaceService.get_availability_calendar(
             db_session,
             vehicle_id=99999,
@@ -47,16 +52,21 @@ class TestMarketplaceAvailabilityCalendar:
 class TestMarketplaceFilterAvailable:
     def test_filter_empty_list(self, db_session):
         from app.services.marketplace_service import MarketplaceService
-        result = MarketplaceService._filter_available(db_session, [], date(2025, 6, 1), date(2025, 6, 7))
-        assert isinstance(result, (list, set))
+
+        result = MarketplaceService._filter_available(
+            db_session, [], date(2025, 6, 1), date(2025, 6, 7)
+        )
+        assert isinstance(result, list | set)
         assert len(result) == 0
 
 
 # ==================== PDF GENERATOR GENERATE FUNCTIONS ====================
 
+
 class TestPdfGeneratorAct:
     def test_generate_act_pdf_no_weasyprint(self):
         from app.services.pdf_generator import generate_act_pdf
+
         # Create minimal mock objects
         class MockAct:
             id = 1
@@ -65,9 +75,11 @@ class TestPdfGeneratorAct:
             total_amount = Decimal("10000.00")
             vat_amount = Decimal("2000.00")
             items = []
+
         class MockRequest:
             work_type = "earthworks"
             description = "Test"
+
         try:
             result = generate_act_pdf(MockAct(), MockRequest())
             assert isinstance(result, bytes)
@@ -78,6 +90,7 @@ class TestPdfGeneratorAct:
 class TestPdfGeneratorInvoice:
     def test_generate_invoice_pdf_no_weasyprint(self):
         from app.services.pdf_generator import generate_invoice_pdf
+
         class MockInvoice:
             id = 1
             invoice_number = "INV-001"
@@ -85,6 +98,7 @@ class TestPdfGeneratorInvoice:
             total_amount = Decimal("5000.00")
             vat_amount = Decimal("1000.00")
             items = []
+
         try:
             result = generate_invoice_pdf(MockInvoice())
             assert isinstance(result, bytes)

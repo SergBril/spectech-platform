@@ -1,5 +1,4 @@
 """Integration tests for shifts/reports.py endpoints (coverage boost)."""
-import pytest
 
 
 class TestReportsEndpoints:
@@ -11,7 +10,9 @@ class TestReportsEndpoints:
         assert isinstance(resp.json(), list)
 
     def test_list_reports_with_filter(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/reports?shift_task_id=99999", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/shifts/reports?shift_task_id=99999", headers=auth_headers
+        )
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
@@ -24,7 +25,9 @@ class TestReportsEndpoints:
         assert resp.status_code in (404, 403)
 
     def test_approve_report_not_found(self, client, auth_headers):
-        resp = client.patch("/api/v1/shifts/reports/99999/approve", headers=auth_headers)
+        resp = client.patch(
+            "/api/v1/shifts/reports/99999/approve", headers=auth_headers
+        )
         assert resp.status_code in (404, 403)
 
     def test_dispute_report_not_found(self, client, auth_headers):

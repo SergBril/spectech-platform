@@ -1,5 +1,4 @@
 """Integration tests for salaries.py endpoints."""
-import pytest
 
 
 class TestSalariesEndpoints:

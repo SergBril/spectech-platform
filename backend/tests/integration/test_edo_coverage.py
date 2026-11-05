@@ -1,5 +1,4 @@
 """Integration tests for EDO-related endpoints."""
-import pytest
 
 
 class TestEdoEndpoints:
@@ -12,7 +11,9 @@ class TestEdoEndpoints:
         assert resp.status_code in (404, 403, 500)
 
     def test_verify_signature_not_found(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/acts/99999/verify-signature", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/shifts/acts/99999/verify-signature", headers=auth_headers
+        )
         assert resp.status_code in (404, 403, 500)
 
     def test_export_acts_1c(self, client, auth_headers):

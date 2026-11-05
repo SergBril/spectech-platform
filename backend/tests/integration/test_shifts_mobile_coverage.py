@@ -1,5 +1,4 @@
 """Integration tests for shifts/mobile.py endpoints (coverage boost)."""
-import pytest
 
 
 class TestMobileEndpoints:
@@ -22,7 +21,9 @@ class TestMobileEndpoints:
         assert resp.status_code in (404, 403, 422)
 
     def test_get_checklist(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/mobile/checklist?shift_task_id=99999", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/shifts/mobile/checklist?shift_task_id=99999", headers=auth_headers
+        )
         assert resp.status_code in (200, 404, 405, 422)
 
     def test_submit_checklist(self, client, auth_headers):

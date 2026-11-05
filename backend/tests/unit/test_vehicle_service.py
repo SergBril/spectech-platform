@@ -1,10 +1,11 @@
-﻿import pytest
-from unittest.mock import MagicMock, patch
+﻿from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.services.vehicle_service import (
+    VehicleServiceError,
     create_vehicle,
     update_vehicle,
-    VehicleServiceError,
 )
 
 
@@ -26,15 +27,23 @@ class TestCreateVehicle:
         mock_db.flush = MagicMock()
         mock_db.commit = MagicMock()
 
-        with patch('app.services.vehicle_service.load_vehicle_with_relations') as mock_load, \
-             patch('app.services.vehicle_service.enrich_vehicle') as mock_enrich, \
-             patch('app.services.vehicle_service.save_vehicle_attributes'):
+        with (
+            patch(
+                "app.services.vehicle_service.load_vehicle_with_relations"
+            ) as mock_load,
+            patch("app.services.vehicle_service.enrich_vehicle") as mock_enrich,
+            patch("app.services.vehicle_service.save_vehicle_attributes"),
+        ):
             mock_load.return_value = mock_vehicle
             mock_enrich.return_value = {"id": 42, "name": "CAT 320"}
 
             result = create_vehicle(
                 db=mock_db,
-                payload_data={"id_value": "V001", "name": "CAT 320", "attributes": None},
+                payload_data={
+                    "id_value": "V001",
+                    "name": "CAT 320",
+                    "attributes": None,
+                },
                 company_id=7,
             )
 
@@ -75,7 +84,10 @@ class TestCreateVehicle:
         mock_db.flush = MagicMock()
         mock_db.rollback = MagicMock()
 
-        with patch('app.services.vehicle_service.save_vehicle_attributes', side_effect=ValueError("bad attr")):
+        with patch(
+            "app.services.vehicle_service.save_vehicle_attributes",
+            side_effect=ValueError("bad attr"),
+        ):
             with pytest.raises(VehicleServiceError) as exc_info:
                 create_vehicle(
                     db=mock_db,
@@ -100,15 +112,22 @@ class TestUpdateVehicle:
         mock_db.scalar = MagicMock(return_value=None)
         mock_db.commit = MagicMock()
 
-        with patch('app.services.vehicle_service.load_vehicle_with_relations') as mock_load, \
-             patch('app.services.vehicle_service.enrich_vehicle') as mock_enrich:
+        with (
+            patch(
+                "app.services.vehicle_service.load_vehicle_with_relations"
+            ) as mock_load,
+            patch("app.services.vehicle_service.enrich_vehicle") as mock_enrich,
+        ):
             mock_load.return_value = mock_vehicle
             mock_enrich.return_value = {"id": 1, "name": "Updated"}
 
             result = update_vehicle(
-                db=mock_db, vehicle_id=1,
+                db=mock_db,
+                vehicle_id=1,
                 update_data={"name": "Updated"},
-                attributes=None, company_id=7, user_id=5,
+                attributes=None,
+                company_id=7,
+                user_id=5,
             )
 
         assert result["name"] == "Updated"
@@ -119,9 +138,12 @@ class TestUpdateVehicle:
 
         with pytest.raises(VehicleServiceError) as exc_info:
             update_vehicle(
-                db=mock_db, vehicle_id=999,
+                db=mock_db,
+                vehicle_id=999,
                 update_data={"name": "Test"},
-                attributes=None, company_id=7, user_id=5,
+                attributes=None,
+                company_id=7,
+                user_id=5,
             )
         assert exc_info.value.status_code == 404
 
@@ -134,9 +156,12 @@ class TestUpdateVehicle:
 
         with pytest.raises(VehicleServiceError) as exc_info:
             update_vehicle(
-                db=mock_db, vehicle_id=1,
+                db=mock_db,
+                vehicle_id=1,
                 update_data={"name": "Test"},
-                attributes=None, company_id=7, user_id=5,
+                attributes=None,
+                company_id=7,
+                user_id=5,
             )
         assert exc_info.value.status_code == 404
 
@@ -153,9 +178,12 @@ class TestUpdateVehicle:
 
         with pytest.raises(VehicleServiceError) as exc_info:
             update_vehicle(
-                db=mock_db, vehicle_id=1,
+                db=mock_db,
+                vehicle_id=1,
                 update_data={"id_value": "V002"},
-                attributes=None, company_id=7, user_id=5,
+                attributes=None,
+                company_id=7,
+                user_id=5,
             )
         assert exc_info.value.status_code == 409
 
@@ -174,16 +202,23 @@ class TestUpdateVehicle:
         mock_query.filter = MagicMock(return_value=mock_query)
         mock_query.update = MagicMock()
 
-        with patch('app.services.vehicle_service.load_vehicle_with_relations') as mock_load, \
-             patch('app.services.vehicle_service.enrich_vehicle') as mock_enrich, \
-             patch('app.services.vehicle_service.log_driver_assignment'):
+        with (
+            patch(
+                "app.services.vehicle_service.load_vehicle_with_relations"
+            ) as mock_load,
+            patch("app.services.vehicle_service.enrich_vehicle") as mock_enrich,
+            patch("app.services.vehicle_service.log_driver_assignment"),
+        ):
             mock_load.return_value = mock_vehicle
             mock_enrich.return_value = {"id": 1}
 
             update_vehicle(
-                db=mock_db, vehicle_id=1,
+                db=mock_db,
+                vehicle_id=1,
                 update_data={"assigned_driver_id": 42},
-                attributes=None, company_id=7, user_id=5,
+                attributes=None,
+                company_id=7,
+                user_id=5,
             )
 
         mock_query.update.assert_called_once()

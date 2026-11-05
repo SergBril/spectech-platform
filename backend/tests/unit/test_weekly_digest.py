@@ -1,10 +1,7 @@
 """Unit-тесты сервиса еженедельного дайджеста."""
 
 from datetime import date, timedelta
-from decimal import Decimal
 from unittest.mock import patch
-
-import pytest
 
 from app.services.weekly_digest_service import WeeklyDigestService
 
@@ -12,13 +9,11 @@ from app.services.weekly_digest_service import WeeklyDigestService
 class TestWeeklyDigestService:
     """Тесты сервиса дайджеста."""
 
-    def test_find_accountants_returns_users(
-        self, db_session, company
-    ):
+    def test_find_accountants_returns_users(self, db_session, company):
         """✅ Находит пользователей-бухгалтеров."""
         from app.models.auth import User
         from app.models.contractor import Contractor, Employee
-        
+
         contractor = Contractor(
             name="Accountant Contractor",
             type="employee",
@@ -26,7 +21,7 @@ class TestWeeklyDigestService:
         )
         db_session.add(contractor)
         db_session.commit()
-        
+
         # 🆕 Добавляем full_name (обязательное поле)
         user = User(
             email="accountant@test.com",
@@ -36,7 +31,7 @@ class TestWeeklyDigestService:
         )
         db_session.add(user)
         db_session.commit()
-        
+
         employee = Employee(
             contractor_id=contractor.id,
             user_id=user.id,
@@ -44,30 +39,24 @@ class TestWeeklyDigestService:
         )
         db_session.add(employee)
         db_session.commit()
-        
+
         accountants = WeeklyDigestService._find_accountants(db_session, company.id)
-        
+
         assert len(accountants) >= 1
         assert any(u.email == "accountant@test.com" for u in accountants)
 
-    def test_find_accountants_empty_when_no_employees(
-        self, db_session, company
-    ):
+    def test_find_accountants_empty_when_no_employees(self, db_session, company):
         """✅ Возвращает пустой список, если нет сотрудников."""
         accountants = WeeklyDigestService._find_accountants(db_session, company.id)
         assert accountants == []
 
-    def test_send_weekly_digest_no_company(
-        self, db_session
-    ):
+    def test_send_weekly_digest_no_company(self, db_session):
         """✅ Возвращает success=False для несуществующей компании."""
         result = WeeklyDigestService.send_weekly_digest(db_session, 99999)
         assert result["success"] is False
         assert result["recipients_count"] == 0
 
-    def test_send_weekly_digest_no_accountants(
-        self, db_session, company
-    ):
+    def test_send_weekly_digest_no_accountants(self, db_session, company):
         """✅ Возвращает recipients_count=0 если нет бухгалтеров."""
         result = WeeklyDigestService.send_weekly_digest(db_session, company.id)
         assert result["success"] is True
@@ -81,7 +70,7 @@ class TestWeeklyDigestService:
         """✅ Отправляет дайджест всем найденным бухгалтерам."""
         from app.models.auth import User
         from app.models.contractor import Contractor, Employee
-        
+
         # Создаём 2 бухгалтеров
         users = []
         for i in range(2):
@@ -92,7 +81,7 @@ class TestWeeklyDigestService:
             )
             db_session.add(contractor)
             db_session.commit()
-            
+
             user = User(
                 email=f"acc{i}@test.com",
                 full_name=f"Accountant User {i}",
@@ -101,7 +90,7 @@ class TestWeeklyDigestService:
             )
             db_session.add(user)
             db_session.commit()
-            
+
             employee = Employee(
                 contractor_id=contractor.id,
                 user_id=user.id,
@@ -109,18 +98,18 @@ class TestWeeklyDigestService:
             )
             db_session.add(employee)
             db_session.commit()
-            
+
             db_session.refresh(user)
             users.append(user)
-        
+
         mock_email.send_email.return_value = True
-        
+
         result = WeeklyDigestService.send_weekly_digest(db_session, company.id)
-        
+
         assert result["success"] is True
         assert result["recipients_count"] == 2
         assert mock_email.send_email.call_count == 2
-        
+
         call_kwargs = mock_email.send_email.call_args[1]
         assert call_kwargs["template_name"] == "email/weekly_digest.html"
 
@@ -131,7 +120,7 @@ class TestWeeklyDigestService:
         """✅ Устойчив к падениям email-сервиса."""
         from app.models.auth import User
         from app.models.contractor import Contractor, Employee
-        
+
         contractor = Contractor(
             name="Accountant",
             type="employee",
@@ -139,7 +128,7 @@ class TestWeeklyDigestService:
         )
         db_session.add(contractor)
         db_session.commit()
-        
+
         user = User(
             email="acc@test.com",
             full_name="Accountant User",
@@ -148,7 +137,7 @@ class TestWeeklyDigestService:
         )
         db_session.add(user)
         db_session.commit()
-        
+
         employee = Employee(
             contractor_id=contractor.id,
             user_id=user.id,
@@ -156,11 +145,11 @@ class TestWeeklyDigestService:
         )
         db_session.add(employee)
         db_session.commit()
-        
+
         mock_email.send_email.side_effect = Exception("SMTP error")
-        
+
         result = WeeklyDigestService.send_weekly_digest(db_session, company.id)
-        
+
         assert result["success"] is True
         assert result["recipients_count"] == 0
 
@@ -174,9 +163,9 @@ class TestWeeklyDigestService:
             "recipients_count": 2,
             "period": {"from": date.today() - timedelta(days=7), "to": date.today()},
         }
-        
+
         result = WeeklyDigestService.send_digests_for_all_companies(db_session)
-        
+
         assert "total_companies" in result
         assert "successful" in result
         assert "total_recipients" in result
@@ -186,11 +175,11 @@ class TestWeeklyDigestService:
         """✅ Метрики возвращаются даже при пустой БД."""
         today = date.today()
         from_date = today - timedelta(days=7)
-        
+
         metrics = WeeklyDigestService._get_dashboard_metrics(
             db_session, company.id, from_date, today
         )
-        
+
         assert "total_revenue" in metrics
         assert "total_paid" in metrics
         assert "total_commission" in metrics
@@ -200,11 +189,11 @@ class TestWeeklyDigestService:
         """✅ Топ клиентов пустой при отсутствии данных."""
         today = date.today()
         from_date = today - timedelta(days=7)
-        
+
         clients = WeeklyDigestService._get_top_clients(
             db_session, company.id, from_date, today, limit=5
         )
-        
+
         assert isinstance(clients, list)
         assert len(clients) == 0
 
@@ -212,11 +201,11 @@ class TestWeeklyDigestService:
         """✅ Топ техники пустой при отсутствии данных."""
         today = date.today()
         from_date = today - timedelta(days=7)
-        
+
         vehicles = WeeklyDigestService._get_top_vehicles(
             db_session, company.id, from_date, today, limit=5
         )
-        
+
         assert isinstance(vehicles, list)
         assert len(vehicles) == 0
 
@@ -225,6 +214,6 @@ class TestWeeklyDigestService:
         invoices = WeeklyDigestService._get_overdue_invoices(
             db_session, company.id, limit=10
         )
-        
+
         assert isinstance(invoices, list)
         assert len(invoices) == 0

@@ -1,16 +1,15 @@
-﻿import pytest
-from unittest.mock import MagicMock, patch
-from datetime import UTC, datetime, timedelta
+﻿from unittest.mock import MagicMock
 
+import pytest
 from fastapi import HTTPException
 
 from app.services.auth_service import (
-    hash_password,
-    verify_password,
+    authenticate_user,
     create_access_token,
     create_refresh_token,
     decode_access_token,
-    authenticate_user,
+    hash_password,
+    verify_password,
 )
 
 
@@ -112,6 +111,7 @@ class TestAuthenticateUser:
 
     def test_authenticate_success(self, mock_db, mock_user):
         from app.models.auth import UserStatus
+
         mock_user.status = UserStatus.active
         mock_user.password_hash = hash_password("correct")
 
@@ -134,6 +134,7 @@ class TestAuthenticateUser:
 
     def test_authenticate_inactive_user(self, mock_db, mock_user):
         from app.models.auth import UserStatus
+
         mock_user.status = UserStatus.suspended
         mock_db.scalar = MagicMock(return_value=mock_user)
 
@@ -143,6 +144,7 @@ class TestAuthenticateUser:
 
     def test_authenticate_wrong_password(self, mock_db, mock_user):
         from app.models.auth import UserStatus
+
         mock_user.status = UserStatus.active
         mock_user.password_hash = hash_password("correct")
         mock_user.failed_login_attempts = 0

@@ -1,5 +1,4 @@
 """Integration tests for shifts/geofence.py endpoints."""
-import pytest
 
 
 class TestGeofenceEndpoints:

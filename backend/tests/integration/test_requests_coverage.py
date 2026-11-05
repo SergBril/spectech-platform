@@ -1,12 +1,14 @@
 ﻿"""Tests for requests API coverage improvement."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from datetime import datetime, timedelta, timezone
 
 
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -18,6 +20,7 @@ def auth_headers(auth_token):
 @pytest.fixture
 def admin_auth_token(admin_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(admin_user)
 
 
@@ -30,7 +33,8 @@ def admin_auth_headers(admin_auth_token):
 def sample_request(db_session, sample_company, sample_user):
     """Create a test request."""
     from app.models.dispatch import Request
-    now = datetime.now(timezone.utc)
+
+    now = datetime.now(UTC)
     req = Request(
         company_id=sample_company.id,
         client_id=sample_company.id,
@@ -69,9 +73,11 @@ class TestListRequestsFilters:
         assert resp.status_code == 200
 
     def test_filter_by_date_range(self, client, auth_headers, sample_request):
-        today = datetime.now(timezone.utc).date().isoformat()
-        future = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
-        resp = client.get(f"/api/v1/requests?date_from={today}&date_to={future}", headers=auth_headers)
+        today = datetime.now(UTC).date().isoformat()
+        future = (datetime.now(UTC) + timedelta(days=30)).date().isoformat()
+        resp = client.get(
+            f"/api/v1/requests?date_from={today}&date_to={future}", headers=auth_headers
+        )
         assert resp.status_code == 200
 
     def test_sort_asc(self, client, auth_headers, sample_request):
@@ -83,7 +89,10 @@ class TestListRequestsFilters:
         assert resp.status_code == 200
 
     def test_filter_by_client_id(self, client, auth_headers, sample_request):
-        resp = client.get(f"/api/v1/requests?client_id={sample_request.client_id}", headers=auth_headers)
+        resp = client.get(
+            f"/api/v1/requests?client_id={sample_request.client_id}",
+            headers=auth_headers,
+        )
         assert resp.status_code == 200
 
 
@@ -105,7 +114,7 @@ class TestCreateRequest:
     """Cover create_request endpoint (lines 157-222)."""
 
     def test_create_basic(self, client, admin_auth_headers, sample_company):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         payload = {
             "work_type": "Crane operation",
             "object_address": "New site",
@@ -123,7 +132,9 @@ class TestGetRequestTimeline:
     """Cover get_request_timeline (lines 752-808)."""
 
     def test_timeline(self, client, auth_headers, sample_request):
-        resp = client.get(f"/api/v1/requests/{sample_request.id}/timeline", headers=auth_headers)
+        resp = client.get(
+            f"/api/v1/requests/{sample_request.id}/timeline", headers=auth_headers
+        )
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
@@ -132,7 +143,9 @@ class TestGetRequestHistory:
     """Cover get_request_history (lines 935-967)."""
 
     def test_history(self, client, auth_headers, sample_request):
-        resp = client.get(f"/api/v1/requests/{sample_request.id}/history", headers=auth_headers)
+        resp = client.get(
+            f"/api/v1/requests/{sample_request.id}/history", headers=auth_headers
+        )
         assert resp.status_code == 200
 
 
@@ -140,6 +153,8 @@ class TestListRequestResponses:
     """Cover list_request_responses (lines 616-656)."""
 
     def test_responses_list(self, client, auth_headers, sample_request):
-        resp = client.get(f"/api/v1/requests/{sample_request.id}/responses", headers=auth_headers)
+        resp = client.get(
+            f"/api/v1/requests/{sample_request.id}/responses", headers=auth_headers
+        )
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)

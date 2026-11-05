@@ -1,13 +1,16 @@
 ﻿"""Batch coverage tests for catalog, auth, alert_engine."""
 
+from datetime import UTC
+
 import pytest
 
-
 # ==================== CATALOG ====================
+
 
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -24,7 +27,9 @@ class TestCatalogTree:
         assert resp.status_code == 200
 
     def test_subcategory_attributes_not_found(self, client, auth_headers):
-        resp = client.get("/api/v1/catalog/subcategories/99999/attributes", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/catalog/subcategories/99999/attributes", headers=auth_headers
+        )
         assert resp.status_code == 404
 
 
@@ -51,6 +56,7 @@ class TestCatalogCreateValidation:
 
 # ==================== AUTH ====================
 
+
 class TestAuthRegister:
     """Cover register endpoint (line 31)."""
 
@@ -63,7 +69,9 @@ class TestAuthLogin:
     """Cover login endpoint (line 49)."""
 
     def test_login_invalid(self, client):
-        resp = client.post("/api/v1/auth/login", json={"email": "bad@test.com", "password": "wrong"})
+        resp = client.post(
+            "/api/v1/auth/login", json={"email": "bad@test.com", "password": "wrong"}
+        )
         assert resp.status_code in (400, 401, 422)
 
 
@@ -71,7 +79,9 @@ class TestAuthForgotPassword:
     """Cover forgot-password (line 131)."""
 
     def test_forgot_password(self, client):
-        resp = client.post("/api/v1/auth/forgot-password", json={"email": "nonexistent@test.com"})
+        resp = client.post(
+            "/api/v1/auth/forgot-password", json={"email": "nonexistent@test.com"}
+        )
         # Should return 200 even if email not found (security)
         assert resp.status_code in (200, 400, 404)
 
@@ -80,10 +90,10 @@ class TestAuthResetPassword:
     """Cover reset-password (line 182)."""
 
     def test_reset_password_invalid_token(self, client):
-        resp = client.post("/api/v1/auth/reset-password", json={
-            "token": "invalid-token",
-            "new_password": "NewPass123!"
-        })
+        resp = client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": "invalid-token", "new_password": "NewPass123!"},
+        )
         assert resp.status_code in (400, 422)
 
 
@@ -97,13 +107,15 @@ class TestAuthMe:
 
 # ==================== ALERT ENGINE ====================
 
+
 class TestAlertEngineProcessPoint:
     """Cover process_point_with_rules (lines 29-74)."""
 
     def test_process_no_rules(self, db_session, sample_vehicle):
-        from app.services.alert_engine import process_point_with_rules
+        from datetime import datetime
+
         from app.models.telematics import GpsPoint
-        from datetime import datetime, timezone
+        from app.services.alert_engine import process_point_with_rules
 
         point = GpsPoint(
             vehicle_id=sample_vehicle.id,
@@ -111,7 +123,7 @@ class TestAlertEngineProcessPoint:
             longitude=37.6173,
             speed=50.0,
             fuel_level=80.0,
-            recorded_at=datetime.now(timezone.utc),
+            recorded_at=datetime.now(UTC),
         )
         db_session.add(point)
         db_session.flush()
@@ -125,6 +137,7 @@ class TestAlertEngineSeedRules:
 
     def test_seed_rules(self, db_session):
         from app.services.alert_engine import seed_default_rules
+
         seed_default_rules(db_session, company_id=1)
         db_session.commit()
         # Should not raise
@@ -135,5 +148,6 @@ class TestSendEmailMock:
 
     def test_send_email_mock(self):
         from app.services.alert_engine import _send_email_mock
+
         # Should not raise
         _send_email_mock("test@test.com", "Test Subject", "Test Body")

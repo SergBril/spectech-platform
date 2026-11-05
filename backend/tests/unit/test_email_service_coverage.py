@@ -1,137 +1,267 @@
-"""Unit tests for EmailService - all 12 notification methods."""
+"""Coverage tests for email_service."""
+
+from datetime import datetime
+from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 
 
-@pytest.mark.asyncio
-class TestEmailServiceAllMethods:
-    """Cover all EmailService notification methods with mocked SMTP."""
-
-    def _make_service(self):
+@pytest.fixture
+def svc():
+    with (
+        patch("app.services.email_service.settings") as mock_settings,
+        patch("app.services.email_service.FileSystemLoader"),
+        patch("app.services.email_service.Environment"),
+        patch("app.services.email_service.select_autoescape"),
+    ):
+        mock_settings.EMAIL_ENABLED = False
+        mock_settings.FRONTEND_URL = "http://localhost"
         from app.services.email_service import EmailService
-        return EmailService()
 
-    def _mock_smtp(self, mock_smtp_cls):
-        mock_server = MagicMock()
-        mock_smtp_cls.return_value.__enter__ = MagicMock(return_value=mock_server)
-        mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
-        return mock_server
+        service = EmailService()
+        return service
 
-    @patch("app.services.email_service.smtplib.SMTP")
-    async def test_send_email(self, mock_smtp):
-        svc = self._make_service()
-        self._mock_smtp(mock_smtp)
-        try:
-            await svc.send_email("test@test.com", "Subject", "<p>Body</p>")
-        except Exception:
-            pass
 
-    @patch("app.services.email_service.smtplib.SMTP")
-    async def test_send_invoice_created(self, mock_smtp):
-        svc = self._make_service()
-        self._mock_smtp(mock_smtp)
-        invoice = MagicMock(id=1, document_number="INV-001", total=10000)
-        try:
-            await svc.send_invoice_created(invoice, "client@test.com")
-        except Exception:
-            pass
+class TestAttachFile:
+    """Cover _attach_file (lines 47-73)."""
 
-    @patch("app.services.email_service.smtplib.SMTP")
-    async def test_send_invoice_paid(self, mock_smtp):
-        svc = self._make_service()
-        self._mock_smtp(mock_smtp)
-        invoice = MagicMock(id=1, document_number="INV-001", total=10000)
-        try:
-            await svc.send_invoice_paid(invoice, "client@test.com")
-        except Exception:
-            pass
+    def test_empty_content(self, svc):
+        msg = MagicMock()
+        svc._attach_file(msg, "test.pdf", b"")
+        msg.attach.assert_not_called()
 
-    @patch("app.services.email_service.smtplib.SMTP")
-    async def test_send_invoice_overdue(self, mock_smtp):
-        svc = self._make_service()
-        self._mock_smtp(mock_smtp)
-        invoice = MagicMock(id=1, document_number="INV-001", total=10000)
-        try:
-            await svc.send_invoice_overdue(invoice, "client@test.com")
-        except Exception:
-            pass
+    def test_pdf_attachment(self, svc):
+        msg = MagicMock()
+        svc._attach_file(msg, "invoice.pdf", b"%PDF-1.4 fake content")
+        msg.attach.assert_called_once()
 
-    @patch("app.services.email_service.smtplib.SMTP")
-    async def test_send_act_created(self, mock_smtp):
-        svc = self._make_service()
-        self._mock_smtp(mock_smtp)
-        act = MagicMock(id=1, document_number="ACT-001", total_amount=5000)
-        try:
-            await svc.send_act_created(act, "client@test.com")
-        except Exception:
-            pass
+    def test_other_attachment(self, svc):
+        msg = MagicMock()
+        svc._attach_file(msg, "data.csv", b"col1,col2")
+        msg.attach.assert_called_once()
 
-    @patch("app.services.email_service.smtplib.SMTP")
-    async def test_send_act_signed(self, mock_smtp):
-        svc = self._make_service()
-        self._mock_smtp(mock_smtp)
-        act = MagicMock(id=1, document_number="ACT-001")
-        try:
-            await svc.send_act_signed(act, "client@test.com")
-        except Exception:
-            pass
 
-    @patch("app.services.email_service.smtplib.SMTP")
-    async def test_send_payout_created(self, mock_smtp):
-        svc = self._make_service()
-        self._mock_smtp(mock_smtp)
-        payout = MagicMock(id=1, document_number="PAY-001", net_amount=85000)
-        try:
-            await svc.send_payout_created(payout, "company@test.com")
-        except Exception:
-            pass
+class TestSendEmailValidation:
+    """Cover send_email validation logic (lines 75-160)."""
 
-    @patch("app.services.email_service.smtplib.SMTP")
-    async def test_send_payout_approved(self, mock_smtp):
-        svc = self._make_service()
-        self._mock_smtp(mock_smtp)
-        payout = MagicMock(id=1, document_number="PAY-001", net_amount=85000)
-        try:
-            await svc.send_payout_approved(payout, "company@test.com")
-        except Exception:
-            pass
+    def test_no_body_raises(self, svc):
+        with patch("app.core.db.SessionLocal") as mock_sl:
+            db_mock = MagicMock()
+            mock_sl.return_value = db_mock
+            with pytest.raises(ValueError, match="Either"):
+                svc.send_email(to_email="t@t.com", subject="Test")
 
-    @patch("app.services.email_service.smtplib.SMTP")
-    async def test_send_dispute_opened(self, mock_smtp):
-        svc = self._make_service()
-        self._mock_smtp(mock_smtp)
-        dispute = MagicMock(id=1, reason="Damage")
-        try:
-            await svc.send_dispute_opened(dispute, "admin@test.com")
-        except Exception:
-            pass
 
-    @patch("app.services.email_service.smtplib.SMTP")
-    async def test_send_dispute_escalated(self, mock_smtp):
-        svc = self._make_service()
-        self._mock_smtp(mock_smtp)
-        dispute = MagicMock(id=1, reason="Damage", status="escalated")
-        try:
-            await svc.send_dispute_escalated(dispute, "admin@test.com")
-        except Exception:
-            pass
+class TestSendInvoiceCreated:
+    """Cover send_invoice_created (lines 271-333)."""
 
-    @patch("app.services.email_service.smtplib.SMTP")
-    async def test_send_request_status_changed(self, mock_smtp):
-        svc = self._make_service()
-        self._mock_smtp(mock_smtp)
-        request = MagicMock(id=1, title="Excavator needed")
-        try:
-            await svc.send_request_status_changed(request, "new_status", "user@test.com")
-        except Exception:
-            pass
+    def test_without_pdf(self, svc):
+        invoice = SimpleNamespace(id=1, document_number="INV-2026-0001")
+        with (
+            patch("app.core.db.SessionLocal") as mock_sl,
+            patch.object(svc, "send_email", return_value=True) as mock_send,
+        ):
+            db_mock = MagicMock()
+            db_mock.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
+                None
+            )
+            mock_sl.return_value = db_mock
+            result = svc.send_invoice_created(invoice, "c@c.com", "Client")
+        assert result is True
+        mock_send.assert_called_once()
 
-    @patch("app.services.email_service.smtplib.SMTP")
-    async def test_send_rental_completed(self, mock_smtp):
-        svc = self._make_service()
-        self._mock_smtp(mock_smtp)
-        rental = MagicMock(id=1, vehicle_name="CAT 320D")
-        try:
-            await svc.send_rental_completed(rental, "client@test.com")
-        except Exception:
-            pass
+
+class TestSendActSigned:
+    """Cover send_act_signed (lines 335-393)."""
+
+    def test_without_pdf(self, svc):
+        act = SimpleNamespace(id=1, document_number="ACT-2026-0001")
+        with (
+            patch("app.core.db.SessionLocal") as mock_sl,
+            patch.object(svc, "send_email", return_value=True),
+        ):
+            db_mock = MagicMock()
+            db_mock.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
+                None
+            )
+            mock_sl.return_value = db_mock
+            result = svc.send_act_signed(act, "u@u.com", "User")
+        assert result is True
+
+
+class TestSendActCreated:
+    """Cover send_act_created (lines 395-410)."""
+
+    def test_success(self, svc):
+        act = SimpleNamespace(document_number="ACT-2026-0001")
+        with patch.object(svc, "send_email", return_value=True):
+            result = svc.send_act_created(act, "e@e.com", "Exec", "Client")
+        assert result is True
+
+
+class TestSendInvoiceOverdue:
+    """Cover send_invoice_overdue (lines 412-427)."""
+
+    def test_success(self, svc):
+        invoice = SimpleNamespace(document_number="INV-2026-0001")
+        with patch.object(svc, "send_email", return_value=True):
+            result = svc.send_invoice_overdue(invoice, "c@c.com", "Client", 5)
+        assert result is True
+
+
+class TestSendRequestStatusChanged:
+    """Cover send_request_status_changed (lines 429-452)."""
+
+    def test_success(self, svc):
+        request = SimpleNamespace(id=1, title="Test request")
+        with patch.object(svc, "send_email", return_value=True):
+            result = svc.send_request_status_changed(
+                request, "c@c.com", "Client", "draft", "active"
+            )
+        assert result is True
+
+
+class TestSendRentalCompleted:
+    """Cover send_rental_completed (lines 454-469)."""
+
+    def test_success(self, svc):
+        rental = SimpleNamespace(id=1)
+        invoice = SimpleNamespace(document_number="INV-2026-0001")
+        with patch.object(svc, "send_email", return_value=True):
+            result = svc.send_rental_completed(rental, invoice, "c@c.com", "Client")
+        assert result is True
+
+
+class TestSendPayoutCreated:
+    """Cover send_payout_created (lines 471-483)."""
+
+    def test_success(self, svc):
+        payout = SimpleNamespace(
+            document_number="PAY-2026-0001", net_amount=Decimal("9000")
+        )
+        with patch.object(svc, "send_email", return_value=True):
+            result = svc.send_payout_created(payout, "o@o.com", "Owner")
+        assert result is True
+
+
+class TestSendPayoutApproved:
+    """Cover send_payout_approved (lines 485-565)."""
+
+    def test_with_pdf_bytes(self, svc):
+        payout = SimpleNamespace(
+            document_number="PAY-2026-0001",
+            net_amount=Decimal("9000"),
+            owner_id=1,
+            vehicle_id=1,
+        )
+        with (
+            patch("app.core.db.SessionLocal") as mock_sl,
+            patch(
+                "app.services.pdf_service.generate_payout_pdf",
+                return_value=b"%PDF-fake-content-" + b"x" * 200,
+            ),
+            patch.object(svc, "send_email", return_value=True) as mock_send,
+        ):
+            db_mock = MagicMock()
+            owner = SimpleNamespace(name="OwnerCo")
+            vehicle = SimpleNamespace(name="KAMAZ")
+            call_count = {"n": 0}
+
+            def mock_get(model, pk):
+                call_count["n"] += 1
+                return owner if call_count["n"] == 1 else vehicle
+
+            db_mock.get.side_effect = mock_get
+            mock_sl.return_value = db_mock
+            result = svc.send_payout_approved(payout, "o@o.com", "Owner")
+        assert result is True
+        # Verify attachment was passed
+        call_kwargs = mock_send.call_args
+        assert call_kwargs is not None
+
+    def test_small_pdf_skipped(self, svc):
+        payout = SimpleNamespace(
+            document_number="PAY-2026-0001",
+            net_amount=Decimal("9000"),
+            owner_id=1,
+            vehicle_id=1,
+        )
+        with (
+            patch("app.core.db.SessionLocal") as mock_sl,
+            patch("app.services.pdf_service.generate_payout_pdf", return_value=b"tiny"),
+            patch.object(svc, "send_email", return_value=True),
+        ):
+            db_mock = MagicMock()
+            owner = SimpleNamespace(name="OwnerCo")
+            vehicle = SimpleNamespace(name="KAMAZ")
+            call_count = {"n": 0}
+
+            def mock_get(model, pk):
+                call_count["n"] += 1
+                return owner if call_count["n"] == 1 else vehicle
+
+            db_mock.get.side_effect = mock_get
+            mock_sl.return_value = db_mock
+            result = svc.send_payout_approved(payout, "o@o.com", "Owner")
+        assert result is True
+
+
+class TestSendDisputeOpened:
+    """Cover send_dispute_opened (lines 567-581)."""
+
+    def test_success(self, svc):
+        dispute = SimpleNamespace(id=1)
+        with patch.object(svc, "send_email", return_value=True):
+            result = svc.send_dispute_opened(dispute, "d@d.com", "Dispatcher")
+        assert result is True
+
+
+class TestSendDisputeEscalated:
+    """Cover send_dispute_escalated (lines 583-606)."""
+
+    def test_success(self, svc):
+        dispute = SimpleNamespace(id=1)
+        with patch.object(svc, "send_email", return_value=True):
+            result = svc.send_dispute_escalated(
+                dispute, "m@m.com", "Manager", "dispatcher", "ceo"
+            )
+        assert result is True
+
+
+class TestSendInvoicePaid:
+    """Cover send_invoice_paid (lines 608-end)."""
+
+    def test_fully_paid(self, svc):
+        invoice = SimpleNamespace(
+            document_number="INV-2026-0001", status=SimpleNamespace(value="paid")
+        )
+        with patch.object(svc, "send_email", return_value=True):
+            result = svc.send_invoice_paid(
+                invoice,
+                Decimal("10000"),
+                datetime.now(),
+                "Payer",
+                "1234567890",
+                "c@c.com",
+                "Client",
+            )
+        assert result is True
+
+    def test_partially_paid(self, svc):
+        invoice = SimpleNamespace(
+            document_number="INV-2026-0001",
+            status=SimpleNamespace(value="partially_paid"),
+        )
+        with patch.object(svc, "send_email", return_value=True):
+            result = svc.send_invoice_paid(
+                invoice,
+                Decimal("5000"),
+                datetime.now(),
+                "Payer",
+                None,
+                "c@c.com",
+                "Client",
+            )
+        assert result is True

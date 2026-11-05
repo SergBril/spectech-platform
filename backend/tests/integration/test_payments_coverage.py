@@ -1,8 +1,9 @@
 ﻿"""Tests for payments_service coverage improvement."""
 
-import pytest
-from decimal import Decimal
 from datetime import date
+from decimal import Decimal
+
+import pytest
 
 
 class TestPaymentsServiceInit:
@@ -10,6 +11,7 @@ class TestPaymentsServiceInit:
 
     def test_init(self):
         from app.services.payments_service import PaymentsService
+
         svc = PaymentsService("40702810000000000001")
         assert svc is not None
         # parser may be None if ClientBankExchangeParser not available
@@ -19,7 +21,12 @@ class TestPaymentsServiceInit:
 def _create_statement_and_tx(db_session, company):
     """Helper to create BankStatement + BankTransaction for tests."""
     from app.models.bank_statement import (
-        BankStatement, BankTransaction, TransactionDirection, MatchStatus, StatementStatus, TransactionType,
+        BankStatement,
+        BankTransaction,
+        MatchStatus,
+        StatementStatus,
+        TransactionDirection,
+        TransactionType,
     )
 
     stmt_obj = BankStatement(
@@ -63,21 +70,22 @@ class TestApplyPayment:
 
     def test_apply_payment_not_found_tx(self, db_session):
         from app.services.payments_service import PaymentsService
+
         svc = PaymentsService("40702810000000000001")
         with pytest.raises(ValueError, match="Transaction.*not found"):
             svc.apply_payment(db_session, 99999, 1)
 
     def test_apply_payment_not_found_invoice(self, db_session, company):
         from app.services.payments_service import PaymentsService
+
         tx = _create_statement_and_tx(db_session, company)
         svc = PaymentsService("40702810000000000001")
         with pytest.raises(ValueError, match="Invoice.*not found"):
             svc.apply_payment(db_session, tx.id, 99999)
 
-    def test_apply_payment_different_company(
-        self, db_session, sample_invoice, company
-    ):
+    def test_apply_payment_different_company(self, db_session, sample_invoice, company):
         from app.services.payments_service import PaymentsService
+
         tx = _create_statement_and_tx(db_session, company)
         svc = PaymentsService("40702810000000000001")
         sample_invoice.company_id = 99999
@@ -85,11 +93,9 @@ class TestApplyPayment:
         with pytest.raises(ValueError, match="different companies"):
             svc.apply_payment(db_session, tx.id, sample_invoice.id)
 
-    def test_apply_payment_success(
-        self, db_session, sample_invoice, company
-    ):
-        from app.services.payments_service import PaymentsService
+    def test_apply_payment_success(self, db_session, sample_invoice, company):
         from app.models.finance import DocumentStatus
+        from app.services.payments_service import PaymentsService
 
         tx = _create_statement_and_tx(db_session, company)
         svc = PaymentsService("40702810000000000001")
@@ -98,12 +104,11 @@ class TestApplyPayment:
         assert payment.invoice_id == sample_invoice.id
         db_session.refresh(sample_invoice)
         assert sample_invoice.status in (
-            DocumentStatus.paid, DocumentStatus.partially_paid
+            DocumentStatus.paid,
+            DocumentStatus.partially_paid,
         )
 
-    def test_apply_payment_exceeds_remaining(
-        self, db_session, sample_invoice, company
-    ):
+    def test_apply_payment_exceeds_remaining(self, db_session, sample_invoice, company):
         from app.services.payments_service import PaymentsService
 
         tx = _create_statement_and_tx(db_session, company)
@@ -119,12 +124,14 @@ class TestGetUnmatchedTransactions:
 
     def test_returns_list(self, db_session, company):
         from app.services.payments_service import PaymentsService
+
         svc = PaymentsService("40702810000000000001")
         result = svc.get_unmatched_transactions(db_session, company.id)
         assert isinstance(result, list)
 
     def test_with_limit_offset(self, db_session, company):
         from app.services.payments_service import PaymentsService
+
         svc = PaymentsService("40702810000000000001")
         result = svc.get_unmatched_transactions(
             db_session, company.id, limit=5, offset=0
@@ -137,8 +144,8 @@ class TestAutoMatchTransactions:
     """Cover auto_match_transactions (lines 171-217)."""
 
     def test_auto_match_no_parser(self, db_session, company):
-        from app.services.payments_service import PaymentsService
         import app.services.payments_service as ps_mod
+        from app.services.payments_service import PaymentsService
 
         original = ps_mod.extract_invoice_numbers_from_purpose
         ps_mod.extract_invoice_numbers_from_purpose = None
@@ -151,7 +158,7 @@ class TestAutoMatchTransactions:
 
     def test_auto_match_no_transactions(self, db_session, company):
         from app.services.payments_service import PaymentsService
+
         svc = PaymentsService("40702810000000000001")
         result = svc.auto_match_transactions(db_session, 99999)
         assert result == 0
-

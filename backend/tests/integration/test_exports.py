@@ -1,6 +1,5 @@
 ﻿"""Tests for export endpoints (Excel, PDF, CSV)."""
 
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -28,8 +27,9 @@ class TestDriverHistoryExport:
         # Should return 200 with xlsx or 404 if no data
         assert resp.status_code in (200, 404)
         if resp.status_code == 200:
-            assert "spreadsheet" in resp.headers.get("content-type", "") or \
-                   "octet-stream" in resp.headers.get("content-type", "")
+            assert "spreadsheet" in resp.headers.get(
+                "content-type", ""
+            ) or "octet-stream" in resp.headers.get("content-type", "")
 
     def test_export_driver_history_pdf_with_auth(
         self, client: TestClient, auth_headers: dict, sample_contractor
@@ -41,8 +41,9 @@ class TestDriverHistoryExport:
         )
         assert resp.status_code in (200, 404)
         if resp.status_code == 200:
-            assert "pdf" in resp.headers.get("content-type", "") or \
-                   "octet-stream" in resp.headers.get("content-type", "")
+            assert "pdf" in resp.headers.get(
+                "content-type", ""
+            ) or "octet-stream" in resp.headers.get("content-type", "")
 
 
 class TestCSVExports:
@@ -67,20 +68,22 @@ class TestCSVExports:
             headers=auth_headers,
         )
         assert resp.status_code == 200
-        assert "csv" in resp.headers.get("content-type", "").lower() or \
-               "text" in resp.headers.get("content-type", "").lower()
+        assert (
+            "csv" in resp.headers.get("content-type", "").lower()
+            or "text" in resp.headers.get("content-type", "").lower()
+        )
 
-    def test_export_acts_csv_with_auth(
-        self, client: TestClient, auth_headers: dict
-    ):
+    def test_export_acts_csv_with_auth(self, client: TestClient, auth_headers: dict):
         """Acts CSV should return CSV content."""
         resp = client.get(
             "/api/v1/export/acts/csv",
             headers=auth_headers,
         )
         assert resp.status_code == 200
-        assert "csv" in resp.headers.get("content-type", "").lower() or \
-               "text" in resp.headers.get("content-type", "").lower()
+        assert (
+            "csv" in resp.headers.get("content-type", "").lower()
+            or "text" in resp.headers.get("content-type", "").lower()
+        )
 
 
 class TestActPDFExports:
@@ -92,9 +95,7 @@ class TestActPDFExports:
         # May return 401 (auth required) or 404 (not found) depending on middleware order
         assert resp.status_code in (401, 404)
 
-    def test_download_act_pdf_nonexistent(
-        self, client: TestClient, auth_headers: dict
-    ):
+    def test_download_act_pdf_nonexistent(self, client: TestClient, auth_headers: dict):
         """Non-existent act should return 404."""
         resp = client.get("/api/v1/acts/99999/pdf", headers=auth_headers)
         assert resp.status_code in (404, 500)

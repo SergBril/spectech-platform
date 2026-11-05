@@ -1,7 +1,6 @@
 ﻿"""Tests for telematics_service coverage improvement."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 class TestSaveGpsPoints:
@@ -9,6 +8,7 @@ class TestSaveGpsPoints:
 
     def test_save_empty_list(self, db_session):
         from app.services.telematics_service import save_gps_points
+
         result = save_gps_points(db_session, [], company_id=1)
         assert result == []
 
@@ -17,14 +17,14 @@ class TestCheckGeofences:
     """Cover _check_geofences (lines 42-98)."""
 
     def test_no_geofences(self, db_session, sample_vehicle):
-        from app.services.telematics_service import _check_geofences
         from app.models.telematics import GpsPoint
+        from app.services.telematics_service import _check_geofences
 
         point = GpsPoint(
             vehicle_id=sample_vehicle.id,
             latitude=55.7558,
             longitude=37.6173,
-            recorded_at=datetime.now(timezone.utc),
+            recorded_at=datetime.now(UTC),
         )
         db_session.add(point)
         db_session.flush()
@@ -37,8 +37,8 @@ class TestCreateAlert:
     """Cover _create_alert (lines 153-179)."""
 
     def test_create_new_alert(self, db_session, sample_vehicle):
-        from app.services.telematics_service import _create_alert
         from app.models.telematics import AlertSeverity
+        from app.services.telematics_service import _create_alert
 
         alert = _create_alert(
             db_session,
@@ -54,8 +54,8 @@ class TestCreateAlert:
         assert alert.title == "Test Alert"
 
     def test_dedup_within_10_min(self, db_session, sample_vehicle):
-        from app.services.telematics_service import _create_alert
         from app.models.telematics import AlertSeverity
+        from app.services.telematics_service import _create_alert
 
         alert1 = _create_alert(
             db_session,
@@ -84,5 +84,6 @@ class TestGetTelematicsDashboard:
 
     def test_dashboard(self, db_session):
         from app.services.telematics_service import get_telematics_dashboard
+
         result = get_telematics_dashboard(db_session, company_id=1)
         assert isinstance(result, dict)

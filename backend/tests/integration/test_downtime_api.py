@@ -1,6 +1,6 @@
 """Интеграционные тесты API учёта простоев."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -8,9 +8,7 @@ from httpx import Client
 from sqlalchemy.orm import Session
 
 from app.models.catalog import Vehicle
-from app.models.downtime import DowntimeCause, DowntimeStatus, FaultParty
 from app.models.shift import ShiftTask
-from app.models.dispatch import Request
 
 
 class TestDowntimeAPI:
@@ -20,8 +18,8 @@ class TestDowntimeAPI:
     def shift_task(self, db_session: Session, company, sample_vehicle):
         """Создаёт сменное задание для тестов."""
         from app.models.dispatch import Request
-    
-        now = datetime.now(timezone.utc)
+
+        now = datetime.now(UTC)
         # Создаём заявку с обязательными полями planned_start/planned_end
         request = Request(
             company_id=company.id,
@@ -34,7 +32,7 @@ class TestDowntimeAPI:
         db_session.add(request)
         db_session.commit()
         db_session.refresh(request)
-    
+
         task = ShiftTask(
             request_id=request.id,
             vehicle_id=sample_vehicle.id,
@@ -49,9 +47,7 @@ class TestDowntimeAPI:
         return task
 
     @pytest.fixture
-    def vehicle_with_rate(
-        self, db_session: Session, company, sample_vehicle: Vehicle
-    ):
+    def vehicle_with_rate(self, db_session: Session, company, sample_vehicle: Vehicle):
         """Добавляет downtime_hourly_rate к технике."""
         sample_vehicle.downtime_hourly_rate = Decimal("2000.00")
         db_session.commit()
@@ -62,7 +58,7 @@ class TestDowntimeAPI:
         self, auth_client: Client, shift_task: ShiftTask, vehicle_with_rate
     ):
         """Простой по вине клиента: billable=True, рассчитывается сумма."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         response = auth_client.post(
             "/api/v1/downtime",
             json={
@@ -89,7 +85,7 @@ class TestDowntimeAPI:
         self, auth_client: Client, shift_task: ShiftTask, vehicle_with_rate
     ):
         """Простой по вине оператора: billable=False, сумма 0."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         response = auth_client.post(
             "/api/v1/downtime",
             json={
@@ -119,7 +115,7 @@ class TestDowntimeAPI:
         ]
 
         for cause, expected_fault in test_cases:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             response = auth_client.post(
                 "/api/v1/downtime",
                 json={
@@ -139,7 +135,7 @@ class TestDowntimeAPI:
         self, auth_client: Client, shift_task: ShiftTask
     ):
         """Можно вручную переопределить виновную сторону."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         response = auth_client.post(
             "/api/v1/downtime",
             json={
@@ -160,7 +156,7 @@ class TestDowntimeAPI:
         self, auth_client: Client, shift_task: ShiftTask, vehicle_with_rate
     ):
         """Завершение открытого простоя пересчитывает сумму."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Создаём открытый простой (без ended_at)
         create_resp = auth_client.post(
@@ -187,11 +183,9 @@ class TestDowntimeAPI:
         # 1.5 часа × 2000 = 3000
         assert float(data["total_amount"]) == 3000.0
 
-    def test_approve_downtime(
-        self, auth_client: Client, shift_task: ShiftTask
-    ):
+    def test_approve_downtime(self, auth_client: Client, shift_task: ShiftTask):
         """Подтверждение простоя: pending → approved."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         create_resp = auth_client.post(
             "/api/v1/downtime",
             json={
@@ -211,11 +205,9 @@ class TestDowntimeAPI:
         assert data["approved_by"] is not None
         assert data["approved_at"] is not None
 
-    def test_reject_downtime(
-        self, auth_client: Client, shift_task: ShiftTask
-    ):
+    def test_reject_downtime(self, auth_client: Client, shift_task: ShiftTask):
         """Отклонение простоя: pending → rejected."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         create_resp = auth_client.post(
             "/api/v1/downtime",
             json={
@@ -241,7 +233,7 @@ class TestDowntimeAPI:
         self, auth_client: Client, shift_task: ShiftTask
     ):
         """Нельзя подтвердить уже подтверждённый простой."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         create_resp = auth_client.post(
             "/api/v1/downtime",
             json={
@@ -264,7 +256,7 @@ class TestDowntimeAPI:
         self, auth_client: Client, shift_task: ShiftTask
     ):
         """Фильтрация простоев по shift_task_id."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # Создаём 3 простоя
         for cause in ["waiting_client", "technical", "weather"]:
             auth_client.post(
@@ -277,9 +269,7 @@ class TestDowntimeAPI:
                 },
             )
 
-        response = auth_client.get(
-            f"/api/v1/downtime?shift_task_id={shift_task.id}"
-        )
+        response = auth_client.get(f"/api/v1/downtime?shift_task_id={shift_task.id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -289,7 +279,7 @@ class TestDowntimeAPI:
         self, auth_client: Client, shift_task: ShiftTask, vehicle_with_rate
     ):
         """Статистика по простоям."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # 2 простоя по вине клиента (billable)
         for _ in range(2):
@@ -334,12 +324,12 @@ class TestDowntimeAPI:
         import io
         from unittest.mock import patch
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # 1. Мокаем storage_service
         mock_result = {
-            "path": f"downtime/1/test_photo.jpg",
-            "url": f"http://localhost:9000/spectech-docs/downtime/1/test_photo.jpg",
+            "path": "downtime/1/test_photo.jpg",
+            "url": "http://localhost:9000/spectech-docs/downtime/1/test_photo.jpg",
             "size": 2048,
             "content_type": "image/jpeg",
             "original_filename": "test_photo.jpg",
@@ -393,7 +383,7 @@ class TestDowntimeAPI:
         sample_vehicle.hourly_rate = Decimal("1000.00")
         sample_vehicle.downtime_hourly_rate = None
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         response = auth_client.post(
             "/api/v1/downtime",
             json={
@@ -418,7 +408,7 @@ class TestDowntimeAPI:
         import io
         from unittest.mock import patch
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # 1. Мокаем storage_service
         def mock_upload(file_obj, filename, folder, content_type):

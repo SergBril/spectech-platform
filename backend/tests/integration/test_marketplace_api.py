@@ -1,6 +1,6 @@
 """Интеграционные тесты Marketplace API: публикация техники и публичная витрина."""
 
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -23,7 +23,7 @@ class TestMarketplaceListings:
         """✅ Собственник может опубликовать свою технику."""
         # Убеждаемся, что изначально не опубликована
         assert sample_vehicle.is_available_for_rent is False
-        
+
         response = auth_client.post(
             "/api/v1/marketplace/listings",
             json={
@@ -35,16 +35,16 @@ class TestMarketplaceListings:
                 "base_location_lon": 37.6173,
             },
         )
-        
+
         assert response.status_code == 201
         data = response.json()
-        
+
         assert data["vehicle_id"] == sample_vehicle.id
         assert data["is_available_for_rent"] is True
         assert float(data["hourly_rate"]) == 2500.0
         assert float(data["shift_rate"]) == 20000.0
         assert data["description"] == "Экскаватор CAT 320D в отличном состоянии"
-        
+
         # Проверяем в БД
         db_session.refresh(sample_vehicle)
         assert sample_vehicle.is_available_for_rent is True
@@ -61,7 +61,7 @@ class TestMarketplaceListings:
                 "description": "Без ставок",
             },
         )
-        
+
         assert response.status_code == 400
         assert "rate" in response.json()["detail"].lower()
 
@@ -72,7 +72,7 @@ class TestMarketplaceListings:
     ):
         """❌ Нельзя публиковать технику другой компании."""
         from app.models.catalog import Vehicle
-        
+
         # Создаём чужую технику
         other_vehicle = Vehicle(
             id_type="internal",
@@ -83,7 +83,7 @@ class TestMarketplaceListings:
         )
         db_session.add(other_vehicle)
         db_session.commit()
-        
+
         response = auth_client.post(
             "/api/v1/marketplace/listings",
             json={
@@ -91,7 +91,7 @@ class TestMarketplaceListings:
                 "hourly_rate": 1000,
             },
         )
-        
+
         assert response.status_code == 400
 
     def test_get_my_listings(
@@ -109,16 +109,16 @@ class TestMarketplaceListings:
                 "hourly_rate": 2500,
             },
         )
-        
+
         response = auth_client.get("/api/v1/marketplace/listings/my")
         assert response.status_code == 200
-        
+
         data = response.json()
         assert "items" in data
         assert "stats" in data
         assert data["total"] >= 1
         assert data["stats"]["published_vehicles"] >= 1
-        
+
         # Находим нашу технику в списке
         vehicle_ids = [item["vehicle_id"] for item in data["items"]]
         assert sample_vehicle.id in vehicle_ids
@@ -135,7 +135,7 @@ class TestMarketplaceListings:
             "/api/v1/marketplace/listings",
             json={"vehicle_id": sample_vehicle.id, "hourly_rate": 2500},
         )
-        
+
         # Обновляем
         response = auth_client.patch(
             f"/api/v1/marketplace/listings/{sample_vehicle.id}",
@@ -144,7 +144,7 @@ class TestMarketplaceListings:
                 "description": "Обновлённое описание",
             },
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert float(data["hourly_rate"]) == 3000.0
@@ -162,16 +162,16 @@ class TestMarketplaceListings:
             "/api/v1/marketplace/listings",
             json={"vehicle_id": sample_vehicle.id, "hourly_rate": 2500},
         )
-        
+
         db_session.refresh(sample_vehicle)
         assert sample_vehicle.is_available_for_rent is True
-        
+
         # Снимаем с публикации
         response = auth_client.delete(
             f"/api/v1/marketplace/listings/{sample_vehicle.id}"
         )
         assert response.status_code == 204
-        
+
         db_session.refresh(sample_vehicle)
         assert sample_vehicle.is_available_for_rent is False
 
@@ -186,6 +186,7 @@ class TestPublicMarketplace:
         """Публикует технику для публичных тестов."""
         # Убедиться, что компания активна (публичный API фильтрует по Company.is_active)
         from app.models.company import Company
+
         company = db_session.get(Company, sample_vehicle.company_id)
         if company and not company.is_active:
             company.is_active = True
@@ -204,20 +205,18 @@ class TestPublicMarketplace:
         )
         return sample_vehicle
 
-    def test_list_public_vehicles(
-        self, client: TestClient, published_vehicle: Vehicle
-    ):
+    def test_list_public_vehicles(self, client: TestClient, published_vehicle: Vehicle):
         """✅ Публичный каталог возвращает только опубликованную технику."""
         response = client.get("/api/v1/public/vehicles")
         assert response.status_code == 200
-        
+
         data = response.json()
         assert isinstance(data, list)
-        
+
         # Наша опубликованная техника должна быть в списке
         vehicle_ids = [v["id"] for v in data]
         assert published_vehicle.id in vehicle_ids
-        
+
         # Проверяем структуру ответа
         for vehicle in data:
             assert "id" in vehicle
@@ -238,7 +237,7 @@ class TestPublicMarketplace:
         data = response.json()
         vehicle_ids = [v["id"] for v in data]
         assert published_vehicle.id in vehicle_ids
-        
+
         # Ищем вне диапазона
         response = client.get(
             "/api/v1/public/vehicles",
@@ -255,7 +254,7 @@ class TestPublicMarketplace:
         """✅ Детальная страница техники работает."""
         response = client.get(f"/api/v1/public/vehicles/{published_vehicle.id}")
         assert response.status_code == 200
-        
+
         data = response.json()
         assert data["id"] == published_vehicle.id
         assert data["name"] == published_vehicle.name
@@ -274,7 +273,7 @@ class TestPublicMarketplace:
         """✅ Календарь доступности возвращает список дат."""
         today = date.today()
         to_date = today + timedelta(days=7)
-        
+
         response = client.get(
             f"/api/v1/public/vehicles/{published_vehicle.id}/availability",
             params={
@@ -283,12 +282,12 @@ class TestPublicMarketplace:
             },
         )
         assert response.status_code == 200
-        
+
         data = response.json()
         assert data["vehicle_id"] == published_vehicle.id
         assert "calendar" in data
         assert len(data["calendar"]) == 8  # 7 дней + сегодня
-        
+
         # Все даты должны быть доступны (нет активных Rental)
         for day in data["calendar"]:
             assert "date" in day
@@ -301,7 +300,7 @@ class TestPublicMarketplace:
         """✅ Создание заявки из витрины создаёт Request в базе."""
         planned_start = datetime.now() + timedelta(days=5)
         planned_end = planned_start + timedelta(days=2)
-        
+
         response = client.post(
             f"/api/v1/public/vehicles/{published_vehicle.id}/request",
             json={
@@ -314,16 +313,16 @@ class TestPublicMarketplace:
                 "contact_email": "client@example.com",
             },
         )
-        
+
         assert response.status_code == 201
         data = response.json()
-        
+
         assert data["vehicle_id"] == published_vehicle.id
         assert data["vehicle_name"] == published_vehicle.name
         assert data["status"] == "new"
         assert data["request_id"] > 0
         assert "Заявка" in data["message"]
-        
+
         # Проверяем в БД
         request = db_session.get(Request, data["request_id"])
         assert request is not None
@@ -346,7 +345,7 @@ class TestPublicMarketplace:
                 "contact_phone": "+79991234567",
             },
         )
-        
+
         assert response.status_code == 400
         assert "after" in response.json()["detail"].lower()
 
@@ -365,5 +364,5 @@ class TestPublicMarketplace:
                 "contact_phone": "+79991234567",
             },
         )
-        
+
         assert response.status_code == 404

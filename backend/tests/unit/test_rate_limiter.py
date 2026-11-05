@@ -1,6 +1,5 @@
 """Unit tests for in-memory RateLimiter."""
-import time
-import pytest
+
 from app.middleware.rate_limiter import RateLimiter
 
 

@@ -1,9 +1,10 @@
 ﻿"""Tests for salary_service coverage improvement."""
 
-import pytest
+from datetime import date
 from decimal import Decimal
-from datetime import date, datetime, timezone
 from types import SimpleNamespace
+
+import pytest
 
 
 class TestCalculateGross:
@@ -19,6 +20,7 @@ class TestCalculateGross:
 
     def test_fixed_shift(self):
         from app.services.salary_service import SalaryService
+
         emp = self._make_employee("fixed_shift", Decimal("5000"))
         shifts_data = {"shifts_count": 10, "total_hours": 80, "total_km": 0}
         gross, details = SalaryService._calculate_gross(emp, shifts_data)
@@ -27,6 +29,7 @@ class TestCalculateGross:
 
     def test_hourly(self):
         from app.services.salary_service import SalaryService
+
         emp = self._make_employee("hourly", Decimal("500"))
         shifts_data = {"shifts_count": 5, "total_hours": 40, "total_km": 0}
         gross, details = SalaryService._calculate_gross(emp, shifts_data)
@@ -34,6 +37,7 @@ class TestCalculateGross:
 
     def test_per_km(self):
         from app.services.salary_service import SalaryService
+
         emp = self._make_employee("per_km", Decimal("15"))
         shifts_data = {"shifts_count": 3, "total_hours": 24, "total_km": 1500}
         gross, details = SalaryService._calculate_gross(emp, shifts_data)
@@ -41,9 +45,12 @@ class TestCalculateGross:
 
     def test_shift_percent(self):
         from app.services.salary_service import SalaryService
+
         emp = self._make_employee("shift_percent", Decimal("0"), Decimal("10"))
         shifts_data = {
-            "shifts_count": 5, "total_hours": 40, "total_km": 0,
+            "shifts_count": 5,
+            "total_hours": 40,
+            "total_km": 0,
             "total_shift_cost": 100000,
         }
         gross, details = SalaryService._calculate_gross(emp, shifts_data)
@@ -51,9 +58,12 @@ class TestCalculateGross:
 
     def test_combo(self):
         from app.services.salary_service import SalaryService
+
         emp = self._make_employee("combo", Decimal("500"), Decimal("5"))
         shifts_data = {
-            "shifts_count": 5, "total_hours": 40, "total_km": 0,
+            "shifts_count": 5,
+            "total_hours": 40,
+            "total_km": 0,
             "total_shift_cost": 100000,
         }
         gross, details = SalaryService._calculate_gross(emp, shifts_data)
@@ -63,6 +73,7 @@ class TestCalculateGross:
 
     def test_unknown_type_raises(self):
         from app.services.salary_service import SalaryService
+
         emp = self._make_employee("unknown_type")
         shifts_data = {"shifts_count": 0, "total_hours": 0, "total_km": 0}
         with pytest.raises(ValueError, match="Unknown salary type"):
@@ -90,7 +101,9 @@ def _create_employee(db_session, company, salary_type="hourly", rate=Decimal("50
         hire_date=date(2025, 1, 1),
         salary_type=salary_type,
         salary_rate=rate,
-        salary_commission_percent=Decimal("10") if salary_type in ("shift_percent", "combo") else None,
+        salary_commission_percent=(
+            Decimal("10") if salary_type in ("shift_percent", "combo") else None
+        ),
     )
     db_session.add(employee)
     db_session.commit()
@@ -103,6 +116,7 @@ class TestCalculateForEmployee:
 
     def test_no_salary_type_raises(self, db_session, company):
         from app.services.salary_service import SalaryService
+
         emp = _create_employee(db_session, company, salary_type=None)
         emp.salary_type = None
         db_session.commit()
@@ -113,6 +127,7 @@ class TestCalculateForEmployee:
 
     def test_creates_new_record(self, db_session, company):
         from app.services.salary_service import SalaryService
+
         emp = _create_employee(db_session, company, "hourly", Decimal("500"))
         record = SalaryService.calculate_for_employee(
             db_session, emp, date(2025, 1, 1), date(2025, 1, 31), company.id
@@ -123,6 +138,7 @@ class TestCalculateForEmployee:
 
     def test_updates_existing_record(self, db_session, company):
         from app.services.salary_service import SalaryService
+
         emp = _create_employee(db_session, company, "fixed_shift", Decimal("5000"))
         r1 = SalaryService.calculate_for_employee(
             db_session, emp, date(2025, 1, 1), date(2025, 1, 31), company.id
@@ -138,6 +154,7 @@ class TestApproveRecord:
 
     def test_approve_draft(self, db_session, company):
         from app.services.salary_service import SalaryService
+
         emp = _create_employee(db_session, company, "hourly")
         record = SalaryService.calculate_for_employee(
             db_session, emp, date(2025, 1, 1), date(2025, 1, 31), company.id
@@ -148,11 +165,13 @@ class TestApproveRecord:
 
     def test_approve_nonexistent_raises(self, db_session):
         from app.services.salary_service import SalaryService
+
         with pytest.raises(ValueError, match="not found"):
             SalaryService.approve_record(db_session, 99999, 1)
 
     def test_approve_non_draft_raises(self, db_session, company):
         from app.services.salary_service import SalaryService
+
         emp = _create_employee(db_session, company, "hourly")
         record = SalaryService.calculate_for_employee(
             db_session, emp, date(2025, 1, 1), date(2025, 1, 31), company.id
@@ -167,6 +186,7 @@ class TestCalculateBatch:
 
     def test_batch_empty(self, db_session, company):
         from app.services.salary_service import SalaryService
+
         records = SalaryService.calculate_batch(
             db_session, company.id, date(2025, 1, 1), date(2025, 1, 31)
         )
@@ -174,6 +194,7 @@ class TestCalculateBatch:
 
     def test_batch_with_employees(self, db_session, company):
         from app.services.salary_service import SalaryService
+
         _create_employee(db_session, company, "hourly", Decimal("500"))
         _create_employee(db_session, company, "fixed_shift", Decimal("5000"))
         records = SalaryService.calculate_batch(

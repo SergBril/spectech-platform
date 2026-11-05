@@ -1,5 +1,4 @@
 """Quick coverage tests for debug, catalog, me, system routes."""
-import pytest
 
 
 class TestMiscEndpoints:

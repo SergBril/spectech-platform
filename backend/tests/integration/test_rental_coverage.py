@@ -1,9 +1,10 @@
 """Tests for rental_service coverage improvement."""
 
-import pytest
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+
+import pytest
 
 
 class TestCalculatePlanAmount:
@@ -15,39 +16,50 @@ class TestCalculatePlanAmount:
             rate_type=rate_type,
             unit_price=unit_price,
             quantity=quantity,
-            start_date=datetime(2025, 1, 1, 9, 0, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 3, 9, 0, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
+            end_date=datetime(2025, 1, 3, 9, 0, tzinfo=UTC),
             items=[item],
         )
 
     def test_shift_rate(self):
-        from app.services.rental_service import RentalService
         from app.models.rental import RateType
+        from app.services.rental_service import RentalService
+
         result = RentalService._calculate_plan_amount(self._make_rental(RateType.SHIFT))
         assert result > 0
 
     def test_trip_rate(self):
-        from app.services.rental_service import RentalService
         from app.models.rental import RateType
+        from app.services.rental_service import RentalService
+
         result = RentalService._calculate_plan_amount(self._make_rental(RateType.TRIP))
         assert result == Decimal("1000")
 
     def test_volume_rate(self):
-        from app.services.rental_service import RentalService
         from app.models.rental import RateType
-        result = RentalService._calculate_plan_amount(self._make_rental(RateType.VOLUME))
+        from app.services.rental_service import RentalService
+
+        result = RentalService._calculate_plan_amount(
+            self._make_rental(RateType.VOLUME)
+        )
         assert result == Decimal("1000")
 
     def test_mileage_rate(self):
-        from app.services.rental_service import RentalService
         from app.models.rental import RateType
-        result = RentalService._calculate_plan_amount(self._make_rental(RateType.MILEAGE))
+        from app.services.rental_service import RentalService
+
+        result = RentalService._calculate_plan_amount(
+            self._make_rental(RateType.MILEAGE)
+        )
         assert result == Decimal("1000")
 
     def test_combined_rate(self):
-        from app.services.rental_service import RentalService
         from app.models.rental import RateType
-        result = RentalService._calculate_plan_amount(self._make_rental(RateType.COMBINED))
+        from app.services.rental_service import RentalService
+
+        result = RentalService._calculate_plan_amount(
+            self._make_rental(RateType.COMBINED)
+        )
         assert result > 0
 
 
@@ -68,47 +80,52 @@ class TestCalculateActualAmount:
             unit_price=Decimal("1000"),
             quantity=1,
             mileage_rate=Decimal("50"),
-            start_date=datetime(2025, 1, 1, 9, 0, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 3, 9, 0, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
+            end_date=datetime(2025, 1, 3, 9, 0, tzinfo=UTC),
             actual_return_date=None,
             items=[item],
         )
 
     def test_shift_actual(self):
-        from app.services.rental_service import RentalService
         from app.models.rental import RateType
+        from app.services.rental_service import RentalService
+
         result = RentalService._calculate_actual_amount(
             self._make_rental_with_items(RateType.SHIFT)
         )
         assert result > 0
 
     def test_trip_actual(self):
-        from app.services.rental_service import RentalService
         from app.models.rental import RateType
+        from app.services.rental_service import RentalService
+
         result = RentalService._calculate_actual_amount(
             self._make_rental_with_items(RateType.TRIP, trips=3)
         )
         assert result == Decimal("3000")
 
     def test_volume_actual(self):
-        from app.services.rental_service import RentalService
         from app.models.rental import RateType
+        from app.services.rental_service import RentalService
+
         result = RentalService._calculate_actual_amount(
             self._make_rental_with_items(RateType.VOLUME, volume=Decimal("5"))
         )
         assert result == Decimal("5000")
 
     def test_mileage_actual(self):
-        from app.services.rental_service import RentalService
         from app.models.rental import RateType
+        from app.services.rental_service import RentalService
+
         result = RentalService._calculate_actual_amount(
             self._make_rental_with_items(RateType.MILEAGE, mileage=Decimal("200"))
         )
         assert result == Decimal("200000")
 
     def test_combined_actual(self):
-        from app.services.rental_service import RentalService
         from app.models.rental import RateType
+        from app.services.rental_service import RentalService
+
         result = RentalService._calculate_actual_amount(
             self._make_rental_with_items(
                 RateType.COMBINED, moto_hours=Decimal("8"), mileage=Decimal("50")
@@ -123,8 +140,8 @@ class TestUpdateRental:
     """Cover update_rental method (lines 324-362)."""
 
     def test_update_draft_rental(self, db_session, sample_rental, company):
-        from app.services.rental_service import RentalService
         from app.models.rental import RentalStatus
+        from app.services.rental_service import RentalService
 
         sample_rental.status = RentalStatus.DRAFT
         db_session.commit()
@@ -146,29 +163,33 @@ class TestUpdateRental:
         assert result.discount == Decimal("500")
 
     def test_update_non_draft_raises(self, db_session, sample_rental, company):
-        from app.services.rental_service import RentalService
-        from app.models.rental import RentalStatus
         from fastapi import HTTPException
+
+        from app.models.rental import RentalStatus
+        from app.services.rental_service import RentalService
 
         sample_rental.status = RentalStatus.ACTIVE
         db_session.commit()
         db_session.refresh(sample_rental)
 
         data = SimpleNamespace(
-            start_date=None, end_date=None, discount=None,
-            comment="test", prepayment_status=None, prepayment_amount=None,
+            start_date=None,
+            end_date=None,
+            discount=None,
+            comment="test",
+            prepayment_status=None,
+            prepayment_amount=None,
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            RentalService.update_rental(
-                db_session, sample_rental.id, data, company.id
-            )
+            RentalService.update_rental(db_session, sample_rental.id, data, company.id)
         assert exc_info.value.status_code == 400
 
     def test_update_invalid_dates_raises(self, db_session, sample_rental, company):
-        from app.services.rental_service import RentalService
-        from app.models.rental import RentalStatus
         from fastapi import HTTPException
+
+        from app.models.rental import RentalStatus
+        from app.services.rental_service import RentalService
 
         sample_rental.status = RentalStatus.DRAFT
         db_session.commit()
@@ -177,12 +198,12 @@ class TestUpdateRental:
         data = SimpleNamespace(
             start_date=sample_rental.end_date + timedelta(days=1),
             end_date=sample_rental.start_date - timedelta(days=1),
-            discount=None, comment=None,
-            prepayment_status=None, prepayment_amount=None,
+            discount=None,
+            comment=None,
+            prepayment_status=None,
+            prepayment_amount=None,
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            RentalService.update_rental(
-                db_session, sample_rental.id, data, company.id
-            )
+            RentalService.update_rental(db_session, sample_rental.id, data, company.id)
         assert exc_info.value.status_code == 400

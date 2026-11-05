@@ -1,5 +1,5 @@
 """Integration tests for shifts/tasks.py endpoints (coverage boost)."""
-import pytest
+
 from datetime import date, timedelta
 
 
@@ -31,7 +31,9 @@ class TestShiftTasksEndpoints:
 
     def test_daily_summary(self, client, auth_headers):
         today = date.today().isoformat()
-        resp = client.get(f"/api/v1/shifts/daily-summary?target_date={today}", headers=auth_headers)
+        resp = client.get(
+            f"/api/v1/shifts/daily-summary?target_date={today}", headers=auth_headers
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "date" in data
@@ -60,7 +62,9 @@ class TestShiftTasksEndpoints:
         assert resp.status_code in (404, 403)
 
     def test_auto_assign_driver_not_found(self, client, auth_headers):
-        resp = client.post("/api/v1/shifts/tasks/99999/auto-assign", headers=auth_headers)
+        resp = client.post(
+            "/api/v1/shifts/tasks/99999/auto-assign", headers=auth_headers
+        )
         assert resp.status_code in (404, 403)
 
     def test_bulk_auto_assign_empty_period(self, client, auth_headers):

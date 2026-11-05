@@ -1,5 +1,4 @@
 """Integration tests for shifts/templates.py endpoints."""
-import pytest
 
 
 class TestTemplatesEndpoints:
@@ -13,7 +12,12 @@ class TestTemplatesEndpoints:
     def test_create_template_access_denied(self, client, auth_headers):
         resp = client.post(
             "/api/v1/shifts/templates",
-            json={"vehicle_id": 99999, "weekday": 0, "start_time": "08:00", "end_time": "17:00"},
+            json={
+                "vehicle_id": 99999,
+                "weekday": 0,
+                "start_time": "08:00",
+                "end_time": "17:00",
+            },
             headers=auth_headers,
         )
         assert resp.status_code in (403, 404, 422)
@@ -34,7 +38,9 @@ class TestTemplatesEndpoints:
             assert "created" in data
 
     def test_list_exclusions_not_found(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/templates/99999/exclusions", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/shifts/templates/99999/exclusions", headers=auth_headers
+        )
         assert resp.status_code in (404, 403)
 
     def test_create_exclusion_not_found(self, client, auth_headers):
@@ -46,5 +52,7 @@ class TestTemplatesEndpoints:
         assert resp.status_code in (404, 403)
 
     def test_delete_exclusion_not_found(self, client, auth_headers):
-        resp = client.delete("/api/v1/shifts/templates/exclusions/99999", headers=auth_headers)
+        resp = client.delete(
+            "/api/v1/shifts/templates/exclusions/99999", headers=auth_headers
+        )
         assert resp.status_code in (404, 403)
