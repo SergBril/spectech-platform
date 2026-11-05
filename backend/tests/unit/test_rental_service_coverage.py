@@ -274,8 +274,8 @@ class TestListRentals:
         assert len(result) == 1
 
     def test_with_status_filter(self, mock_db):
-        from app.services.rental_service import RentalService
         from app.models.rental import RentalStatus
+        from app.services.rental_service import RentalService
         q = MagicMock()
         opts = MagicMock()
         filt1 = MagicMock()
@@ -330,9 +330,9 @@ class TestUpdateRental:
     """Cover update_rental (lines 317-367)."""
 
     def test_success(self, mock_db):
-        from app.services.rental_service import RentalService
-        from app.schemas.rental import RentalUpdate
         from app.models.rental import RentalStatus
+        from app.schemas.rental import RentalUpdate
+        from app.services.rental_service import RentalService
         item = _make_item(unit_price=1000)
         rental = _make_rental("HOURLY", items=[item])
         rental.status = RentalStatus.DRAFT
@@ -345,10 +345,11 @@ class TestUpdateRental:
         mock_db.commit.assert_called()
 
     def test_not_draft_raises(self, mock_db):
-        from app.services.rental_service import RentalService
-        from app.schemas.rental import RentalUpdate
-        from app.models.rental import RentalStatus
         from fastapi import HTTPException
+
+        from app.models.rental import RentalStatus
+        from app.schemas.rental import RentalUpdate
+        from app.services.rental_service import RentalService
         rental = _make_rental("HOURLY")
         rental.status = RentalStatus.ACTIVE
         _mock_get_rental(mock_db, rental)
@@ -357,10 +358,11 @@ class TestUpdateRental:
         assert exc_info.value.status_code == 400
 
     def test_invalid_dates_raises(self, mock_db):
-        from app.services.rental_service import RentalService
-        from app.schemas.rental import RentalUpdate
-        from app.models.rental import RentalStatus
         from fastapi import HTTPException
+
+        from app.models.rental import RentalStatus
+        from app.schemas.rental import RentalUpdate
+        from app.services.rental_service import RentalService
         rental = _make_rental("HOURLY")
         rental.status = RentalStatus.DRAFT
         _mock_get_rental(mock_db, rental)
@@ -377,8 +379,8 @@ class TestActivateRental:
     """Cover activate_rental (lines 456-488)."""
 
     def test_success(self, mock_db):
+        from app.models.rental import PrepaymentStatus, RentalStatus
         from app.services.rental_service import RentalService
-        from app.models.rental import RentalStatus, PrepaymentStatus
         item = _make_item(unit_price=1000)
         rental = _make_rental("HOURLY", items=[item])
         rental.status = RentalStatus.DRAFT
@@ -391,9 +393,10 @@ class TestActivateRental:
         mock_db.commit.assert_called()
 
     def test_wrong_status_raises(self, mock_db):
-        from app.services.rental_service import RentalService
-        from app.models.rental import RentalStatus
         from fastapi import HTTPException
+
+        from app.models.rental import RentalStatus
+        from app.services.rental_service import RentalService
         rental = _make_rental("HOURLY")
         rental.status = RentalStatus.COMPLETED
         _mock_get_rental(mock_db, rental)
@@ -401,9 +404,10 @@ class TestActivateRental:
             RentalService.activate_rental(mock_db, 1, 7)
 
     def test_no_items_raises(self, mock_db):
-        from app.services.rental_service import RentalService
-        from app.models.rental import RentalStatus
         from fastapi import HTTPException
+
+        from app.models.rental import RentalStatus
+        from app.services.rental_service import RentalService
         rental = _make_rental("HOURLY", items=[])
         rental.status = RentalStatus.DRAFT
         _mock_get_rental(mock_db, rental)
@@ -411,9 +415,10 @@ class TestActivateRental:
             RentalService.activate_rental(mock_db, 1, 7)
 
     def test_prepayment_required_raises(self, mock_db):
-        from app.services.rental_service import RentalService
-        from app.models.rental import RentalStatus, PrepaymentStatus
         from fastapi import HTTPException
+
+        from app.models.rental import PrepaymentStatus, RentalStatus
+        from app.services.rental_service import RentalService
         item = _make_item(unit_price=1000)
         rental = _make_rental("HOURLY", items=[item])
         rental.status = RentalStatus.DRAFT
@@ -428,8 +433,8 @@ class TestCancelRental:
     """Cover cancel_rental (lines 490-511)."""
 
     def test_success(self, mock_db):
-        from app.services.rental_service import RentalService
         from app.models.rental import RentalStatus
+        from app.services.rental_service import RentalService
         rental = _make_rental("HOURLY")
         rental.status = RentalStatus.DRAFT
         rental.prepayment_paid_at = None
@@ -440,8 +445,8 @@ class TestCancelRental:
         mock_db.commit.assert_called()
 
     def test_with_prepayment_refund(self, mock_db):
+        from app.models.rental import PrepaymentStatus, RentalStatus
         from app.services.rental_service import RentalService
-        from app.models.rental import RentalStatus, PrepaymentStatus
         rental = _make_rental("HOURLY")
         rental.status = RentalStatus.ACTIVE
         rental.prepayment_paid_at = datetime.now(UTC)
@@ -452,9 +457,10 @@ class TestCancelRental:
         assert result.prepayment_status == PrepaymentStatus.REFUNDED
 
     def test_wrong_status_raises(self, mock_db):
-        from app.services.rental_service import RentalService
-        from app.models.rental import RentalStatus
         from fastapi import HTTPException
+
+        from app.models.rental import RentalStatus
+        from app.services.rental_service import RentalService
         rental = _make_rental("HOURLY")
         rental.status = RentalStatus.COMPLETED
         _mock_get_rental(mock_db, rental)
@@ -466,9 +472,9 @@ class TestCloseRental:
     """Cover close_rental (lines 513-608)."""
 
     def test_success(self, mock_db):
-        from app.services.rental_service import RentalService
         from app.models.rental import RentalStatus
         from app.schemas.rental import RentalClose
+        from app.services.rental_service import RentalService
         item = _make_item(unit_price=1000, actual_moto_hours=8)
         item.id = 1
         rental = _make_rental("HOURLY", items=[item])
@@ -485,10 +491,11 @@ class TestCloseRental:
         mock_db.commit.assert_called()
 
     def test_wrong_status_raises(self, mock_db):
-        from app.services.rental_service import RentalService
+        from fastapi import HTTPException
+
         from app.models.rental import RentalStatus
         from app.schemas.rental import RentalClose
-        from fastapi import HTTPException
+        from app.services.rental_service import RentalService
         rental = _make_rental("HOURLY")
         rental.status = RentalStatus.DRAFT
         _mock_get_rental(mock_db, rental)
@@ -497,9 +504,9 @@ class TestCloseRental:
             RentalService.close_rental(mock_db, 1, close_data, 7)
 
     def test_doc_creation_error_logged(self, mock_db):
-        from app.services.rental_service import RentalService
         from app.models.rental import RentalStatus
         from app.schemas.rental import RentalClose
+        from app.services.rental_service import RentalService
         item = _make_item(unit_price=1000, actual_moto_hours=8)
         item.id = 1
         rental = _make_rental("HOURLY", items=[item])
@@ -520,9 +527,9 @@ class TestAddRentalItem:
     """Cover add_rental_item (lines 369-416)."""
 
     def test_success(self, mock_db):
-        from app.services.rental_service import RentalService
-        from app.schemas.rental import RentalItemAdd
         from app.models.rental import RentalStatus
+        from app.schemas.rental import RentalItemAdd
+        from app.services.rental_service import RentalService
         rental = _make_rental("HOURLY")
         rental.status = RentalStatus.DRAFT
         _mock_get_rental(mock_db, rental)
@@ -530,16 +537,17 @@ class TestAddRentalItem:
         # Mock _check_vehicle_availability to return True (available)
         with patch.object(RentalService, "_check_vehicle_availability", return_value=True):
             item_in = RentalItemAdd(vehicle_id=2, unit_price=2000, quantity=1)
-            result = RentalService.add_rental_item(mock_db, 1, item_in, 7)
+            RentalService.add_rental_item(mock_db, 1, item_in, 7)
 
         mock_db.add.assert_called()
         mock_db.commit.assert_called()
 
     def test_not_draft_raises(self, mock_db):
-        from app.services.rental_service import RentalService
-        from app.schemas.rental import RentalItemAdd
-        from app.models.rental import RentalStatus
         from fastapi import HTTPException
+
+        from app.models.rental import RentalStatus
+        from app.schemas.rental import RentalItemAdd
+        from app.services.rental_service import RentalService
         rental = _make_rental("HOURLY")
         rental.status = RentalStatus.ACTIVE
         _mock_get_rental(mock_db, rental)
@@ -548,10 +556,11 @@ class TestAddRentalItem:
             RentalService.add_rental_item(mock_db, 1, item_in, 7)
 
     def test_vehicle_unavailable_raises(self, mock_db):
-        from app.services.rental_service import RentalService
-        from app.schemas.rental import RentalItemAdd
-        from app.models.rental import RentalStatus
         from fastapi import HTTPException
+
+        from app.models.rental import RentalStatus
+        from app.schemas.rental import RentalItemAdd
+        from app.services.rental_service import RentalService
         rental = _make_rental("HOURLY")
         rental.status = RentalStatus.DRAFT
         _mock_get_rental(mock_db, rental)
@@ -566,8 +575,8 @@ class TestRemoveRentalItem:
     """Cover remove_rental_item (lines 418-454)."""
 
     def test_success(self, mock_db):
-        from app.services.rental_service import RentalService
         from app.models.rental import RentalStatus
+        from app.services.rental_service import RentalService
         item = SimpleNamespace(id=5, unit_price=1000, quantity=1)
         rental = _make_rental("HOURLY", items=[item])
         rental.status = RentalStatus.DRAFT
@@ -578,9 +587,10 @@ class TestRemoveRentalItem:
         mock_db.commit.assert_called()
 
     def test_item_not_found_raises(self, mock_db):
-        from app.services.rental_service import RentalService
-        from app.models.rental import RentalStatus
         from fastapi import HTTPException
+
+        from app.models.rental import RentalStatus
+        from app.services.rental_service import RentalService
         rental = _make_rental("HOURLY", items=[])
         rental.status = RentalStatus.DRAFT
         _mock_get_rental(mock_db, rental)
@@ -589,11 +599,269 @@ class TestRemoveRentalItem:
         assert exc_info.value.status_code == 404
 
     def test_not_draft_raises(self, mock_db):
-        from app.services.rental_service import RentalService
-        from app.models.rental import RentalStatus
         from fastapi import HTTPException
+
+        from app.models.rental import RentalStatus
+        from app.services.rental_service import RentalService
         rental = _make_rental("HOURLY")
         rental.status = RentalStatus.ACTIVE
         _mock_get_rental(mock_db, rental)
         with pytest.raises(HTTPException):
             RentalService.remove_rental_item(mock_db, 1, 5, 7)
+
+
+class TestCreateRental:
+    """Cover create_rental (lines 196-275)."""
+
+    def test_success(self, mock_db):
+        from app.models.rental import RateType
+        from app.schemas.rental import RentalCreate, RentalItemCreate
+        from app.services.rental_service import RentalService
+
+        item_in = RentalItemCreate(vehicle_id=1, unit_price=1000, quantity=1)
+        rental_in = RentalCreate(
+            client_id=10, request_id=None,
+            start_date=datetime(2026, 11, 1, tzinfo=UTC),
+            end_date=datetime(2026, 11, 2, tzinfo=UTC),
+            rate_type=RateType.HOURLY, items=[item_in],
+        )
+
+        # Mock flush to set rental.id
+        call_count = {"n": 0}
+        def mock_flush():
+            call_count["n"] += 1
+
+        mock_db.flush.side_effect = mock_flush
+        mock_db.refresh.side_effect = lambda r: setattr(r, "id", 1) if not hasattr(r, "id") or r.id is None else None
+
+        added_objects = []
+        def mock_add(obj):
+            added_objects.append(obj)
+            if hasattr(obj, "client_id") and not hasattr(obj, "vehicle_id"):
+                obj.id = 1
+                obj.items = []
+
+        mock_db.add.side_effect = mock_add
+        mock_db.add_all.side_effect = lambda items: None
+
+        with patch.object(RentalService, "_check_vehicle_availability", return_value=True):
+            result = RentalService.create_rental(mock_db, rental_in, 7, 1)
+
+        mock_db.commit.assert_called()
+        assert result is not None
+
+    def test_invalid_dates_raises(self, mock_db):
+        from fastapi import HTTPException
+
+        from app.models.rental import RateType
+        from app.schemas.rental import RentalCreate, RentalItemCreate
+        from app.services.rental_service import RentalService
+
+        item_in = RentalItemCreate(vehicle_id=1, unit_price=1000)
+        rental_in = RentalCreate(
+            client_id=10, request_id=None,
+            start_date=datetime(2026, 11, 2, tzinfo=UTC),
+            end_date=datetime(2026, 11, 1, tzinfo=UTC),
+            rate_type=RateType.HOURLY, items=[item_in],
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            RentalService.create_rental(mock_db, rental_in, 7, 1)
+        assert exc_info.value.status_code == 400
+
+    def test_vehicle_unavailable_raises(self, mock_db):
+        from fastapi import HTTPException
+
+        from app.models.rental import RateType
+        from app.schemas.rental import RentalCreate, RentalItemCreate
+        from app.services.rental_service import RentalService
+
+        item_in = RentalItemCreate(vehicle_id=1, unit_price=1000)
+        rental_in = RentalCreate(
+            client_id=10, request_id=None,
+            start_date=datetime(2026, 11, 1, tzinfo=UTC),
+            end_date=datetime(2026, 11, 2, tzinfo=UTC),
+            rate_type=RateType.HOURLY, items=[item_in],
+        )
+
+        mock_db.flush.side_effect = lambda: None
+        added = []
+        def mock_add(obj):
+            added.append(obj)
+            if hasattr(obj, "client_id") and not hasattr(obj, "vehicle_id"):
+                obj.id = 1
+        mock_db.add.side_effect = mock_add
+
+        with patch.object(RentalService, "_check_vehicle_availability", return_value=False):
+            with pytest.raises(HTTPException) as exc_info:
+                RentalService.create_rental(mock_db, rental_in, 7, 1)
+            assert exc_info.value.status_code == 409
+        mock_db.rollback.assert_called()
+
+
+class TestCreateDocumentsFromRental:
+    """Cover _create_documents_from_rental (lines 610-626)."""
+
+    def test_calls_all_sub_methods(self, mock_db):
+        from app.services.rental_service import RentalService
+        rental = _make_rental("HOURLY")
+        invoice = SimpleNamespace(id=1)
+        act = SimpleNamespace(id=2)
+
+        with patch.object(RentalService, "_create_invoice_from_rental", return_value=invoice) as m_inv, \
+             patch.object(RentalService, "_create_act_from_rental", return_value=act) as m_act, \
+             patch.object(RentalService, "_create_payouts_from_rental", return_value=[]) as m_pay, \
+             patch.object(RentalService, "_send_rental_notifications") as m_notif:
+            result = RentalService._create_documents_from_rental(mock_db, rental)
+
+        m_inv.assert_called_once()
+        m_act.assert_called_once()
+        m_pay.assert_called_once()
+        m_notif.assert_called_once()
+        assert result == (invoice, act, [])
+
+
+class TestCreateInvoiceFromRental:
+    """Cover _create_invoice_from_rental (lines 629-703)."""
+
+    def test_success(self, mock_db):
+        from app.services.rental_service import RentalService
+        rental = _make_rental("HOURLY")
+        rental.total_amount = Decimal("10000")
+        rental.request_id = None
+
+        added = []
+        def mock_add(obj):
+            added.append(obj)
+            obj.id = len(added)
+        mock_db.add.side_effect = mock_add
+        mock_db.flush.side_effect = lambda: None
+
+        with patch("app.services.finance_service.generate_document_number", return_value="INV-2026-0001"):
+            result = RentalService._create_invoice_from_rental(mock_db, rental)
+
+        assert result is not None
+        assert mock_db.add.call_count == 2  # invoice + invoice_item
+
+
+class TestCreateActFromRental:
+    """Cover _create_act_from_rental (lines 706-741)."""
+
+    def test_success(self, mock_db):
+        from app.services.rental_service import RentalService
+        rental = _make_rental("HOURLY")
+        rental.request_id = None
+        invoice = SimpleNamespace(total=Decimal("12000"), vat_amount=Decimal("2000"), vat_rate=Decimal("20"))
+
+        added = []
+        def mock_add(obj):
+            added.append(obj)
+            obj.id = len(added)
+        mock_db.add.side_effect = mock_add
+        mock_db.flush.side_effect = lambda: None
+
+        with patch("app.services.finance_service.generate_document_number", return_value="ACT-2026-0001"):
+            result = RentalService._create_act_from_rental(mock_db, rental, invoice)
+
+        assert result is not None
+        mock_db.add.assert_called_once()
+
+
+class TestCreatePayoutsFromRental:
+    """Cover _create_payouts_from_rental (lines 744-851)."""
+
+    def test_zero_total_returns_empty(self, mock_db):
+        from app.services.rental_service import RentalService
+        item = _make_item(unit_price=0, quantity=1)
+        rental = _make_rental("HOURLY", items=[item])
+        rental.commission_rate = Decimal("10")
+        result = RentalService._create_payouts_from_rental(mock_db, rental)
+        assert result == []
+
+    def test_with_vehicles_and_owners(self, mock_db):
+        from app.services.rental_service import RentalService
+        item = _make_item(unit_price=10000, quantity=1)
+        item.vehicle_id = 1
+        rental = _make_rental("HOURLY", items=[item])
+        rental.total_amount = Decimal("10000")
+        rental.commission_rate = Decimal("10")
+        rental.request_id = None
+
+        vehicle = SimpleNamespace(id=1, owner_id=100)
+        mock_db.get.return_value = vehicle
+
+        added = []
+        def mock_add(obj):
+            added.append(obj)
+            obj.id = len(added)
+        mock_db.add.side_effect = mock_add
+        mock_db.refresh.side_effect = lambda p: None
+
+        with patch("app.services.finance_service.generate_document_number", return_value="PAY-2026-0001"):
+            result = RentalService._create_payouts_from_rental(mock_db, rental)
+
+        assert len(result) == 1
+        mock_db.commit.assert_called()
+
+    def test_vehicle_not_found_skipped(self, mock_db):
+        from app.services.rental_service import RentalService
+        item = _make_item(unit_price=10000, quantity=1)
+        rental = _make_rental("HOURLY", items=[item])
+        rental.total_amount = Decimal("10000")
+        rental.commission_rate = Decimal("10")
+        mock_db.get.return_value = None
+
+        with patch("app.services.finance_service.generate_document_number", return_value="PAY-2026-0001"):
+            result = RentalService._create_payouts_from_rental(mock_db, rental)
+        assert result == []
+
+    def test_vehicle_no_owner_skipped(self, mock_db):
+        from app.services.rental_service import RentalService
+        item = _make_item(unit_price=10000, quantity=1)
+        rental = _make_rental("HOURLY", items=[item])
+        rental.total_amount = Decimal("10000")
+        rental.commission_rate = Decimal("10")
+        vehicle = SimpleNamespace(id=1, owner_id=None)
+        mock_db.get.return_value = vehicle
+
+        with patch("app.services.finance_service.generate_document_number", return_value="PAY-2026-0001"):
+            result = RentalService._create_payouts_from_rental(mock_db, rental)
+        assert result == []
+
+
+class TestSendRentalNotifications:
+    """Cover _send_rental_notifications (lines 854-end)."""
+
+    def test_client_not_found(self, mock_db):
+        from app.services.rental_service import RentalService
+        rental = _make_rental("HOURLY")
+        mock_db.get.return_value = None
+        # Should not raise
+        RentalService._send_rental_notifications(mock_db, rental, None, [])
+
+    def test_success_no_loop(self, mock_db):
+        from app.services.rental_service import RentalService
+        rental = _make_rental("HOURLY")
+        client = SimpleNamespace(id=10, name="TestClient", email="test@test.com", user_id=1)
+        mock_db.get.return_value = client
+
+        payout = SimpleNamespace(owner_id=100)
+        owner = SimpleNamespace(id=100, name="Owner", email="owner@test.com", user_id=2)
+
+        call_count = {"n": 0}
+        def mock_get(model, obj_id):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return client
+            return owner
+
+        mock_db.get.side_effect = mock_get
+
+        # No event loop - should handle gracefully
+        RentalService._send_rental_notifications(mock_db, rental, None, [payout])
+
+    def test_exception_handled(self, mock_db):
+        from app.services.rental_service import RentalService
+        rental = _make_rental("HOURLY")
+        mock_db.get.side_effect = Exception("DB error")
+        # Should not raise
+        RentalService._send_rental_notifications(mock_db, rental, None, [])
