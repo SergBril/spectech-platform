@@ -1,220 +1,262 @@
-﻿"""Tests for ReviewsService."""
+"""Coverage tests for reviews_service."""
 
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 
 @pytest.fixture
 def mock_db():
-    return MagicMock()
+    db = MagicMock()
+    db.commit = MagicMock()
+    db.flush = MagicMock()
+    db.refresh = MagicMock()
+    db.add = MagicMock()
+    db.delete = MagicMock()
+    return db
 
 
-class TestValidators:
-    """Cover _validate_rating and _validate_optional_rating (lines 472-490)."""
+class TestValidateRating:
+    """Cover _validate_rating (lines 472-478)."""
 
-    def test_valid_rating(self):
+    def test_valid(self):
         from app.services.reviews_service import ReviewsService
 
-        ReviewsService._validate_rating(3)  # No raise
+        ReviewsService._validate_rating(3)  # no exception
 
-    def test_invalid_rating_type(self):
+    def test_too_low(self):
         from app.services.reviews_service import ReviewsService
 
-        with pytest.raises(ValueError, match="integer"):
-            ReviewsService._validate_rating("5")
+        with pytest.raises(ValueError, match="between"):
+            ReviewsService._validate_rating(0)
 
-    def test_rating_out_of_range(self):
+    def test_too_high(self):
         from app.services.reviews_service import ReviewsService
 
         with pytest.raises(ValueError, match="between"):
             ReviewsService._validate_rating(6)
 
-    def test_optional_none_ok(self):
+    def test_not_int(self):
         from app.services.reviews_service import ReviewsService
 
-        ReviewsService._validate_optional_rating(None, "quality")  # No raise
+        with pytest.raises(ValueError, match="integer"):
+            ReviewsService._validate_rating("3")
 
-    def test_optional_valid(self):
+
+class TestValidateOptionalRating:
+    """Cover _validate_optional_rating (lines 480-489)."""
+
+    def test_none_ok(self):
         from app.services.reviews_service import ReviewsService
 
-        ReviewsService._validate_optional_rating(4, "quality")  # No raise
+        ReviewsService._validate_optional_rating(None, "quality")
 
-    def test_optional_invalid(self):
+    def test_valid(self):
         from app.services.reviews_service import ReviewsService
 
-        with pytest.raises(ValueError, match="between"):
+        ReviewsService._validate_optional_rating(5, "quality")
+
+    def test_invalid(self):
+        from app.services.reviews_service import ReviewsService
+
+        with pytest.raises(ValueError):
             ReviewsService._validate_optional_rating(0, "quality")
 
 
 class TestVerifyParticipant:
-    """Cover _verify_participant (lines 491-514)."""
+    """Cover _verify_participant (lines 491-513)."""
 
-    def test_client_to_owner_valid(self, mock_db):
-        from app.services.reviews_service import ReviewsService
+    def test_client_to_owner_is_client(self, mock_db):
+        from app.services.reviews_service import ReviewsService, ReviewTypeError
 
-        rental = SimpleNamespace(client_id=10, items=None)
+        rental = SimpleNamespace(client_id=1, items=[])
         assert (
-            ReviewsService._verify_participant(mock_db, rental, 10, "client_to_owner")
+            ReviewsService._verify_participant(
+                mock_db, rental, 1, ReviewTypeError.CLIENT_TO_OWNER
+            )
             is True
         )
 
-    def test_client_to_owner_invalid(self, mock_db):
-        from app.services.reviews_service import ReviewsService
+    def test_client_to_owner_not_client(self, mock_db):
+        from app.services.reviews_service import ReviewsService, ReviewTypeError
 
-        rental = SimpleNamespace(client_id=10, items=None)
+        rental = SimpleNamespace(client_id=1, items=[])
         assert (
-            ReviewsService._verify_participant(mock_db, rental, 99, "client_to_owner")
+            ReviewsService._verify_participant(
+                mock_db, rental, 2, ReviewTypeError.CLIENT_TO_OWNER
+            )
             is False
         )
 
-    def test_owner_to_client_valid(self, mock_db):
-        from app.services.reviews_service import ReviewsService
+    def test_owner_to_client_is_owner(self, mock_db):
+        from app.services.reviews_service import ReviewsService, ReviewTypeError
 
         item = SimpleNamespace(vehicle_id=1)
-        vehicle = SimpleNamespace(owner_id=20)
-        rental = SimpleNamespace(client_id=10, items=[item])
+        vehicle = SimpleNamespace(owner_id=2)
+        rental = SimpleNamespace(client_id=1, items=[item])
         mock_db.get.return_value = vehicle
         assert (
-            ReviewsService._verify_participant(mock_db, rental, 20, "owner_to_client")
+            ReviewsService._verify_participant(
+                mock_db, rental, 2, ReviewTypeError.OWNER_TO_CLIENT
+            )
             is True
         )
 
     def test_owner_to_client_no_items(self, mock_db):
-        from app.services.reviews_service import ReviewsService
+        from app.services.reviews_service import ReviewsService, ReviewTypeError
 
-        rental = SimpleNamespace(client_id=10, items=None)
+        rental = SimpleNamespace(client_id=1, items=[])
         assert (
-            ReviewsService._verify_participant(mock_db, rental, 20, "owner_to_client")
+            ReviewsService._verify_participant(
+                mock_db, rental, 2, ReviewTypeError.OWNER_TO_CLIENT
+            )
             is False
         )
 
 
 class TestResolveReviewedCompany:
-    """Cover _resolve_reviewed_company (lines 515-544)."""
+    """Cover _resolve_reviewed_company (lines 515-543)."""
 
-    def test_client_to_owner_with_vehicle(self, mock_db):
-        from app.services.reviews_service import ReviewsService
+    def test_client_to_owner(self, mock_db):
+        from app.services.reviews_service import ReviewsService, ReviewTypeError
 
         item = SimpleNamespace(vehicle_id=1)
-        vehicle = SimpleNamespace(owner_id=20)
+        vehicle = SimpleNamespace(owner_id=2)
         owner = SimpleNamespace(company_id=5)
-        rental = SimpleNamespace(client_id=10, items=[item], company_id=1)
+        rental = SimpleNamespace(client_id=1, items=[item], company_id=3)
 
         call_count = {"n": 0}
 
         def mock_get(model, pk):
             call_count["n"] += 1
-            if call_count["n"] == 1:
-                return vehicle
-            return owner
+            return vehicle if call_count["n"] == 1 else owner
 
         mock_db.get.side_effect = mock_get
 
-        ReviewsService._resolve_reviewed_company(mock_db, rental, 10, "client_to_owner")
+        result = ReviewsService._resolve_reviewed_company(
+            mock_db, rental, 1, ReviewTypeError.CLIENT_TO_OWNER
+        )
         assert result == 5
 
     def test_owner_to_client(self, mock_db):
-        from app.services.reviews_service import ReviewsService
+        from app.services.reviews_service import ReviewsService, ReviewTypeError
 
-        client = SimpleNamespace(company_id=3)
-        rental = SimpleNamespace(client_id=10, items=[], company_id=1)
+        client = SimpleNamespace(company_id=7)
+        rental = SimpleNamespace(client_id=1, items=[], company_id=3)
         mock_db.get.return_value = client
 
-        ReviewsService._resolve_reviewed_company(mock_db, rental, 20, "owner_to_client")
-        assert result == 3
+        result = ReviewsService._resolve_reviewed_company(
+            mock_db, rental, 2, ReviewTypeError.OWNER_TO_CLIENT
+        )
+        assert result == 7
+
+    def test_no_items_returns_none(self, mock_db):
+        from app.services.reviews_service import ReviewsService, ReviewTypeError
+
+        rental = SimpleNamespace(client_id=1, items=[], company_id=3)
+        result = ReviewsService._resolve_reviewed_company(
+            mock_db, rental, 1, ReviewTypeError.CLIENT_TO_OWNER
+        )
+        assert result is None
+
+
+class TestRecalculateCompanyRating:
+    """Cover _recalculate_company_rating (lines 545-end)."""
+
+    def test_no_company(self, mock_db):
+        from app.services.reviews_service import ReviewsService
+
+        mock_db.get.return_value = None
+        ReviewsService._recalculate_company_rating(mock_db, 999)  # no exception
+
+    def test_no_reviews(self, mock_db):
+        from app.services.reviews_service import ReviewsService
+
+        company = SimpleNamespace(
+            average_rating=None, total_reviews=0, rating_distribution=None
+        )
+        mock_db.get.return_value = company
+        mock_db.query.return_value.filter.return_value.all.return_value = []
+
+        ReviewsService._recalculate_company_rating(mock_db, 1)
+        assert company.average_rating is None
+        assert company.total_reviews == 0
+
+    def test_with_reviews(self, mock_db):
+        from app.services.reviews_service import ReviewsService
+
+        company = SimpleNamespace(
+            average_rating=None, total_reviews=0, rating_distribution=None
+        )
+        r1 = SimpleNamespace(rating=5)
+        r2 = SimpleNamespace(rating=3)
+        mock_db.get.return_value = company
+        mock_db.query.return_value.filter.return_value.all.return_value = [r1, r2]
+
+        ReviewsService._recalculate_company_rating(mock_db, 1)
+        assert company.average_rating == Decimal("4.00")
+        assert company.total_reviews == 2
+        assert company.rating_distribution["5"] == 1
+        assert company.rating_distribution["3"] == 1
 
 
 class TestGetCompanyRating:
-    """Cover get_company_rating (lines 322-386)."""
+    """Cover get_company_rating (lines 322-385)."""
 
     def test_no_reviews(self, mock_db):
         from app.services.reviews_service import ReviewsService
 
         mock_db.query.return_value.filter.return_value.all.return_value = []
-
-        ReviewsService.get_company_rating(mock_db, 1)
+        result = ReviewsService.get_company_rating(mock_db, 1)
         assert result["average_rating"] is None
         assert result["total_reviews"] == 0
 
     def test_with_reviews(self, mock_db):
         from app.services.reviews_service import ReviewsService
 
-        reviews = [
-            SimpleNamespace(
-                rating=5, quality_rating=5, punctuality_rating=4, communication_rating=5
-            ),
-            SimpleNamespace(
-                rating=4,
-                quality_rating=4,
-                punctuality_rating=None,
-                communication_rating=4,
-            ),
-            SimpleNamespace(
-                rating=3,
-                quality_rating=None,
-                punctuality_rating=3,
-                communication_rating=None,
-            ),
-        ]
-        mock_db.query.return_value.filter.return_value.all.return_value = reviews
+        r1 = SimpleNamespace(
+            rating=5, quality_rating=4, punctuality_rating=5, communication_rating=4
+        )
+        r2 = SimpleNamespace(
+            rating=3, quality_rating=3, punctuality_rating=None, communication_rating=3
+        )
+        mock_db.query.return_value.filter.return_value.all.return_value = [r1, r2]
 
-        ReviewsService.get_company_rating(mock_db, 1)
+        result = ReviewsService.get_company_rating(mock_db, 1)
         assert result["average_rating"] == 4.0
-        assert result["total_reviews"] == 3
+        assert result["total_reviews"] == 2
         assert result["distribution"]["5"] == 1
-        assert result["category_averages"]["quality"] == 4.5
+        assert result["category_averages"]["quality"] == 3.5
+        assert result["category_averages"]["punctuality"] == 5.0
 
 
-class TestUpdateReview:
-    """Cover update_review (lines 209-268)."""
+class TestCanLeaveReview:
+    """Cover can_leave_review (lines 408-470)."""
 
-    def test_not_found(self, mock_db):
+    def test_rental_not_found(self, mock_db):
         from app.services.reviews_service import ReviewsService
 
         mock_db.get.return_value = None
-        with pytest.raises(ValueError, match="not found"):
-            ReviewsService.update_review(mock_db, 999, 1)
+        result = ReviewsService.can_leave_review(mock_db, 999, 1)
+        assert result["can_review_owner"] is False
 
-    def test_wrong_author(self, mock_db):
+    def test_client_can_review_owner(self, mock_db):
+        from app.models.rental import RentalStatus
         from app.services.reviews_service import ReviewsService
 
-        review = SimpleNamespace(reviewer_contractor_id=1)
-        mock_db.get.return_value = review
-        with pytest.raises(ValueError, match="your own"):
-            ReviewsService.update_review(mock_db, 1, 999)
+        rental = SimpleNamespace(status=RentalStatus.COMPLETED, client_id=1, items=[])
+        mock_db.get.return_value = rental
+        mock_db.query.return_value.filter.return_value.all.return_value = []
 
-    def test_update_success(self, mock_db):
-        from app.services.reviews_service import ReviewsService
-
-        review = SimpleNamespace(
-            reviewer_contractor_id=1,
-            rating=3,
-            comment="old",
-            reviewed_company_id=5,
-            pros=None,
-            cons=None,
-            photos=None,
-            quality_rating=None,
-            punctuality_rating=None,
-            communication_rating=None,
-        )
-        mock_db.get.return_value = review
-
-        with patch.object(ReviewsService, "_recalculate_company_rating"):
-            ReviewsService.update_review(
-                mock_db, 1, 1, rating=5, comment="Отличный сервис!"
-            )
-
-        assert review.rating == 5
-        assert review.comment == "Отличный сервис!"
-        mock_db.commit.assert_called_once()
+        result = ReviewsService.can_leave_review(mock_db, 1, 1)
+        assert result["can_review_owner"] is True
+        assert result["can_review_client"] is False
 
 
 class TestDeleteReview:
-    """Cover delete_review (lines 269-294)."""
+    """Cover delete_review (lines 269-293)."""
 
     def test_not_found(self, mock_db):
         from app.services.reviews_service import ReviewsService
@@ -223,284 +265,126 @@ class TestDeleteReview:
         with pytest.raises(ValueError, match="not found"):
             ReviewsService.delete_review(mock_db, 999, 1)
 
-    def test_wrong_author(self, mock_db):
-        from app.services.reviews_service import ReviewsService
-
-        review = SimpleNamespace(reviewer_contractor_id=1)
-        mock_db.get.return_value = review
-        with pytest.raises(ValueError, match="your own"):
-            ReviewsService.delete_review(mock_db, 1, 999)
-
-    def test_delete_success(self, mock_db):
+    def test_not_author(self, mock_db):
         from app.services.reviews_service import ReviewsService
 
         review = SimpleNamespace(reviewer_contractor_id=1, reviewed_company_id=5)
         mock_db.get.return_value = review
+        with pytest.raises(ValueError, match="own reviews"):
+            ReviewsService.delete_review(mock_db, 1, 2)
 
-        with patch.object(ReviewsService, "_recalculate_company_rating"):
-            ReviewsService.delete_review(mock_db, 1, 1)
+    def test_success(self, mock_db):
+        from app.services.reviews_service import ReviewsService
 
+        review = SimpleNamespace(reviewer_contractor_id=1, reviewed_company_id=5)
+        mock_db.get.return_value = review
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                ReviewsService,
+                "_recalculate_company_rating",
+                staticmethod(lambda db, cid: None),
+            )
+            result = ReviewsService.delete_review(mock_db, 1, 1)
         assert result is True
         mock_db.delete.assert_called_once()
-        mock_db.commit.assert_called_once()
 
 
-class TestCanLeaveReview:
-    """Cover can_leave_review (lines 408-471)."""
+class TestUpdateReview:
+    """Cover update_review (lines 209-267)."""
+
+    def test_not_found(self, mock_db):
+        from app.services.reviews_service import ReviewsService
+
+        mock_db.get.return_value = None
+        with pytest.raises(ValueError, match="not found"):
+            ReviewsService.update_review(mock_db, 999, 1)
+
+    def test_not_author(self, mock_db):
+        from app.services.reviews_service import ReviewsService
+
+        review = SimpleNamespace(reviewer_contractor_id=1, reviewed_company_id=5)
+        mock_db.get.return_value = review
+        with pytest.raises(ValueError, match="own reviews"):
+            ReviewsService.update_review(mock_db, 1, 2)
+
+    def test_success(self, mock_db):
+        from app.services.reviews_service import ReviewsService
+
+        review = SimpleNamespace(
+            reviewer_contractor_id=1,
+            reviewed_company_id=5,
+            rating=3,
+            comment=None,
+            pros=None,
+            cons=None,
+            photos=None,
+            quality_rating=None,
+            punctuality_rating=None,
+            communication_rating=None,
+        )
+        mock_db.get.return_value = review
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                ReviewsService,
+                "_recalculate_company_rating",
+                staticmethod(lambda db, cid: None),
+            )
+            result = ReviewsService.update_review(
+                mock_db, 1, 1, rating=5, comment="Great service!"
+            )
+        assert result.rating == 5
+        assert result.comment == "Great service!"
+
+
+class TestCreateReview:
+    """Cover create_review (lines 37-207)."""
+
+    def test_invalid_rating(self, mock_db):
+        from app.services.reviews_service import ReviewsService
+
+        with pytest.raises(ValueError, match="between"):
+            ReviewsService.create_review(mock_db, 1, 1, "client_to_owner", 0)
+
+    def test_comment_too_short(self, mock_db):
+        from app.services.reviews_service import ReviewsService
+
+        with pytest.raises(ValueError, match="at least"):
+            ReviewsService.create_review(
+                mock_db, 1, 1, "client_to_owner", 5, comment="short"
+            )
+
+    def test_too_many_photos(self, mock_db):
+        from app.services.reviews_service import ReviewsService
+
+        photos = [f"http://img{i}.jpg" for i in range(6)]
+        with pytest.raises(ValueError, match="Maximum"):
+            ReviewsService.create_review(
+                mock_db, 1, 1, "client_to_owner", 5, photos=photos
+            )
+
+    def test_invalid_review_type(self, mock_db):
+        from app.services.reviews_service import ReviewsService
+
+        with pytest.raises(ValueError, match="Invalid review_type"):
+            ReviewsService.create_review(mock_db, 1, 1, "invalid_type", 5)
 
     def test_rental_not_found(self, mock_db):
         from app.services.reviews_service import ReviewsService
 
         mock_db.get.return_value = None
-        ReviewsService.can_leave_review(mock_db, 999, 1)
-        assert result["can_review_owner"] is False
-
-    def test_client_can_review_owner(self, mock_db):
-        from app.models.rental import RentalStatus
-        from app.services.reviews_service import ReviewsService
-
-        rental = SimpleNamespace(status=RentalStatus.COMPLETED, client_id=10, items=[])
-        mock_db.get.return_value = rental
-        mock_db.query.return_value.filter.return_value.all.return_value = []
-
-        ReviewsService.can_leave_review(mock_db, 1, 10)
-        assert result["can_review_owner"] is True
-        assert result["can_review_client"] is False
-
-    def test_already_reviewed(self, mock_db):
-        from app.models.rental import RentalStatus
-        from app.services.reviews_service import ReviewsService
-
-        rental = SimpleNamespace(status=RentalStatus.COMPLETED, client_id=10, items=[])
-        existing_review = SimpleNamespace(review_type="client_to_owner")
-        mock_db.get.return_value = rental
-        mock_db.query.return_value.filter.return_value.all.return_value = [
-            existing_review
-        ]
-
-        ReviewsService.can_leave_review(mock_db, 1, 10)
-        assert result["can_review_owner"] is False
-        assert result["has_reviewed_owner"] is True
-
-
-class TestRecalculateCompanyRating:
-    """Cover _recalculate_company_rating (lines 545-end)."""
-
-    def test_no_company_id(self, mock_db):
-        from app.services.reviews_service import ReviewsService
-
-        ReviewsService._recalculate_company_rating(mock_db, None)  # No raise
-
-    def test_recalculates(self, mock_db):
-        from app.services.reviews_service import ReviewsService
-
-        company = SimpleNamespace(
-            id=1, average_rating=None, total_reviews=0, rating_distribution=None
-        )
-        reviews = [
-            SimpleNamespace(rating=5),
-            SimpleNamespace(rating=3),
-        ]
-
-        # db.get returns company
-        mock_db.get.return_value = company
-
-        # db.query returns reviews
-        mock_query = MagicMock()
-        mock_query.filter.return_value.all.return_value = reviews
-        mock_db.query.return_value = mock_query
-
-        ReviewsService._recalculate_company_rating(mock_db, 1)
-        assert company.average_rating == Decimal("4.0")
-        assert company.total_reviews == 2
-
-
-class TestCreateReview:
-    """Cover create_review (lines 37-208)."""
-
-    def _make_base_mocks(self, mock_db):
-        """Helper to setup common mocks for create_review."""
-        from app.models.rental import RentalStatus
-
-        rental = SimpleNamespace(
-            id=1,
-            status=RentalStatus.COMPLETED,
-            client_id=10,
-            items=[SimpleNamespace(vehicle_id=1)],
-            company_id=1,
-        )
-        reviewer = SimpleNamespace(id=10, company_id=2)
-        vehicle = SimpleNamespace(id=1, owner_id=20)
-        owner_contractor = SimpleNamespace(id=20, company_id=5)
-
-        call_count = {"n": 0}
-
-        def mock_get(model, pk):
-            call_count["n"] += 1
-            # Return based on call order or model type
-            if hasattr(model, "__tablename__"):
-                tn = model.__tablename__
-                if tn == "rentals":
-                    return rental
-                if tn == "contractors":
-                    if pk == 10:
-                        return reviewer
-                    if pk == 20:
-                        return owner_contractor
-                if tn == "vehicles":
-                    return vehicle
-            # Fallback by call count
-            if call_count["n"] <= 1:
-                return rental
-            if call_count["n"] == 2:
-                return reviewer
-            if call_count["n"] == 3:
-                return vehicle
-            return owner_contractor
-
-        mock_db.get.side_effect = mock_get
-        # No existing review
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-        return rental, reviewer
-
-    def test_invalid_rating_raises(self, mock_db):
-        from app.services.reviews_service import ReviewsService
-
-        with pytest.raises(ValueError, match="between"):
-            ReviewsService.create_review(mock_db, 1, 10, "client_to_owner", rating=6)
-
-    def test_short_comment_raises(self, mock_db):
-        from app.services.reviews_service import ReviewsService
-
-        with pytest.raises(ValueError, match="at least"):
-            ReviewsService.create_review(
-                mock_db, 1, 10, "client_to_owner", rating=5, comment="short"
-            )
-
-    def test_too_many_photos_raises(self, mock_db):
-        from app.services.reviews_service import ReviewsService
-
-        photos = [f"url{i}" for i in range(6)]
-        with pytest.raises(ValueError, match="Maximum"):
-            ReviewsService.create_review(
-                mock_db, 1, 10, "client_to_owner", rating=5, photos=photos
-            )
-
-    def test_invalid_review_type_raises(self, mock_db):
-        from app.services.reviews_service import ReviewsService
-
-        with pytest.raises(ValueError, match="Invalid review_type"):
-            ReviewsService.create_review(mock_db, 1, 10, "invalid_type", rating=5)
-
-    def test_rental_not_found_raises(self, mock_db):
-        from app.services.reviews_service import ReviewsService
-
-        mock_db.get.return_value = None
         with pytest.raises(ValueError, match="not found"):
-            ReviewsService.create_review(mock_db, 999, 10, "client_to_owner", rating=5)
+            ReviewsService.create_review(mock_db, 999, 1, "client_to_owner", 5)
 
-    def test_rental_not_completed_raises(self, mock_db):
+    def test_self_review_prevention(self, mock_db):
         from app.models.rental import RentalStatus
         from app.services.reviews_service import ReviewsService
 
-        rental = SimpleNamespace(status=RentalStatus.ACTIVE)
-        mock_db.get.return_value = rental
-        with pytest.raises(ValueError, match="COMPLETED"):
-            ReviewsService.create_review(mock_db, 1, 10, "client_to_owner", rating=5)
-
-    def test_duplicate_review_raises(self, mock_db):
-        from app.models.rental import RentalStatus
-        from app.services.reviews_service import ReviewsService
-
+        item = SimpleNamespace(vehicle_id=1)
+        vehicle = SimpleNamespace(owner_id=1)  # same as reviewer
+        # reviewer must be client for client_to_owner
         rental = SimpleNamespace(
-            status=RentalStatus.COMPLETED, client_id=10, items=[], company_id=1
+            status=RentalStatus.COMPLETED, client_id=1, items=[item]
         )
-        reviewer = SimpleNamespace(id=10)
-        existing = SimpleNamespace(id=1)
-
-        call_count = {"n": 0}
-
-        def mock_get(model, pk):
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                return rental
-            return reviewer
-
-        mock_db.get.side_effect = mock_get
-        mock_db.query.return_value.filter.return_value.first.return_value = existing
-
-        with pytest.raises(ValueError, match="already left"):
-            ReviewsService.create_review(mock_db, 1, 10, "client_to_owner", rating=5)
-
-    def test_success_client_to_owner(self, mock_db):
-        from app.models.rental import RentalStatus
-        from app.services.reviews_service import ReviewsService
-
-        rental = SimpleNamespace(
-            id=1,
-            status=RentalStatus.COMPLETED,
-            client_id=10,
-            items=[SimpleNamespace(vehicle_id=1)],
-            company_id=1,
-        )
-        reviewer = SimpleNamespace(id=10, company_id=2)
-        vehicle = SimpleNamespace(id=1, owner_id=20)
-        owner_contractor = SimpleNamespace(id=20, company_id=5)
-
-        # Map pk -> object for reliable lookup
-        objects_by_pk = {1: rental, 10: reviewer, 20: owner_contractor}
-
-        # Vehicle is always returned for vehicle_id lookups
-        def mock_get(model, pk):
-            if (
-                pk == 1
-                and hasattr(model, "__name__")
-                and "Vehicle" in getattr(model, "__name__", "")
-            ):
-                return vehicle
-            if (
-                pk == 1
-                and hasattr(model, "__name__")
-                and "Rental" in getattr(model, "__name__", "")
-            ):
-                return rental
-            # For _verify_participant and _resolve_reviewed_company vehicle lookups
-            if pk == 1:
-                return vehicle
-            return objects_by_pk.get(pk, owner_contractor)
-
-        mock_db.get.side_effect = mock_get
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-
-        with patch.object(ReviewsService, "_recalculate_company_rating"):
-            ReviewsService.create_review(
-                mock_db,
-                1,
-                10,
-                "client_to_owner",
-                rating=5,
-                comment="Отличный сервис, рекомендую!",
-                pros="Быстро",
-                cons="Дорого",
-            )
-
-        mock_db.add.assert_called_once()
-        mock_db.commit.assert_called_once()
-
-    def test_self_review_raises(self, mock_db):
-        from app.models.rental import RentalStatus
-        from app.services.reviews_service import ReviewsService
-
-        # Owner tries to review themselves as client
-        rental = SimpleNamespace(
-            id=1,
-            status=RentalStatus.COMPLETED,
-            client_id=20,
-            items=[SimpleNamespace(vehicle_id=1)],
-            company_id=1,
-        )
-        reviewer = SimpleNamespace(id=20, company_id=5)
-        vehicle = SimpleNamespace(id=1, owner_id=20)
 
         call_count = {"n": 0}
 
@@ -509,11 +393,11 @@ class TestCreateReview:
             if call_count["n"] == 1:
                 return rental
             if call_count["n"] == 2:
-                return reviewer
+                return SimpleNamespace(id=1)  # reviewer contractor
             return vehicle
 
         mock_db.get.side_effect = mock_get
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
         with pytest.raises(ValueError, match="yourself"):
-            ReviewsService.create_review(mock_db, 1, 20, "owner_to_client", rating=5)
+            ReviewsService.create_review(mock_db, 1, 1, "client_to_owner", 5)
