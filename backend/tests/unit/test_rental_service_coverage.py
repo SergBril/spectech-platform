@@ -2,7 +2,7 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -865,3 +865,163 @@ class TestSendRentalNotifications:
         mock_db.get.side_effect = Exception("DB error")
         # Should not raise
         RentalService._send_rental_notifications(mock_db, rental, None, [])
+
+
+
+class TestUpdateRentalAllFields:
+    """Cover update_rental remaining fields (lines 338, 342, 344)."""
+
+    def test_update_discount_prepayment(self, mock_db):
+        from app.models.rental import PrepaymentStatus, RentalStatus
+        from app.schemas.rental import RentalUpdate
+        from app.services.rental_service import RentalService
+        item = _make_item(unit_price=1000)
+        rental = _make_rental("HOURLY", items=[item])
+        rental.status = RentalStatus.DRAFT
+        rental.discount = Decimal("0")
+        rental.prepayment_status = PrepaymentStatus.NONE
+        rental.prepayment_amount = None
+        _mock_get_rental(mock_db, rental)
+
+        update_data = RentalUpdate(
+            discount=Decimal("500"),
+            prepayment_status=PrepaymentStatus.PAID,
+            prepayment_amount=Decimal("3000"),
+        )
+        result = RentalService.update_rental(mock_db, 1, update_data, 7)
+        assert result.discount == Decimal("500")
+        assert result.prepayment_status == PrepaymentStatus.PAID
+        assert result.prepayment_amount == Decimal("3000")
+
+
+class TestCloseRentalOverdue:
+    """Cover close_rental overdue penalty and items_actuals (lines 534-572)."""
+
+    def test_overdue_penalty(self, mock_db):
+        from app.models.rental import RentalStatus
+        from app.schemas.rental import RentalClose
+        from app.services.rental_service import RentalService
+        item = _make_item(unit_price=1000, actual_moto_hours=8)
+        item.id = 1
+        # end_date = Nov 2, actual_return = Nov 3 -> 24h overdue
+        rental = _make_rental("HOURLY", items=[item],
+            start_date=datetime(2026, 11, 1, tzinfo=UTC),
+            end_date=datetime(2026, 11, 2, tzinfo=UTC))
+        rental.status = RentalStatus.ACTIVE
+        rental.actual_return_date = None
+        _mock_get_rental(mock_db, rental)
+
+        close_data = RentalClose(
+            actual_return_date=datetime(2026, 11, 3, tzinfo=UTC))
+
+        with patch.object(RentalService, "_create_documents_from_rental", return_value=(None, None)):
+            result = RentalService.close_rental(mock_db, 1, close_data, 7)
+
+        assert result.status == RentalStatus.COMPLETED
+        # Should have overdue penalty > 0
+        assert result.total_amount > Decimal("0")
+
+    def test_with_items_actuals(self, mock_db):
+        from app.models.rental import RentalStatus
+        from app.schemas.rental import RentalClose, RentalItemActual
+        from app.services.rental_service import RentalService
+        item = _make_item(unit_price=1000)
+        item.id = 1
+        rental = _make_rental("HOURLY", items=[item])
+        rental.status = RentalStatus.ACTIVE
+        rental.actual_return_date = None
+        _mock_get_rental(mock_db, rental)
+
+        actual = RentalItemActual(
+            rental_item_id=1,
+            actual_moto_hours=10,
+            actual_mileage=500,
+            actual_trips=3,
+            actual_volume=50,
+        )
+        close_data = RentalClose(
+            actual_return_date=datetime(2026, 11, 2, tzinfo=UTC),
+            items_actuals=[actual],
+        )
+
+        with patch.object(RentalService, "_create_documents_from_rental", return_value=(None, None)):
+            result = RentalService.close_rental(mock_db, 1, close_data, 7)
+
+        assert result.status == RentalStatus.COMPLETED
+        # Item should have updated actuals
+        assert item.actual_moto_hours == 10
+        assert item.actual_mileage == 500
+
+    def test_naive_actual_return_date(self, mock_db):
+        from app.models.rental import RentalStatus
+        from app.schemas.rental import RentalClose
+        from app.services.rental_service import RentalService
+        item = _make_item(unit_price=1000, actual_moto_hours=8)
+        item.id = 1
+        rental = _make_rental("HOURLY", items=[item])
+        rental.status = RentalStatus.ACTIVE
+        rental.actual_return_date = None
+        rental.end_date = datetime(2026, 11, 2)  # naive
+        _mock_get_rental(mock_db, rental)
+
+        close_data = RentalClose(
+            actual_return_date=datetime(2026, 11, 2, 12, 0))  # naive
+
+        with patch.object(RentalService, "_create_documents_from_rental", return_value=(None, None)):
+            result = RentalService.close_rental(mock_db, 1, close_data, 7)
+
+        assert result.status == RentalStatus.COMPLETED
+
+
+class TestSendNotificationsWithLoop:
+    """Cover _send_rental_notifications with event loop (lines 884, 902, 912)."""
+
+    @pytest.mark.asyncio
+    async def test_with_event_loop(self, mock_db):
+        from app.services.rental_service import RentalService
+        rental = _make_rental("HOURLY")
+        client = SimpleNamespace(id=10, name="Client", email="c@test.com", user_id=1)
+        # Owner without email -> triggers fallback on line 902
+        owner = SimpleNamespace(id=100, name="Owner", email=None, user_id=2)
+        payout = SimpleNamespace(owner_id=100)
+
+        call_count = {"n": 0}
+        def mock_get(model, obj_id):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return client
+            return owner
+        mock_db.get.side_effect = mock_get
+
+        mock_dispatcher = MagicMock()
+        mock_dispatcher.notify_rental_completed = AsyncMock()
+        mock_dispatcher.notify_payout_created = AsyncMock()
+
+        with patch("app.services.notification_dispatcher.notification_dispatcher", mock_dispatcher):
+            RentalService._send_rental_notifications(mock_db, rental, None, [payout])
+
+        import asyncio
+        await asyncio.sleep(0.01)
+
+
+
+class TestSendNotificationsOwnerNotFound:
+    """Cover line 902: continue when owner not found."""
+
+    def test_payout_owner_not_found(self, mock_db):
+        from app.services.rental_service import RentalService
+        rental = _make_rental("HOURLY")
+        client = SimpleNamespace(id=10, name="Client", email="c@test.com", user_id=1)
+        payout = SimpleNamespace(owner_id=999)
+
+        call_count = {"n": 0}
+        def mock_get(model, obj_id):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return client
+            # Owner not found for payout
+            return None
+        mock_db.get.side_effect = mock_get
+
+        # Should not raise, just skip the payout notification
+        RentalService._send_rental_notifications(mock_db, rental, None, [payout])
