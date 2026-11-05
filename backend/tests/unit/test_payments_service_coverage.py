@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -220,3 +220,124 @@ class TestFindInvoiceByNumber:
         mock_db.scalars.return_value = scalars_mock
         result = service._find_invoice_by_number(mock_db, "INV-999", 7)
         assert result is None
+
+
+
+class TestUploadStatementDuplicate:
+    """Cover upload_statement duplicate check (lines 59-80)."""
+
+    def test_duplicate_raises(self, mock_db, service):
+        from datetime import date
+        parsed = SimpleNamespace(
+            account_number="40702810000000000001",
+            date_start=date(2026, 11, 1), date_end=date(2026, 11, 5),
+        )
+        existing = SimpleNamespace(id=99)
+        service.parser.parse_file.return_value = parsed
+        q = MagicMock()
+        q.filter.return_value.first.return_value = existing
+        mock_db.query.return_value = q
+        with pytest.raises(ValueError, match="уже загружена"):
+            service.upload_statement(mock_db, Path("/tmp/test.xml"), 7)
+
+
+class TestAutoMatchPartialPaid:
+    """Cover auto_match partial paid branch (lines 203-204)."""
+
+    def test_partial_paid_status(self, mock_db, service):
+        tx = SimpleNamespace(
+            id=1, company_id=7, amount=Decimal("500"),
+            matched_invoice_id=None, matched_amount=None,
+            match_status=None, match_confidence=None,
+        )
+        # Invoice total=1000, paying 500 -> partially_paid
+        invoice = SimpleNamespace(id=10, paid_amount="0", total="1000", status="draft")
+        mock_db.scalars.return_value.all.return_value = [tx]
+        mock_match = MagicMock()
+        mock_match.match_transaction.return_value = {
+            "matched": True, "match_type": "invoice",
+            "matched_id": 10, "confidence": 0.9, "reason": "match",
+        }
+        mock_db.get.return_value = invoice
+        with patch("app.services.bank_matching_service.BankMatchingService", mock_match):
+            result = service.auto_match_transactions(mock_db, 1)
+        assert result == 1
+        assert invoice.status.value == "partially_paid" or invoice.status == "partially_paid"
+
+
+class TestApplyPaymentNotifications:
+    """Cover apply_payment notification branches (lines 281-342)."""
+
+    @pytest.mark.asyncio
+    async def test_with_event_loop(self, mock_db, service):
+        """Test notification path when event loop exists."""
+        from app.models.bank_statement import MatchStatus
+        tx = SimpleNamespace(
+            id=1, match_status=MatchStatus.unmatched, payment_id=None,
+            company_id=7, amount=Decimal("1000"), processed_date=datetime.now(UTC),
+            bank_transaction_id="BT001", counterparty_name="OOO Test",
+            counterparty_inn="1234567890", counterparty_account="40702810000000000001",
+            purpose="Payment",
+        )
+        invoice = SimpleNamespace(
+            id=10, company_id=7, total="1000", paid_amount="0",
+            status="draft", document_number="INV-001",
+        )
+        call_count = {"n": 0}
+        def mock_get(model, obj_id):
+            call_count["n"] += 1
+            return tx if call_count["n"] == 1 else invoice
+        mock_db.get.side_effect = mock_get
+        mock_db.flush.side_effect = lambda: None
+        mock_db.refresh.side_effect = lambda r: None
+
+        mock_max = MagicMock()
+        mock_max.notify_company_dispatchers = AsyncMock()
+        mock_templates = MagicMock()
+        mock_templates.payment_received.return_value = ("Title", "Body")
+
+        mock_pns = MagicMock()
+        mock_pns.notify_invoice_paid = AsyncMock()
+
+        with patch("app.services.max_messenger_service.max_messenger_service", mock_max), \
+             patch("app.services.max_messenger_service.notification_templates", mock_templates), \
+             patch("app.services.payment_notifications.payment_notification_service", mock_pns):
+            result = service.apply_payment(mock_db, 1, 10)
+
+        assert result is not None
+
+    def test_notification_import_error(self, mock_db, service):
+        """Cover ImportError branch in notifications."""
+        from app.models.bank_statement import MatchStatus
+        tx = SimpleNamespace(
+            id=1, match_status=MatchStatus.unmatched, payment_id=None,
+            company_id=7, amount=Decimal("1000"), processed_date=datetime.now(UTC),
+            bank_transaction_id="BT001", counterparty_name="Test",
+            counterparty_inn="123", counterparty_account="407",
+            purpose="Pay",
+        )
+        invoice = SimpleNamespace(
+            id=10, company_id=7, total="1000", paid_amount="0",
+            status="draft", document_number="INV-001",
+        )
+        call_count = {"n": 0}
+        def mock_get(model, obj_id):
+            call_count["n"] += 1
+            return tx if call_count["n"] == 1 else invoice
+        mock_db.get.side_effect = mock_get
+        mock_db.flush.side_effect = lambda: None
+        mock_db.refresh.side_effect = lambda r: None
+
+        # Make max_messenger_service import fail
+        import sys
+        original = sys.modules.get("app.services.max_messenger_service")
+        sys.modules["app.services.max_messenger_service"] = None
+        try:
+            result = service.apply_payment(mock_db, 1, 10)
+        finally:
+            if original is not None:
+                sys.modules["app.services.max_messenger_service"] = original
+            elif "app.services.max_messenger_service" in sys.modules:
+                del sys.modules["app.services.max_messenger_service"]
+
+        assert result is not None
