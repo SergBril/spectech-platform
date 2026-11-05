@@ -1,12 +1,13 @@
-﻿import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime
+﻿from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.services.notification_service import (
     create_notification,
     get_unread_count,
-    mark_notification_read,
     mark_all_read,
+    mark_notification_read,
 )
 
 
@@ -33,15 +34,13 @@ class TestCreateNotification:
 
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
-        mock_db.refresh = MagicMock(side_effect=lambda n: setattr(n, 'id', 1))
+        mock_db.refresh = MagicMock(side_effect=lambda n: setattr(n, "id", 1))
         mock_db.query = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_user
 
-        with patch('app.services.notification_service.manager') as mock_manager:
+        with patch("app.services.notification_service.manager") as mock_manager:
             mock_manager.broadcast_to_company = AsyncMock()
-            result = await create_notification(
-                db=mock_db, user_id=5, title="Test", body="Body"
-            )
+            await create_notification(db=mock_db, user_id=5, title="Test", body="Body")
 
         mock_db.add.assert_called_once()
         mock_db.commit.assert_called_once()
@@ -60,7 +59,7 @@ class TestCreateNotification:
         mock_db.query = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_user
 
-        with patch('app.services.notification_service.manager') as mock_manager:
+        with patch("app.services.notification_service.manager") as mock_manager:
             mock_manager.broadcast_to_company = AsyncMock()
             await create_notification(db=mock_db, user_id=5, title="Test", body="Body")
 
@@ -77,7 +76,7 @@ class TestCreateNotification:
         mock_db.query = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_user
 
-        with patch('app.services.notification_service.manager') as mock_manager:
+        with patch("app.services.notification_service.manager") as mock_manager:
             mock_manager.broadcast_to_company = AsyncMock()
             await create_notification(
                 db=mock_db, user_id=5, title="Alert", body="!", alert_id=42

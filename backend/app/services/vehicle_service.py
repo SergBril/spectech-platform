@@ -21,6 +21,12 @@ def save_vehicle_attributes(
     db: Session, vehicle_id: int, subcategory_id: int | None, attributes: dict | None
 ) -> None:
     """Сохраняет динамические атрибуты для техники."""
+    from app.models.catalog import (
+        EquipmentAttributeDefinition,
+        EquipmentAttributeOption,
+        EquipmentAttributeValue,
+    )
+
     if not attributes or not subcategory_id:
         return
 
@@ -167,7 +173,9 @@ def log_driver_assignment(
     user_id: int | None,
 ):
     """Записать историю назначения водителя."""
-    from datetime import datetime
+    from datetime import UTC, datetime
+
+    from app.models.contractor import DriverAssignmentLog
 
     # Закрываем предыдущее назначение (если был старый водитель)
     if old_driver_id and old_driver_id != new_driver_id:
@@ -195,6 +203,8 @@ def log_driver_assignment(
 
 def clear_vehicle_attributes(db: Session, vehicle_id: int) -> None:
     """Удаляет все значения атрибутов для техники (перед пересохранением)."""
+    from app.models.catalog import EquipmentAttributeValue
+
     db.query(EquipmentAttributeValue).filter(
         EquipmentAttributeValue.vehicle_id == vehicle_id
     ).delete()

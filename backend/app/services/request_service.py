@@ -640,7 +640,9 @@ class RequestService:
                     vehicle_id=assignment.vehicle_id,
                     operator_id=getattr(vehicle, "current_driver_id", None),
                     shift_date=(
-                        request.planned_start.date() if request.planned_start else date.today()
+                        request.planned_start.date()
+                        if request.planned_start
+                        else date.today()
                     ),
                     status=ShiftTaskStatus.draft,
                     company_id=request.company_id,

@@ -140,9 +140,9 @@ def start_scheduler() -> None:
         from sqlalchemy import select
 
         from app.core.db import SessionLocal
-        from app.models.user_company import UserCompany
-        from app.models.shift import ShiftFuelEntry, ShiftTask
         from app.models.catalog import Vehicle
+        from app.models.shift import ShiftFuelEntry, ShiftTask
+        from app.models.user_company import UserCompany
         from app.services.alert_service import send_alert_email, send_telegram_alert
 
         yesterday = date_type.today() - timedelta(days=1)
@@ -224,9 +224,9 @@ def start_scheduler() -> None:
         from datetime import timedelta
 
         from app.core.db import SessionLocal
+        from app.models.catalog import Vehicle
         from app.models.finance import Act
         from app.models.shift import ShiftTask
-        from app.models.catalog import Vehicle
 
         today = date_type.today()
         if today.day != 1:
@@ -320,8 +320,8 @@ def start_scheduler() -> None:
         from sqlalchemy import select
 
         from app.core.db import SessionLocal
-        from app.models.user_company import UserCompany
         from app.models.finance import Act
+        from app.models.user_company import UserCompany
         from app.services.diadoc_service import diadoc_service
         from app.services.fcm_service import fcm_service
 
@@ -413,8 +413,8 @@ def start_scheduler() -> None:
         from sqlalchemy import select
 
         from app.core.db import SessionLocal
-        from app.models.user_company import UserCompany
         from app.models.finance import Act
+        from app.models.user_company import UserCompany
         from app.services.fcm_service import fcm_service
 
         today = date_type.today()
@@ -539,9 +539,9 @@ def start_scheduler() -> None:
         from sqlalchemy import select
 
         from app.core.db import SessionLocal
-        from app.models.user_company import UserCompany
         from app.models.bank_statement import BankTransaction
         from app.models.finance import Act
+        from app.models.user_company import UserCompany
 
         with SessionLocal() as db:
             try:
@@ -641,8 +641,8 @@ def start_scheduler() -> None:
         from sqlalchemy import select
 
         from app.core.db import SessionLocal
-        from app.models.telematics import EngineHoursLog
         from app.models.catalog import Vehicle
+        from app.models.telematics import EngineHoursLog
 
         db = SessionLocal()
         try:

@@ -12,8 +12,8 @@ from app.models.company import Company
 from app.models.contractor import Contractor
 from app.models.dispatch import Request as DispatchRequest
 from app.models.dispatch import RequestAssignment, RequestStatusLog
-from app.models.review import Review
 from app.models.finance import Payout
+from app.models.review import Review
 
 logger = logging.getLogger("spectech.public")
 
@@ -38,6 +38,8 @@ class PublicCompanyRead(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
+from datetime import UTC
 
 from app.schemas.public import (
     PublicRequestResponse,
@@ -746,13 +748,22 @@ class PublicService:
                 status_code=409, detail="Already responded with this vehicle"
             )
 
-        from datetime import datetime as dt, timezone
+        from datetime import datetime as dt
+
         assignment = RequestAssignment(
             request_id=request_id,
             vehicle_id=vehicle_id,
             operator_id=getattr(current_user, "id", None),
-            planned_start=request.planned_start if hasattr(request, "planned_start") and request.planned_start else dt.now(timezone.utc),
-            planned_end=request.planned_end if hasattr(request, "planned_end") and request.planned_end else dt.now(timezone.utc),
+            planned_start=(
+                request.planned_start
+                if hasattr(request, "planned_start") and request.planned_start
+                else dt.now(UTC)
+            ),
+            planned_end=(
+                request.planned_end
+                if hasattr(request, "planned_end") and request.planned_end
+                else dt.now(UTC)
+            ),
             status="pending_approval",
         )
         db.add(assignment)
@@ -897,9 +908,7 @@ class PublicService:
             ws.cell(row=row_idx, column=2, value=period)
             ws.cell(row=row_idx, column=3, value=f"#{request.id}" if request else "")
             ws.cell(row=row_idx, column=4, value=vehicle.name if vehicle else "")
-            ws.cell(
-                row=row_idx, column=5, value=getattr(p, "owner_name", "") or ""
-            )
+            ws.cell(row=row_idx, column=5, value=getattr(p, "owner_name", "") or "")
             ws.cell(row=row_idx, column=6, value=amount)
             ws.cell(row=row_idx, column=7, value=commission)
             ws.cell(row=row_idx, column=8, value=net)

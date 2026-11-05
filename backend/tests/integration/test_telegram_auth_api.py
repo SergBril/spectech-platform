@@ -1,10 +1,6 @@
-"""Интеграционные тесты Telegram-привязки пользователя."""
+﻿"""Интеграционные тесты Telegram-привязки пользователя."""
 
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
-
-from app.models.auth import User
 
 
 class TestTelegramAuthAPI:
@@ -28,9 +24,7 @@ class TestTelegramAuthAPI:
         db_session.refresh(admin_user)
         assert admin_user.telegram_link_code == data["code"]
 
-    def test_generate_link_code_regenerates(
-        self, auth_client, db_session, admin_user
-    ):
+    def test_generate_link_code_regenerates(self, auth_client, db_session, admin_user):
         """✅ Повторный вызов генерирует новый код."""
         # Первый код
         resp1 = auth_client.post("/api/v1/auth/me/telegram-link-code")
@@ -46,9 +40,7 @@ class TestTelegramAuthAPI:
         db_session.refresh(admin_user)
         assert admin_user.telegram_link_code == code2
 
-    def test_get_telegram_status_unlinked(
-        self, auth_client
-    ):
+    def test_get_telegram_status_unlinked(self, auth_client):
         """✅ Показывает статус 'не привязан' для нового пользователя."""
         response = auth_client.get("/api/v1/auth/me/telegram-status")
 
@@ -58,22 +50,18 @@ class TestTelegramAuthAPI:
         assert "linked" in data
         assert data["linked"] is False
 
-    def test_unlink_telegram_when_not_linked(
-        self, auth_client
-    ):
+    def test_unlink_telegram_when_not_linked(self, auth_client):
         """❌ Отвязка без привязки возвращает 400."""
         response = auth_client.delete("/api/v1/auth/me/telegram-link")
         assert response.status_code == 400
         assert "not linked" in response.json()["detail"].lower()
 
-    def test_telegram_link_flow(
-        self, auth_client, db_session, admin_user
-    ):
+    def test_telegram_link_flow(self, auth_client, db_session, admin_user):
         """✅ Полный flow: генерация → привязка → статус → отвязка."""
         # 1. Генерируем код
         resp1 = auth_client.post("/api/v1/auth/me/telegram-link-code")
         assert resp1.status_code == 200
-        code = resp1.json()["code"]
+        _code = resp1.json()["code"]
 
         # 2. Имитируем привязку (как бот сделал бы)
         admin_user.telegram_id = 123456789
@@ -95,16 +83,14 @@ class TestTelegramAuthAPI:
         db_session.refresh(admin_user)
         assert admin_user.telegram_id is None
 
-    def test_endpoints_require_auth(
-        self, client: TestClient
-    ):
+    def test_endpoints_require_auth(self, client: TestClient):
         """❌ Все endpoints требуют авторизацию."""
         endpoints = [
             ("POST", "/api/v1/auth/me/telegram-link-code"),
             ("GET", "/api/v1/auth/me/telegram-status"),
             ("DELETE", "/api/v1/auth/me/telegram-link"),
         ]
-        
+
         for method, url in endpoints:
             if method == "POST":
                 resp = client.post(url)
@@ -112,5 +98,5 @@ class TestTelegramAuthAPI:
                 resp = client.get(url)
             else:
                 resp = client.delete(url)
-            
+
             assert resp.status_code in (401, 422), f"{method} {url} should require auth"

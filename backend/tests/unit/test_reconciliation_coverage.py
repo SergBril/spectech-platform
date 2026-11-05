@@ -1,7 +1,9 @@
 """Coverage tests for telematics reconciliation service."""
-import pytest
-from unittest.mock import MagicMock
+
 from datetime import datetime
+from unittest.mock import MagicMock
+
+import pytest
 
 
 class TestReconciliationService:
@@ -14,6 +16,7 @@ class TestReconciliationService:
     @pytest.fixture
     def service(self):
         from app.services.telematics.reconciliation_service import ReconciliationService
+
         return ReconciliationService()
 
     def test_reconcile_shift_task_returns_result_or_none(self, service, mock_db):
@@ -23,7 +26,7 @@ class TestReconciliationService:
         mock_query.filter.return_value.first.return_value = None
         result = service.reconcile_shift_task(mock_db, shift_task_id=999)
         # May return None or create new record - either way code path covered
-        assert result is None or hasattr(result, 'id')
+        assert result is None or hasattr(result, "id")
 
     def test_calculate_diff_percent_normal(self, service):
         result = service._calculate_diff_percent(100.0, 95.0)
@@ -53,7 +56,7 @@ class TestReconciliationService:
 
     def test_calculate_odometer_empty(self, service):
         result = service._calculate_odometer([])
-        assert isinstance(result, (int, float))
+        assert isinstance(result, int | float)
         assert result == 0
 
     def test_calculate_fuel_used_empty(self, service):
@@ -80,7 +83,7 @@ class TestReconciliationService:
         p2.latitude = 55.7560
         p2.longitude = 37.6175
         result = service._calculate_odometer([p1, p2])
-        assert isinstance(result, (int, float))
+        assert isinstance(result, int | float)
 
     def test_calculate_fuel_used_with_points(self, service):
         p1 = MagicMock()

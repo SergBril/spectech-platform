@@ -1,7 +1,7 @@
-﻿import pytest
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
-from datetime import datetime, UTC
-from decimal import Decimal
+﻿from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.services.request_service import RequestService, RequestServiceError
 
@@ -42,9 +42,14 @@ class TestCreateRequest:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
 
-        with patch('app.services.request_service.Request') as MockRequest, \
-             patch('app.services.request_service.RequestStatusLog') as MockLog, \
-             patch('app.services.request_service.create_notification', new_callable=AsyncMock):
+        with (
+            patch("app.services.request_service.Request") as MockRequest,
+            patch("app.services.request_service.RequestStatusLog"),
+            patch(
+                "app.services.request_service.create_notification",
+                new_callable=AsyncMock,
+            ),
+        ):
             MockRequest.return_value = mock_request
             result = await service.create_request(
                 payload_data={
@@ -99,12 +104,12 @@ class TestApproveResponse:
         mock_vehicle.name = "CAT 320"
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'Request':
+            name = getattr(model, "__name__", str(model))
+            if name == "Request":
                 return mock_request
-            if name == 'RequestAssignment':
+            if name == "RequestAssignment":
                 return mock_assignment
-            if name == 'Vehicle':
+            if name == "Vehicle":
                 return mock_vehicle
             return None
 
@@ -114,8 +119,13 @@ class TestApproveResponse:
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
 
-        with patch('app.services.request_service.ShiftTask') as MockShiftTask, \
-             patch('app.services.request_service.create_notification', new_callable=AsyncMock):
+        with (
+            patch("app.services.request_service.ShiftTask") as MockShiftTask,
+            patch(
+                "app.services.request_service.create_notification",
+                new_callable=AsyncMock,
+            ),
+        ):
             mock_shift = MagicMock()
             mock_shift.id = 99
             MockShiftTask.return_value = mock_shift
@@ -154,8 +164,8 @@ class TestApproveResponse:
         mock_assignment.status = "approved"
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'Request':
+            name = getattr(model, "__name__", str(model))
+            if name == "Request":
                 return mock_request
             return mock_assignment
 
@@ -187,8 +197,8 @@ class TestRejectResponse:
         mock_assignment.assigned_by = 5
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'Request':
+            name = getattr(model, "__name__", str(model))
+            if name == "Request":
                 return mock_request
             return mock_assignment
 
@@ -196,7 +206,9 @@ class TestRejectResponse:
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
 
-        with patch('app.services.request_service.create_notification', new_callable=AsyncMock):
+        with patch(
+            "app.services.request_service.create_notification", new_callable=AsyncMock
+        ):
             result = await service.reject_response(
                 request_id=1,
                 assignment_id=100,
@@ -217,8 +229,8 @@ class TestRejectResponse:
         mock_assignment.request_id = 1
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'Request':
+            name = getattr(model, "__name__", str(model))
+            if name == "Request":
                 return mock_request
             return mock_assignment
 
@@ -319,10 +331,10 @@ class TestGetRequestTimeline:
         mock_user.email = "test@test.com"
 
         def get_side_effect(model, id):
-            name = getattr(model, '__name__', str(model))
-            if name == 'Request':
+            name = getattr(model, "__name__", str(model))
+            if name == "Request":
                 return mock_request
-            if name in ('User', 'UserModel'):
+            if name in ("User", "UserModel"):
                 return mock_user
             return mock_user
 

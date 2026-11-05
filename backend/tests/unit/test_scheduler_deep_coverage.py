@@ -1,6 +1,8 @@
 """Deep coverage tests for scheduler.start_scheduler."""
+
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 class TestStartSchedulerDeep:
@@ -8,7 +10,8 @@ class TestStartSchedulerDeep:
 
     @patch("app.tasks.scheduler.settings")
     def test_start_scheduler_disabled(self, mock_settings):
-        from app.tasks.scheduler import start_scheduler, scheduler
+        from app.tasks.scheduler import scheduler, start_scheduler
+
         mock_settings.SCHEDULER_ENABLED = False
         if scheduler.running:
             scheduler.shutdown(wait=False)
@@ -17,7 +20,8 @@ class TestStartSchedulerDeep:
 
     @patch("app.tasks.scheduler.settings")
     def test_start_scheduler_already_running(self, mock_settings):
-        from app.tasks.scheduler import start_scheduler, scheduler
+        from app.tasks.scheduler import scheduler, start_scheduler
+
         mock_settings.SCHEDULER_ENABLED = True
         original_state = scheduler.state
         try:
@@ -29,7 +33,8 @@ class TestStartSchedulerDeep:
     @patch("app.tasks.scheduler.settings")
     @pytest.mark.asyncio
     async def test_start_scheduler_registers_all_jobs(self, mock_settings):
-        from app.tasks.scheduler import start_scheduler, stop_scheduler, scheduler
+        from app.tasks.scheduler import scheduler, start_scheduler, stop_scheduler
+
         mock_settings.SCHEDULER_ENABLED = True
         mock_settings.SCHEDULER_INTERVAL_MINUTES = 60
         if scheduler.running:
@@ -47,6 +52,7 @@ class TestStartSchedulerDeep:
 
     def test_get_scheduler_status_structure(self):
         from app.tasks.scheduler import get_scheduler_status
+
         status = get_scheduler_status()
         assert isinstance(status, dict)
         assert len(status) > 0
@@ -55,6 +61,7 @@ class TestStartSchedulerDeep:
     @pytest.mark.asyncio
     async def test_auto_escalate_task_success(self, mock_session_local):
         from app.tasks.scheduler import auto_escalate_disputes_task
+
         mock_db = MagicMock()
         mock_session_local.return_value = mock_db
         with patch("app.tasks.scheduler.dispute_service") as mock_dispute:
@@ -66,6 +73,7 @@ class TestStartSchedulerDeep:
     @pytest.mark.asyncio
     async def test_auto_escalate_task_exception(self, mock_session_local):
         from app.tasks.scheduler import auto_escalate_disputes_task
+
         mock_db = MagicMock()
         mock_session_local.return_value = mock_db
         with patch("app.tasks.scheduler.dispute_service") as mock_dispute:

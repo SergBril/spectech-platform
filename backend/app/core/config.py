@@ -127,9 +127,7 @@ class Settings(BaseSettings):
     MAX_ENABLED: bool = Field(
         default=False, description="Enable MAX Bot API notifications"
     )
-    MAX_BOT_TOKEN: str = Field(
-        default="", description="MAX Bot API token"
-    )
+    MAX_BOT_TOKEN: str = Field(default="", description="MAX Bot API token")
     MAX_DEFAULT_CHAT_ID: str = Field(
         default="", description="Default MAX chat/group ID for alerts"
     )

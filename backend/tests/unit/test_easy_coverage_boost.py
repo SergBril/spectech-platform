@@ -1,6 +1,4 @@
 """Quick coverage boost: cover 1-miss modules."""
-import pytest
-from unittest.mock import patch, MagicMock
 
 
 class TestOneMissModules:
@@ -8,6 +6,7 @@ class TestOneMissModules:
 
     def test_review_model_repr(self):
         from app.models.review import Review
+
         r = Review.__new__(Review)
         # Trigger __repr__ or any uncovered dunder
         try:
@@ -17,6 +16,7 @@ class TestOneMissModules:
 
     def test_config_edge_case(self):
         from app.core.config import settings
+
         # Access rarely-used setting to cover fallback line
         _ = getattr(settings, "NONEXISTENT_SETTING", None)
 
@@ -34,6 +34,7 @@ class TestOneMissModules:
 
     def test_notification_service_edge(self):
         from app.services.notification_service import create_notification
+
         try:
             create_notification(user_id=None, message=None)
         except Exception:
@@ -41,6 +42,7 @@ class TestOneMissModules:
 
     def test_user_company_model(self):
         from app.models.user_company import UserCompany
+
         uc = UserCompany.__new__(UserCompany)
         try:
             repr(uc)
@@ -49,7 +51,10 @@ class TestOneMissModules:
 
     def test_marketplace_model(self):
         import app.models.marketplace as mp
-        models = [getattr(mp, x) for x in dir(mp) if hasattr(getattr(mp, x), "__table__")]
+
+        models = [
+            getattr(mp, x) for x in dir(mp) if hasattr(getattr(mp, x), "__table__")
+        ]
         mr = models[0].__new__(models[0]) if models else None
         try:
             repr(mr)
@@ -62,6 +67,7 @@ class TestOneMissModules:
 
     def test_logging_config_edge(self):
         from app.core.logging_config import setup_logging
+
         # Call with edge case to cover uncovered branch
         try:
             setup_logging(debug=True)
@@ -70,8 +76,9 @@ class TestOneMissModules:
 
     def test_translations_missing_key(self):
         from app.services.translations import translate_unit
+
         try:
-            result = translate_unit("nonexistent_key_xyz")
+            translate_unit("nonexistent_key_xyz")
         except Exception:
             pass
 
@@ -93,13 +100,19 @@ class TestOneMissModules:
 
     def test_constants_edge(self):
         from app.core.constants import TaxSystem
+
         # Access all enum values to cover any uncovered branch
         for ts in TaxSystem:
             _ = ts.value
 
     def test_chat_service_edge(self):
         import app.services.chat_service as cs
-        funcs = [getattr(cs, x) for x in dir(cs) if callable(getattr(cs, x)) and not x.startswith("_")]
+
+        funcs = [
+            getattr(cs, x)
+            for x in dir(cs)
+            if callable(getattr(cs, x)) and not x.startswith("_")
+        ]
         try:
             if funcs:
                 funcs[0](None)
@@ -108,6 +121,7 @@ class TestOneMissModules:
 
     def test_gps_manual_provider(self):
         from app.services.gps_providers.manual import ManualAdapter
+
         p = ManualAdapter.__new__(ManualAdapter)
         try:
             p.get_last_position()
@@ -116,6 +130,7 @@ class TestOneMissModules:
 
     def test_gps_factory_edge(self):
         import app.services.gps_providers.factory as gf
+
         adapters = {x: getattr(gf, x) for x in dir(gf) if "Adapter" in x}
         try:
             list(adapters.values())[0]({})

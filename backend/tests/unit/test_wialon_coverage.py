@@ -1,6 +1,8 @@
 """Tests for WialonAdapter GPS provider with mocked httpx."""
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 
 
 @pytest.mark.asyncio
@@ -9,6 +11,7 @@ class TestWialonAdapterAsync:
 
     def _make_adapter(self):
         from app.services.gps_providers.wialon import WialonAdapter
+
         config = {
             "base_url": "https://test.wialon.com",
             "username": "test_user",
@@ -54,7 +57,7 @@ class TestWialonAdapterAsync:
         mock_client_cls.return_value = mock_client
 
         try:
-            result = await adapter.get_last_position()
+            await adapter.get_last_position()
         except Exception:
             pass
 
@@ -74,7 +77,7 @@ class TestWialonAdapterAsync:
         mock_client_cls.return_value = mock_client
 
         try:
-            result = await adapter.get_all_positions()
+            await adapter.get_all_positions()
         except Exception:
             pass
 
@@ -93,8 +96,9 @@ class TestWialonAdapterAsync:
         mock_client_cls.return_value = mock_client
 
         try:
-            from datetime import datetime, UTC
-            result = await adapter.get_track(
+            from datetime import UTC, datetime
+
+            await adapter.get_track(
                 start=datetime(2026, 1, 1, tzinfo=UTC),
                 end=datetime(2026, 1, 2, tzinfo=UTC),
             )
@@ -114,7 +118,7 @@ class TestWialonAdapterAsync:
         mock_client_cls.return_value = mock_client
 
         try:
-            result = await adapter.test_connection()
+            await adapter.test_connection()
         except Exception:
             pass
 
@@ -131,7 +135,7 @@ class TestWialonAdapterAsync:
         mock_client_cls.return_value = mock_client
 
         try:
-            result = await adapter.test_connection()
+            await adapter.test_connection()
         except Exception:
             pass
 
@@ -148,7 +152,7 @@ class TestWialonAdapterAsync:
         mock_client_cls.return_value = mock_client
 
         try:
-            result = await adapter._api_call(mock_client, "/test", {})
+            await adapter._api_call(mock_client, "/test", {})
         except Exception:
             pass
 

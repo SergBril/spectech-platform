@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Интеграция с API топливных карт и АЗС."""
 
 import logging
