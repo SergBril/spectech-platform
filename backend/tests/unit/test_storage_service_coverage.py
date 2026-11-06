@@ -205,3 +205,23 @@ class TestUploadBytesWithMetadata:
              patch.object(storage_service, "ensure_bucket_exists"):
             result = storage_service.upload_bytes_with_metadata(b"pdf", "doc.pdf")
         assert result["size"] == 3
+
+
+
+class TestGetS3Client:
+    """Cover _get_s3_client (line 28)."""
+
+    def test_returns_boto3_client(self):
+        from app.services.storage_service import _get_s3_client
+        with patch("app.services.storage_service.boto3") as mock_boto3:
+            mock_client = MagicMock()
+            mock_boto3.client.return_value = mock_client
+            result = _get_s3_client()
+        assert result == mock_client
+        mock_boto3.client.assert_called_once_with(
+            "s3",
+            endpoint_url="http://localhost:9000",
+            aws_access_key_id="minioadmin",
+            aws_secret_access_key="minioadmin",
+            region_name="ru-central1",
+        )
