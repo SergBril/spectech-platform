@@ -1,0 +1,132 @@
+"""Coverage tests for audit_decorator."""
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+
+class TestAuditLogDecorator:
+    """Cover audit_log decorator (lines 9-61)."""
+
+    @pytest.mark.asyncio
+    async def test_sync_func_with_audit(self):
+        from app.services.audit_decorator import audit_log
+
+        @audit_log("create", "vehicle")
+        def create_vehicle(db=None, current_user=None, request=None):
+            return {"id": 42, "name": "KAMAZ"}
+
+        db = MagicMock()
+        user = SimpleNamespace(id=1)
+        request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+
+        with patch("app.services.audit_service.log_action") as mock_log:
+            result = create_vehicle(db=db, current_user=user, request=request)
+
+        assert result["id"] == 42
+        mock_log.assert_called_once()
+        call_kwargs = mock_log.call_args[1]
+        assert call_kwargs["resource_id"] == 42
+        assert call_kwargs["ip_address"] == "127.0.0.1"
+
+    @pytest.mark.asyncio
+    async def test_async_func_with_audit(self):
+        from app.services.audit_decorator import audit_log
+
+        @audit_log("update", "user")
+        async def update_user(db=None, current_user=None, request=None):
+            return {"id": 7}
+
+        db = MagicMock()
+        user = SimpleNamespace(id=1)
+
+        with patch("app.services.audit_service.log_action") as mock_log:
+            result = await update_user(db=db, current_user=user)
+
+        assert result["id"] == 7
+        mock_log.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_no_db_skips_audit(self):
+        from app.services.audit_decorator import audit_log
+
+        @audit_log("test", "resource")
+        def my_func(db=None, current_user=None):
+            return "ok"
+
+        result = my_func(db=None, current_user=None)
+        assert result == "ok"
+
+    @pytest.mark.asyncio
+    async def test_no_user_skips_audit(self):
+        from app.services.audit_decorator import audit_log
+
+        @audit_log("test", "resource")
+        def my_func(db=None, current_user=None):
+            return "ok"
+
+        db = MagicMock()
+        result = my_func(db=db, current_user=None)
+        assert result == "ok"
+
+    @pytest.mark.asyncio
+    async def test_result_without_id(self):
+        from app.services.audit_decorator import audit_log
+
+        @audit_log("list", "vehicle")
+        def list_vehicles(db=None, current_user=None):
+            return [{"id": 1}, {"id": 2}]
+
+        db = MagicMock()
+        user = SimpleNamespace(id=1)
+
+        with patch("app.services.audit_service.log_action") as mock_log:
+            result = list_vehicles(db=db, current_user=user)
+
+        assert len(result) == 2
+        call_kwargs = mock_log.call_args[1]
+        assert call_kwargs["resource_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_audit_exception_swallowed(self):
+        from app.services.audit_decorator import audit_log
+
+        @audit_log("test", "resource")
+        def my_func(db=None, current_user=None):
+            return {"id": 1}
+
+        db = MagicMock()
+        user = SimpleNamespace(id=1)
+
+        with patch("app.services.audit_service.log_action", side_effect=Exception("DB fail")):
+            result = my_func(db=db, current_user=user)
+
+        assert result["id"] == 1  # Function still returns result
+
+    @pytest.mark.asyncio
+    async def test_no_request_ip_is_none(self):
+        from app.services.audit_decorator import audit_log
+
+        @audit_log("test", "resource")
+        def my_func(db=None, current_user=None, request=None):
+            return {"id": 1}
+
+        db = MagicMock()
+        user = SimpleNamespace(id=1)
+
+        with patch("app.services.audit_service.log_action") as mock_log:
+            my_func(db=db, current_user=user, request=None)
+
+        call_kwargs = mock_log.call_args[1]
+        assert call_kwargs["ip_address"] is None
+
+    @pytest.mark.asyncio
+    async def test_preserves_function_metadata(self):
+        from app.services.audit_decorator import audit_log
+
+        @audit_log("test", "resource")
+        def my_documented_func():
+            """My docstring."""
+            pass
+
+        assert my_documented_func.__name__ == "my_documented_func"
