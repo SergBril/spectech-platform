@@ -273,7 +273,10 @@ class TestRemainingBranches:
             att = mock_send.call_args[1]["attachments"]
             assert att is not None
         finally:
-            os.unlink(tmpf.name)
+            try:
+                os.unlink(tmpf.name)
+            except FileNotFoundError:
+                pass  # Already cleaned up by send_payout_approved
 
     def test_payout_approved_pdf_file_missing(self, service):
         """Cover lines 548-551: PDF file path but file missing."""
