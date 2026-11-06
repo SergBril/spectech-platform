@@ -14,7 +14,7 @@ async def check_and_notify_idle_vehicles(
 ):
     """Проверить простаивающую технику и отправить уведомления."""
     from app.models.shift import ShiftTask
-    from app.models.vehicle import Vehicle
+    from app.models.catalog import Vehicle
 
     vehicles = (
         db.execute(select(Vehicle).where(Vehicle.company_id == company_id))
@@ -53,6 +53,7 @@ async def check_and_notify_conflicts(
 ):
     """Проверить конфликты расписания (двойное назначение)."""
 
+    from app.models.catalog import Vehicle
     from app.models.shift import ShiftTask
 
     # Drivers with multiple shifts on same date
@@ -85,7 +86,8 @@ async def send_alert_email(company_id: int, subject: str, body: str, db: Session
 
     # Send FCM push to company dispatchers
     try:
-        from app.models.auth import User, UserCompany
+        from app.models.auth import User
+        from app.models.user_company import UserCompany
         from app.services.fcm_service import fcm_service
 
         dispatcher_ids = (
