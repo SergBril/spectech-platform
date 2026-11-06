@@ -411,3 +411,34 @@ class TestUpdateVehicleExtra:
             update_vehicle(mock_db, vehicle_id=1,
                           update_data={"id_value": "DUP"},
                           attributes=None, company_id=7, user_id=1)
+
+
+
+class TestFinalTwoLines:
+    """Cover last 2 uncovered lines."""
+
+    def test_number_value_error_branch(self, mock_db):
+        """Cover line 57: except TypeError/ValueError sets value_text."""
+        from app.services.vehicle_service import save_vehicle_attributes
+        attr_def = MagicMock()
+        attr_def.id = 1
+        attr_def.data_type = "number"
+        mock_db.query.return_value.filter.return_value.first.return_value = attr_def
+        # Use a dict as value - float(dict) raises TypeError
+        save_vehicle_attributes(mock_db, vehicle_id=1, subcategory_id=10, attributes={"weight": {"bad": True}})
+        mock_db.add.assert_called()
+        # Verify value_text was set (not value_number)
+        call_args = mock_db.add.call_args
+        added_obj = call_args[0][0]
+        assert added_obj.value_text is not None
+
+    def test_create_invalid_subcategory_level(self, mock_db):
+        """Cover line 235: subcategory exists but level != 2."""
+        from app.services.vehicle_service import create_vehicle, VehicleServiceError
+        sub = MagicMock()
+        sub.level = 1  # Wrong level!
+        mock_db.scalar.return_value = None
+        mock_db.get.return_value = sub
+
+        with pytest.raises(VehicleServiceError, match="Invalid subcategory"):
+            create_vehicle(mock_db, {"name": "Test", "subcategory_id": 10}, company_id=7)
