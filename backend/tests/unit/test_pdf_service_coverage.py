@@ -93,8 +93,8 @@ class TestGenerateInvoicePdf:
         invoice = SimpleNamespace(document_number="INV-001", items=[], subtotal=1000, total=1200, vat_amount=200, vat_rate=20, tax_system="osno")
         mock_html = MagicMock()
         mock_html.write_pdf.return_value = b"%PDF-invoice"
-        with patch("app.services.pdf_service.HTML") as MockHTML, \
-             patch("app.services.pdf_service.Environment") as MockEnv:
+        with patch("weasyprint.HTML") as MockHTML, \
+             patch("jinja2.Environment") as MockEnv:
             MockHTML.return_value = mock_html
             MockEnv.return_value.get_template.return_value.render.return_value = "<html></html>"
             result = generate_invoice_pdf(invoice)
@@ -104,7 +104,7 @@ class TestGenerateInvoicePdf:
         from app.services.pdf_service import generate_invoice_pdf
         invoice = SimpleNamespace(document_number="INV-001", items=[], subtotal=1000, total=1200, vat_amount=200, vat_rate=20, tax_system="osno")
         with patch.dict("sys.modules", {"weasyprint": None}):
-            with patch("app.services.pdf_service.Environment") as MockEnv:
+            with patch("jinja2.Environment") as MockEnv:
                 MockEnv.return_value.get_template.return_value.render.return_value = "<html>test</html>"
                 result = generate_invoice_pdf(invoice)
         assert b"<html>test</html>" == result
@@ -126,8 +126,8 @@ class TestGenerateActPdf:
         act = SimpleNamespace(document_number="ACT-001", total_amount=5000, tax_system="osno", vat_rate=20, is_vat_included=True)
         mock_html = MagicMock()
         mock_html.write_pdf.return_value = b"%PDF-act"
-        with patch("app.services.pdf_service.HTML") as MockHTML, \
-             patch("app.services.pdf_service.Environment") as MockEnv:
+        with patch("weasyprint.HTML") as MockHTML, \
+             patch("jinja2.Environment") as MockEnv:
             MockHTML.return_value = mock_html
             MockEnv.return_value.get_template.return_value.render.return_value = "<html></html>"
             result = generate_act_pdf(act)
@@ -158,7 +158,7 @@ class TestGeneratePayoutPdf:
 
     def test_error_returns_empty(self):
         from app.services.pdf_service import generate_payout_pdf
-        with patch("app.services.pdf_service.FPDF", side_effect=Exception("no fpdf")):
+        with patch("fpdf.FPDF", side_effect=Exception("no fpdf")):
             result = generate_payout_pdf(SimpleNamespace())
         assert result == b""
 
@@ -171,8 +171,8 @@ class TestGenerateMaintenanceOrderPdf:
         order = {"order_number": "MO-001", "vehicle_name": "KAMAZ", "status": "open", "title": "Oil change", "total_cost": 5000}
         mock_html = MagicMock()
         mock_html.write_pdf.return_value = b"%PDF-mo"
-        with patch("app.services.pdf_service.HTML") as MockHTML, \
-             patch("app.services.pdf_service.Environment") as MockEnv:
+        with patch("weasyprint.HTML") as MockHTML, \
+             patch("jinja2.Environment") as MockEnv:
             MockHTML.return_value = mock_html
             MockEnv.return_value.get_template.return_value.render.return_value = "<html></html>"
             result = generate_maintenance_order_pdf(order)
@@ -195,8 +195,8 @@ class TestGenerateActMaintenancePdf:
         order = {"order_number": "ACT-MO-001", "vehicle_name": "Excavator", "total_cost": 15000}
         mock_html = MagicMock()
         mock_html.write_pdf.return_value = b"%PDF-act-mo"
-        with patch("app.services.pdf_service.HTML") as MockHTML, \
-             patch("app.services.pdf_service.Environment") as MockEnv:
+        with patch("weasyprint.HTML") as MockHTML, \
+             patch("jinja2.Environment") as MockEnv:
             MockHTML.return_value = mock_html
             MockEnv.return_value.get_template.return_value.render.return_value = "<html></html>"
             result = generate_act_maintenance_pdf(order)
