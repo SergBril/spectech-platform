@@ -155,11 +155,12 @@ class TestRecalculateCompanyRating:
         reviews = [SimpleNamespace(rating=5, quality_rating=4, punctuality_rating=5, communication_rating=4),
                    SimpleNamespace(rating=3, quality_rating=3, punctuality_rating=3, communication_rating=3)]
         company = SimpleNamespace(id=7)
-        # db.get(Company, 7) -> company; db.query(Review).filter().all() -> reviews
         mock_db.get.return_value = company
         mock_db.query.return_value.filter.return_value.all.return_value = reviews
         ReviewsService._recalculate_company_rating(mock_db, 7)
-        mock_db.commit.assert_called()
+        # Method sets company attributes; caller is responsible for commit
+        assert company.average_rating is not None
+        assert company.total_reviews == 2
 
     def test_no_company(self, mock_db):
         from app.services.reviews_service import ReviewsService
