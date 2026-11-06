@@ -106,7 +106,7 @@ def open_dispute(
 
         # Получаем ответственного диспетчера (для простоты — первого admin)
         # В реальности нужно использовать role-based assignment
-        dispatcher = db.query(User).filter(User.is_active == True).first()
+        dispatcher = db.query(User).filter(User.status == "active").first()
 
         if dispatcher:
             dispatcher_email = dispatcher.email
@@ -188,8 +188,8 @@ def escalate_dispute(
 
             # Получаем менеджера (для простоты — второго admin)
             manager = (
-                db.query(User).filter(User.is_active == True).offset(1).first()
-            ) or (db.query(User).filter(User.is_active == True).first())
+                db.query(User).filter(User.status == "active").offset(1).first()
+            ) or (db.query(User).filter(User.status == "active").first())
 
             if manager:
                 manager_email = manager.email
