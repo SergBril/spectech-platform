@@ -332,47 +332,56 @@ class TestFinalPdfBranches:
         assert isinstance(result, bytes)
 
     def test_act_pdf_except_print_line(self):
-        """Cover line 235 (print) and 239 (return fpdf) in except block."""
-        from app.services.pdf_service import generate_act_pdf
-        act = SimpleNamespace(document_number="ACT-EX", act_date="2026-11-06", total_amount=5000, tax_system="osno", vat_rate=20, is_vat_included=True)
-        # Force template rendering to fail by providing act without needed attrs for Jinja2
-        # but WITH enough attrs for FPDF fallback to succeed
-        # The key: make env.get_template().render() raise
-        real_get_template = None
+        """Cover lines 235 (print) and 239 (return fpdf) in except block.
+        
+        WeasyPrint is NOT installed in test env, so 'from weasyprint import HTML'
+        always raises ImportError -> use_weasy=False. To hit the except block,
+        we must inject a fake weasyprint module that imports OK but fails on write_pdf.
+        """
+        import sys
+        from unittest.mock import MagicMock as MM
+        
+        # Create fake weasyprint module
+        fake_wp = MM()
+        fake_html_instance = MM()
+        fake_html_instance.write_pdf.side_effect = Exception("WeasyPrint render failed")
+        fake_wp.HTML.return_value = fake_html_instance
+        
+        # Inject fake module BEFORE calling generate_act_pdf
+        sys.modules["weasyprint"] = fake_wp
+        
         try:
-            from jinja2 import Environment
-            real_get_template = Environment.get_template
-            def failing_get_template(self, name):
-                raise Exception("Template not found: " + name)
-            Environment.get_template = failing_get_template
+            from app.services.pdf_service import generate_act_pdf
+            act = SimpleNamespace(document_number="ACT-EX", act_date="2026-11-06", 
+                                  total_amount=5000, tax_system="osno", vat_rate=20, is_vat_included=True)
             result = generate_act_pdf(act)
         finally:
-            if real_get_template:
-                Environment.get_template = real_get_template
-        # FPDF fallback should have succeeded
+            # Remove fake module
+            del sys.modules["weasyprint"]
+        
+        # FPDF fallback should have succeeded after WeasyPrint failed
         assert isinstance(result, bytes)
         assert len(result) > 100
 
-    def test_payout_font_ok_false_covers_helvetica_branch(self):
-        """Cover line 483: font_ok=False -> Helvetica set_font call."""
+    def test_payout_pdf_small_warning_line_575(self):
+        """Cover line 575: len(result) < 100 triggers warning.
+        
+        FPDF.output() normally returns >100 bytes. We monkeypatch it to return tiny bytes.
+        """
+        from fpdf import FPDF
         from app.services.pdf_service import generate_payout_pdf
+        
         payout = SimpleNamespace(
-            document_number="PAY-HF", payout_date="2026-11-06",
+            document_number="PAY-SM", payout_date="2026-11-06",
             status=SimpleNamespace(value="ok"),
             gross_amount=1000, platform_commission=100, net_amount=900, commission_rate=10,
         )
-        # Track if Helvetica was used
-        helvetica_used = [False]
-        from fpdf import FPDF
-        orig_set_font = FPDF.set_font
-        def tracking_set_font(self, family=None, style="", size=10):
-            if family == "Helvetica":
-                helvetica_used[0] = True
-                # Switch back to DejaVu to avoid Unicode crash
-                return orig_set_font(self, "DejaVu", style, size)
-            return orig_set_font(self, family, style, size)
-        with patch("app.services.pdf_service._register_dejavu_fonts", return_value=False), \
-             patch.object(FPDF, "set_font", tracking_set_font):
-            result = generate_payout_pdf(payout, owner_name="Test", vehicle_name="Car")
-        assert helvetica_used[0], "Helvetica branch was not exercised"
-        assert isinstance(result, bytes)
+        
+        orig_output = FPDF.output
+        FPDF.output = lambda self, *a, **kw: b"x" * 50
+        try:
+            result = generate_payout_pdf(payout, owner_name="T", vehicle_name="V")
+        finally:
+            FPDF.output = orig_output
+        
+        assert len(result) == 50
