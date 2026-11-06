@@ -118,19 +118,25 @@ class TestNotifyCompanyDispatchers:
     @pytest.mark.asyncio
     async def test_notifies_all(self, service):
         db = MagicMock()
-        db.execute.return_value.scalars.return_value.all.return_value = [1, 2, 3]
-        user = SimpleNamespace(id=1, max_chat_id="chat_1")
-        db.get.return_value = user
-        with patch.object(service, "notify_user", new_callable=AsyncMock, return_value={"status": "sent"}) as mock:
-            results = await service.notify_company_dispatchers(db, 7, "Alert", "Body")
+        # Mock the entire select+execute chain to avoid SQLAlchemy issues with mock UserCompany
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [1, 2, 3]
+        db.execute.return_value = mock_result
+        with patch.object(service, "notify_user", new_callable=AsyncMock, return_value={"status": "sent"}) as mock_notify:
+            # Patch select to return something SQLAlchemy won't reject
+            with patch("app.services.max_messenger_service.select", return_value=MagicMock()):
+                results = await service.notify_company_dispatchers(db, 7, "Alert", "Body")
         assert len(results) == 3
-        assert mock.call_count == 3
+        assert mock_notify.call_count == 3
 
     @pytest.mark.asyncio
     async def test_empty_dispatchers(self, service):
         db = MagicMock()
-        db.execute.return_value.scalars.return_value.all.return_value = []
-        results = await service.notify_company_dispatchers(db, 7, "Alert", "Body")
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        db.execute.return_value = mock_result
+        with patch("app.services.max_messenger_service.select", return_value=MagicMock()):
+            results = await service.notify_company_dispatchers(db, 7, "Alert", "Body")
         assert results == []
 
 
