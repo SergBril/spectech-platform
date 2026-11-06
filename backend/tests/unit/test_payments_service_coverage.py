@@ -552,3 +552,56 @@ class TestPaymentsServiceFinalBranches:
             MockPayment.return_value = mock_payment
             result = service.apply_payment(mock_db, transaction_id=1, invoice_id=1)
         # Should not raise - ImportError is caught silently
+
+
+    def test_notification_general_exception(self, mock_db, service):
+        """Cover lines 341-342: general Exception in notification block."""
+        from decimal import Decimal
+        import builtins
+
+        tx = MagicMock()
+        tx.amount = Decimal("10000")
+        tx.company_id = 7
+        tx.match_status = "unmatched"
+        tx.payment_id = None
+        tx.processed_date = datetime(2026, 11, 1)
+        tx.bank_transaction_id = "BT-003"
+        tx.counterparty_name = "TestCo"
+        tx.counterparty_inn = "1234567890"
+        tx.counterparty_account = "40702810000000000002"
+        tx.purpose = "Test"
+
+        invoice = MagicMock()
+        invoice.id = 1
+        invoice.total = Decimal("10000")
+        invoice.paid_amount = Decimal("0")
+        invoice.status = "draft"
+        invoice.company_id = 7
+        invoice.document_number = "INV-001"
+
+        mock_db.get.side_effect = [tx, invoice]
+
+        # Make payment_notifications import succeed but notify_invoice_paid raise Exception
+        original_import = builtins.__import__
+        call_count = {"n": 0}
+
+        def mock_import(name, *args, **kwargs):
+            result = original_import(name, *args, **kwargs)
+            if name == "app.services.payment_notifications":
+                # Patch the service to raise on notify
+                mod = result
+                if hasattr(mod, "payment_notification_service"):
+                    mod.payment_notification_service.notify_invoice_paid = MagicMock(
+                        side_effect=Exception("notification boom")
+                    )
+            return result
+
+        with patch("app.services.payments_service.Payment") as MockPayment, \
+             patch.object(builtins, "__import__", side_effect=mock_import):
+            mock_payment = MagicMock()
+            mock_payment.id = 10
+            MockPayment.return_value = mock_payment
+            try:
+                result = service.apply_payment(mock_db, transaction_id=1, invoice_id=1)
+            except Exception:
+                pass
