@@ -356,3 +356,44 @@ class TestInit:
         from app.services.gps_providers.wialon import WialonAdapter
         a = WialonAdapter({"api_url": "https://custom.wialon.com/", "login": "u", "password": "p"})
         assert not a.api_url.endswith("/")
+
+
+
+class TestGetTrackEdgeCases:
+    @pytest.mark.asyncio
+    async def test_zero_coords_skipped_in_track(self, adapter):
+        """Cover line 255: continue when lat==0 and lon==0 in get_track."""
+        adapter.token = "tok"
+        units_resp = MagicMock(status_code=200)
+        units_resp.json.return_value = {"items": [{"id": 100}]}
+        msg_resp = MagicMock(status_code=200)
+        msg_resp.json.return_value = {
+            "messages": [{"pos": {"y": 0, "x": 0}, "t": 1700000000, "uid": 100}]
+        }
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = [units_resp, msg_resp]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+            result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_parse_error_in_track(self, adapter):
+        """Cover lines 274-275: except block in get_track parsing."""
+        adapter.token = "tok"
+        units_resp = MagicMock(status_code=200)
+        units_resp.json.return_value = {"items": [{"id": 100}]}
+        msg_resp = MagicMock(status_code=200)
+        msg_resp.json.return_value = {
+            "messages": [{"pos": {"y": "bad", "x": "data"}, "uid": 100}]
+        }
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = [units_resp, msg_resp]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+            result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
+        assert isinstance(result, list)
