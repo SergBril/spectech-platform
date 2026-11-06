@@ -370,11 +370,19 @@ class TestSendEmailExtra:
 
     def test_log_update_to_sent_success(self, service):
         """Cover lines 241-250: successful log update after send."""
-        mock_db = MagicMock()
-        mock_log = _MockEmailLog()
-        mock_db.get.return_value = mock_log
+        shared_log = _MockEmailLog()
         mock_server = _make_mock_smtp()
-        with patch("app.core.db.SessionLocal", return_value=mock_db), \
+
+        def make_session():
+            db = MagicMock()
+            # When add is called, capture the log object
+            def capture_add(obj):
+                obj.id = 1
+            db.add.side_effect = capture_add
+            db.get.return_value = shared_log
+            return db
+
+        with patch("app.core.db.SessionLocal", side_effect=make_session), \
              patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
              patch("app.services.email_service.settings") as ms:
             ms.SMTP_PORT = 587
@@ -385,15 +393,21 @@ class TestSendEmailExtra:
             ms.SMTP_FROM_EMAIL = "t@t.com"
             result = service.send_email(to_email="t@t.com", subject="S", body="B")
         assert result is True
-        # Verify status was updated to sent
-        assert mock_log.status == "sent"
+        assert shared_log.status == "sent"
 
     def test_log_update_to_failed_on_error(self, service):
         """Cover lines 258-267: failed log update after send error."""
-        mock_db = MagicMock()
-        mock_log = _MockEmailLog()
-        mock_db.get.return_value = mock_log
-        with patch("app.core.db.SessionLocal", return_value=mock_db), \
+        shared_log = _MockEmailLog()
+
+        def make_session():
+            db = MagicMock()
+            def capture_add(obj):
+                obj.id = 1
+            db.add.side_effect = capture_add
+            db.get.return_value = shared_log
+            return db
+
+        with patch("app.core.db.SessionLocal", side_effect=make_session), \
              patch("app.services.email_service.smtplib.SMTP", side_effect=Exception("fail")), \
              patch("app.services.email_service.settings") as ms:
             ms.SMTP_PORT = 587
@@ -404,7 +418,7 @@ class TestSendEmailExtra:
             ms.SMTP_FROM_EMAIL = "t@t.com"
             with pytest.raises(Exception):
                 service.send_email(to_email="t@t.com", subject="S", body="B")
-        assert mock_log.status == "failed"
+        assert shared_log.status == "failed"
 
     def test_context_with_invoice_and_act(self, service):
         """Cover invoice_id and act_id extraction from context."""
