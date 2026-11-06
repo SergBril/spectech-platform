@@ -391,7 +391,7 @@ class TestFinalPdfBranches:
 class TestPdfServiceFinalLines:
     """Cover last 2 uncovered lines."""
 
-    def test_generate_act_pdf_no_weasy(self, mock_db):
+    def test_generate_act_pdf_no_weasy(self):
         """Cover line 235: html_content.encode when weasyprint not available."""
         from app.services.pdf_service import generate_act_pdf
         act = MagicMock()
@@ -426,7 +426,7 @@ class TestPdfServiceFinalLines:
         # When use_weasy=False, returns html bytes (not fallback)
         assert isinstance(result, bytes)
 
-    def test_payout_pdf_font_fallback(self, mock_db):
+    def test_payout_pdf_font_fallback(self):
         """Cover line 483: Helvetica fallback when DejaVu fonts not found."""
         from app.services.pdf_service import generate_payout_pdf
         payout = MagicMock()
