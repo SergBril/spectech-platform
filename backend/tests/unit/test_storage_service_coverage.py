@@ -22,33 +22,30 @@ class TestEnsureBucketExists:
     """Cover ensure_bucket_exists (lines 37-51)."""
 
     def test_bucket_exists(self):
-        from app.services.storage_service import ensure_bucket_exists
-        with patch("app.services.storage_service._get_s3_client") as mock_get:
-            s3 = MagicMock()
-            mock_get.return_value = s3
-            s3.head_bucket.return_value = {}
-            ensure_bucket_exists()
-            s3.create_bucket.assert_not_called()
+        from app.services import storage_service
+        s3 = MagicMock()
+        s3.head_bucket.return_value = {}
+        with patch.object(storage_service, "_get_s3_client", return_value=s3):
+            storage_service.ensure_bucket_exists()
+        s3.create_bucket.assert_not_called()
 
     def test_bucket_404_creates(self):
-        from app.services.storage_service import ensure_bucket_exists
-        with patch("app.services.storage_service._get_s3_client") as mock_get:
-            s3 = MagicMock()
-            mock_get.return_value = s3
-            error_response = {"Error": {"Code": "404"}}
-            s3.head_bucket.side_effect = ClientError(error_response, "HeadBucket")
-            ensure_bucket_exists()
-            s3.create_bucket.assert_called_once()
+        from app.services import storage_service
+        s3 = MagicMock()
+        error_response = {"Error": {"Code": "404"}}
+        s3.head_bucket.side_effect = ClientError(error_response, "HeadBucket")
+        with patch.object(storage_service, "_get_s3_client", return_value=s3):
+            storage_service.ensure_bucket_exists()
+        s3.create_bucket.assert_called_once()
 
     def test_other_error_raises(self):
-        from app.services.storage_service import ensure_bucket_exists
-        with patch("app.services.storage_service._get_s3_client") as mock_get:
-            s3 = MagicMock()
-            mock_get.return_value = s3
-            error_response = {"Error": {"Code": "500"}}
-            s3.head_bucket.side_effect = ClientError(error_response, "HeadBucket")
+        from app.services import storage_service
+        s3 = MagicMock()
+        error_response = {"Error": {"Code": "500"}}
+        s3.head_bucket.side_effect = ClientError(error_response, "HeadBucket")
+        with patch.object(storage_service, "_get_s3_client", return_value=s3):
             with pytest.raises(ClientError):
-                ensure_bucket_exists()
+                storage_service.ensure_bucket_exists()
 
 
 class TestUploadFile:
