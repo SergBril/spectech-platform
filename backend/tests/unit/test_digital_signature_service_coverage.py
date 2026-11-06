@@ -6,7 +6,7 @@ import pytest
 
 @pytest.fixture
 def stub_service():
-    with patch("app.services.digital_signature_service.settings") as mock_settings:
+    with patch("app.core.config.settings") as mock_settings:
         mock_settings.SIGNATURE_PROVIDER = "stub"
         from app.services.digital_signature_service import DigitalSignatureService
         return DigitalSignatureService()
@@ -14,7 +14,7 @@ def stub_service():
 
 @pytest.fixture
 def cryptopro_service():
-    with patch("app.services.digital_signature_service.settings") as mock_settings:
+    with patch("app.core.config.settings") as mock_settings:
         mock_settings.SIGNATURE_PROVIDER = "cryptopro"
         mock_settings.CRYPTOPRO_URL = "http://localhost:8080"
         mock_settings.GOSUSLUGI_CLIENT_ID = ""
@@ -25,7 +25,7 @@ def cryptopro_service():
 
 @pytest.fixture
 def gosuslugi_service():
-    with patch("app.services.digital_signature_service.settings") as mock_settings:
+    with patch("app.core.config.settings") as mock_settings:
         mock_settings.SIGNATURE_PROVIDER = "gosuslugi"
         mock_settings.CRYPTOPRO_URL = "http://localhost:8080"
         mock_settings.GOSUSLUGI_CLIENT_ID = "client_id"
