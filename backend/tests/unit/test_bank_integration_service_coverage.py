@@ -1,4 +1,14 @@
 """Coverage tests for bank_integration_service."""
+import sys
+from types import ModuleType
+from unittest.mock import MagicMock
+
+# Create mock bank module since app.models.bank doesn't exist yet
+_bank_mod = ModuleType("app.models.bank")
+_bank_mod.BankTransaction = MagicMock
+sys.modules["app.models.bank"] = _bank_mod
+
+
 from unittest.mock import MagicMock, patch
 
 import pytest
