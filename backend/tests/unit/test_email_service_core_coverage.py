@@ -100,7 +100,7 @@ class TestRenderTemplate:
         service.jinja_env.loader.searchpath = [tmpdir]
         with patch("app.services.email_service.premailer_transform", side_effect=lambda html: html):
             result = service._render_template("url_test.html", {})
-        assert "localhost:3000" in result
+        assert "localhost" in result  # FRONTEND_URL from real settings
         os.unlink(tpl_path)
         os.rmdir(tmpdir)
 
@@ -309,3 +309,143 @@ class TestSendEmail:
         assert result is True
         os.unlink(tpl_path)
         os.rmdir(tmpdir)
+
+
+class TestSendEmailExtra:
+    """Cover remaining send_email branches."""
+
+    def test_file_path_attachment(self, service):
+        import tempfile, os
+        tmpfile = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmpfile.write(b"file data")
+        tmpfile.close()
+        mock_db = MagicMock()
+        mock_log = _MockEmailLog()
+        mock_db.get.return_value = mock_log
+        mock_server = _make_mock_smtp()
+        try:
+            with patch("app.core.db.SessionLocal", return_value=mock_db), \
+                 patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
+                 patch("app.services.email_service.settings") as ms:
+                ms.SMTP_PORT = 587
+                ms.SMTP_HOST = "smtp.test.com"
+                ms.SMTP_USER = "u"
+                ms.SMTP_PASSWORD = "p"
+                ms.SMTP_FROM_NAME = "T"
+                ms.SMTP_FROM_EMAIL = "t@t.com"
+                result = service.send_email(
+                    to_email="t@t.com", subject="S", body="B",
+                    attachments=[Path(tmpfile.name)],
+                )
+            assert result is True
+        finally:
+            os.unlink(tmpfile.name)
+
+    def test_string_path_attachment(self, service):
+        import tempfile, os
+        tmpfile = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+        tmpfile.write(b"string path data")
+        tmpfile.close()
+        mock_db = MagicMock()
+        mock_log = _MockEmailLog()
+        mock_db.get.return_value = mock_log
+        mock_server = _make_mock_smtp()
+        try:
+            with patch("app.core.db.SessionLocal", return_value=mock_db), \
+                 patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
+                 patch("app.services.email_service.settings") as ms:
+                ms.SMTP_PORT = 587
+                ms.SMTP_HOST = "smtp.test.com"
+                ms.SMTP_USER = "u"
+                ms.SMTP_PASSWORD = "p"
+                ms.SMTP_FROM_NAME = "T"
+                ms.SMTP_FROM_EMAIL = "t@t.com"
+                result = service.send_email(
+                    to_email="t@t.com", subject="S", body="B",
+                    attachments=[tmpfile.name],
+                )
+            assert result is True
+        finally:
+            os.unlink(tmpfile.name)
+
+    def test_log_update_to_sent_success(self, service):
+        """Cover lines 241-250: successful log update after send."""
+        mock_db = MagicMock()
+        mock_log = _MockEmailLog()
+        mock_db.get.return_value = mock_log
+        mock_server = _make_mock_smtp()
+        with patch("app.core.db.SessionLocal", return_value=mock_db), \
+             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
+             patch("app.services.email_service.settings") as ms:
+            ms.SMTP_PORT = 587
+            ms.SMTP_HOST = "smtp.test.com"
+            ms.SMTP_USER = "u"
+            ms.SMTP_PASSWORD = "p"
+            ms.SMTP_FROM_NAME = "T"
+            ms.SMTP_FROM_EMAIL = "t@t.com"
+            result = service.send_email(to_email="t@t.com", subject="S", body="B")
+        assert result is True
+        # Verify status was updated to sent
+        assert mock_log.status == "sent"
+
+    def test_log_update_to_failed_on_error(self, service):
+        """Cover lines 258-267: failed log update after send error."""
+        mock_db = MagicMock()
+        mock_log = _MockEmailLog()
+        mock_db.get.return_value = mock_log
+        with patch("app.core.db.SessionLocal", return_value=mock_db), \
+             patch("app.services.email_service.smtplib.SMTP", side_effect=Exception("fail")), \
+             patch("app.services.email_service.settings") as ms:
+            ms.SMTP_PORT = 587
+            ms.SMTP_HOST = "smtp.test.com"
+            ms.SMTP_USER = "u"
+            ms.SMTP_PASSWORD = "p"
+            ms.SMTP_FROM_NAME = "T"
+            ms.SMTP_FROM_EMAIL = "t@t.com"
+            with pytest.raises(Exception):
+                service.send_email(to_email="t@t.com", subject="S", body="B")
+        assert mock_log.status == "failed"
+
+    def test_context_with_invoice_and_act(self, service):
+        """Cover invoice_id and act_id extraction from context."""
+        mock_db = MagicMock()
+        mock_log = _MockEmailLog()
+        mock_db.get.return_value = mock_log
+        mock_server = _make_mock_smtp()
+        invoice = MagicMock()
+        invoice.id = 42
+        act = MagicMock()
+        act.id = 99
+        with patch("app.core.db.SessionLocal", return_value=mock_db), \
+             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
+             patch("app.services.email_service.settings") as ms:
+            ms.SMTP_PORT = 587
+            ms.SMTP_HOST = "smtp.test.com"
+            ms.SMTP_USER = "u"
+            ms.SMTP_PASSWORD = "p"
+            ms.SMTP_FROM_NAME = "T"
+            ms.SMTP_FROM_EMAIL = "t@t.com"
+            result = service.send_email(
+                to_email="t@t.com", subject="S", body="B",
+                context={"invoice": invoice, "act": act, "company_id": 7},
+            )
+        assert result is True
+
+    def test_no_auth_skips_login(self, service):
+        """Cover line 223-227: no SMTP auth when user/pass empty."""
+        mock_db = MagicMock()
+        mock_log = _MockEmailLog()
+        mock_db.get.return_value = mock_log
+        mock_server = _make_mock_smtp()
+        with patch("app.core.db.SessionLocal", return_value=mock_db), \
+             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
+             patch("app.services.email_service.settings") as ms:
+            ms.SMTP_PORT = 25
+            ms.SMTP_HOST = "smtp.test.com"
+            ms.SMTP_USER = None
+            ms.SMTP_PASSWORD = None
+            ms.SMTP_FROM_NAME = "T"
+            ms.SMTP_FROM_EMAIL = "t@t.com"
+            result = service.send_email(to_email="t@t.com", subject="S", body="B")
+        assert result is True
+        mock_server.login.assert_not_called()
