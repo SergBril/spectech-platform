@@ -6,7 +6,10 @@ from unittest.mock import MagicMock
 # Mock UserCompany if not in auth module
 _auth_mod = sys.modules.get("app.models.auth")
 if _auth_mod and not hasattr(_auth_mod, "UserCompany"):
-    _auth_mod.UserCompany = MagicMock
+    class _MockUserCompany:
+        user_id = MagicMock()
+        company_id = MagicMock()
+    _auth_mod.UserCompany = _MockUserCompany
 
 
 from types import SimpleNamespace
