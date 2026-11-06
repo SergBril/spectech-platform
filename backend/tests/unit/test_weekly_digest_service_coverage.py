@@ -223,7 +223,7 @@ class TestWeeklyDigestExtraBranches:
         row = MagicMock()
         row.vehicle_id = 1
         row.vehicle_name = "KAMAZ"
-        row.total_revenue = Decimal("50000")
+        row.total_revenue = 50000.0
         row.rentals_count = 5
         # Build full mock chain: db.query().join().join().filter().group_by().order_by().limit().all()
         q = MagicMock()
@@ -244,8 +244,8 @@ class TestWeeklyDigestExtraBranches:
         row.invoice_id = 42
         row.document_number = "INV-001"
         row.client_name = "ClientCo"
-        row.total = Decimal("10000")
-        row.paid_amount = Decimal("3000")
+        row.total = 10000.0
+        row.paid_amount = 3000.0
         row.due_date = date(2026, 10, 1)
         # Build full mock chain: db.query().join().filter().order_by().limit().all()
         q = MagicMock()
