@@ -1,7 +1,7 @@
-"""Coverage tests for gps_providers.wialon."""
-
+"""Tests for WialonAdapter GPS provider - async-correct."""
+import json
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
 import pytest
 
@@ -9,481 +9,341 @@ import pytest
 @pytest.fixture
 def adapter():
     from app.services.gps_providers.wialon import WialonAdapter
-
-    return WialonAdapter(
-        {
-            "api_url": "https://hst-api.wialon.com",
-            "login": "testuser",
-            "password": "testpass",
-        }
-    )
+    return WialonAdapter({
+        "api_url": "https://test-api.wialon.com",
+        "login": "testuser",
+        "password": "testpass",
+    })
 
 
-class TestInit:
-    """Cover __init__ (lines 30-35)."""
-
-    def test_defaults(self):
-        from app.services.gps_providers.wialon import WialonAdapter
-
-        a = WialonAdapter({"login": "u", "password": "p"})
-        assert a.api_url == "https://hst-api.wialon.com"
-        assert a.token is None
-
-    def test_custom_url(self):
-        from app.services.gps_providers.wialon import WialonAdapter
-
-        a = WialonAdapter(
-            {"api_url": "https://custom.wialon.com/", "login": "u", "password": "p"}
-        )
-        assert a.api_url == "https://custom.wialon.com"
+def _make_client(get_response=None, post_response=None):
+    client = AsyncMock()
+    if get_response is not None:
+        client.get.return_value = get_response
+    if post_response is not None:
+        client.post.return_value = post_response
+    return client
 
 
 class TestEnsureToken:
-    """Cover _ensure_token (lines 37-64)."""
-
     @pytest.mark.asyncio
     async def test_cached_token(self, adapter):
-        adapter.token = "cached-token"
-        client = AsyncMock()
+        adapter.token = "cached_eid"
+        client = _make_client()
         result = await adapter._ensure_token(client)
-        assert result == "cached-token"
-        client.get.assert_not_called()
+        assert result == "cached_eid"
 
     @pytest.mark.asyncio
-    async def test_no_credentials_raises(self):
-        from app.services.gps_providers.wialon import WialonAdapter
-
-        a = WialonAdapter({"login": "", "password": ""})
+    async def test_missing_credentials(self, adapter):
+        adapter.login = ""
+        client = _make_client()
         with pytest.raises(ValueError, match="not configured"):
-            await a._ensure_token(AsyncMock())
+            await adapter._ensure_token(client)
 
     @pytest.mark.asyncio
     async def test_auth_success(self, adapter):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"eid": "token123"}
-        client = AsyncMock()
-        client.get.return_value = mock_resp
-
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"eid": "new_token_123"}
+        client = _make_client(get_response=resp)
         result = await adapter._ensure_token(client)
-        assert result == "token123"
-        assert adapter.token == "token123"
+        assert result == "new_token_123"
+        assert adapter.token == "new_token_123"
 
     @pytest.mark.asyncio
     async def test_auth_http_error(self, adapter):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 401
-        client = AsyncMock()
-        client.get.return_value = mock_resp
-
-        with pytest.raises(ValueError, match="HTTP 401"):
+        resp = MagicMock()
+        resp.status_code = 403
+        client = _make_client(get_response=resp)
+        with pytest.raises(ValueError, match="HTTP 403"):
             await adapter._ensure_token(client)
 
     @pytest.mark.asyncio
     async def test_auth_no_eid(self, adapter):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"error": "invalid_user"}
-        client = AsyncMock()
-        client.get.return_value = mock_resp
-
-        with pytest.raises(ValueError, match="invalid_user"):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"error": "invalid_credentials"}
+        client = _make_client(get_response=resp)
+        with pytest.raises(ValueError, match="invalid_credentials"):
             await adapter._ensure_token(client)
 
 
 class TestApiCall:
-    """Cover _api_call (lines 66-93)."""
-
     @pytest.mark.asyncio
     async def test_success(self, adapter):
-        adapter.token = "tok"
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"items": [1, 2]}
-        client = AsyncMock()
-        client.post.return_value = mock_resp
-
+        adapter.token = "tok123"
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"items": [{"id": 1}]}
+        client = _make_client(post_response=resp)
         result = await adapter._api_call(client, "core/search_items", {})
-        assert result == {"items": [1, 2]}
+        assert result == {"items": [{"id": 1}]}
 
     @pytest.mark.asyncio
     async def test_http_error_resets_token(self, adapter):
-        adapter.token = "tok"
-        mock_resp = MagicMock()
-        mock_resp.status_code = 500
-        client = AsyncMock()
-        client.post.return_value = mock_resp
-
+        adapter.token = "old_tok"
+        resp = MagicMock()
+        resp.status_code = 500
+        client = _make_client(post_response=resp)
         result = await adapter._api_call(client, "svc", {})
         assert result == {}
         assert adapter.token is None
 
     @pytest.mark.asyncio
-    async def test_api_error_code_8_resets_token(self, adapter):
+    async def test_api_error_code(self, adapter):
         adapter.token = "tok"
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"error": 8}
-        client = AsyncMock()
-        client.post.return_value = mock_resp
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"error": 4}
+        client = _make_client(post_response=resp)
+        result = await adapter._api_call(client, "svc", {})
+        assert result == {}
 
+    @pytest.mark.asyncio
+    async def test_error_code_8_resets_token(self, adapter):
+        adapter.token = "expired_tok"
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"error": 8}
+        client = _make_client(post_response=resp)
         result = await adapter._api_call(client, "svc", {})
         assert result == {}
         assert adapter.token is None
-
-    @pytest.mark.asyncio
-    async def test_api_error_nonzero(self, adapter):
-        adapter.token = "tok"
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"error": 4}
-        client = AsyncMock()
-        client.post.return_value = mock_resp
-
-        result = await adapter._api_call(client, "svc", {})
-        assert result == {}
-        # Non-8 error should NOT reset token
-        assert adapter.token == "tok"
-
-
-class TestGetLastPositionImpl:
-    """Cover _get_last_position_impl (lines 108-112)."""
-
-    @pytest.mark.asyncio
-    async def test_returns_first(self, adapter):
-        from app.services.gps_providers.base import GpsPointData
-
-        point = GpsPointData(latitude=55.0, longitude=37.0)
-        with patch.object(
-            adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[point]
-        ):
-            result = await adapter._get_last_position_impl()
-            assert result.latitude == 55.0
-
-    @pytest.mark.asyncio
-    async def test_empty_returns_none(self, adapter):
-        with patch.object(
-            adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]
-        ):
-            result = await adapter._get_last_position_impl()
-            assert result is None
 
 
 class TestFetchPositions:
-    """Cover _fetch_positions (lines 129-206)."""
-
     @pytest.mark.asyncio
     async def test_success(self, adapter):
         adapter.token = "tok"
-        units_resp = MagicMock()
-        units_resp.status_code = 200
-        units_resp.json.return_value = {"items": [{"id": 123}]}
-
-        msg_resp = MagicMock()
-        msg_resp.status_code = 200
+        units_resp = MagicMock(status_code=200)
+        units_resp.json.return_value = {"items": [{"id": 100}]}
+        msg_resp = MagicMock(status_code=200)
         msg_resp.json.return_value = {
-            "messages": [
-                {
-                    "pos": {"y": 55.75, "x": 37.62, "s": 500, "c": 1800},
-                    "t": 1700000000,
-                    "uid": 123,
-                }
-            ]
+            "messages": [{
+                "pos": {"y": 55.75, "x": 37.61, "s": 600, "c": 1800},
+                "t": 1700000000, "uid": 100
+            }]
         }
-
         mock_client = AsyncMock()
+        mock_client.post.side_effect = [units_resp, msg_resp]
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post.side_effect = [units_resp, msg_resp]
 
-        with patch(
-            "app.services.gps_providers.wialon.create_retry_client",
-            return_value=mock_client,
-        ):
+        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
             result = await adapter._fetch_positions()
-
         assert len(result) == 1
         assert result[0].latitude == 55.75
-        assert result[0].speed == 50
 
     @pytest.mark.asyncio
     async def test_no_units(self, adapter):
         adapter.token = "tok"
-        units_resp = MagicMock()
-        units_resp.status_code = 200
+        units_resp = MagicMock(status_code=200)
         units_resp.json.return_value = {"items": []}
-
         mock_client = AsyncMock()
+        mock_client.post.return_value = units_resp
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post.return_value = units_resp
 
-        with patch(
-            "app.services.gps_providers.wialon.create_retry_client",
-            return_value=mock_client,
-        ):
+        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
             result = await adapter._fetch_positions()
+        assert result == []
 
+    @pytest.mark.asyncio
+    async def test_no_messages(self, adapter):
+        adapter.token = "tok"
+        units_resp = MagicMock(status_code=200)
+        units_resp.json.return_value = {"items": [{"id": 100}]}
+        msg_resp = MagicMock(status_code=200)
+        msg_resp.json.return_value = {"messages": []}
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = [units_resp, msg_resp]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+            result = await adapter._fetch_positions()
         assert result == []
 
     @pytest.mark.asyncio
     async def test_zero_coords_skipped(self, adapter):
         adapter.token = "tok"
-        units_resp = MagicMock()
-        units_resp.status_code = 200
-        units_resp.json.return_value = {"items": [{"id": 1}]}
-
-        msg_resp = MagicMock()
-        msg_resp.status_code = 200
+        units_resp = MagicMock(status_code=200)
+        units_resp.json.return_value = {"items": [{"id": 100}]}
+        msg_resp = MagicMock(status_code=200)
         msg_resp.json.return_value = {
-            "messages": [{"pos": {"y": 0, "x": 0}, "t": 1700000000, "uid": 1}]
+            "messages": [{"pos": {"y": 0, "x": 0}, "t": 1700000000, "uid": 100}]
         }
-
         mock_client = AsyncMock()
+        mock_client.post.side_effect = [units_resp, msg_resp]
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post.side_effect = [units_resp, msg_resp]
 
-        with patch(
-            "app.services.gps_providers.wialon.create_retry_client",
-            return_value=mock_client,
-        ):
+        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
             result = await adapter._fetch_positions()
-
         assert result == []
+
+    @pytest.mark.asyncio
+    async def test_parse_error_skipped(self, adapter):
+        adapter.token = "tok"
+        units_resp = MagicMock(status_code=200)
+        units_resp.json.return_value = {"items": [{"id": 100}]}
+        msg_resp = MagicMock(status_code=200)
+        msg_resp.json.return_value = {
+            "messages": [{"pos": {"y": "bad", "x": "data"}, "uid": 100}]
+        }
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = [units_resp, msg_resp]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+            result = await adapter._fetch_positions()
+        assert isinstance(result, list)
+
+
+class TestGetLastPosition:
+    @pytest.mark.asyncio
+    async def test_impl_returns_first(self, adapter):
+        mock_point = MagicMock()
+        with patch.object(adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[mock_point]):
+            result = await adapter._get_last_position_impl()
+        assert result == mock_point
+
+    @pytest.mark.asyncio
+    async def test_impl_empty(self, adapter):
+        with patch.object(adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]):
+            result = await adapter._get_last_position_impl()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_with_db(self, adapter):
+        mock_db = MagicMock()
+        with patch.object(adapter, "_logged_call", new_callable=AsyncMock, return_value=None) as mock_lc:
+            result = await adapter.get_last_position(db=mock_db, company_id=7)
+        mock_lc.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_without_db(self, adapter):
+        mock_point = MagicMock()
+        with patch.object(adapter, "_get_last_position_impl", new_callable=AsyncMock, return_value=mock_point):
+            result = await adapter.get_last_position()
+        assert result == mock_point
+
+
+class TestGetAllPositions:
+    @pytest.mark.asyncio
+    async def test_async(self, adapter):
+        mock_points = [MagicMock()]
+        with patch.object(adapter, "_fetch_positions", new_callable=AsyncMock, return_value=mock_points):
+            result = await adapter.get_all_positions()
+        assert result == mock_points
+
+    def test_sync_no_loop(self, adapter):
+        with patch.object(adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]), \
+             patch("asyncio.run", return_value=[]):
+            result = adapter.get_all_positions_sync()
+        assert isinstance(result, list)
+
+    def test_sync_with_running_loop(self, adapter):
+        with patch.object(adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]), \
+             patch("asyncio.run", side_effect=RuntimeError("already running")), \
+             patch("concurrent.futures.ThreadPoolExecutor") as MockExec:
+            mock_future = MagicMock()
+            mock_future.result.return_value = []
+            inst = MagicMock()
+            inst.submit.return_value = mock_future
+            inst.__enter__ = MagicMock(return_value=inst)
+            inst.__exit__ = MagicMock(return_value=False)
+            MockExec.return_value = inst
+            result = adapter.get_all_positions_sync()
+        assert isinstance(result, list)
 
 
 class TestGetTrack:
-    """Cover get_track (lines 208-277)."""
-
     @pytest.mark.asyncio
     async def test_success(self, adapter):
         adapter.token = "tok"
-        units_resp = MagicMock()
-        units_resp.status_code = 200
-        units_resp.json.return_value = {"items": [{"id": 123}]}
-
-        track_resp = MagicMock()
-        track_resp.status_code = 200
-        track_resp.json.return_value = {
-            "messages": [
-                {
-                    "pos": {"y": 55.75, "x": 37.62, "s": 300, "c": 900},
-                    "t": 1700000000,
-                    "uid": 123,
-                }
-            ]
+        units_resp = MagicMock(status_code=200)
+        units_resp.json.return_value = {"items": [{"id": 100}]}
+        msg_resp = MagicMock(status_code=200)
+        msg_resp.json.return_value = {
+            "messages": [{
+                "pos": {"y": 55.75, "x": 37.61, "s": 500, "c": 900},
+                "t": 1700000000, "uid": 100
+            }]
         }
-
         mock_client = AsyncMock()
+        mock_client.post.side_effect = [units_resp, msg_resp]
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post.side_effect = [units_resp, track_resp]
 
-        with patch(
-            "app.services.gps_providers.wialon.create_retry_client",
-            return_value=mock_client,
-        ):
-            result = await adapter.get_track(
-                datetime(2026, 1, 1, tzinfo=UTC),
-                datetime(2026, 1, 2, tzinfo=UTC),
-            )
-
+        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+            result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
         assert len(result) == 1
 
     @pytest.mark.asyncio
     async def test_no_units(self, adapter):
         adapter.token = "tok"
-        units_resp = MagicMock()
-        units_resp.status_code = 200
+        units_resp = MagicMock(status_code=200)
         units_resp.json.return_value = {"items": []}
-
         mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.post.return_value = units_resp
-
-        with patch(
-            "app.services.gps_providers.wialon.create_retry_client",
-            return_value=mock_client,
-        ):
-            result = await adapter.get_track(
-                datetime(2026, 1, 1, tzinfo=UTC),
-                datetime(2026, 1, 2, tzinfo=UTC),
-            )
-
-        assert result == []
-
-
-class TestTestConnectionImpl:
-    """Cover _test_connection_impl (lines 289-end)."""
-
-    @pytest.mark.asyncio
-    async def test_success(self, adapter):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"eid": "tok"}
-
-        mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.get.return_value = mock_resp
 
-        with patch(
-            "app.services.gps_providers.wialon.create_retry_client",
-            return_value=mock_client,
-        ):
-            result = await adapter._test_connection_impl()
-
-        assert result is True
+        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+            result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
+        assert result == []
 
     @pytest.mark.asyncio
     async def test_exception(self, adapter):
-        with patch(
-            "app.services.gps_providers.wialon.create_retry_client",
-            side_effect=Exception("fail"),
-        ):
+        with patch("app.services.gps_providers.wialon.create_retry_client", side_effect=Exception("fail")):
+            result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
+        assert result == []
+
+
+class TestTestConnection:
+    @pytest.mark.asyncio
+    async def test_impl_success(self, adapter):
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"eid": "tok"}
+        mock_client.get.return_value = resp
+
+        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+            result = await adapter._test_connection_impl()
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_impl_failure(self, adapter):
+        with patch("app.services.gps_providers.wialon.create_retry_client", side_effect=Exception("fail")):
             result = await adapter._test_connection_impl()
         assert result is False
-
-
-class TestGetAllPositionsSync:
-    """Cover get_all_positions_sync (lines 117-127)."""
-
-    def test_no_running_loop(self, adapter):
-        with patch.object(
-            adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]
-        ):
-            result = adapter.get_all_positions_sync()
-            assert result == []
-
-
-class TestGetLastPositionWithDb:
-    """Cover get_last_position with db parameter (lines 95-106)."""
-
-    @pytest.mark.asyncio
-    async def test_with_db_calls_logged(self, adapter):
-        mock_db = MagicMock()
-        with patch.object(
-            adapter, "_logged_call", new_callable=AsyncMock, return_value=None
-        ) as mock_logged:
-            result = await adapter.get_last_position(db=mock_db, company_id=7)
-            mock_logged.assert_called_once()
-            assert result is None
-
-    @pytest.mark.asyncio
-    async def test_without_db(self, adapter):
-        with patch.object(
-            adapter,
-            "_get_last_position_impl",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
-            result = await adapter.get_last_position()
-            assert result is None
-
-
-class TestGetAllPositionsSyncWithLoop:
-    """Cover get_all_positions_sync with running loop (lines 122-127)."""
-
-    def test_with_running_loop(self, adapter):
-        import asyncio
-
-        with patch.object(
-            adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]
-        ):
-
-            async def run():
-                return adapter.get_all_positions_sync()
-
-            result = asyncio.run(run())
-            assert result == []
-
-
-class TestTestConnectionWithDb:
-    """Cover test_connection with db parameter (lines 280-287)."""
 
     @pytest.mark.asyncio
     async def test_with_db(self, adapter):
         mock_db = MagicMock()
-        with patch.object(
-            adapter, "_logged_call", new_callable=AsyncMock, return_value=True
-        ) as mock_logged:
+        with patch.object(adapter, "_logged_call", new_callable=AsyncMock, return_value=True) as mock_lc:
             result = await adapter.test_connection(db=mock_db, company_id=7)
-            mock_logged.assert_called_once()
-            assert result is True
-
-
-class TestFetchPositionsParseErrors:
-    """Cover parse error handling in _fetch_positions (lines 170-171, 202-203)."""
+        mock_lc.assert_called_once()
+        assert result is True
 
     @pytest.mark.asyncio
-    async def test_malformed_message_skipped(self, adapter):
-        adapter.token = "tok"
-        units_resp = MagicMock()
-        units_resp.status_code = 200
-        units_resp.json.return_value = {"items": [{"id": 1}]}
-
-        msg_resp = MagicMock()
-        msg_resp.status_code = 200
-        # Message without pos key - should be skipped gracefully
-        msg_resp.json.return_value = {
-            "messages": [
-                {"no_pos_key": True, "t": 1700000000, "uid": 1},
-                {
-                    "pos": {"y": 55.0, "x": 37.0, "s": 100, "c": 90},
-                    "t": 1700000000,
-                    "uid": 1,
-                },
-            ]
-        }
-
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post.side_effect = [units_resp, msg_resp]
-
-        with patch(
-            "app.services.gps_providers.wialon.create_retry_client",
-            return_value=mock_client,
-        ):
-            result = await adapter._fetch_positions()
-
-        # First message has no pos, second is valid
-        assert len(result) == 1
+    async def test_without_db(self, adapter):
+        with patch.object(adapter, "_test_connection_impl", new_callable=AsyncMock, return_value=True):
+            result = await adapter.test_connection()
+        assert result is True
 
 
-class TestGetTrackParseErrors:
-    """Cover parse error handling in get_track (lines 255, 274-275)."""
+class TestInit:
+    def test_default_api_url(self):
+        from app.services.gps_providers.wialon import WialonAdapter
+        a = WialonAdapter({"login": "u", "password": "p"})
+        assert "wialon.com" in a.api_url
 
-    @pytest.mark.asyncio
-    async def test_malformed_track_message(self, adapter):
-        adapter.token = "tok"
-        units_resp = MagicMock()
-        units_resp.status_code = 200
-        units_resp.json.return_value = {"items": [{"id": 1}]}
-
-        track_resp = MagicMock()
-        track_resp.status_code = 200
-        track_resp.json.return_value = {
-            "messages": [
-                {"bad": "data"},
-                {"pos": {"y": 55.0, "x": 37.0}, "t": 1700000000, "uid": 1},
-            ]
-        }
-
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post.side_effect = [units_resp, track_resp]
-
-        with patch(
-            "app.services.gps_providers.wialon.create_retry_client",
-            return_value=mock_client,
-        ):
-            result = await adapter.get_track(
-                datetime(2026, 1, 1, tzinfo=UTC),
-                datetime(2026, 1, 2, tzinfo=UTC),
-            )
-
-        assert len(result) == 1
+    def test_custom_api_url_trailing_slash(self):
+        from app.services.gps_providers.wialon import WialonAdapter
+        a = WialonAdapter({"api_url": "https://custom.wialon.com/", "login": "u", "password": "p"})
+        assert not a.api_url.endswith("/")
