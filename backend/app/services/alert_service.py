@@ -58,13 +58,13 @@ async def check_and_notify_conflicts(
 
     # Drivers with multiple shifts on same date
     conflicts = db.execute(
-        select(ShiftTask.driver_id, func.count(ShiftTask.id).label("cnt"))
+        select(ShiftTask.operator_id, func.count(ShiftTask.id).label("cnt"))
         .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
         .where(Vehicle.company_id == company_id)
         .where(ShiftTask.shift_date == target_date)
-        .where(ShiftTask.driver_id.isnot(None))
+        .where(ShiftTask.operator_id.isnot(None))
         .where(ShiftTask.status.notin_(["cancelled"]))
-        .group_by(ShiftTask.driver_id)
+        .group_by(ShiftTask.operator_id)
         .having(func.count(ShiftTask.id) > 1)
     ).all()
 
