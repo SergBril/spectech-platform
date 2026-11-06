@@ -87,6 +87,13 @@ class TestParseCsv:
         assert result == []
 
 
+
+    def test_csv_parse_error_returns_empty(self, service):
+        """Cover except branch in parse_csv (lines 79-80)."""
+        # Pass non-string to trigger exception in csv.DictReader
+        result = service.parse_csv(None)
+        assert result == []
+
 class TestSyncPaymentsToDb:
     """Cover sync_payments_to_db (lines 90-138)."""
 
