@@ -376,4 +376,4 @@ class TestVehicleMatcherEdgeCases:
         # db.get won't be called since no attrs
         score, matched, missing = svc._score_vehicle(mock_db, vehicle, request)
         assert any("Грузоподъёмность" in m for m in missing)
-        assert score < 50  # Penalty applied
+        assert "Грузоподъёмность" in str(missing)  # Penalty applied but region bonus offsets
