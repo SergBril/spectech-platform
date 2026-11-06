@@ -343,3 +343,236 @@ class TestUpdateVehicle:
 
         mock_clear.assert_called_once()
         mock_save.assert_called_once()
+
+
+
+
+class TestSaveVehicleAttributes:
+    """Cover save_vehicle_attributes function (lines 20-95)."""
+
+    def test_number_type_error_fallback(self, mock_db):
+        """Cover line 35: TypeError/ValueError fallback to value_text."""
+        from app.services.vehicle_service import save_vehicle_attributes
+        attr_def = MagicMock()
+        attr_def.id = 1
+        attr_def.data_type = "number"
+        mock_db.query.return_value.filter.return_value.first.return_value = attr_def
+        # Pass a value that can't be converted to float
+        save_vehicle_attributes(mock_db, vehicle_id=1, subcategory_id=10, attributes={"weight": "not_a_number"})
+        mock_db.add.assert_called()
+
+    def test_boolean_type(self, mock_db):
+        """Cover boolean branch."""
+        from app.services.vehicle_service import save_vehicle_attributes
+        attr_def = MagicMock()
+        attr_def.id = 1
+        attr_def.data_type = "boolean"
+        mock_db.query.return_value.filter.return_value.first.return_value = attr_def
+        save_vehicle_attributes(mock_db, vehicle_id=1, subcategory_id=10, attributes={"has_gps": "true"})
+        mock_db.add.assert_called()
+
+    def test_empty_attributes(self, mock_db):
+        """Cover early return on empty attributes."""
+        from app.services.vehicle_service import save_vehicle_attributes
+        save_vehicle_attributes(mock_db, vehicle_id=1, subcategory_id=None, attributes=None)
+        mock_db.add.assert_not_called()
+
+
+class TestEnrichVehicle:
+    """Cover enrich_vehicle function (lines 120-165)."""
+
+    def test_category_level2_with_parent(self, mock_db):
+        """Cover lines 58-59: category level 2 with parent."""
+        from app.services.vehicle_service import enrich_vehicle
+        vehicle = MagicMock()
+        vehicle.category = MagicMock()
+        vehicle.category.level = 2
+        vehicle.category.name = "SubCat"
+        vehicle.category.parent = MagicMock()
+        vehicle.category.parent.name = "ParentCat"
+        vehicle.attribute_values = []
+        vehicle.assigned_driver_id = None
+
+        with patch("app.services.vehicle_service.VehicleRead") as MockRead:
+            MockRead.model_validate.return_value.model_dump.return_value = {
+                "attribute_values": [], "id": 1,
+            }
+            result = enrich_vehicle(vehicle, mock_db)
+        assert result["category_name"] == "ParentCat"
+        assert result["subcategory_name"] == "SubCat"
+
+    def test_category_level1(self, mock_db):
+        """Cover else branch: category not level 2."""
+        from app.services.vehicle_service import enrich_vehicle
+        vehicle = MagicMock()
+        vehicle.category = MagicMock()
+        vehicle.category.level = 1
+        vehicle.category.name = "Excavators"
+        vehicle.attribute_values = []
+        vehicle.assigned_driver_id = None
+
+        with patch("app.services.vehicle_service.VehicleRead") as MockRead:
+            MockRead.model_validate.return_value.model_dump.return_value = {
+                "attribute_values": [], "id": 1,
+            }
+            result = enrich_vehicle(vehicle, mock_db)
+        assert result["category_name"] == "Excavators"
+        assert result["subcategory_name"] is None
+
+    def test_no_category(self, mock_db):
+        """Cover no category branch."""
+        from app.services.vehicle_service import enrich_vehicle
+        vehicle = MagicMock()
+        vehicle.category = None
+        vehicle.attribute_values = []
+        vehicle.assigned_driver_id = None
+
+        with patch("app.services.vehicle_service.VehicleRead") as MockRead:
+            MockRead.model_validate.return_value.model_dump.return_value = {
+                "attribute_values": [], "id": 1,
+            }
+            result = enrich_vehicle(vehicle, mock_db)
+        assert result["category_name"] is None
+
+    def test_attribute_values_with_definition(self, mock_db):
+        """Cover lines 129-143: attribute values with definition."""
+        from app.services.vehicle_service import enrich_vehicle
+        av = MagicMock()
+        av.attribute_definition = MagicMock()
+        av.attribute_definition.slug = "weight"
+        av.attribute_definition.name = "Weight"
+        av.attribute_definition.data_type = "number"
+        av.attribute_definition.unit = "kg"
+        av.value_text = "5000"
+        av.value_number = 5000.0
+        av.value_boolean = None
+
+        vehicle = MagicMock()
+        vehicle.category = None
+        vehicle.attribute_values = [av]
+        vehicle.assigned_driver_id = None
+
+        with patch("app.services.vehicle_service.VehicleRead") as MockRead:
+            MockRead.model_validate.return_value.model_dump.return_value = {
+                "attribute_values": [], "id": 1,
+            }
+            result = enrich_vehicle(vehicle, mock_db)
+        assert len(result["attribute_values"]) == 1
+        assert result["attribute_values"][0]["slug"] == "weight"
+
+    def test_attribute_values_exception(self, mock_db):
+        """Cover lines 162-163: except Exception continue."""
+        from app.services.vehicle_service import enrich_vehicle
+        bad_av = MagicMock()
+        bad_av.attribute_definition = property(lambda self: (_ for _ in ()).throw(Exception("fail")))
+        type(bad_av).attribute_definition = property(lambda self: (_ for _ in ()).throw(Exception("fail")))
+
+        vehicle = MagicMock()
+        vehicle.category = None
+        vehicle.attribute_values = [bad_av]
+        vehicle.assigned_driver_id = None
+
+        with patch("app.services.vehicle_service.VehicleRead") as MockRead:
+            MockRead.model_validate.return_value.model_dump.return_value = {
+                "attribute_values": [], "id": 1,
+            }
+            result = enrich_vehicle(vehicle, mock_db)
+        assert result["attribute_values"] == []
+
+    def test_assigned_driver_name(self, mock_db):
+        """Cover driver name lookup."""
+        from app.services.vehicle_service import enrich_vehicle
+        vehicle = MagicMock()
+        vehicle.category = None
+        vehicle.attribute_values = []
+        vehicle.assigned_driver_id = 42
+
+        emp = MagicMock()
+        emp.contractor = MagicMock()
+        emp.contractor.name = "Driver Ivan"
+        mock_db.query.return_value.filter.return_value.first.return_value = emp
+
+        with patch("app.services.vehicle_service.VehicleRead") as MockRead:
+            MockRead.model_validate.return_value.model_dump.return_value = {
+                "attribute_values": [], "id": 1,
+            }
+            result = enrich_vehicle(vehicle, mock_db)
+        assert result["assigned_driver_name"] == "Driver Ivan"
+        assert result["driver_name"] == "Driver Ivan"
+
+    def test_driver_lookup_exception(self, mock_db):
+        """Cover lines 162-163: except Exception pass in driver lookup."""
+        from app.services.vehicle_service import enrich_vehicle
+        vehicle = MagicMock()
+        vehicle.category = None
+        vehicle.attribute_values = []
+        vehicle.assigned_driver_id = 42
+
+        mock_db.query.return_value.filter.return_value.first.side_effect = Exception("DB error")
+
+        with patch("app.services.vehicle_service.VehicleRead") as MockRead:
+            MockRead.model_validate.return_value.model_dump.return_value = {
+                "attribute_values": [], "id": 1,
+            }
+            result = enrich_vehicle(vehicle, mock_db)
+        assert result["assigned_driver_name"] is None
+
+
+class TestCreateVehicleExtraBranches:
+    """Cover remaining create_vehicle branches."""
+
+    def test_category_level1_from_payload(self, mock_db):
+        """Cover lines 237-240: category_id from level 1 category."""
+        from app.services.vehicle_service import create_vehicle
+        cat = MagicMock()
+        cat.level = 1
+        # db.get calls: Category check for subcategory_id (None), then Category for category_id
+        mock_db.get.side_effect = [cat]
+        mock_db.query.return_value.filter.return_value.first.return_value = None  # no duplicate
+
+        payload = {"name": "Test", "category_id": 5, "company_id": 7}
+        with patch("app.services.vehicle_service.load_vehicle_with_relations") as mock_load,              patch("app.services.vehicle_service.enrich_vehicle") as mock_enrich,              patch("app.services.vehicle_service.save_vehicle_attributes"):
+            mock_load.return_value = MagicMock()
+            mock_enrich.return_value = {"id": 1}
+            result = create_vehicle(mock_db, payload, company_id=7)
+        mock_db.add.assert_called()
+
+    def test_model_pop(self, mock_db):
+        """Cover line 251: model -> model_name pop."""
+        from app.services.vehicle_service import create_vehicle
+        mock_db.get.return_value = None  # no subcategory
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+
+        payload = {"name": "Test", "model": "KAMAZ-65115", "company_id": 7}
+        with patch("app.services.vehicle_service.load_vehicle_with_relations") as mock_load,              patch("app.services.vehicle_service.enrich_vehicle") as mock_enrich,              patch("app.services.vehicle_service.save_vehicle_attributes"):
+            mock_load.return_value = MagicMock()
+            mock_enrich.return_value = {"id": 1}
+            result = create_vehicle(mock_db, payload, company_id=7)
+        mock_db.add.assert_called()
+
+    def test_save_attributes_exception(self, mock_db):
+        """Cover lines 261-264: save_vehicle_attributes raises exception."""
+        from app.services.vehicle_service import create_vehicle, VehicleServiceError
+        mock_db.get.return_value = None
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+
+        payload = {"name": "Test", "company_id": 7, "attributes": {"weight": "5000"}}
+        with patch("app.services.vehicle_service.load_vehicle_with_relations"),              patch("app.services.vehicle_service.enrich_vehicle"),              patch("app.services.vehicle_service.save_vehicle_attributes", side_effect=ValueError("bad attr")):
+            with pytest.raises(VehicleServiceError, match="Attribute save error"):
+                create_vehicle(mock_db, payload, company_id=7)
+        mock_db.rollback.assert_called()
+
+
+class TestUpdateVehicleExtraBranches:
+    """Cover remaining update_vehicle branches."""
+
+    def test_invalid_subcategory(self, mock_db):
+        """Cover line 316: invalid subcategory in update."""
+        from app.services.vehicle_service import update_vehicle, VehicleServiceError
+        vehicle = MagicMock()
+        vehicle.company_id = 7
+        mock_db.get.side_effect = [vehicle, None]  # vehicle found, subcategory not found
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+
+        with pytest.raises(VehicleServiceError, match="Invalid subcategory"):
+            update_vehicle(mock_db, vehicle_id=1, company_id=7, update_data={"subcategory_id": 999})
