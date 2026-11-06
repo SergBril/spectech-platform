@@ -1,4 +1,5 @@
 """Tests for MapixAdapter GPS provider - async-correct."""
+import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
@@ -16,7 +17,7 @@ def adapter():
     })
 
 
-def _make_async_client(cookies=None, post_response=None):
+def _make_async_client(cookies=None, post_response=None, get_response=None):
     client = AsyncMock()
     cookie_store = dict(cookies or {})
     mock_cookies = MagicMock()
@@ -29,6 +30,8 @@ def _make_async_client(cookies=None, post_response=None):
     type(client).cookies = PropertyMock(return_value=mock_cookies)
     if post_response is not None:
         client.post.return_value = post_response
+    if get_response is not None:
+        client.get.return_value = get_response
     return client
 
 
@@ -94,8 +97,8 @@ class TestFetchObjectData:
     async def test_success(self, adapter):
         resp = MagicMock()
         resp.status_code = 200
-        resp.json.return_value = {"success": True, "data": {"lat": 55.75, "lon": 37.61, "speed": 60, "ts": 1700000000}}
-        client = _make_async_client(post_response=resp)
+        resp.text = json.dumps({"success": True, "lat": 55.75, "long": 37.61})
+        client = _make_async_client(get_response=resp)
         result = await adapter._fetch_object_data(client, "obj1")
         assert result is not None
 
@@ -103,7 +106,7 @@ class TestFetchObjectData:
     async def test_http_error(self, adapter):
         resp = MagicMock()
         resp.status_code = 500
-        client = _make_async_client(post_response=resp)
+        client = _make_async_client(get_response=resp)
         result = await adapter._fetch_object_data(client, "obj1")
         assert result is None
 
@@ -111,8 +114,8 @@ class TestFetchObjectData:
     async def test_empty_response(self, adapter):
         resp = MagicMock()
         resp.status_code = 200
-        resp.json.return_value = {}
-        client = _make_async_client(post_response=resp)
+        resp.text = ""
+        client = _make_async_client(get_response=resp)
         result = await adapter._fetch_object_data(client, "obj1")
         assert result is None
 
@@ -120,8 +123,8 @@ class TestFetchObjectData:
     async def test_invalid_json(self, adapter):
         resp = MagicMock()
         resp.status_code = 200
-        resp.json.side_effect = ValueError("bad json")
-        client = _make_async_client(post_response=resp)
+        resp.text = "<html>not json</html>"
+        client = _make_async_client(get_response=resp)
         result = await adapter._fetch_object_data(client, "obj1")
         assert result is None
 
@@ -129,8 +132,8 @@ class TestFetchObjectData:
     async def test_success_false(self, adapter):
         resp = MagicMock()
         resp.status_code = 200
-        resp.json.return_value = {"success": False}
-        client = _make_async_client(post_response=resp)
+        resp.text = json.dumps({"success": False})
+        client = _make_async_client(get_response=resp)
         result = await adapter._fetch_object_data(client, "obj1")
         assert result is None
 
@@ -138,10 +141,10 @@ class TestFetchObjectData:
     async def test_zero_coords(self, adapter):
         resp = MagicMock()
         resp.status_code = 200
-        resp.json.return_value = {"success": True, "data": {"lat": 0, "lon": 0, "speed": 0, "ts": 1700000000}}
-        client = _make_async_client(post_response=resp)
+        resp.text = json.dumps({"success": True, "lat": 0, "long": 0})
+        client = _make_async_client(get_response=resp)
         result = await adapter._fetch_object_data(client, "obj1")
-        assert result is None or result is not None
+        assert result is None
 
     @pytest.mark.asyncio
     async def test_request_exception(self, adapter):
