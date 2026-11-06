@@ -393,7 +393,8 @@ class TestNotifyOwnerNewRequest:
         request.planned_start = datetime(2026, 12, 1, 9, 0)
         request.planned_end = datetime(2026, 12, 5, 18, 0)
 
-        with patch("app.services.marketplace_service.email_service") as mock_email:
+        # email_service is imported inside the function via local import
+        with patch("app.services.email_service.email_service") as mock_email:
             await MarketplaceService._notify_owner_new_request(
                 vehicle=vehicle, request=request,
                 owner_name="Ivan", owner_email="ivan@test.com",
@@ -411,7 +412,7 @@ class TestNotifyOwnerNewRequest:
         request.planned_start = datetime(2026, 12, 1)
         request.planned_end = datetime(2026, 12, 5)
 
-        with patch("app.services.marketplace_service.email_service") as mock_email:
+        with patch("app.services.email_service.email_service") as mock_email:
             mock_email.send_email.side_effect = Exception("SMTP error")
             # Should not raise, just log error
             await MarketplaceService._notify_owner_new_request(
