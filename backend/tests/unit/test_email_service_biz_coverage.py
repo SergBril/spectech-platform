@@ -298,12 +298,17 @@ class TestFinalBranches:
     def test_log_update_to_sent_fails(self, service):
         """Cover lines 249-250: exception inside try block during log update to sent."""
         call_count = [0]
+        created_log = MagicMock()
+        created_log.id = 42  # Must be truthy for 'if log_id:' check
+
         def make_session():
             call_count[0] += 1
             db = MagicMock()
             if call_count[0] == 1:
-                # First call: create log entry - works fine
-                db.add = MagicMock()
+                # First call: create log entry
+                def capture_add(obj):
+                    obj.id = 42
+                db.add.side_effect = capture_add
                 return db
             else:
                 # Second call: inside try block, get() raises -> hits except on line 249
@@ -333,8 +338,10 @@ class TestFinalBranches:
             call_count[0] += 1
             db = MagicMock()
             if call_count[0] == 1:
-                # First call: create log entry - works fine
-                db.add = MagicMock()
+                # First call: create log entry
+                def capture_add(obj):
+                    obj.id = 42
+                db.add.side_effect = capture_add
                 return db
             else:
                 # Second call: inside except->try block, get() raises -> hits except on line 266
