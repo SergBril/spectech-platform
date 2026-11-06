@@ -257,7 +257,13 @@ class TestCreateReview:
         m_company.total_reviews = 0
         m_company.rating_distribution = {}
         mock_db.get.side_effect = [m_rental, m_reviewer, m_vehicle, m_client, m_company]
-        mock_db.query.return_value.filter.return_value.first.return_value = None
+        
+        # db.query is used for: 1) duplicate check (.first()), 2) _recalculate (.all())
+        # Need to return None for .first() and empty list for .all()
+        mock_query = MM()
+        mock_query.filter.return_value.first.return_value = None
+        mock_query.filter.return_value.all.return_value = []
+        mock_db.query.return_value = mock_query
 
         result = ReviewsService.create_review(
             mock_db, rental_id=100, reviewer_contractor_id=20,
