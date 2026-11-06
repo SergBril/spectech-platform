@@ -131,9 +131,11 @@ class TestSendToUser:
         mock_db = MagicMock()
         mock_db.execute.return_value.scalars.return_value.all.return_value = ["token1", "token2"]
 
-        mock_response = MagicMock()
-        mock_response.success_count = 2
-        mock_firebase["messaging"].send_each_for_multicast.return_value = mock_response
+        # Use SimpleNamespace to avoid MagicMock comparison issues
+        from types import SimpleNamespace
+        mock_response = SimpleNamespace(success_count=2, failure_count=0)
+        messaging_mock = mock_firebase["messaging"]
+        messaging_mock.send_each_for_multicast.return_value = mock_response
 
         result = await svc.send_to_user(1, "Title", "Body", data={"key": "val"}, db=mock_db)
         assert result is True
