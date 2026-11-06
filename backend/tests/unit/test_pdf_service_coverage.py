@@ -1,5 +1,6 @@
 """Coverage tests for pdf_service."""
 from types import SimpleNamespace
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
