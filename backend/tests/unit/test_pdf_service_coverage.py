@@ -208,3 +208,94 @@ class TestGenerateActMaintenancePdf:
         with patch("jinja2.Environment", side_effect=Exception("fail")):
             result = generate_act_maintenance_pdf(order)
         assert b"ACT-MO-001" in result
+
+
+
+class TestFpdfInvoiceFallback:
+    """Cover _generate_invoice_pdf_fpdf (lines 244-355)."""
+
+    def test_with_contractor_osno(self):
+        from app.services.pdf_service import _generate_invoice_pdf_fpdf
+        item = SimpleNamespace(description="Услуга", unit="hourly", quantity=10, unit_price=1000, amount=10000)
+        invoice = SimpleNamespace(
+            document_number="INV-001", invoice_date="2026-11-06",
+            items=[item], subtotal=10000, total=12000, vat_amount=2000, vat_rate=20, tax_system="osno",
+        )
+        contractor = SimpleNamespace(
+            name="OOO Client", legal_address="Moscow", inn="7701234567", kpp="770101001",
+            bank_details={"account": "40702810000000012345", "bank_name": "Sberbank", "bik": "044525225"},
+            tax_system="osno",
+        )
+        result = _generate_invoice_pdf_fpdf(invoice, contractor)
+        assert isinstance(result, bytes)
+        assert len(result) > 100
+
+    def test_without_contractor_usn(self):
+        from app.services.pdf_service import _generate_invoice_pdf_fpdf
+        invoice = SimpleNamespace(
+            document_number="INV-002", invoice_date="2026-11-06",
+            items=[], subtotal=5000, total=5000, vat_amount=0, vat_rate=0, tax_system="usn_6",
+        )
+        result = _generate_invoice_pdf_fpdf(invoice, None)
+        assert isinstance(result, bytes)
+
+    def test_contractor_partial_info(self):
+        from app.services.pdf_service import _generate_invoice_pdf_fpdf
+        invoice = SimpleNamespace(
+            document_number="INV-003", invoice_date="2026-11-06",
+            items=[], subtotal=1000, total=1000, vat_amount=0, vat_rate=0, tax_system="patent",
+        )
+        contractor = SimpleNamespace(name="IP Ivanov", legal_address=None, inn="770123456789", kpp=None, bank_details=None, tax_system=None)
+        result = _generate_invoice_pdf_fpdf(invoice, contractor)
+        assert isinstance(result, bytes)
+
+
+class TestFpdfActFallback:
+    """Cover _generate_act_pdf_fpdf (lines 360-464)."""
+
+    def test_with_contractor_osno_vat_included(self):
+        from app.services.pdf_service import _generate_act_pdf_fpdf
+        act = SimpleNamespace(document_number="ACT-001", act_date="2026-11-06", total_amount=50000, tax_system="osno", vat_rate=20, is_vat_included=True)
+        contractor = SimpleNamespace(
+            name="OOO Client", legal_address="SPb", inn="7801234567", kpp="780101001",
+            bank_details={"account": "40702810000000099999", "bank_name": "VTB", "bik": "044030704"},
+            tax_system="osno",
+        )
+        result = _generate_act_pdf_fpdf(act, contractor)
+        assert isinstance(result, bytes)
+        assert len(result) > 100
+
+    def test_osno_vat_not_included(self):
+        from app.services.pdf_service import _generate_act_pdf_fpdf
+        act = SimpleNamespace(document_number="ACT-002", act_date="2026-11-06", total_amount=60000, tax_system="osno", vat_rate=20, is_vat_included=False)
+        result = _generate_act_pdf_fpdf(act, None)
+        assert isinstance(result, bytes)
+
+    def test_usn_no_vat(self):
+        from app.services.pdf_service import _generate_act_pdf_fpdf
+        act = SimpleNamespace(document_number="ACT-003", act_date="2026-11-06", total_amount=30000, tax_system="usn_15")
+        result = _generate_act_pdf_fpdf(act, None)
+        assert isinstance(result, bytes)
+
+
+class TestGeneratePayoutPdfDetails:
+    """Cover generate_payout_pdf internal branches."""
+
+    def test_with_none_fields(self):
+        from app.services.pdf_service import generate_payout_pdf
+        payout = SimpleNamespace(
+            document_number=None, payout_date=None, status=None,
+            gross_amount=None, platform_commission=None, net_amount=None, commission_rate=None,
+        )
+        result = generate_payout_pdf(payout)
+        assert isinstance(result, bytes)
+        assert len(result) > 100
+
+    def test_with_string_status(self):
+        from app.services.pdf_service import generate_payout_pdf
+        payout = SimpleNamespace(
+            document_number="PAY-002", payout_date="2026-11-06", status="pending",
+            gross_amount=50000, platform_commission=5000, net_amount=45000, commission_rate=10,
+        )
+        result = generate_payout_pdf(payout, owner_name="", vehicle_name="")
+        assert isinstance(result, bytes)
