@@ -605,3 +605,60 @@ class TestPaymentsServiceFinalBranches:
                 result = service.apply_payment(mock_db, transaction_id=1, invoice_id=1)
             except Exception:
                 pass
+
+
+    def test_notification_exception_caught(self, mock_db, service):
+        """Cover lines 341-342: Exception in notification import/call."""
+        from decimal import Decimal
+        import sys
+        import types
+
+        tx = MagicMock()
+        tx.amount = Decimal("10000")
+        tx.company_id = 7
+        tx.match_status = "unmatched"
+        tx.payment_id = None
+        tx.processed_date = datetime(2026, 11, 1)
+        tx.bank_transaction_id = "BT-004"
+        tx.counterparty_name = "TestCo"
+        tx.counterparty_inn = "1234567890"
+        tx.counterparty_account = "40702810000000000002"
+        tx.purpose = "Test"
+
+        invoice = MagicMock()
+        invoice.id = 1
+        invoice.total = Decimal("10000")
+        invoice.paid_amount = Decimal("0")
+        invoice.status = "draft"
+        invoice.company_id = 7
+        invoice.document_number = "INV-001"
+
+        mock_db.get.side_effect = [tx, invoice]
+
+        # Create a fake payment_notifications module where import succeeds
+        # but accessing payment_notification_service raises Exception
+        fake_mod = types.ModuleType("app.services.payment_notifications")
+        fake_mod.payment_notification_service = property(
+            lambda self: (_ for _ in ()).throw(Exception("service init failed"))
+        )
+        # Simpler: make the attribute access raise
+        type(fake_mod).payment_notification_service = property(
+            lambda self: exec("raise Exception('boom')") or None
+        )
+
+        # Actually simplest: patch sys.modules so import works but attribute access fails
+        fake_svc = MagicMock()
+        fake_svc.notify_invoice_paid = MagicMock(side_effect=Exception("notify boom"))
+        fake_mod2 = types.ModuleType("app.services.payment_notifications")
+        fake_mod2.payment_notification_service = fake_svc
+
+        # Make get_running_loop raise something OTHER than RuntimeError
+        # so it falls through to outer except Exception
+        with patch("app.services.payments_service.Payment") as MockPayment, \
+             patch.dict(sys.modules, {"app.services.payment_notifications": fake_mod2}), \
+             patch("asyncio.get_running_loop", side_effect=Exception("loop error")):
+            mock_payment = MagicMock()
+            mock_payment.id = 10
+            MockPayment.return_value = mock_payment
+            result = service.apply_payment(mock_db, transaction_id=1, invoice_id=1)
+        # Should not raise - Exception caught by outer except
