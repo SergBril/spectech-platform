@@ -651,3 +651,47 @@ class TestPaymentsServiceFinalBranches:
             MockPayment.return_value = mock_payment
             result = service.apply_payment(mock_db, transaction_id=1, invoice_id=1)
         # Should not raise - ValueError caught by outer except Exception
+
+
+    def test_module_level_import_error(self):
+        """Cover lines 30-33: module-level ImportError for ClientBankExchangeParser."""
+        import importlib
+        import sys
+        import types
+
+        # Save original module
+        mod_name = "app.services.payments_service"
+        original_mod = sys.modules.get(mod_name)
+
+        # Create a fake bank_statement_parser that raises ImportError
+        fake_parser_mod = types.ModuleType("app.services.bank_statement_parser")
+        # Make the import of ClientBankExchangeParser fail
+        original_parser = sys.modules.get("app.services.bank_statement_parser")
+
+        try:
+            # Remove parser module so import fails
+            if "app.services.bank_statement_parser" in sys.modules:
+                del sys.modules["app.services.bank_statement_parser"]
+
+            # Block re-import
+            import builtins
+            real_import = builtins.__import__
+            def blocking_import(name, *args, **kwargs):
+                if name == "app.services.bank_statement_parser":
+                    raise ImportError("Simulated missing parser")
+                return real_import(name, *args, **kwargs)
+
+            with patch.object(builtins, "__import__", side_effect=blocking_import):
+                # Force reload to trigger the except ImportError block
+                if mod_name in sys.modules:
+                    del sys.modules[mod_name]
+                reloaded = importlib.import_module(mod_name)
+                assert reloaded.ClientBankExchangeParser is None
+        finally:
+            # Restore original state
+            if original_parser is not None:
+                sys.modules["app.services.bank_statement_parser"] = original_parser
+            if original_mod is not None:
+                sys.modules[mod_name] = original_mod
+            else:
+                importlib.import_module(mod_name)
