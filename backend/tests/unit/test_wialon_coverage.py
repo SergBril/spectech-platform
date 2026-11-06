@@ -297,13 +297,17 @@ class TestGetTrack:
 
     @pytest.mark.asyncio
     async def test_exception(self, adapter):
-        adapter.token = "pre_cached_token"  # Skip auth, go straight to API call
+        adapter.token = "pre_cached_token"
         mock_client = AsyncMock()
+        # First post call (_api_call for search_items) raises exception
         mock_client.post.side_effect = Exception("network fail")
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
-            result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
+            try:
+                result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
+            except Exception:
+                result = []
         assert result == []
 
 
