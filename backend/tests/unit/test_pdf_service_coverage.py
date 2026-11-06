@@ -303,32 +303,31 @@ class TestGeneratePayoutPdfDetails:
 
 
 class TestFinalPdfBranches:
-    """Cover last 5 uncovered lines."""
+    """Cover last 2 uncovered lines."""
 
-    def test_act_pdf_without_weasyprint(self):
-        """Cover lines 208-209: use_weasy=False in generate_act_pdf."""
+    def test_act_pdf_exception_triggers_fpdf_fallback(self):
+        """Cover line 235: except branch in generate_act_pdf calls _generate_act_pdf_fpdf."""
         from app.services.pdf_service import generate_act_pdf
-        act = SimpleNamespace(document_number="ACT-001", total_amount=5000, tax_system="osno")
-        # Block weasyprint import to trigger use_weasy=False
-        import builtins
-        real_import = builtins.__import__
-        def mock_import(name, *args, **kwargs):
-            if name == "weasyprint":
-                raise ImportError("blocked")
-            return real_import(name, *args, **kwargs)
-        with patch.object(builtins, "__import__", side_effect=mock_import):
+        act = SimpleNamespace(document_number="ACT-FB", act_date="2026-11-06", total_amount=5000, tax_system="osno", vat_rate=20, is_vat_included=True)
+        # Make jinja2.Environment fail so we hit except -> _generate_act_pdf_fpdf
+        with patch("jinja2.Environment", side_effect=Exception("template error")):
             result = generate_act_pdf(act)
         assert isinstance(result, bytes)
+        assert len(result) > 100
 
-    def test_payout_font_not_registered(self):
-        """Cover line 483: font_ok=False uses Helvetica."""
+    def test_payout_pdf_too_small_warning(self):
+        """Cover line 575: PDF too small warning branch."""
         from app.services.pdf_service import generate_payout_pdf
         payout = SimpleNamespace(
-            document_number="PAY-FONT", payout_date="2026-11-06",
+            document_number="PAY-SMALL", payout_date="2026-11-06",
             status=SimpleNamespace(value="approved"),
             gross_amount=10000, platform_commission=1000, net_amount=9000, commission_rate=10,
         )
-        with patch("app.services.pdf_service._register_dejavu_fonts", return_value=False):
-            result = generate_payout_pdf(payout, owner_name="Test", vehicle_name="Test")
-        assert isinstance(result, bytes)
-        assert len(result) > 100
+        # Mock pdf.output() to return tiny bytes
+        with patch("fpdf.FPDF") as MockFPDF:
+            mock_pdf = MagicMock()
+            mock_pdf.output.return_value = b"tiny"  # < 100 bytes
+            MockFPDF.return_value = mock_pdf
+            with patch("app.services.pdf_service._register_dejavu_fonts", return_value=True):
+                result = generate_payout_pdf(payout, owner_name="T", vehicle_name="T")
+        assert result == b"tiny"
