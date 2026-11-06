@@ -17,7 +17,7 @@ class TestSendRoleChangeEmail:
         from app.services.rbac_email_service import send_role_change_email
         user = SimpleNamespace(id=1, email="test@example.com", full_name="Ivan")
         db = MagicMock()
-        with patch("app.services.rbac_email_service.send_email") as mock_send:
+        with patch("app.services.email_service.send_email") as mock_send:
             send_role_change_email(user, "viewer", "admin", db)
         mock_send.assert_called_once()
         call_args = mock_send.call_args[0]
@@ -37,7 +37,7 @@ class TestSendRoleChangeEmail:
         from app.services.rbac_email_service import send_role_change_email
         user = SimpleNamespace(id=1, email="test@example.com", full_name=None)
         db = MagicMock()
-        with patch("app.services.rbac_email_service.send_email", side_effect=Exception("SMTP fail")):
+        with patch("app.services.email_service.send_email", side_effect=Exception("SMTP fail")):
             send_role_change_email(user, "viewer", "admin", db)
         # Should not raise, error is logged
 
@@ -45,7 +45,7 @@ class TestSendRoleChangeEmail:
         from app.services.rbac_email_service import send_role_change_email
         user = SimpleNamespace(id=1, email="test@example.com", full_name=None)
         db = MagicMock()
-        with patch("app.services.rbac_email_service.send_email") as mock_send:
+        with patch("app.services.email_service.send_email") as mock_send:
             send_role_change_email(user, "viewer", "admin", db)
         body = mock_send.call_args[0][2]
         assert "test@example.com" in body
