@@ -335,25 +335,28 @@ class TestFinalPdfBranches:
         """Cover line 235: except in generate_act_pdf -> fpdf fallback."""
         from app.services.pdf_service import generate_act_pdf
         act = SimpleNamespace(document_number="ACT-ERR", act_date="2026-11-06", total_amount=5000, tax_system="osno", vat_rate=20, is_vat_included=True)
-        # Make template.render fail
-        mock_env = MagicMock()
-        mock_env.filters = {}
-        mock_env.get_template.return_value.render.side_effect = Exception("render fail")
-        with patch("jinja2.Environment", return_value=mock_env):
+        # Make FileSystemLoader fail to trigger except branch
+        with patch("jinja2.FileSystemLoader", side_effect=Exception("no templates")):
             result = generate_act_pdf(act)
         assert isinstance(result, bytes)
         assert len(result) > 100
 
-    def test_payout_font_fallback_helvetica(self):
-        """Cover line 483: font_ok=False uses Helvetica with ASCII-only data."""
+    def test_payout_pdf_too_small(self):
+        """Cover line 575: PDF output < 100 bytes triggers warning."""
         from app.services.pdf_service import generate_payout_pdf
         payout = SimpleNamespace(
-            document_number="PAY-H", payout_date="2026-11-06",
+            document_number="PAY-S", payout_date="2026-11-06",
             status=SimpleNamespace(value="ok"),
             gross_amount=1000, platform_commission=100, net_amount=900, commission_rate=10,
         )
-        # font_ok=False but use ASCII-only names to avoid Unicode error
-        with patch("app.services.pdf_service._register_dejavu_fonts", return_value=False):
-            result = generate_payout_pdf(payout, owner_name="Test", vehicle_name="Car")
-        # May succeed or fail depending on fpdf version - either way covers the branch
-        assert isinstance(result, bytes)
+        # Patch FPDF.output to return tiny result
+        original_output = None
+        try:
+            from fpdf import FPDF
+            original_output = FPDF.output
+            FPDF.output = lambda self: b"small"
+            result = generate_payout_pdf(payout, owner_name="T", vehicle_name="V")
+        finally:
+            if original_output:
+                FPDF.output = original_output
+        assert result == b"small"
