@@ -207,3 +207,82 @@ class TestGlobalSingleton:
     def test_exists(self):
         from app.services.email_service import email_service
         assert email_service is not None
+
+
+
+class TestRemainingBranches:
+    """Cover remaining uncovered lines."""
+
+    def test_invoice_created_pdf_cleanup_error(self, service):
+        """Cover lines 330-331: pdf_path.unlink() exception."""
+        invoice = SimpleNamespace(id=1, document_number="INV-001")
+        uploaded = SimpleNamespace(storage_path="/tmp/inv.pdf")
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = uploaded
+        fake_path = MagicMock()
+        fake_path.exists.return_value = True
+        fake_path.unlink.side_effect = PermissionError("locked")
+        with patch.object(service, "send_email", return_value=True), \
+             patch("app.core.db.SessionLocal", return_value=mock_db), \
+             patch("app.services.storage_service.get_file", return_value=b"%PDF-content"), \
+             patch("tempfile.NamedTemporaryFile") as mock_tmp:
+            mock_tmp.return_value.__enter__ = lambda s: s
+            mock_tmp.return_value.__exit__ = lambda *a: False
+            mock_tmp.return_value.name = "/tmp/fake.pdf"
+            mock_tmp.return_value.write = MagicMock()
+            mock_tmp.return_value.close = MagicMock()
+            # Patch Path to return our fake_path
+            with patch("app.services.email_service.Path") as MockPath:
+                MockPath.return_value = fake_path
+                result = service.send_invoice_created(invoice, "c@c.com", "C")
+        assert result is True  # Should not raise despite unlink error
+
+    def test_act_signed_pdf_cleanup_error(self, service):
+        """Cover lines 390-391: act pdf cleanup exception."""
+        act = SimpleNamespace(id=1, document_number="ACT-001")
+        uploaded = SimpleNamespace(storage_path="/tmp/act.pdf")
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = uploaded
+        fake_path = MagicMock()
+        fake_path.exists.return_value = True
+        fake_path.unlink.side_effect = OSError("busy")
+        with patch.object(service, "send_email", return_value=True), \
+             patch("app.core.db.SessionLocal", return_value=mock_db), \
+             patch("app.services.storage_service.get_file", return_value=b"%PDF-act"), \
+             patch("app.services.email_service.Path") as MockPath:
+            MockPath.return_value = fake_path
+            result = service.send_act_signed(act, "u@u.com", "U")
+        assert result is True
+
+    def test_payout_approved_pdf_file_path(self, service):
+        """Cover lines 524-540: PDF as file path string."""
+        import tempfile, os
+        payout = SimpleNamespace(document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2)
+        mock_db = MagicMock()
+        mock_db.get.return_value = None
+        # Create a real temp PDF file > 100 bytes
+        tmpf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmpf.write(b"%PDF-" + b"x" * 200)
+        tmpf.close()
+        try:
+            with patch.object(service, "send_email", return_value=True) as mock_send, \
+                 patch("app.core.db.SessionLocal", return_value=mock_db), \
+                 patch("app.services.pdf_service.generate_payout_pdf", return_value=tmpf.name):
+                result = service.send_payout_approved(payout, "o@o.com", "Owner")
+            assert result is True
+            att = mock_send.call_args[1]["attachments"]
+            assert att is not None
+        finally:
+            os.unlink(tmpf.name)
+
+    def test_payout_approved_pdf_file_missing(self, service):
+        """Cover lines 548-551: PDF file path but file missing."""
+        payout = SimpleNamespace(document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2)
+        mock_db = MagicMock()
+        mock_db.get.return_value = None
+        with patch.object(service, "send_email", return_value=True) as mock_send, \
+             patch("app.core.db.SessionLocal", return_value=mock_db), \
+             patch("app.services.pdf_service.generate_payout_pdf", return_value="/nonexistent/file.pdf"):
+            result = service.send_payout_approved(payout, "o@o.com", "Owner")
+        assert result is True
+        assert mock_send.call_args[1]["attachments"] is None
