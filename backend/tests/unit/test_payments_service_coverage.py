@@ -608,7 +608,7 @@ class TestPaymentsServiceFinalBranches:
 
 
     def test_notification_exception_caught(self, mock_db, service):
-        """Cover lines 341-342: Exception in notification import/call."""
+        """Cover lines 341-342: Exception in notification block (non-RuntimeError)."""
         from decimal import Decimal
         import sys
         import types
@@ -635,30 +635,19 @@ class TestPaymentsServiceFinalBranches:
 
         mock_db.get.side_effect = [tx, invoice]
 
-        # Create a fake payment_notifications module where import succeeds
-        # but accessing payment_notification_service raises Exception
-        fake_mod = types.ModuleType("app.services.payment_notifications")
-        fake_mod.payment_notification_service = property(
-            lambda self: (_ for _ in ()).throw(Exception("service init failed"))
-        )
-        # Simpler: make the attribute access raise
-        type(fake_mod).payment_notification_service = property(
-            lambda self: exec("raise Exception('boom')") or None
-        )
-
-        # Actually simplest: patch sys.modules so import works but attribute access fails
+        # Fake module so import succeeds
         fake_svc = MagicMock()
-        fake_svc.notify_invoice_paid = MagicMock(side_effect=Exception("notify boom"))
-        fake_mod2 = types.ModuleType("app.services.payment_notifications")
-        fake_mod2.payment_notification_service = fake_svc
+        fake_mod = types.ModuleType("app.services.payment_notifications")
+        fake_mod.payment_notification_service = fake_svc
 
-        # Make get_running_loop raise something OTHER than RuntimeError
-        # so it falls through to outer except Exception
+        # asyncio.get_running_loop raises ValueError (not RuntimeError)
+        # -> inner except RuntimeError doesn't catch it
+        # -> outer except Exception catches it (lines 341-342)
         with patch("app.services.payments_service.Payment") as MockPayment, \
-             patch.dict(sys.modules, {"app.services.payment_notifications": fake_mod2}), \
-             patch("asyncio.get_running_loop", side_effect=Exception("loop error")):
+             patch.dict(sys.modules, {"app.services.payment_notifications": fake_mod}), \
+             patch("asyncio.get_running_loop", side_effect=ValueError("no loop")):
             mock_payment = MagicMock()
             mock_payment.id = 10
             MockPayment.return_value = mock_payment
             result = service.apply_payment(mock_db, transaction_id=1, invoice_id=1)
-        # Should not raise - Exception caught by outer except
+        # Should not raise - ValueError caught by outer except Exception
