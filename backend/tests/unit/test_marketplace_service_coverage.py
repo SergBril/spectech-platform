@@ -419,3 +419,109 @@ class TestNotifyOwnerNewRequest:
                 vehicle=vehicle, request=request,
                 owner_name="Ivan", owner_email="ivan@test.com",
             )
+
+
+
+class TestCalendarItemSkip:
+    """Cover line 293: rental item with different vehicle_id is skipped."""
+
+    def test_mixed_vehicle_items(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        # Rental has items for vehicle 1 AND vehicle 99
+        rental = MagicMock()
+        rental.start_date = datetime(2026, 11, 5)
+        rental.end_date = datetime(2026, 11, 7)
+        rental.id = 42
+        item_our = MagicMock()
+        item_our.vehicle_id = 1
+        item_other = MagicMock()
+        item_other.vehicle_id = 99
+        rental.items = [item_our, item_other]
+
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = [rental]
+        mock_db.scalars.return_value = mock_scalars
+        result = MarketplaceService.get_availability_calendar(
+            mock_db, vehicle_id=1, from_date=date(2026, 11, 1), to_date=date(2026, 11, 30),
+        )
+        busy = [d for d in result if not d["available"]]
+        assert len(busy) == 3  # Only vehicle 1 dates marked busy
+
+
+class TestCreateRequestNotifyBranches:
+    """Cover lines 393, 403-404: async notify task creation and exception."""
+
+    def test_notify_with_owner(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        vehicle = MagicMock()
+        vehicle.id = 1
+        vehicle.is_available_for_rent = True
+        vehicle.owner_id = 20
+        vehicle.name = "KAMAZ"
+        owner = MagicMock()
+        owner.email = "owner@test.com"
+        owner.name = "Ivan"
+        owner.id = 20
+
+        # db.get sequence: Vehicle(1), Contractor(20)
+        mock_db.get.side_effect = [vehicle, owner]
+        # _filter_available: no busy rentals
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_db.scalars.return_value = mock_scalars
+
+        result = MarketplaceService.create_request_from_listing(
+            mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
+            work_type="excavation", planned_start=datetime(2026, 12, 1),
+            planned_end=datetime(2026, 12, 5),
+        )
+        mock_db.add.assert_called()
+        mock_db.commit.assert_called()
+
+    def test_notify_no_event_loop(self, mock_db):
+        """Cover line 403: RuntimeError when no event loop."""
+        from app.services.marketplace_service import MarketplaceService
+        vehicle = MagicMock()
+        vehicle.id = 1
+        vehicle.is_available_for_rent = True
+        vehicle.owner_id = 20
+        vehicle.name = "KAMAZ"
+        owner = MagicMock()
+        owner.email = "owner@test.com"
+        owner.name = "Ivan"
+        owner.id = 20
+
+        mock_db.get.side_effect = [vehicle, owner]
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_db.scalars.return_value = mock_scalars
+
+        # Patch asyncio.get_running_loop to raise RuntimeError
+        with patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
+            result = MarketplaceService.create_request_from_listing(
+                mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
+                work_type="test", planned_start=datetime(2026, 12, 1),
+                planned_end=datetime(2026, 12, 5),
+            )
+        mock_db.commit.assert_called()
+
+    def test_notify_exception_caught(self, mock_db):
+        """Cover line 404: outer exception handler."""
+        from app.services.marketplace_service import MarketplaceService
+        vehicle = MagicMock()
+        vehicle.id = 1
+        vehicle.is_available_for_rent = True
+        vehicle.owner_id = 20
+        vehicle.name = "KAMAZ"
+
+        mock_db.get.side_effect = [vehicle, None]  # owner not found -> owner=None, skips notify
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_db.scalars.return_value = mock_scalars
+
+        result = MarketplaceService.create_request_from_listing(
+            mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
+            work_type="test", planned_start=datetime(2026, 12, 1),
+            planned_end=datetime(2026, 12, 5),
+        )
+        mock_db.commit.assert_called()
