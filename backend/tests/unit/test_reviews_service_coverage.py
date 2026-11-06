@@ -250,8 +250,13 @@ class TestCreateReview:
         m_client.id = 10
         m_client.company_id = 8
 
-        # Sequential db.get: Rental(100), Contractor(20), Vehicle(1), Contractor(10)
-        mock_db.get.side_effect = [m_rental, m_reviewer, m_vehicle, m_client]
+        # Sequential db.get: Rental(100), Contractor(20), Vehicle(1), Contractor(10), Company(8)
+        m_company = MM()
+        m_company.id = 8
+        m_company.average_rating = None
+        m_company.total_reviews = 0
+        m_company.rating_distribution = {}
+        mock_db.get.side_effect = [m_rental, m_reviewer, m_vehicle, m_client, m_company]
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
         result = ReviewsService.create_review(
