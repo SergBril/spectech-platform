@@ -1,7 +1,7 @@
 """Coverage tests for fuel_service."""
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -14,12 +14,13 @@ def mock_db():
 class TestGetFuelAnalytics:
     """Cover get_fuel_analytics (lines 19-93)."""
 
-    def test_default_dates(self, mock_db):
+    def test_default_dates_empty(self, mock_db):
         from app.services.fuel_service import FuelService
         mock_db.query.return_value.join.return_value.filter.return_value.all.return_value = []
         result = FuelService.get_fuel_analytics(mock_db, company_id=7)
-        assert "total_refuels" in result
         assert result["total_refuels"] == 0
+        assert result["total_drains"] == 0
+        assert "period" in result
 
     def test_with_vehicle_filter(self, mock_db):
         from app.services.fuel_service import FuelService
@@ -31,9 +32,9 @@ class TestGetFuelAnalytics:
         from app.services.fuel_service import FuelService
         now = datetime.now(UTC)
         txns = [
-            SimpleNamespace(transaction_type="refuel", volume=50.0, price_per_liter=55.0, occurred_at=now),
-            SimpleNamespace(transaction_type="refuel", volume=30.0, price_per_liter=56.0, occurred_at=now),
-            SimpleNamespace(transaction_type="drain", volume=10.0, price_per_liter=0, occurred_at=now),
+            SimpleNamespace(transaction_type="refuel", volume=50.0, total_cost=2750.0, occurred_at=now),
+            SimpleNamespace(transaction_type="refuel", volume=30.0, total_cost=1680.0, occurred_at=now),
+            SimpleNamespace(transaction_type="drain", volume=10.0, total_cost=None, occurred_at=now),
         ]
         mock_db.query.return_value.join.return_value.filter.return_value.all.return_value = txns
         result = FuelService.get_fuel_analytics(mock_db, company_id=7)
@@ -41,6 +42,11 @@ class TestGetFuelAnalytics:
         assert result["total_drains"] == 1
         assert result["total_volume_refuel"] == 80.0
         assert result["total_volume_drain"] == 10.0
+        assert result["net_volume"] == 70.0
+        assert result["total_cost"] == 4430.0
+        assert result["avg_price_per_liter"] > 0
+        assert result["avg_volume_per_refuel"] == 40.0
+        assert "refuels_by_month" in result
 
     def test_custom_date_range(self, mock_db):
         from app.services.fuel_service import FuelService
@@ -48,7 +54,7 @@ class TestGetFuelAnalytics:
         date_to = datetime(2026, 6, 30, tzinfo=UTC)
         mock_db.query.return_value.join.return_value.filter.return_value.all.return_value = []
         result = FuelService.get_fuel_analytics(mock_db, company_id=7, date_from=date_from, date_to=date_to)
-        assert result["total_refuels"] == 0
+        assert result["period"]["from"] == date_from.isoformat()
 
 
 class TestGetConsumptionRates:
@@ -58,18 +64,29 @@ class TestGetConsumptionRates:
         from app.services.fuel_service import FuelService
         mock_db.query.return_value.join.return_value.filter.return_value.all.return_value = []
         result = FuelService.get_consumption_rates(mock_db, company_id=7)
-        assert result == []
+        assert isinstance(result, list)
 
     def test_with_data(self, mock_db):
         from app.services.fuel_service import FuelService
         now = datetime.now(UTC)
-        txns = [
-            SimpleNamespace(vehicle_id=1, volume=50.0, occurred_at=now),
-        ]
-        mock_db.query.return_value.join.return_value.filter.return_value.all.return_value = txns
-        # Also need vehicle query for names
+        # Need to handle multiple query calls - first for transactions, then for vehicles
+        txn = SimpleNamespace(vehicle_id=1, volume=50.0, occurred_at=now)
         vehicle = SimpleNamespace(id=1, name="KAMAZ", plate_number="A123AA")
-        mock_db.query.return_value.filter.return_value.all.return_value = [vehicle]
+        
+        call_count = [0]
+        def query_side_effect(*args):
+            call_count[0] += 1
+            mock_q = MagicMock()
+            if call_count[0] <= 2:
+                # Transaction queries
+                mock_q.join.return_value.filter.return_value.all.return_value = [txn]
+                mock_q.filter.return_value.all.return_value = [txn]
+            else:
+                # Vehicle queries
+                mock_q.filter.return_value.all.return_value = [vehicle]
+            return mock_q
+        
+        mock_db.query.side_effect = query_side_effect
         result = FuelService.get_consumption_rates(mock_db, company_id=7)
         assert isinstance(result, list)
 
@@ -77,21 +94,36 @@ class TestGetConsumptionRates:
 class TestGetFuelByVehicle:
     """Cover get_fuel_by_vehicle (lines 169-233)."""
 
-    def test_empty(self, mock_db):
+    def test_empty_vehicles(self, mock_db):
         from app.services.fuel_service import FuelService
-        mock_db.query.return_value.join.return_value.filter.return_value.all.return_value = []
+        # First query returns no vehicles
+        mock_db.query.return_value.filter.return_value.all.return_value = []
         result = FuelService.get_fuel_by_vehicle(mock_db, company_id=7)
-        assert result == {}
+        assert result == []
 
-    def test_with_data(self, mock_db):
+    def test_with_vehicles_and_transactions(self, mock_db):
         from app.services.fuel_service import FuelService
         now = datetime.now(UTC)
-        txns = [
-            SimpleNamespace(vehicle_id=1, transaction_type="refuel", volume=50.0, price_per_liter=55.0, occurred_at=now),
-        ]
-        mock_db.query.return_value.join.return_value.filter.return_value.all.return_value = txns
+        vehicle = SimpleNamespace(id=1, name="KAMAZ")
+        txn = SimpleNamespace(transaction_type="refuel", volume=50.0, total_cost=2750.0, occurred_at=now)
+        
+        call_count = [0]
+        def query_side_effect(*args):
+            call_count[0] += 1
+            mock_q = MagicMock()
+            if call_count[0] == 1:
+                # Vehicle query
+                mock_q.filter.return_value.all.return_value = [vehicle]
+            else:
+                # Transaction query per vehicle
+                mock_q.filter.return_value.all.return_value = [txn]
+            return mock_q
+        
+        mock_db.query.side_effect = query_side_effect
         result = FuelService.get_fuel_by_vehicle(mock_db, company_id=7)
-        assert isinstance(result, dict)
+        assert len(result) == 1
+        assert result[0]["vehicle_name"] == "KAMAZ"
+        assert result[0]["refuels_count"] == 1
 
 
 class TestGetRefuelsTimeline:
@@ -106,10 +138,24 @@ class TestGetRefuelsTimeline:
     def test_with_data(self, mock_db):
         from app.services.fuel_service import FuelService
         now = datetime.now(UTC)
-        txns = [
-            SimpleNamespace(vehicle_id=1, volume=50.0, price_per_liter=55.0, occurred_at=now, location="Moscow"),
-        ]
-        mock_db.query.return_value.join.return_value.filter.return_value.all.return_value = txns
+        txn = SimpleNamespace(
+            vehicle_id=1, volume=50.0, price_per_liter=55.0, 
+            total_cost=2750.0, occurred_at=now, location="Moscow"
+        )
+        vehicle = SimpleNamespace(id=1, name="KAMAZ", plate_number="A123AA")
+        
+        call_count = [0]
+        def query_side_effect(*args):
+            call_count[0] += 1
+            mock_q = MagicMock()
+            if call_count[0] <= 2:
+                mock_q.join.return_value.filter.return_value.all.return_value = [txn]
+                mock_q.filter.return_value.all.return_value = [txn]
+            else:
+                mock_q.filter.return_value.all.return_value = [vehicle]
+            return mock_q
+        
+        mock_db.query.side_effect = query_side_effect
         result = FuelService.get_refuels_timeline(mock_db, company_id=7)
         assert isinstance(result, list)
 
@@ -119,16 +165,42 @@ class TestDetectAnomalies:
 
     def test_empty(self, mock_db):
         from app.services.fuel_service import FuelService
-        mock_db.query.return_value.join.return_value.filter.return_value.all.return_value = []
+        mock_db.query.return_value.filter.return_value.all.return_value = []
         result = FuelService.detect_anomalies(mock_db, company_id=7)
-        assert result == []
+        assert isinstance(result, dict)
+        assert "anomalies" in result
+        assert "summary" in result
+        assert result["summary"]["total_anomalies"] == 0
+
+    def test_with_vehicle_filter(self, mock_db):
+        from app.services.fuel_service import FuelService
+        mock_db.query.return_value.filter.return_value.all.return_value = []
+        result = FuelService.detect_anomalies(mock_db, company_id=7, vehicle_id=42)
+        assert isinstance(result, dict)
 
     def test_detects_drain_anomaly(self, mock_db):
         from app.services.fuel_service import FuelService
         now = datetime.now(UTC)
-        txns = [
-            SimpleNamespace(vehicle_id=1, transaction_type="drain", volume=100.0, occurred_at=now),
-        ]
-        mock_db.query.return_value.join.return_value.filter.return_value.all.return_value = txns
+        vehicle = SimpleNamespace(id=1, name="KAMAZ")
+        drain = SimpleNamespace(
+            vehicle_id=1, transaction_type="drain", volume=100.0, 
+            occurred_at=now, total_cost=None
+        )
+        
+        call_count = [0]
+        def query_side_effect(*args):
+            call_count[0] += 1
+            mock_q = MagicMock()
+            if call_count[0] == 1:
+                # Vehicle query
+                mock_q.filter.return_value.all.return_value = [vehicle]
+            else:
+                # Drain/refuel queries per vehicle
+                mock_q.filter.return_value.order_by.return_value.all.return_value = [drain]
+                mock_q.filter.return_value.all.return_value = [drain]
+            return mock_q
+        
+        mock_db.query.side_effect = query_side_effect
         result = FuelService.detect_anomalies(mock_db, company_id=7)
-        assert isinstance(result, list)
+        assert isinstance(result, dict)
+        assert "anomalies" in result
