@@ -1,29 +1,8 @@
 """Coverage tests for bank_integration_service."""
-import sys
-from types import ModuleType
-from unittest.mock import MagicMock
-
-# Create mock bank module since app.models.bank doesn't exist yet
-_bank_mod = ModuleType("app.models.bank")
-
-
-class _MockBankTransaction:
-    """Minimal mock for BankTransaction that works with SQLAlchemy select()."""
-    __tablename__ = "bank_transactions"
-    company_id = None
-    doc_number = None
-    amount = None
-
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
-
-_bank_mod.BankTransaction = _MockBankTransaction
-sys.modules["app.models.bank"] = _bank_mod
-
-
 from unittest.mock import MagicMock, patch
+
+
+from unittest.mock import MagicMock, patch, patch
 
 import pytest
 
@@ -119,7 +98,10 @@ class TestSyncPaymentsToDb:
                       "payee_name": "B", "payee_account": "408", "amount": 1000.0,
                       "purpose": "Test", "status": "processed"}]
 
-        result = service.sync_payments_to_db(db, 7, payments)
+        mock_txn_class = MagicMock()
+        with patch.dict("sys.modules", {"app.models.bank": MagicMock(BankTransaction=mock_txn_class)}), \
+             patch("app.services.bank_integration_service.select", return_value=MagicMock()):
+            result = service.sync_payments_to_db(db, 7, payments)
 
         assert result["created"] == 1
         assert result["skipped"] == 0
@@ -135,7 +117,10 @@ class TestSyncPaymentsToDb:
                       "payee_name": "B", "payee_account": "408", "amount": 1000.0,
                       "purpose": "Test", "status": "processed"}]
 
-        result = service.sync_payments_to_db(db, 7, payments)
+        mock_txn_class = MagicMock()
+        with patch.dict("sys.modules", {"app.models.bank": MagicMock(BankTransaction=mock_txn_class)}), \
+             patch("app.services.bank_integration_service.select", return_value=MagicMock()):
+            result = service.sync_payments_to_db(db, 7, payments)
 
         assert result["created"] == 0
         assert result["skipped"] == 1
