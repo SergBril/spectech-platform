@@ -69,26 +69,33 @@ class TestGetConsumptionRates:
     def test_with_data(self, mock_db):
         from app.services.fuel_service import FuelService
         now = datetime.now(UTC)
-        # Need to handle multiple query calls - first for transactions, then for vehicles
-        txn = SimpleNamespace(id=10, vehicle_id=1, volume=50.0, occurred_at=now)
-        vehicle = SimpleNamespace(id=1, name="KAMAZ", plate_number="A123AA")
+        txn = SimpleNamespace(id=10, vehicle_id=1, volume=50.0, occurred_at=now, odometer=1000)
+        vehicle = SimpleNamespace(
+            id=1, name="KAMAZ", plate_number="A123AA",
+            engine_hours=100.0, fuel_norm_per_hour=10.0, fuel_norm_per_100km=None,
+        )
         
         call_count = [0]
         def query_side_effect(*args):
             call_count[0] += 1
             mock_q = MagicMock()
-            if call_count[0] <= 2:
-                # Transaction queries
-                mock_q.join.return_value.filter.return_value.all.return_value = [txn]
-                mock_q.filter.return_value.all.return_value = [txn]
-            else:
-                # Vehicle queries
+            if call_count[0] == 1:
+                # Vehicle list query
                 mock_q.filter.return_value.all.return_value = [vehicle]
+            elif call_count[0] == 2:
+                # sum(volume) scalar query
+                mock_q.filter.return_value.scalar.return_value = 50.0
+            elif call_count[0] == 3:
+                # odometer refuels query
+                mock_q.filter.return_value.order_by.return_value.all.return_value = [txn, txn]
+            else:
+                mock_q.filter.return_value.all.return_value = []
             return mock_q
         
         mock_db.query.side_effect = query_side_effect
         result = FuelService.get_consumption_rates(mock_db, company_id=7)
         assert isinstance(result, list)
+        assert len(result) >= 1
 
 
 class TestGetFuelByVehicle:
@@ -181,10 +188,15 @@ class TestDetectAnomalies:
     def test_detects_drain_anomaly(self, mock_db):
         from app.services.fuel_service import FuelService
         now = datetime.now(UTC)
-        vehicle = SimpleNamespace(id=1, name="KAMAZ")
+        vehicle = SimpleNamespace(
+            id=1, name="KAMAZ", engine_hours=100.0,
+            fuel_norm_per_hour=10.0, fuel_norm_per_100km=None,
+        )
         drain = SimpleNamespace(
-            id=99, vehicle_id=1, transaction_type="drain", volume=100.0, 
-            occurred_at=now, total_cost=None
+            id=99, vehicle_id=1, transaction_type="drain", volume=100.0,
+            occurred_at=now, total_cost=None,
+            fuel_level_before=80.0, fuel_level_after=30.0,
+            odometer=5000.0, comment="test drain",
         )
         
         call_count = [0]
@@ -194,13 +206,20 @@ class TestDetectAnomalies:
             if call_count[0] == 1:
                 # Vehicle query
                 mock_q.filter.return_value.all.return_value = [vehicle]
-            else:
-                # Drain/refuel queries per vehicle
+            elif call_count[0] == 2:
+                # Drains query (with order_by)
                 mock_q.filter.return_value.order_by.return_value.all.return_value = [drain]
-                mock_q.filter.return_value.all.return_value = [drain]
+            elif call_count[0] == 3:
+                # sum(volume) scalar for high_consumption check
+                mock_q.filter.return_value.scalar.return_value = 500.0
+            else:
+                mock_q.filter.return_value.all.return_value = []
+                mock_q.filter.return_value.order_by.return_value.all.return_value = []
             return mock_q
         
         mock_db.query.side_effect = query_side_effect
         result = FuelService.detect_anomalies(mock_db, company_id=7)
         assert isinstance(result, dict)
         assert "anomalies" in result
+        assert len(result["anomalies"]) >= 1
+        assert result["anomalies"][0]["type"] == "drain"
