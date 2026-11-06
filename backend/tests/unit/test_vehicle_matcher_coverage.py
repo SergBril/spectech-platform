@@ -254,124 +254,114 @@ class TestScoreVehicle:
 
 
 class TestVehicleMatcherEdgeCases:
-    """Cover remaining 10 uncovered lines."""
+    """Cover remaining uncovered lines."""
 
     def test_compatible_categories_with_children(self, mock_db):
         """Cover lines 176, 181: sibling + child categories."""
         from app.services.marketplace.vehicle_matcher import VehicleMatcherService
         svc = VehicleMatcherService()
 
-        # cat_id=10 has parent_id=5 -> triggers sibling block
         cat = MagicMock()
         cat.id = 10
-        cat.parent_id = 5  # Has parent!
+        cat.parent_id = 5
 
         sibling = MagicMock()
         sibling.id = 11
-
         child = MagicMock()
         child.id = 12
 
         mock_db.get.return_value = cat
-        # Two queries: siblings (parent_id==5), then children (parent_id==10)
         mock_db.query.return_value.filter.return_value.all.side_effect = [
-            [sibling],   # siblings of cat (same parent)
-            [child],     # children of cat
+            [sibling], [child],
         ]
 
         result = svc._get_compatible_categories(mock_db, cat_id=10)
-        assert 11 in result  # sibling
-        assert 12 in result  # child
-        assert 5 in result   # parent
+        assert 11 in result
+        assert 12 in result
+        assert 5 in result
 
-    def test_score_missing_attribute_definition(self, mock_db):
-        """Cover line 236: defn not found -> continue."""
+    def _make_score_setup(self, mock_db, vehicle_attrs, requirements=None):
+        """Helper to set up _score_vehicle mocks."""
         from app.services.marketplace.vehicle_matcher import VehicleMatcherService
         svc = VehicleMatcherService()
 
         vehicle = MagicMock()
         vehicle.id = 1
-        vehicle.category_id = 5
-        vehicle.status = "available"
-        vehicle.hourly_rate = 1000
-        vehicle.shift_rate = 8000
+        vehicle.category_id = 2
+        vehicle.region = "Москва"
 
         request = MagicMock()
-        request.vehicle_category_id = 5
-        request.required_attributes = [{"name": "test_attr", "value": "10", "type": "gte"}]
+        request.requirements = requirements or {}
+        request.region = "Москва"
 
+        # db.query(EquipmentAttributeValue).filter().all() returns attrs
+        mock_db.query.return_value.filter.return_value.all.return_value = vehicle_attrs
+
+        return svc, vehicle, request
+
+    def test_score_missing_def(self, mock_db):
+        """Cover line 236: defn not found -> continue."""
         va = MagicMock()
         va.attribute_definition_id = 999
         va.value_number = 20
         va.value_text = None
-        vehicle.attributes = [va]
 
-        # db.get returns None for attribute definition
+        # db.get returns None for defn lookup
         mock_db.get.return_value = None
 
+        svc, vehicle, request = self._make_score_setup(mock_db, [va])
         score, matched, missing = svc._score_vehicle(mock_db, vehicle, request)
-        assert isinstance(score, (int, float))
+        assert isinstance(score, int)
 
     def test_score_eq_mismatch(self, mock_db):
-        """Cover lines 270-271, 281-284: eq compare with mismatch."""
-        from app.services.marketplace.vehicle_matcher import VehicleMatcherService
-        svc = VehicleMatcherService()
-
-        vehicle = MagicMock()
-        vehicle.id = 1
-        vehicle.category_id = 5
-        vehicle.status = "available"
-        vehicle.hourly_rate = 1000
-        vehicle.shift_rate = 8000
-
-        request = MagicMock()
-        request.vehicle_category_id = 5
-        request.required_attributes = [
-            {"name": "brand", "value": "CAT", "type": "eq"},
-        ]
-
+        """Cover lines 282-284: eq compare with value mismatch."""
         va = MagicMock()
         va.attribute_definition_id = 1
         va.value_number = None
-        va.value_text = "Komatsu"  # Different from required "CAT"
-        vehicle.attributes = [va]
+        va.value_text = "Komatsu"
 
         defn = MagicMock()
-        defn.name = "brand"
+        defn.name = "Тип шасси"
         mock_db.get.return_value = defn
 
+        svc, vehicle, request = self._make_score_setup(
+            mock_db, [va], requirements={"chassis_type": "CAT"}
+        )
         score, matched, missing = svc._score_vehicle(mock_db, vehicle, request)
-        # Should have mismatch penalty
-        assert "brand" in str(missing) or score < 100
+        assert any("!=" in m for m in missing)
 
-    def test_score_weight_normalization(self, mock_db):
-        """Cover lines 260, 328: kg->ton normalization and optimal range bonus."""
-        from app.services.marketplace.vehicle_matcher import VehicleMatcherService
-        svc = VehicleMatcherService()
-
-        vehicle = MagicMock()
-        vehicle.id = 1
-        vehicle.category_id = 5
-        vehicle.status = "available"
-        vehicle.hourly_rate = 1000
-        vehicle.shift_rate = 8000
-
-        # Request weight in grams (huge number), vehicle in kg
-        request = MagicMock()
-        request.vehicle_category_id = 5
-        request.required_attributes = [
-            {"name": "weight", "value": "5000000", "type": "gte"},  # 5000000g = 5t
-        ]
-
+    def test_score_gte_norm_req_div1000(self, mock_db):
+        """Cover line 260: norm_req / 1000 when req >> vehicle."""
         va = MagicMock()
         va.attribute_definition_id = 1
-        va.value_number = 6000  # 6000kg = 6t
+        va.value_number = 5  # 5 tons
         va.value_text = None
-        vehicle.attributes = [va]
 
         defn = MagicMock()
-        defn.name = "weight"
+        defn.name = "Грузоподъёмность"
         mock_db.get.return_value = defn
 
+        # req=6000 (kg), vehicle=5 (tons) -> norm_req > norm_vehicle*100 -> norm_req/1000=6
+        svc, vehicle, request = self._make_score_setup(
+            mock_db, [va], requirements={"min_tonnage": "6000"}
+        )
         score, matched, missing = svc._score_vehicle(mock_db, vehicle, request)
-        assert isinstance(score, (int, float))
+        assert isinstance(score, int)
+
+    def test_score_optimal_bonus(self, mock_db):
+        """Cover line 328: norm_req/1000 + optimal range bonus."""
+        va = MagicMock()
+        va.attribute_definition_id = 1
+        va.value_number = 8  # 8 tons
+        va.value_text = None
+
+        defn = MagicMock()
+        defn.name = "Грузоподъёмность"
+        mock_db.get.return_value = defn
+
+        # req=6000 (kg), vehicle=8 (tons) -> norm_req/1000=6, 6<=8<=12 -> bonus
+        svc, vehicle, request = self._make_score_setup(
+            mock_db, [va], requirements={"min_tonnage": "6000"}
+        )
+        score, matched, missing = svc._score_vehicle(mock_db, vehicle, request)
+        assert any("optimal" in m for m in matched)
