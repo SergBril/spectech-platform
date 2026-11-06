@@ -1,4 +1,4 @@
-﻿"""Tests for MapixAdapter GPS provider - async-correct."""
+"""Tests for MapixAdapter GPS provider - async-correct."""
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
@@ -17,18 +17,16 @@ def adapter():
 
 
 def _make_async_client(cookies=None, post_response=None):
-    \"\"\"Create properly mocked httpx.AsyncClient.\"\"\"
     client = AsyncMock()
-    # cookies as dict-like
     cookie_store = dict(cookies or {})
-    type(client).cookies = PropertyMock(return_value=MagicMock(
-        items=lambda: list(cookie_store.items()),
-        set=MagicMock(),
-        __iter__=lambda self: iter(cookie_store),
-        __contains__=lambda self, k: k in cookie_store,
-        __getitem__=lambda self, k: cookie_store[k],
-        keys=lambda: cookie_store.keys(),
-    ))
+    mock_cookies = MagicMock()
+    mock_cookies.items = lambda: list(cookie_store.items())
+    mock_cookies.set = MagicMock()
+    mock_cookies.__iter__ = lambda self: iter(cookie_store)
+    mock_cookies.__contains__ = lambda self, k: k in cookie_store
+    mock_cookies.__getitem__ = lambda self, k: cookie_store[k]
+    mock_cookies.keys = lambda: cookie_store.keys()
+    type(client).cookies = PropertyMock(return_value=mock_cookies)
     if post_response is not None:
         client.post.return_value = post_response
     return client
@@ -74,7 +72,7 @@ class TestEnsureSession:
         adapter._session_valid = False
         resp = MagicMock()
         resp.status_code = 200
-        client = _make_async_client({}, post_response=resp)  # No PHPSESSID
+        client = _make_async_client({}, post_response=resp)
         result = await adapter._ensure_session(client)
         assert result is False
 
@@ -83,9 +81,10 @@ class TestEnsureSession:
         adapter._session_valid = False
         client = AsyncMock()
         client.post.side_effect = Exception("Connection error")
-        type(client).cookies = PropertyMock(return_value=MagicMock(
-            items=lambda: [], set=MagicMock(),
-        ))
+        mock_cookies = MagicMock()
+        mock_cookies.items = lambda: []
+        mock_cookies.set = MagicMock()
+        type(client).cookies = PropertyMock(return_value=mock_cookies)
         result = await adapter._ensure_session(client)
         assert result is False
 
@@ -142,14 +141,16 @@ class TestFetchObjectData:
         resp.json.return_value = {"success": True, "data": {"lat": 0, "lon": 0, "speed": 0, "ts": 1700000000}}
         client = _make_async_client(post_response=resp)
         result = await adapter._fetch_object_data(client, "obj1")
-        # Zero coords may be filtered out
         assert result is None or result is not None
 
     @pytest.mark.asyncio
     async def test_request_exception(self, adapter):
         client = AsyncMock()
         client.get.side_effect = Exception("timeout")
-        type(client).cookies = PropertyMock(return_value=MagicMock(items=lambda: [], set=MagicMock()))
+        mock_cookies = MagicMock()
+        mock_cookies.items = lambda: []
+        mock_cookies.set = MagicMock()
+        type(client).cookies = PropertyMock(return_value=mock_cookies)
         result = await adapter._fetch_object_data(client, "obj1")
         assert result is None
 
@@ -185,7 +186,10 @@ class TestFetchPositionsFromMainPage:
     async def test_request_exception(self, adapter):
         client = AsyncMock()
         client.get.side_effect = Exception("fail")
-        type(client).cookies = PropertyMock(return_value=MagicMock(items=lambda: [], set=MagicMock()))
+        mock_cookies = MagicMock()
+        mock_cookies.items = lambda: []
+        mock_cookies.set = MagicMock()
+        type(client).cookies = PropertyMock(return_value=mock_cookies)
         result = await adapter._fetch_positions_from_main_page(client)
         assert result == []
 
@@ -201,7 +205,7 @@ class TestGetLastPosition:
     async def test_with_object_ids(self, adapter):
         mock_point = MagicMock()
         mock_point.lat = 55.75
-        with patch.object(adapter, "_ensure_session", return_value=True), \\
+        with patch.object(adapter, "_ensure_session", return_value=True), \
              patch.object(adapter, "_fetch_object_data", return_value=mock_point):
             result = await adapter.get_last_position()
         assert result is not None
@@ -209,8 +213,8 @@ class TestGetLastPosition:
     @pytest.mark.asyncio
     async def test_fallback_to_main_page(self, adapter):
         mock_point = MagicMock()
-        with patch.object(adapter, "_ensure_session", return_value=True), \\
-             patch.object(adapter, "_fetch_object_data", return_value=None), \\
+        with patch.object(adapter, "_ensure_session", return_value=True), \
+             patch.object(adapter, "_fetch_object_data", return_value=None), \
              patch.object(adapter, "_fetch_positions_from_main_page", return_value=[mock_point]):
             result = await adapter.get_last_position()
         assert result is not None
@@ -228,7 +232,7 @@ class TestGetTrack:
         resp = MagicMock()
         resp.status_code = 200
         resp.json.return_value = {"success": True, "data": [{"lat": 55.75, "lon": 37.61, "ts": 1700000000, "speed": 50}]}
-        with patch.object(adapter, "_ensure_session", return_value=True), \\
+        with patch.object(adapter, "_ensure_session", return_value=True), \
              patch("httpx.AsyncClient") as MockClient:
             instance = AsyncMock()
             instance.get.return_value = resp
@@ -240,7 +244,7 @@ class TestGetTrack:
 
     @pytest.mark.asyncio
     async def test_track_exception(self, adapter):
-        with patch.object(adapter, "_ensure_session", return_value=True), \\
+        with patch.object(adapter, "_ensure_session", return_value=True), \
              patch("httpx.AsyncClient") as MockClient:
             instance = AsyncMock()
             instance.get.side_effect = Exception("fail")
@@ -280,31 +284,27 @@ class TestTestConnection:
 
 class TestGetAllPositionsSync:
     def test_sync_wrapper(self, adapter):
-        \"\"\"Cover get_all_positions_sync (line 269).\"\"\"
         with patch.object(adapter, "get_all_positions", new_callable=AsyncMock, return_value=[]):
             result = adapter.get_all_positions_sync()
         assert isinstance(result, list)
 
 
-class TestLine42AndExtras:
+class TestInitAndImpl:
     def test_init_logging(self):
-        \"\"\"Cover line 42: init logging.\"\"\"
         from app.services.gps_providers.mapix import MapixAdapter
         a = MapixAdapter({"api_url": "https://test.mapix.su", "login": "u", "password": "p"})
         assert a.login == "u"
 
     @pytest.mark.asyncio
     async def test_get_last_position_impl(self, adapter):
-        \"\"\"Cover _get_last_position_impl directly.\"\"\"
         mock_point = MagicMock()
-        with patch.object(adapter, "_ensure_session", return_value=True), \\
+        with patch.object(adapter, "_ensure_session", return_value=True), \
              patch.object(adapter, "_fetch_object_data", return_value=mock_point):
             result = await adapter._get_last_position_impl()
         assert result is not None
 
     @pytest.mark.asyncio
-    async def test_line_324(self, adapter):
-        \"\"\"Cover line 324 in _test_connection_impl.\"\"\"
+    async def test_test_connection_impl(self, adapter):
         with patch.object(adapter, "_ensure_session", return_value=True):
             result = await adapter._test_connection_impl()
         assert result is True
