@@ -300,18 +300,16 @@ class TestFinalBranches:
         call_count = [0]
         def make_session():
             call_count[0] += 1
-            db = MagicMock()
-            if call_count[0] <= 2:
-                # First two calls: create log + get for update
+            if call_count[0] == 1:
+                # First call: create log entry - works fine
+                db = MagicMock()
                 mock_log = MagicMock()
                 mock_log.id = 1
                 db.add = MagicMock()
-                db.get.return_value = mock_log
-                if call_count[0] == 2:
-                    # Second session: commit raises error
-                    db.commit.side_effect = Exception("DB write fail")
                 return db
-            return MagicMock()
+            else:
+                # Second call: update log to sent - raises exception
+                raise Exception("DB connection lost")
 
         mock_server = MagicMock()
         mock_server.ehlo = MagicMock(return_value=(250, b"OK"))
@@ -327,21 +325,21 @@ class TestFinalBranches:
             ms.SMTP_USER = "u"; ms.SMTP_PASSWORD = "p"
             ms.SMTP_FROM_NAME = "T"; ms.SMTP_FROM_EMAIL = "t@t.com"
             result = service.send_email(to_email="t@t.com", subject="S", body="B")
-        assert result is True  # Email sent despite log update failure
+        assert result is True
 
     def test_log_update_to_failed_fails(self, service):
         """Cover lines 266-267: exception during log update to failed."""
         call_count = [0]
         def make_session():
             call_count[0] += 1
-            db = MagicMock()
-            mock_log = MagicMock()
-            mock_log.id = 1
-            db.add = MagicMock()
-            db.get.return_value = mock_log
-            if call_count[0] >= 2:
-                db.commit.side_effect = Exception("DB fail on error update")
-            return db
+            if call_count[0] == 1:
+                # First call: create log entry - works fine
+                db = MagicMock()
+                db.add = MagicMock()
+                return db
+            else:
+                # Second call: update log to failed - raises exception
+                raise Exception("DB gone")
 
         with patch("app.core.db.SessionLocal", side_effect=make_session), \
              patch("app.services.email_service.smtplib.SMTP", side_effect=Exception("SMTP boom")), \
@@ -366,18 +364,27 @@ class TestFinalBranches:
 
     def test_payout_temp_cleanup_error(self, service):
         """Cover lines 550-551: temp_path_to_cleanup.unlink() exception."""
+        import tempfile, os
         payout = SimpleNamespace(document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2)
         mock_db = MagicMock()
         mock_db.get.return_value = None
-        fake_path = MagicMock()
-        fake_path.exists.return_value = True
-        fake_path.stat.return_value.st_size = 200
-        fake_path.unlink.side_effect = PermissionError("locked")
-        with patch.object(service, "send_email", return_value=True) as mock_send, \
-             patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.pdf_service.generate_payout_pdf", return_value="/fake/path.pdf"), \
-             patch("app.services.email_service.Path") as MockPath, \
-             patch("builtins.open", MagicMock()):
-            MockPath.return_value = fake_path
-            result = service.send_payout_approved(payout, "o@o.com", "Owner")
-        assert result is True
+        # Create real file so exists() returns True
+        tmpf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmpf.write(b"%PDF-" + b"x" * 200)
+        tmpf.close()
+        # Make unlink fail by making file read-only and using a wrapper
+        original_unlink = Path.unlink
+        def failing_unlink(self, *a, **kw):
+            raise PermissionError("locked")
+        try:
+            with patch.object(service, "send_email", return_value=True) as mock_send, \
+                 patch("app.core.db.SessionLocal", return_value=mock_db), \
+                 patch("app.services.pdf_service.generate_payout_pdf", return_value=tmpf.name), \
+                 patch.object(Path, "unlink", failing_unlink):
+                result = service.send_payout_approved(payout, "o@o.com", "Owner")
+            assert result is True
+        finally:
+            try:
+                os.unlink(tmpf.name)
+            except Exception:
+                pass
