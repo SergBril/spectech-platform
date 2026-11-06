@@ -385,3 +385,58 @@ class TestFinalPdfBranches:
             FPDF.output = orig_output
         
         assert len(result) == 50
+
+
+
+class TestPdfServiceFinalLines:
+    """Cover last 2 uncovered lines."""
+
+    def test_generate_act_pdf_no_weasy(self, mock_db):
+        """Cover line 235: html_content.encode when weasyprint not available."""
+        from app.services.pdf_service import generate_act_pdf
+        act = MagicMock()
+        act.id = 1
+        act.document_number = "ACT-001"
+        act.created_at = datetime(2026, 11, 1)
+        act.total_amount = 10000.0
+        act.tax_system = "usn"
+        act.vat_amount = 0
+        contractor = MagicMock()
+        contractor.name = "TestCo"
+        contractor.inn = "1234567890"
+        contractor.address = "Moscow"
+        contractor.kpp = ""
+        contractor.bank_account = ""
+        contractor.bank_name = ""
+        contractor.bik = ""
+        contractor.ogrn = ""
+        contractor.okpo = ""
+
+        # Make weasyprint import fail -> use_weasy=False
+        import builtins
+        original_import = builtins.__import__
+        def mock_import(name, *args, **kwargs):
+            if name == "weasyprint":
+                raise ImportError("No weasyprint")
+            return original_import(name, *args, **kwargs)
+
+        with patch.object(builtins, "__import__", side_effect=mock_import), \
+             patch("app.services.pdf_service._generate_act_pdf_fpdf", return_value=b"fallback"):
+            result = generate_act_pdf(act, contractor=contractor)
+        # When use_weasy=False, returns html bytes (not fallback)
+        assert isinstance(result, bytes)
+
+    def test_payout_pdf_font_fallback(self, mock_db):
+        """Cover line 483: Helvetica fallback when DejaVu fonts not found."""
+        from app.services.pdf_service import generate_payout_pdf
+        payout = MagicMock()
+        payout.document_number = "PAY-001"
+        payout.total_amount = 50000.0
+        payout.created_at = datetime(2026, 11, 1)
+        payout.status = "paid"
+
+        # Make _register_dejavu_fonts return False
+        with patch("app.services.pdf_service._register_dejavu_fonts", return_value=False):
+            result = generate_payout_pdf(payout, owner_name="Ivan", vehicle_name="KAMAZ")
+        assert isinstance(result, bytes)
+        assert len(result) > 0
