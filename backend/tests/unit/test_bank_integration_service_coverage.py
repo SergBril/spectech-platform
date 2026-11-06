@@ -5,7 +5,21 @@ from unittest.mock import MagicMock
 
 # Create mock bank module since app.models.bank doesn't exist yet
 _bank_mod = ModuleType("app.models.bank")
-_bank_mod.BankTransaction = MagicMock
+
+
+class _MockBankTransaction:
+    """Minimal mock for BankTransaction that works with SQLAlchemy select()."""
+    __tablename__ = "bank_transactions"
+    company_id = None
+    doc_number = None
+    amount = None
+
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
+_bank_mod.BankTransaction = _MockBankTransaction
 sys.modules["app.models.bank"] = _bank_mod
 
 
