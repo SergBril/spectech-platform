@@ -87,7 +87,7 @@ class TestSignCryptopro:
         mock_client.post.return_value = mock_response
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        with patch("app.services.digital_signature_service.httpx.AsyncClient", return_value=mock_client):
+        with patch("httpx.AsyncClient", return_value=mock_client):
             result = await cryptopro_service._sign_cryptopro(b"data", "thumb")
         assert result["status"] == "signed"
         assert result["provider"] == "cryptopro"
@@ -98,7 +98,7 @@ class TestSignCryptopro:
         mock_client.post.side_effect = Exception("Connection refused")
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        with patch("app.services.digital_signature_service.httpx.AsyncClient", return_value=mock_client):
+        with patch("httpx.AsyncClient", return_value=mock_client):
             result = await cryptopro_service._sign_cryptopro(b"data", "thumb")
         assert result["status"] == "error"
         assert "Connection refused" in result["error"]
@@ -119,7 +119,7 @@ class TestSignGosuslugi:
         mock_client.post.side_effect = [token_response, sign_response]
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        with patch("app.services.digital_signature_service.httpx.AsyncClient", return_value=mock_client):
+        with patch("httpx.AsyncClient", return_value=mock_client):
             result = await gosuslugi_service._sign_gosuslugi(b"data")
         assert result["status"] == "signed"
         assert result["provider"] == "gosuslugi"
@@ -130,7 +130,7 @@ class TestSignGosuslugi:
         mock_client.post.side_effect = Exception("ESIA fail")
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        with patch("app.services.digital_signature_service.httpx.AsyncClient", return_value=mock_client):
+        with patch("httpx.AsyncClient", return_value=mock_client):
             result = await gosuslugi_service._sign_gosuslugi(b"data")
         assert result["status"] == "error"
 
