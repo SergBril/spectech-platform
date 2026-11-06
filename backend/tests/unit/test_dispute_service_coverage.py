@@ -239,3 +239,66 @@ class TestAutoEscalateOverdue:
         mock_db.scalars.return_value.all.return_value = []
         count = auto_escalate_overdue(mock_db)
         assert count == 0
+
+
+
+class TestDisputeFinalBranches:
+    """Cover remaining 5 uncovered lines."""
+
+    def test_notification_general_exception(self, mock_db):
+        """Cover lines 133-134: except Exception in notification block."""
+        from app.services.dispute_service import open_dispute
+        sr = MagicMock(shift_task_id=2, status="completed")
+        st = MagicMock(request_id=3)
+        req = MagicMock(id=3, company_id=7)
+        dispatcher = MagicMock(email="disp@test.com", full_name="Disp", id=10)
+        mock_db.get.side_effect = [sr, st, req]
+        mock_db.query.return_value.filter.return_value.first.return_value = dispatcher
+
+        # get_running_loop succeeds but create_task raises non-RuntimeError
+        mock_loop = MagicMock()
+        mock_loop.create_task.side_effect = ValueError("bad task")
+
+        with patch("asyncio.get_running_loop", return_value=mock_loop), \
+             patch("app.services.dispute_service.notification_dispatcher", create=True) as mock_nd:
+            mock_nd.notify_dispute_opened = AsyncMock()
+            result = open_dispute(mock_db, shift_report_id=1, dispute_type="hours", initiator_id=1, initiator_role="operator")
+        # Should not raise - caught by except Exception
+        assert result is not None
+
+    def test_resolve_no_opened_at(self, mock_db):
+        """Cover line 254: resolution_time=0 when opened_at is None."""
+        from app.services.dispute_service import resolve_dispute
+        from app.services.dispute_service import DisputeStatus
+        dispute = MagicMock(
+            status=DisputeStatus.dispatcher_review,
+            opened_at=None,  # No opened_at!
+            sla_deadline=None,
+            shift_report_id=5,
+        )
+        sr = MagicMock()
+        mock_db.get.side_effect = [dispute, sr]
+
+        result = resolve_dispute(mock_db, dispute_id=1, resolved_by=1, resolution={})
+        assert dispute.resolution_time_minutes == 0
+
+    def test_resolve_with_all_finals(self, mock_db):
+        """Cover lines 276, 278: final_odometer and final_fuel_used."""
+        from app.services.dispute_service import resolve_dispute
+        from app.services.dispute_service import DisputeStatus
+        now = datetime.now(UTC)
+        dispute = MagicMock(
+            status=DisputeStatus.dispatcher_review,
+            opened_at=now - timedelta(hours=1),
+            sla_deadline=now + timedelta(hours=2),
+            shift_report_id=5,
+        )
+        sr = MagicMock()
+        mock_db.get.side_effect = [dispute, sr]
+
+        result = resolve_dispute(
+            mock_db, dispute_id=1, resolved_by=1, resolution={},
+            final_moto_hours=5.0, final_odometer=12345, final_fuel_used=50.5
+        )
+        assert sr.final_odometer == 12345
+        assert sr.final_fuel_used == 50.5
