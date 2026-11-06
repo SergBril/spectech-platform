@@ -101,11 +101,14 @@ class TestResolveReviewedCompany:
         result = ReviewsService._resolve_reviewed_company(mock_db, rental, 10, "client_to_owner")
         assert result == 7
 
-    def test_client_to_owner_fallback_no_items(self, mock_db):
+    def test_client_to_owner_fallback_no_valid_owner(self, mock_db):
         from app.services.reviews_service import ReviewsService
-        rental = SimpleNamespace(client_id=10, company_id=99, items=None)
+        rental_item = SimpleNamespace(vehicle_id=1)
+        rental = SimpleNamespace(client_id=10, company_id=99, items=[rental_item])
+        # Vehicle has no owner_id -> falls through to rental.company_id
+        vehicle = SimpleNamespace(owner_id=None)
+        mock_db.get.return_value = vehicle
         result = ReviewsService._resolve_reviewed_company(mock_db, rental, 10, "client_to_owner")
-        # items is falsy -> returns rental.company_id
         assert result == 99
 
     def test_owner_to_client(self, mock_db):
@@ -152,18 +155,22 @@ class TestRecalculateCompanyRating:
         reviews = [SimpleNamespace(rating=5, quality_rating=4, punctuality_rating=5, communication_rating=4),
                    SimpleNamespace(rating=3, quality_rating=3, punctuality_rating=3, communication_rating=3)]
         company = SimpleNamespace(id=7)
-        call_count = [0]
-        def query_side_effect(model):
-            call_count[0] += 1
-            q = MagicMock()
-            if call_count[0] == 1:
-                q.filter.return_value.all.return_value = reviews
-            else:
-                q.filter.return_value.first.return_value = company
-            return q
-        mock_db.query.side_effect = query_side_effect
+        # db.get(Company, 7) -> company; db.query(Review).filter().all() -> reviews
+        mock_db.get.return_value = company
+        mock_db.query.return_value.filter.return_value.all.return_value = reviews
         ReviewsService._recalculate_company_rating(mock_db, 7)
         mock_db.commit.assert_called()
+
+    def test_no_company(self, mock_db):
+        from app.services.reviews_service import ReviewsService
+        mock_db.get.return_value = None
+        ReviewsService._recalculate_company_rating(mock_db, 7)
+        mock_db.commit.assert_not_called()
+
+    def test_no_company_id(self, mock_db):
+        from app.services.reviews_service import ReviewsService
+        ReviewsService._recalculate_company_rating(mock_db, None)
+        mock_db.get.assert_not_called()
 
     def test_no_reviews(self, mock_db):
         from app.services.reviews_service import ReviewsService
@@ -184,7 +191,8 @@ class TestRecalculateCompanyRating:
 class TestCanLeaveReview:
     def test_client_can_review_owner(self, mock_db):
         from app.services.reviews_service import ReviewsService
-        rental = SimpleNamespace(client_id=10, items=[], status=SimpleNamespace(value="completed"))
+        from app.models.rental import RentalStatus
+        rental = SimpleNamespace(client_id=10, items=[], status=RentalStatus.COMPLETED)
         mock_db.get.return_value = rental
         mock_db.query.return_value.filter.return_value.all.return_value = []
         result = ReviewsService.can_leave_review(mock_db, 100, 10)
@@ -193,7 +201,8 @@ class TestCanLeaveReview:
 
     def test_already_reviewed_owner(self, mock_db):
         from app.services.reviews_service import ReviewsService
-        rental = SimpleNamespace(client_id=10, items=[], status=SimpleNamespace(value="completed"))
+        from app.models.rental import RentalStatus
+        rental = SimpleNamespace(client_id=10, items=[], status=RentalStatus.COMPLETED)
         existing = SimpleNamespace(review_type="client_to_owner")
         mock_db.get.return_value = rental
         mock_db.query.return_value.filter.return_value.all.return_value = [existing]
@@ -203,7 +212,8 @@ class TestCanLeaveReview:
 
     def test_rental_not_completed(self, mock_db):
         from app.services.reviews_service import ReviewsService
-        rental = SimpleNamespace(client_id=10, items=[], status=SimpleNamespace(value="active"))
+        from app.models.rental import RentalStatus
+        rental = SimpleNamespace(client_id=10, items=[], status=RentalStatus.ACTIVE)
         mock_db.get.return_value = rental
         result = ReviewsService.can_leave_review(mock_db, 100, 10)
         assert result["can_review_owner"] is False
@@ -213,12 +223,16 @@ class TestCreateReview:
     def test_success(self, mock_db):
         from app.services.reviews_service import ReviewsService
         from app.models.rental import RentalStatus
+        rental_item = SimpleNamespace(vehicle_id=1)
         rental = SimpleNamespace(
-            id=100, client_id=10, company_id=7, items=[],
+            id=100, client_id=10, company_id=7, items=[rental_item],
             status=RentalStatus.COMPLETED,
         )
         reviewer = SimpleNamespace(id=10, company_id=5)
-        mock_db.get.side_effect = [rental, reviewer]
+        vehicle = SimpleNamespace(owner_id=20)
+        owner_contractor = SimpleNamespace(company_id=7)
+        # db.get sequence: Rental, Contractor(reviewer), Vehicle, Contractor(owner)
+        mock_db.get.side_effect = [rental, reviewer, vehicle, owner_contractor]
         mock_db.query.return_value.filter.return_value.first.return_value = None
         result = ReviewsService.create_review(
             mock_db, rental_id=100, reviewer_contractor_id=10,
