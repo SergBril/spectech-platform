@@ -70,7 +70,7 @@ class TestGetConsumptionRates:
         from app.services.fuel_service import FuelService
         now = datetime.now(UTC)
         # Need to handle multiple query calls - first for transactions, then for vehicles
-        txn = SimpleNamespace(vehicle_id=1, volume=50.0, occurred_at=now)
+        txn = SimpleNamespace(id=10, vehicle_id=1, volume=50.0, occurred_at=now)
         vehicle = SimpleNamespace(id=1, name="KAMAZ", plate_number="A123AA")
         
         call_count = [0]
@@ -183,7 +183,7 @@ class TestDetectAnomalies:
         now = datetime.now(UTC)
         vehicle = SimpleNamespace(id=1, name="KAMAZ")
         drain = SimpleNamespace(
-            vehicle_id=1, transaction_type="drain", volume=100.0, 
+            id=99, vehicle_id=1, transaction_type="drain", volume=100.0, 
             occurred_at=now, total_cost=None
         )
         
