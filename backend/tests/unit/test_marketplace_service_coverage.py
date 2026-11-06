@@ -316,3 +316,105 @@ class TestHaversine:
         from app.services.marketplace_service import MarketplaceService
         result = MarketplaceService._haversine(55.75, 37.62, 59.93, 30.32)
         assert result > 0
+
+
+
+class TestAvailabilityCalendarWithRentals:
+    """Cover lines 290-301: rental items loop in calendar."""
+
+    def test_with_busy_dates(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        rental = MagicMock()
+        rental.start_date = datetime(2026, 11, 5)
+        rental.end_date = datetime(2026, 11, 7)
+        rental.id = 42
+        item = MagicMock()
+        item.vehicle_id = 1
+        rental.items = [item]
+
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = [rental]
+        mock_db.scalars.return_value = mock_scalars
+        result = MarketplaceService.get_availability_calendar(
+            mock_db, vehicle_id=1, from_date=date(2026, 11, 1), to_date=date(2026, 11, 30),
+        )
+        assert isinstance(result, list)
+        # Should have some busy dates
+        busy = [d for d in result if not d["available"]]
+        assert len(busy) >= 3
+
+
+class TestCreateRequestExtraBranches:
+    """Cover remaining create_request branches."""
+
+    def test_vehicle_not_found(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        mock_db.get.return_value = None
+        with pytest.raises(ValueError, match="not found"):
+            MarketplaceService.create_request_from_listing(
+                mock_db, vehicle_id=999, client_contractor_id=5, company_id=5,
+                work_type="test", planned_start=datetime(2026, 12, 1),
+                planned_end=datetime(2026, 12, 5),
+            )
+
+    def test_not_available_period(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        vehicle = MagicMock()
+        vehicle.id = 1
+        vehicle.is_available_for_rent = True
+        mock_db.get.return_value = vehicle
+        # _filter_available returns empty set (vehicle busy)
+        mock_scalars = MagicMock()
+        rental = MagicMock()
+        item = MagicMock()
+        item.vehicle_id = 1
+        rental.items = [item]
+        mock_scalars.all.return_value = [rental]
+        mock_db.scalars.return_value = mock_scalars
+        with pytest.raises(ValueError, match="not available for the selected period"):
+            MarketplaceService.create_request_from_listing(
+                mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
+                work_type="test", planned_start=datetime(2026, 12, 1),
+                planned_end=datetime(2026, 12, 5),
+            )
+
+
+class TestNotifyOwnerNewRequest:
+    """Cover _notify_owner_new_request (lines 415-438)."""
+
+    @pytest.mark.asyncio
+    async def test_success(self):
+        from app.services.marketplace_service import MarketplaceService
+        vehicle = MagicMock()
+        vehicle.name = "KAMAZ"
+        request = MagicMock()
+        request.id = 1
+        request.work_type = "excavation"
+        request.planned_start = datetime(2026, 12, 1, 9, 0)
+        request.planned_end = datetime(2026, 12, 5, 18, 0)
+
+        with patch("app.services.marketplace_service.email_service") as mock_email:
+            await MarketplaceService._notify_owner_new_request(
+                vehicle=vehicle, request=request,
+                owner_name="Ivan", owner_email="ivan@test.com",
+            )
+            mock_email.send_email.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_email_failure(self):
+        from app.services.marketplace_service import MarketplaceService
+        vehicle = MagicMock()
+        vehicle.name = "KAMAZ"
+        request = MagicMock()
+        request.id = 1
+        request.work_type = "test"
+        request.planned_start = datetime(2026, 12, 1)
+        request.planned_end = datetime(2026, 12, 5)
+
+        with patch("app.services.marketplace_service.email_service") as mock_email:
+            mock_email.send_email.side_effect = Exception("SMTP error")
+            # Should not raise, just log error
+            await MarketplaceService._notify_owner_new_request(
+                vehicle=vehicle, request=request,
+                owner_name="Ivan", owner_email="ivan@test.com",
+            )
