@@ -67,7 +67,7 @@ class TestParseCsv:
     """Cover parse_csv (lines 52-88)."""
 
     def test_russian_headers(self, service):
-        csv_content = "Номер;Дата;ИННПлательщика;Плательщик;СчетПлательщика;ИННПолучателя;Получатель;СчетПолучателя;Сумма;Назначение\n1;06.11.2026;7701234567;ООО Тест;40702810000000001234;7709876543;ООО Пост;40702810000000005678;50000;Оплата"
+        csv_content = "Номер,Дата,ИННПлательщика,Плательщик,СчетПлательщика,ИННПолучателя,Получатель,СчетПолучателя,Сумма,Назначение\n1,06.11.2026,7701234567,ООО Тест,40702810000000001234,7709876543,ООО Пост,40702810000000005678,50000,Оплата"
         result = service.parse_csv(csv_content)
         assert len(result) == 1
         assert result[0]["doc_number"] == "1"
@@ -95,8 +95,7 @@ class TestSyncPaymentsToDb:
                       "payee_name": "B", "payee_account": "408", "amount": 1000.0,
                       "purpose": "Test", "status": "processed"}]
 
-        with patch("app.services.bank_integration_service.select"):
-            result = service.sync_payments_to_db(db, 7, payments)
+        result = service.sync_payments_to_db(db, 7, payments)
 
         assert result["created"] == 1
         assert result["skipped"] == 0
@@ -112,8 +111,7 @@ class TestSyncPaymentsToDb:
                       "payee_name": "B", "payee_account": "408", "amount": 1000.0,
                       "purpose": "Test", "status": "processed"}]
 
-        with patch("app.services.bank_integration_service.select"):
-            result = service.sync_payments_to_db(db, 7, payments)
+        result = service.sync_payments_to_db(db, 7, payments)
 
         assert result["created"] == 0
         assert result["skipped"] == 1
