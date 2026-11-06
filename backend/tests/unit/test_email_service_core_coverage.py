@@ -62,6 +62,11 @@ class TestInit:
 class TestRenderTemplate:
     """Cover _render_template (lines 38-45)."""
 
+    @pytest.fixture(autouse=True)
+    def mock_premailer(self):
+        with patch("app.services.email_service.premailer_transform", side_effect=lambda html: html):
+            yield
+
     def test_renders_with_context(self, service):
         # Create a temp template
         import tempfile, os
@@ -120,7 +125,7 @@ class TestSendEmail:
     """Cover send_email (lines 75-270)."""
 
     def test_no_body_raises(self, service):
-        with patch("app.services.email_service.SessionLocal") as mock_sl:
+        with patch("app.core.db.SessionLocal") as mock_sl:
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
             mock_log = MagicMock()
@@ -130,7 +135,7 @@ class TestSendEmail:
                 service.send_email(to_email="test@test.com", subject="Test")
 
     def test_direct_body_success(self, service):
-        with patch("app.services.email_service.SessionLocal") as mock_sl, \
+        with patch("app.core.db.SessionLocal") as mock_sl, \
              patch("app.services.email_service.smtplib.SMTP") as mock_smtp:
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
@@ -151,7 +156,7 @@ class TestSendEmail:
 
     def test_ssl_port_465(self, service):
         service.smtp_port = 465
-        with patch("app.services.email_service.SessionLocal") as mock_sl, \
+        with patch("app.core.db.SessionLocal") as mock_sl, \
              patch("app.services.email_service.smtplib.SMTP_SSL") as mock_smtp_ssl, \
              patch("app.services.email_service.settings") as mock_settings:
             mock_settings.SMTP_PORT = 465
@@ -171,7 +176,7 @@ class TestSendEmail:
         assert result is True
 
     def test_send_error_updates_log(self, service):
-        with patch("app.services.email_service.SessionLocal") as mock_sl, \
+        with patch("app.core.db.SessionLocal") as mock_sl, \
              patch("app.services.email_service.smtplib.SMTP") as mock_smtp:
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
@@ -183,7 +188,7 @@ class TestSendEmail:
                 service.send_email(to_email="t@t.com", subject="S", body="B")
 
     def test_dict_attachment(self, service):
-        with patch("app.services.email_service.SessionLocal") as mock_sl, \
+        with patch("app.core.db.SessionLocal") as mock_sl, \
              patch("app.services.email_service.smtplib.SMTP") as mock_smtp:
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
@@ -199,7 +204,7 @@ class TestSendEmail:
         assert result is True
 
     def test_invalid_attachment_skipped(self, service):
-        with patch("app.services.email_service.SessionLocal") as mock_sl, \
+        with patch("app.core.db.SessionLocal") as mock_sl, \
              patch("app.services.email_service.smtplib.SMTP") as mock_smtp:
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
@@ -215,7 +220,7 @@ class TestSendEmail:
         assert result is True
 
     def test_log_creation_failure_continues(self, service):
-        with patch("app.services.email_service.SessionLocal") as mock_sl, \
+        with patch("app.core.db.SessionLocal") as mock_sl, \
              patch("app.services.email_service.smtplib.SMTP") as mock_smtp:
             mock_sl.side_effect = [Exception("DB fail"), MagicMock()]
             mock_server = MagicMock()
