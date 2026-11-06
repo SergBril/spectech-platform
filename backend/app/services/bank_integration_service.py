@@ -3,6 +3,7 @@
 import logging
 from xml.etree.ElementTree import fromstring
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
