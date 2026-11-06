@@ -78,29 +78,22 @@ class TestUpdateCostRates:
     def test_create_new(self, service, mock_db):
         mock_db.execute.return_value.scalar_one_or_none.return_value = None
         user = MagicMock(id=1)
-        with patch("app.services.shift_stats_service.CompanyCostRates", autospec=False) as MockRates:
-            mock_rates = MagicMock()
-            MockRates.return_value = mock_rates
-            # Need to patch the import inside the method
-            with patch.dict("sys.modules", {"app.models.shift": MagicMock(CompanyCostRates=MockRates)}):
-                result = service.update_cost_rates(mock_db, company_id=7, fuel_price_per_liter=70.0, hourly_wage=600.0, amortization_per_hour=350.0, current_user=user)
+        MockRates = MagicMock()
+        mock_rates_instance = MagicMock()
+        MockRates.return_value = mock_rates_instance
+        with patch("app.models.shift.CompanyCostRates", MockRates):
+            result = service.update_cost_rates(mock_db, company_id=7, fuel_price_per_liter=70.0, hourly_wage=600.0, amortization_per_hour=350.0, current_user=user)
         mock_db.add.assert_called_once()
         mock_db.commit.assert_called_once()
+        assert result["message"]
 
 
 class TestGetPlatformOverview:
     def test_returns_overview_structure(self, service, mock_db):
-        # Mock all scalar queries
-        mock_db.execute.return_value.scalar.side_effect = [
-            10,   # users_count
-            5,    # drivers_count
-            20,   # vehicles_count
-            3,    # documents_count
-            100000,  # total_revenue
-            50000,   # total_expenses
-            15,   # active_shifts
-        ]
-        # Mock scalars().all() for recent activity
-        mock_db.execute.return_value.scalars.return_value.all.return_value = []
+        # Each db.execute().scalar() call returns a count
+        mock_scalar_result = MagicMock()
+        mock_scalar_result.scalar.side_effect = [10, 5, 20, 3, 100000, 50000, 15]
+        mock_scalar_result.scalars.return_value.all.return_value = []
+        mock_db.execute.return_value = mock_scalar_result
         result = service.get_platform_overview(mock_db, company_id=7)
         assert isinstance(result, dict)
