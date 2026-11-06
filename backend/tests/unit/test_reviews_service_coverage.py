@@ -363,3 +363,171 @@ class TestGetMyReviews:
         mock_db.scalars.return_value = mock_scalars
         result = ReviewsService.get_my_reviews(mock_db, 10)
         assert result == []
+
+
+
+class TestCreateReviewExtraBranches:
+    """Cover remaining create_review branches."""
+
+    def test_self_transaction_client_to_owner(self, mock_db):
+        """Cover lines 132-136: client reviews self via vehicle.owner_id."""
+        from app.services.reviews_service import ReviewsService
+        from app.models.rental import RentalStatus
+        from unittest.mock import MagicMock as MM
+
+        item = type("Item", (), {"vehicle_id": 1})()
+        m_rental = MM(id=100, client_id=10, company_id=7, items=[item], status=RentalStatus.COMPLETED)
+        m_reviewer = MM(id=10, company_id=5)
+        m_vehicle = MM(id=1, owner_id=10)  # reviewer IS the owner -> self-transaction
+
+        mock_db.get.side_effect = [m_rental, m_reviewer, m_vehicle]
+        with pytest.raises(ValueError, match="yourself"):
+            ReviewsService.create_review(mock_db, rental_id=100, reviewer_contractor_id=10,
+                                         review_type="client_to_owner", rating=5)
+
+    def test_self_transaction_owner_to_client(self, mock_db):
+        """Cover line 140: owner reviews self (reviewer == client)."""
+        from app.services.reviews_service import ReviewsService
+        from app.models.rental import RentalStatus
+        from unittest.mock import MagicMock as MM
+
+        item = type("Item", (), {"vehicle_id": 1})()
+        m_rental = MM(id=100, client_id=20, company_id=7, items=[item], status=RentalStatus.COMPLETED)
+        m_reviewer = MM(id=20, company_id=5)
+        m_vehicle = MM(id=1, owner_id=20)
+
+        mock_db.get.side_effect = [m_rental, m_reviewer, m_vehicle]
+        with pytest.raises(ValueError, match="yourself"):
+            ReviewsService.create_review(mock_db, rental_id=100, reviewer_contractor_id=20,
+                                         review_type="owner_to_client", rating=5)
+
+    def test_duplicate_review(self, mock_db):
+        """Cover line 154: existing review raises ValueError."""
+        from app.services.reviews_service import ReviewsService
+        from app.models.rental import RentalStatus
+        from unittest.mock import MagicMock as MM
+
+        item = type("Item", (), {"vehicle_id": 1})()
+        m_rental = MM(id=100, client_id=10, company_id=7, items=[item], status=RentalStatus.COMPLETED)
+        m_reviewer = MM(id=20, company_id=5)
+        m_vehicle = MM(id=1, owner_id=20)
+        m_client = MM(id=10, company_id=8)
+        existing = MM(id=1)
+
+        mock_db.get.side_effect = [m_rental, m_reviewer, m_vehicle, m_client]
+        mock_query = MM()
+        mock_query.filter.return_value.first.return_value = existing
+        mock_db.query.return_value = mock_query
+
+        with pytest.raises(ValueError, match="already left"):
+            ReviewsService.create_review(mock_db, rental_id=100, reviewer_contractor_id=20,
+                                         review_type="owner_to_client", rating=5)
+
+    def test_cannot_determine_company(self, mock_db):
+        """Cover line 164: _resolve returns None."""
+        from app.services.reviews_service import ReviewsService
+        from app.models.rental import RentalStatus
+        from unittest.mock import MagicMock as MM
+
+        # rental with no items -> _resolve returns None for client_to_owner
+        m_rental = MM(id=100, client_id=10, company_id=None, items=[], status=RentalStatus.COMPLETED)
+        m_reviewer = MM(id=10, company_id=5)
+
+        mock_db.get.side_effect = [m_rental, m_reviewer]
+        mock_query = MM()
+        mock_query.filter.return_value.first.return_value = None
+        mock_db.query.return_value = mock_query
+
+        with pytest.raises(ValueError, match="Cannot determine"):
+            ReviewsService.create_review(mock_db, rental_id=100, reviewer_contractor_id=10,
+                                         review_type="client_to_owner", rating=5)
+
+
+class TestUpdateReviewExtraBranches:
+    """Cover remaining update_review branches."""
+
+    def test_wrong_author(self, mock_db):
+        """Cover line 228: not own review."""
+        from app.services.reviews_service import ReviewsService
+        review = SimpleNamespace(id=1, reviewer_contractor_id=10, reviewed_company_id=7)
+        mock_db.get.return_value = review
+        with pytest.raises(ValueError, match="own reviews"):
+            ReviewsService.update_review(mock_db, review_id=1, reviewer_contractor_id=99, rating=5)
+
+    def test_comment_too_short(self, mock_db):
+        """Cover line 236: comment < MIN_COMMENT_LENGTH."""
+        from app.services.reviews_service import ReviewsService
+        review = SimpleNamespace(id=1, reviewer_contractor_id=10, rating=4, reviewed_company_id=7)
+        mock_db.get.return_value = review
+        with pytest.raises(ValueError, match="at least"):
+            ReviewsService.update_review(mock_db, review_id=1, reviewer_contractor_id=10, comment="short")
+
+    def test_update_pros_cons(self, mock_db):
+        """Cover lines 242, 244: pros and cons update."""
+        from app.services.reviews_service import ReviewsService
+        review = SimpleNamespace(
+            id=1, reviewer_contractor_id=10, rating=4, comment="old",
+            pros=None, cons=None, photos=[], quality_rating=None,
+            punctuality_rating=None, communication_rating=None, reviewed_company_id=7,
+        )
+        mock_db.get.return_value = review
+        mock_db.query.return_value.filter.return_value.all.return_value = []
+        mock_db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(id=7)
+        result = ReviewsService.update_review(mock_db, review_id=1, reviewer_contractor_id=10,
+                                              pros="Great!", cons="None really")
+        assert result.pros == "Great!"
+        assert result.cons == "None really"
+
+    def test_update_photos(self, mock_db):
+        """Cover lines 247-249: photos update with validation."""
+        from app.services.reviews_service import ReviewsService
+        review = SimpleNamespace(
+            id=1, reviewer_contractor_id=10, rating=4, comment="old",
+            pros=None, cons=None, photos=[], quality_rating=None,
+            punctuality_rating=None, communication_rating=None, reviewed_company_id=7,
+        )
+        mock_db.get.return_value = review
+        mock_db.query.return_value.filter.return_value.all.return_value = []
+        mock_db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(id=7)
+        result = ReviewsService.update_review(mock_db, review_id=1, reviewer_contractor_id=10,
+                                              photos=["url1", "url2"])
+        assert result.photos == ["url1", "url2"]
+
+    def test_update_photos_too_many(self, mock_db):
+        """Cover line 248: photos > MAX_PHOTOS."""
+        from app.services.reviews_service import ReviewsService
+        review = SimpleNamespace(id=1, reviewer_contractor_id=10, rating=4, reviewed_company_id=7)
+        mock_db.get.return_value = review
+        with pytest.raises(ValueError, match="Maximum"):
+            ReviewsService.update_review(mock_db, review_id=1, reviewer_contractor_id=10,
+                                         photos=["url"] * 6)
+
+
+class TestDeleteReviewExtraBranches:
+    def test_wrong_author(self, mock_db):
+        """Cover line 280: not own review."""
+        from app.services.reviews_service import ReviewsService
+        review = SimpleNamespace(id=1, reviewer_contractor_id=10, reviewed_company_id=7)
+        mock_db.get.return_value = review
+        with pytest.raises(ValueError, match="own reviews"):
+            ReviewsService.delete_review(mock_db, review_id=1, reviewer_contractor_id=99)
+
+
+class TestCanLeaveReviewOwnerPath:
+    def test_is_owner_true(self, mock_db):
+        """Cover lines 439-443: contractor is owner of vehicle in rental."""
+        from app.services.reviews_service import ReviewsService
+        from app.models.rental import RentalStatus
+        from unittest.mock import MagicMock as MM
+
+        item = type("Item", (), {"vehicle_id": 1})()
+        m_rental = MM(client_id=10, items=[item], status=RentalStatus.COMPLETED)
+        m_vehicle = MM(owner_id=20)
+
+        # db.get: Rental(100), then Vehicle(1) in owner check loop
+        mock_db.get.side_effect = [m_rental, m_vehicle]
+        mock_db.query.return_value.filter.return_value.all.return_value = []
+
+        result = ReviewsService.can_leave_review(mock_db, 100, 20)
+        assert result["can_review_client"] is True
+        assert result["has_reviewed_client"] is False
