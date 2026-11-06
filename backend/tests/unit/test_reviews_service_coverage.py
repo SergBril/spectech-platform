@@ -531,3 +531,126 @@ class TestCanLeaveReviewOwnerPath:
         result = ReviewsService.can_leave_review(mock_db, 100, 20)
         assert result["can_review_client"] is True
         assert result["has_reviewed_client"] is False
+
+
+
+class TestFinalBranches:
+    """Cover last 11 uncovered lines."""
+
+    def test_photos_filtering(self, mock_db):
+        """Cover line 95: photos list comprehension filters empty strings."""
+        from app.services.reviews_service import ReviewsService
+        from app.models.rental import RentalStatus
+        from unittest.mock import MagicMock as MM
+
+        item = type("Item", (), {"vehicle_id": 1})()
+        m_rental = MM(id=100, client_id=10, company_id=7, items=[item], status=RentalStatus.COMPLETED)
+        m_reviewer = MM(id=20, company_id=5)
+        m_vehicle = MM(id=1, owner_id=20)
+        m_client = MM(id=10, company_id=8)
+        m_company = MM(id=8, average_rating=None, total_reviews=0, rating_distribution={})
+
+        mock_db.get.side_effect = [m_rental, m_reviewer, m_vehicle, m_client, m_company]
+        mock_query = MM()
+        mock_query.filter.return_value.first.return_value = None
+        mock_query.filter.return_value.all.return_value = []
+        mock_db.query.return_value = mock_query
+
+        # Photos with empty strings should be filtered
+        result = ReviewsService.create_review(
+            mock_db, rental_id=100, reviewer_contractor_id=20,
+            review_type="owner_to_client", rating=5, comment="Great client!!!",
+            photos=["url1", "", "  ", "url2"],
+        )
+        mock_db.add.assert_called()
+
+    def test_rental_not_completed_status(self, mock_db):
+        """Cover line 109: rental status != COMPLETED."""
+        from app.services.reviews_service import ReviewsService
+        from app.models.rental import RentalStatus
+        from unittest.mock import MagicMock as MM
+
+        m_rental = MM(id=100, status=RentalStatus.ACTIVE)
+        mock_db.get.return_value = m_rental
+        with pytest.raises(ValueError, match="COMPLETED"):
+            ReviewsService.create_review(mock_db, rental_id=100, reviewer_contractor_id=10,
+                                         review_type="client_to_owner", rating=5)
+
+    def test_reviewer_not_found(self, mock_db):
+        """Cover line 117: reviewer contractor not found."""
+        from app.services.reviews_service import ReviewsService
+        from app.models.rental import RentalStatus
+        from unittest.mock import MagicMock as MM
+
+        m_rental = MM(id=100, status=RentalStatus.COMPLETED)
+        mock_db.get.side_effect = [m_rental, None]
+        with pytest.raises(ValueError, match="Reviewer contractor"):
+            ReviewsService.create_review(mock_db, rental_id=100, reviewer_contractor_id=999,
+                                         review_type="client_to_owner", rating=5)
+
+    def test_not_valid_participant(self, mock_db):
+        """Cover line 123: contractor is not a valid participant."""
+        from app.services.reviews_service import ReviewsService
+        from app.models.rental import RentalStatus
+        from unittest.mock import MagicMock as MM
+
+        m_rental = MM(id=100, client_id=10, items=[], status=RentalStatus.COMPLETED)
+        m_reviewer = MM(id=99, company_id=5)
+        mock_db.get.side_effect = [m_rental, m_reviewer]
+        with pytest.raises(ValueError, match="not a valid participant"):
+            ReviewsService.create_review(mock_db, rental_id=100, reviewer_contractor_id=99,
+                                         review_type="client_to_owner", rating=5)
+
+    def test_update_optional_ratings(self, mock_db):
+        """Cover lines 257-258: quality/punctuality/communication rating update."""
+        from app.services.reviews_service import ReviewsService
+        review = SimpleNamespace(
+            id=1, reviewer_contractor_id=10, rating=4, comment="old",
+            pros=None, cons=None, photos=[], quality_rating=None,
+            punctuality_rating=None, communication_rating=None, reviewed_company_id=7,
+        )
+        mock_db.get.return_value = review
+        mock_db.query.return_value.filter.return_value.all.return_value = []
+        mock_db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(id=7)
+        result = ReviewsService.update_review(
+            mock_db, review_id=1, reviewer_contractor_id=10,
+            quality_rating=5, punctuality_rating=4, communication_rating=3,
+        )
+        assert result.quality_rating == 5
+        assert result.punctuality_rating == 4
+        assert result.communication_rating == 3
+
+    def test_get_company_reviews_with_min_rating(self, mock_db):
+        """Cover line 317: min_rating filter in get_company_reviews."""
+        from app.services.reviews_service import ReviewsService
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_db.scalars.return_value = mock_scalars
+        result = ReviewsService.get_company_reviews(mock_db, 7, min_rating=4)
+        assert result == []
+
+    def test_validate_rating_non_integer(self):
+        """Cover line 475: rating is not an integer."""
+        from app.services.reviews_service import ReviewsService
+        with pytest.raises(ValueError, match="integer"):
+            ReviewsService._validate_rating("five")
+
+    def test_validate_optional_rating_non_integer(self):
+        """Cover line 484: optional rating is not an integer."""
+        from app.services.reviews_service import ReviewsService
+        with pytest.raises(ValueError, match="integer"):
+            ReviewsService._validate_optional_rating("three", "quality")
+
+    def test_verify_participant_unknown_type(self, mock_db):
+        """Cover line 510: unknown review_type returns False."""
+        from app.services.reviews_service import ReviewsService
+        rental = SimpleNamespace(client_id=10, items=[])
+        result = ReviewsService._verify_participant(mock_db, rental, 10, "unknown_type")
+        assert result is False
+
+    def test_resolve_reviewed_company_unknown_type(self, mock_db):
+        """Cover line 542: unknown review_type returns None."""
+        from app.services.reviews_service import ReviewsService
+        rental = SimpleNamespace(client_id=10, company_id=7, items=[])
+        result = ReviewsService._resolve_reviewed_company(mock_db, rental, 10, "unknown_type")
+        assert result is None
