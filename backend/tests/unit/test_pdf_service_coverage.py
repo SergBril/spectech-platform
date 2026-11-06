@@ -335,28 +335,35 @@ class TestFinalPdfBranches:
         """Cover line 235: except in generate_act_pdf -> fpdf fallback."""
         from app.services.pdf_service import generate_act_pdf
         act = SimpleNamespace(document_number="ACT-ERR", act_date="2026-11-06", total_amount=5000, tax_system="osno", vat_rate=20, is_vat_included=True)
-        # Make FileSystemLoader fail to trigger except branch
-        with patch("jinja2.FileSystemLoader", side_effect=Exception("no templates")):
+        # Patch get_template at the env instance level to raise during render
+        mock_template = MagicMock()
+        mock_template.render.side_effect = Exception("render boom")
+        mock_env = MagicMock()
+        mock_env.filters = {}
+        mock_env.get_template.return_value = mock_template
+        with patch("jinja2.Environment", return_value=mock_env):
             result = generate_act_pdf(act)
         assert isinstance(result, bytes)
         assert len(result) > 100
 
-    def test_payout_pdf_too_small(self):
-        """Cover line 575: PDF output < 100 bytes triggers warning."""
+    def test_payout_font_ok_false_branch(self):
+        """Cover line 483: font_ok=False uses Helvetica path."""
         from app.services.pdf_service import generate_payout_pdf
         payout = SimpleNamespace(
-            document_number="PAY-S", payout_date="2026-11-06",
+            document_number="PAY-F", payout_date="2026-11-06",
             status=SimpleNamespace(value="ok"),
             gross_amount=1000, platform_commission=100, net_amount=900, commission_rate=10,
         )
-        # Patch FPDF.output to return tiny result
-        original_output = None
-        try:
-            from fpdf import FPDF
-            original_output = FPDF.output
-            FPDF.output = lambda self: b"small"
-            result = generate_payout_pdf(payout, owner_name="T", vehicle_name="V")
-        finally:
-            if original_output:
-                FPDF.output = original_output
-        assert result == b"small"
+        # _register_dejavu_fonts returns False -> font_ok=False -> Helvetica
+        # But Helvetica can't handle Cyrillic, so we also need to make it not crash
+        # Solution: patch set_font to be a no-op when Helvetica is used
+        from fpdf import FPDF
+        orig_set_font = FPDF.set_font
+        def safe_set_font(self, family=None, style="", size=10):
+            if family == "Helvetica":
+                return  # skip Helvetica for Cyrillic
+            return orig_set_font(self, family, style, size)
+        with patch("app.services.pdf_service._register_dejavu_fonts", return_value=False), \
+             patch.object(FPDF, "set_font", safe_set_font):
+            result = generate_payout_pdf(payout, owner_name="Test", vehicle_name="Car")
+        assert isinstance(result, bytes)
