@@ -297,6 +297,7 @@ class TestGetTrack:
 
     @pytest.mark.asyncio
     async def test_exception(self, adapter):
+        adapter.token = "pre_cached_token"  # Skip auth, go straight to API call
         mock_client = AsyncMock()
         mock_client.post.side_effect = Exception("network fail")
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
