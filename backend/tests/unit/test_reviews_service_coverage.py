@@ -221,23 +221,42 @@ class TestCanLeaveReview:
 
 
 class TestCreateReview:
-    def test_success(self, mock_db):
+    """Cover create_review (lines 37-207)."""
+
+    def test_success_owner_to_client(self, mock_db):
+        """Test create_review with owner_to_client type."""
         from app.services.reviews_service import ReviewsService
         from app.models.rental import RentalStatus
-        rental_item = SimpleNamespace(vehicle_id=1)
-        rental = SimpleNamespace(
-            id=100, client_id=10, company_id=7, items=[rental_item],
-            status=RentalStatus.COMPLETED,
-        )
-        reviewer = SimpleNamespace(id=10, company_id=5)
-        vehicle = SimpleNamespace(owner_id=20)
-        owner_contractor = SimpleNamespace(company_id=7)
-        # db.get sequence: Rental, Contractor(reviewer), Vehicle, Contractor(owner)
-        mock_db.get.side_effect = [rental, reviewer, vehicle, owner_contractor]
+        from unittest.mock import MagicMock as MM
+
+        # Use plain object for rental item to ensure int vehicle_id
+        item = type("Item", (), {"vehicle_id": 1})()
+        m_rental = MM()
+        m_rental.id = 100
+        m_rental.client_id = 10
+        m_rental.company_id = 7
+        m_rental.status = RentalStatus.COMPLETED
+        m_rental.items = [item]
+
+        m_reviewer = MM()
+        m_reviewer.id = 20
+        m_reviewer.company_id = 5
+
+        m_vehicle = MM()
+        m_vehicle.id = 1
+        m_vehicle.owner_id = 20
+
+        m_client = MM()
+        m_client.id = 10
+        m_client.company_id = 8
+
+        # Sequential db.get: Rental(100), Contractor(20), Vehicle(1), Contractor(10)
+        mock_db.get.side_effect = [m_rental, m_reviewer, m_vehicle, m_client]
         mock_db.query.return_value.filter.return_value.first.return_value = None
+
         result = ReviewsService.create_review(
-            mock_db, rental_id=100, reviewer_contractor_id=10,
-            review_type="client_to_owner", rating=5, comment="Great service!!!",
+            mock_db, rental_id=100, reviewer_contractor_id=20,
+            review_type="owner_to_client", rating=5, comment="Great client!!!",
         )
         mock_db.add.assert_called()
         mock_db.commit.assert_called()
@@ -267,6 +286,7 @@ class TestCreateReview:
         with pytest.raises(ValueError, match="Invalid review_type"):
             ReviewsService.create_review(mock_db, rental_id=100, reviewer_contractor_id=10,
                                          review_type="invalid", rating=5)
+
 
 
 class TestUpdateReview:
