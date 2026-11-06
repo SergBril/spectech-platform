@@ -1,8 +1,6 @@
-"""Tests for dispute_service."""
-
+"""Tests for dispute_service - full coverage."""
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -13,283 +11,231 @@ def mock_db():
 
 
 class TestEnsureAware:
-    """Cover _ensure_aware (lines 27-34)."""
-
-    def test_none_returns_none(self):
+    def test_none(self):
         from app.services.dispute_service import _ensure_aware
-
         assert _ensure_aware(None) is None
 
-    def test_naive_gets_utc(self):
+    def test_naive_datetime(self):
         from app.services.dispute_service import _ensure_aware
-
-        dt = datetime(2026, 11, 5, 12, 0)
+        dt = datetime(2026, 11, 6, 12, 0, 0)
         result = _ensure_aware(dt)
         assert result.tzinfo == UTC
 
-    def test_aware_unchanged(self):
+    def test_aware_datetime(self):
         from app.services.dispute_service import _ensure_aware
-
-        dt = datetime(2026, 11, 5, 12, 0, tzinfo=UTC)
+        dt = datetime(2026, 11, 6, 12, 0, 0, tzinfo=UTC)
         result = _ensure_aware(dt)
         assert result is dt
 
 
 class TestOpenDispute:
-    """Cover open_dispute (lines 36-137)."""
-
     def test_shift_report_not_found(self, mock_db):
-        from app.models.dispute import DisputeType, InitiatorRole
         from app.services.dispute_service import open_dispute
-
         mock_db.get.return_value = None
         with pytest.raises(ValueError, match="ShiftReport"):
-            open_dispute(mock_db, 999, DisputeType.hours, 1, InitiatorRole.operator)
+            open_dispute(mock_db, shift_report_id=1, dispute_type="hours", initiator_id=1, initiator_role="operator")
 
     def test_shift_task_not_found(self, mock_db):
-        from app.models.dispute import DisputeType, InitiatorRole
         from app.services.dispute_service import open_dispute
-
-        report = SimpleNamespace(shift_task_id=1)
-        call_count = {"n": 0}
-
-        def mock_get(model, pk):
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                return report
-            return None
-
-        mock_db.get.side_effect = mock_get
+        sr = MagicMock()
+        sr.shift_task_id = 2
+        mock_db.get.side_effect = [sr, None]
         with pytest.raises(ValueError, match="ShiftTask"):
-            open_dispute(mock_db, 1, DisputeType.hours, 1, InitiatorRole.operator)
+            open_dispute(mock_db, shift_report_id=1, dispute_type="hours", initiator_id=1, initiator_role="operator")
 
     def test_request_not_found(self, mock_db):
-        from app.models.dispute import DisputeType, InitiatorRole
         from app.services.dispute_service import open_dispute
-
-        report = SimpleNamespace(shift_task_id=1)
-        task = SimpleNamespace(request_id=1)
-        call_count = {"n": 0}
-
-        def mock_get(model, pk):
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                return report
-            if call_count["n"] == 2:
-                return task
-            return None
-
-        mock_db.get.side_effect = mock_get
+        sr = MagicMock(shift_task_id=2)
+        st = MagicMock(request_id=3)
+        mock_db.get.side_effect = [sr, st, None]
         with pytest.raises(ValueError, match="Request"):
-            open_dispute(mock_db, 1, DisputeType.hours, 1, InitiatorRole.operator)
+            open_dispute(mock_db, shift_report_id=1, dispute_type="hours", initiator_id=1, initiator_role="operator")
 
     def test_success(self, mock_db):
-        from app.models.dispute import DisputeType, InitiatorRole
         from app.services.dispute_service import open_dispute
+        sr = MagicMock(shift_task_id=2, status="completed")
+        st = MagicMock(request_id=3)
+        req = MagicMock(id=3, company_id=7)
+        mock_db.get.side_effect = [sr, st, req]
 
-        report = SimpleNamespace(shift_task_id=1, status=None)
-        task = SimpleNamespace(request_id=1)
-        request = SimpleNamespace(id=1, company_id=1)
-
-        call_count = {"n": 0}
-
-        def mock_get(model, pk):
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                return report
-            if call_count["n"] == 2:
-                return task
-            return request
-
-        mock_db.get.side_effect = mock_get
-        mock_db.refresh.side_effect = lambda obj: setattr(obj, "id", 1) or None
-
-        # Mock notification part
-        mock_dispatcher = SimpleNamespace(email="disp@test.com", full_name="Disp", id=1)
-        mock_db.query.return_value.filter.return_value.first.return_value = (
-            mock_dispatcher
-        )
-
-        # asyncio is imported inside the function, so we just let it run
-        # and catch any notification errors gracefully
-        try:
-            open_dispute(mock_db, 1, DisputeType.hours, 1, InitiatorRole.operator)
-        except Exception:
-            pass  # notification part may fail in test env
-
+        # Mock notification imports to avoid side effects
+        with patch("app.services.dispute_service.asyncio", create=True) as mock_asyncio:
+            mock_asyncio.get_running_loop.side_effect = RuntimeError("no loop")
+            result = open_dispute(mock_db, shift_report_id=1, dispute_type="hours", initiator_id=1, initiator_role="operator")
         mock_db.add.assert_called_once()
         mock_db.commit.assert_called()
 
+    def test_success_with_notification(self, mock_db):
+        from app.services.dispute_service import open_dispute
+        sr = MagicMock(shift_task_id=2, status="completed")
+        st = MagicMock(request_id=3)
+        req = MagicMock(id=3, company_id=7)
+        dispatcher = MagicMock(email="disp@test.com", full_name="Disp", id=10)
+        mock_db.get.side_effect = [sr, st, req]
+        mock_db.query.return_value.filter.return_value.first.return_value = dispatcher
+
+        mock_loop = MagicMock()
+        with patch("asyncio.get_running_loop", return_value=mock_loop), \
+             patch("app.services.dispute_service.notification_dispatcher", create=True):
+            result = open_dispute(mock_db, shift_report_id=1, dispute_type="hours", initiator_id=1, initiator_role="operator")
+        mock_loop.create_task.assert_called()
+
 
 class TestEscalateDispute:
-    """Cover escalate_dispute (lines 139-225)."""
-
     def test_not_found(self, mock_db):
         from app.services.dispute_service import escalate_dispute
-
         mock_db.get.return_value = None
         with pytest.raises(ValueError, match="not found"):
-            escalate_dispute(mock_db, 999, 1)
+            escalate_dispute(mock_db, dispute_id=1, escalated_by=1)
 
     def test_dispatcher_to_manager(self, mock_db):
-        from app.models.dispute import DisputeStatus
         from app.services.dispute_service import escalate_dispute
-
-        dispute = SimpleNamespace(
-            status=DisputeStatus.dispatcher_review,
-            escalated_at=None,
-            escalation_deadline=None,
-            assigned_role=None,
-            id=1,
-        )
+        from app.services.dispute_service import DisputeStatus
+        dispute = MagicMock()
+        dispute.status = DisputeStatus.dispatcher_review
         mock_db.get.return_value = dispute
-        mock_db.refresh.side_effect = lambda obj: None
 
-        escalate_dispute(mock_db, 1, 1)
+        with patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
+            result = escalate_dispute(mock_db, dispute_id=1, escalated_by=1)
         assert dispute.status == DisputeStatus.escalated_to_manager
-        mock_db.commit.assert_called()
 
     def test_manager_to_ceo(self, mock_db):
-        from app.models.dispute import DisputeStatus
         from app.services.dispute_service import escalate_dispute
-
-        dispute = SimpleNamespace(
-            status=DisputeStatus.escalated_to_manager,
-            escalated_at=None,
-            escalation_deadline=None,
-            assigned_role=None,
-            id=1,
-        )
+        from app.services.dispute_service import DisputeStatus
+        dispute = MagicMock()
+        dispute.status = DisputeStatus.escalated_to_manager
         mock_db.get.return_value = dispute
-        mock_db.refresh.side_effect = lambda obj: None
 
-        escalate_dispute(mock_db, 1, 1)
+        with patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
+            result = escalate_dispute(mock_db, dispute_id=1, escalated_by=1)
         assert dispute.status == DisputeStatus.escalated_to_ceo
 
     def test_cannot_escalate_resolved(self, mock_db):
-        from app.models.dispute import DisputeStatus
         from app.services.dispute_service import escalate_dispute
-
-        dispute = SimpleNamespace(status=DisputeStatus.resolved, id=1)
+        from app.services.dispute_service import DisputeStatus
+        dispute = MagicMock()
+        dispute.status = DisputeStatus.resolved
         mock_db.get.return_value = dispute
         with pytest.raises(ValueError, match="Cannot escalate"):
-            escalate_dispute(mock_db, 1, 1)
+            escalate_dispute(mock_db, dispute_id=1, escalated_by=1)
 
 
 class TestResolveDispute:
-    """Cover resolve_dispute (lines 227-289)."""
-
     def test_not_found(self, mock_db):
         from app.services.dispute_service import resolve_dispute
-
         mock_db.get.return_value = None
         with pytest.raises(ValueError, match="not found"):
-            resolve_dispute(mock_db, 999, 1, {"decision": "operator"})
+            resolve_dispute(mock_db, dispute_id=1, resolved_by=1, resolution={"decision": "operator"})
 
     def test_already_resolved(self, mock_db):
-        from app.models.dispute import DisputeStatus
         from app.services.dispute_service import resolve_dispute
-
-        dispute = SimpleNamespace(status=DisputeStatus.resolved, id=1)
+        from app.services.dispute_service import DisputeStatus
+        dispute = MagicMock(status=DisputeStatus.resolved)
         mock_db.get.return_value = dispute
         with pytest.raises(ValueError, match="already resolved"):
-            resolve_dispute(mock_db, 1, 1, {"decision": "operator"})
+            resolve_dispute(mock_db, dispute_id=1, resolved_by=1, resolution={})
 
-    def test_success_with_sla_breach(self, mock_db):
-        from app.models.dispute import DisputeStatus
+    def test_success_within_sla(self, mock_db):
         from app.services.dispute_service import resolve_dispute
-
-        past = datetime.now(UTC) - timedelta(hours=5)
-        dispute = SimpleNamespace(
+        from app.services.dispute_service import DisputeStatus
+        now = datetime.now(UTC)
+        dispute = MagicMock(
             status=DisputeStatus.dispatcher_review,
-            opened_at=past,
-            sla_deadline=past + timedelta(hours=3),
-            shift_report_id=1,
-            resolution=None,
-            resolved_at=None,
-            resolved_by=None,
-            resolution_time_minutes=None,
-            sla_breached=False,
-            id=1,
+            opened_at=now - timedelta(hours=1),
+            sla_deadline=now + timedelta(hours=2),
+            shift_report_id=5,
         )
-        report = SimpleNamespace(
-            status=None,
-            final_moto_hours=None,
-            final_odometer=None,
-            final_fuel_used=None,
-        )
+        sr = MagicMock()
+        mock_db.get.side_effect = [dispute, sr]
 
-        call_count = {"n": 0}
-
-        def mock_get(model, pk):
-            call_count["n"] += 1
-            return dispute if call_count["n"] == 1 else report
-
-        mock_db.get.side_effect = mock_get
-        mock_db.refresh.side_effect = lambda obj: None
-
-        resolve_dispute(
-            mock_db,
-            1,
-            1,
-            {"decision": "operator"},
-            final_moto_hours=8.0,
-            final_fuel_used=50.0,
-        )
+        result = resolve_dispute(mock_db, dispute_id=1, resolved_by=1, resolution={"decision": "operator"}, final_moto_hours=5.0)
         assert dispute.status == DisputeStatus.resolved
-        assert dispute.sla_breached is True
-        assert report.final_moto_hours == 8.0
-        mock_db.commit.assert_called()
+        assert dispute.sla_breached != True
+
+    def test_sla_breached(self, mock_db):
+        from app.services.dispute_service import resolve_dispute
+        from app.services.dispute_service import DisputeStatus
+        now = datetime.now(UTC)
+        dispute = MagicMock(
+            status=DisputeStatus.dispatcher_review,
+            opened_at=now - timedelta(hours=5),
+            sla_deadline=now - timedelta(hours=2),  # Already passed
+            shift_report_id=5,
+        )
+        sr = MagicMock()
+        mock_db.get.side_effect = [dispute, sr]
+
+        result = resolve_dispute(mock_db, dispute_id=1, resolved_by=1, resolution={})
+        assert dispute.sla_breached == True
+
+    def test_no_shift_report(self, mock_db):
+        from app.services.dispute_service import resolve_dispute
+        from app.services.dispute_service import DisputeStatus
+        dispute = MagicMock(
+            status=DisputeStatus.dispatcher_review,
+            opened_at=datetime.now(UTC),
+            sla_deadline=None,
+            shift_report_id=999,
+        )
+        mock_db.get.side_effect = [dispute, None]
+        result = resolve_dispute(mock_db, dispute_id=1, resolved_by=1, resolution={})
+        assert dispute.status == DisputeStatus.resolved
 
 
 class TestGetOverdueDisputes:
-    """Cover get_overdue_disputes (lines 291-316)."""
-
-    def test_no_overdue(self, mock_db):
+    def test_returns_overdue(self, mock_db):
         from app.services.dispute_service import get_overdue_disputes
+        now = datetime.now(UTC)
+        d1 = MagicMock(sla_deadline=now - timedelta(hours=1))  # Overdue
+        d2 = MagicMock(sla_deadline=now + timedelta(hours=1))  # Not overdue
+        d3 = MagicMock(sla_deadline=None)  # No deadline
+        mock_db.scalars.return_value.all.return_value = [d1, d2, d3]
 
-        future = datetime.now(UTC) + timedelta(hours=1)
-        d = SimpleNamespace(sla_deadline=future)
-        mock_db.scalars.return_value.all.return_value = [d]
+        result = get_overdue_disputes(mock_db)
+        assert len(result) == 1
+        assert result[0] == d1
+
+    def test_empty(self, mock_db):
+        from app.services.dispute_service import get_overdue_disputes
+        mock_db.scalars.return_value.all.return_value = []
         result = get_overdue_disputes(mock_db)
         assert result == []
 
-    def test_with_overdue(self, mock_db):
-        from app.services.dispute_service import get_overdue_disputes
-
-        past = datetime.now(UTC) - timedelta(hours=1)
-        d = SimpleNamespace(sla_deadline=past)
-        mock_db.scalars.return_value.all.return_value = [d]
-        result = get_overdue_disputes(mock_db)
-        assert len(result) == 1
-
 
 class TestAutoEscalateOverdue:
-    """Cover auto_escalate_overdue (lines 318-end)."""
+    def test_escalates_overdue(self, mock_db):
+        from app.services.dispute_service import auto_escalate_overdue
+        from app.services.dispute_service import DisputeStatus
+        now = datetime.now(UTC)
+        overdue_dispute = MagicMock(
+            id=1,
+            sla_deadline=now - timedelta(hours=1),
+            status=DisputeStatus.dispatcher_review,
+        )
+        mock_db.scalars.return_value.all.return_value = [overdue_dispute]
+        mock_db.get.return_value = overdue_dispute
+
+        with patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
+            count = auto_escalate_overdue(mock_db)
+        assert count == 1
+
+    def test_handles_escalation_error(self, mock_db):
+        from app.services.dispute_service import auto_escalate_overdue
+        from app.services.dispute_service import DisputeStatus
+        now = datetime.now(UTC)
+        overdue_dispute = MagicMock(
+            id=1,
+            sla_deadline=now - timedelta(hours=1),
+            status=DisputeStatus.resolved,  # Cannot escalate resolved
+        )
+        mock_db.scalars.return_value.all.return_value = [overdue_dispute]
+        mock_db.get.return_value = overdue_dispute
+
+        count = auto_escalate_overdue(mock_db)
+        assert count == 0
 
     def test_no_overdue(self, mock_db):
         from app.services.dispute_service import auto_escalate_overdue
-
         mock_db.scalars.return_value.all.return_value = []
-        result = auto_escalate_overdue(mock_db)
-        assert result == 0
-
-    def test_escalates_overdue(self, mock_db):
-        from app.models.dispute import DisputeStatus
-        from app.services.dispute_service import auto_escalate_overdue
-
-        past = datetime.now(UTC) - timedelta(hours=5)
-        d = SimpleNamespace(
-            sla_deadline=past,
-            status=DisputeStatus.dispatcher_review,
-            id=1,
-            escalated_at=None,
-            escalation_deadline=None,
-            assigned_role=None,
-        )
-        mock_db.scalars.return_value.all.return_value = [d]
-        mock_db.get.return_value = d
-        mock_db.refresh.side_effect = lambda obj: None
-
-        result = auto_escalate_overdue(mock_db)
-        assert result == 1
+        count = auto_escalate_overdue(mock_db)
+        assert count == 0
