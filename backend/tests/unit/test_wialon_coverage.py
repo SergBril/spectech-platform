@@ -297,7 +297,10 @@ class TestGetTrack:
 
     @pytest.mark.asyncio
     async def test_exception(self, adapter):
-        with patch("app.services.gps_providers.wialon.create_retry_client", side_effect=Exception("fail")):
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(side_effect=Exception("fail"))
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
             result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
         assert result == []
 
