@@ -213,6 +213,7 @@ class TestFindAccountants:
 
 
 
+
 class TestWeeklyDigestExtraBranches:
     """Cover remaining uncovered lines."""
 
@@ -222,10 +223,10 @@ class TestWeeklyDigestExtraBranches:
         row = MagicMock()
         row.vehicle_id = 1
         row.vehicle_name = "KAMAZ"
-        row.total_hours = 120.5
-        row.revenue = Decimal("50000")
-        mock_db.execute.return_value.all.return_value = [row]
-        result = WeeklyDigestService._gather_top_vehicles(mock_db, company_id=7)
+        row.total_revenue = Decimal("50000")
+        row.rentals_count = 5
+        mock_db.query.return_value.join.return_value.join.return_value.filter.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
+        result = WeeklyDigestService._get_top_vehicles(mock_db, company_id=7, from_date=date(2026, 11, 1), to_date=date(2026, 11, 30))
         assert len(result) == 1
         assert result[0]["vehicle_id"] == 1
 
@@ -237,14 +238,17 @@ class TestWeeklyDigestExtraBranches:
         row.invoice_number = "INV-001"
         row.amount = Decimal("10000")
         row.due_date = date(2026, 10, 1)
-        mock_db.execute.return_value.all.return_value = [row]
-        result = WeeklyDigestService._gather_overdue_invoices(mock_db, company_id=7)
+        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
+        result = WeeklyDigestService._get_overdue_invoices(mock_db, company_id=7)
         assert len(result) == 1
 
     def test_send_weekly_digest_exception(self, mock_db):
         """Cover lines 251-253: exception in send_weekly_digest."""
         from app.services.weekly_digest_service import WeeklyDigestService
-        with patch.object(WeeklyDigestService, "_gather_top_vehicles", side_effect=Exception("DB error")):
+        company = MagicMock()
+        company.name = "TestCo"
+        mock_db.get.return_value = company
+        with patch.object(WeeklyDigestService, "_get_dashboard_metrics", side_effect=Exception("DB error")):
             result = WeeklyDigestService.send_weekly_digest(mock_db, company_id=7)
         assert result["success"] is False
         assert "error" in result
@@ -254,36 +258,65 @@ class TestWeeklyDigestExtraBranches:
         from app.services.weekly_digest_service import WeeklyDigestService
         user = MagicMock()
         user.email = "test@test.com"
-        digest_data = {"company_name": "TestCo", "top_vehicles": [], "overdue_invoices": []}
+        company = MagicMock()
+        company.name = "TestCo"
+        mock_db.get.return_value = company
+        recipients = [user]
 
-        # Success case
-        with patch("app.services.weekly_digest_service.email_service") as mock_email:
+        with patch.object(WeeklyDigestService, "_get_dashboard_metrics", return_value={}), \
+             patch.object(WeeklyDigestService, "_get_top_clients", return_value=[]), \
+             patch.object(WeeklyDigestService, "_get_top_vehicles", return_value=[]), \
+             patch.object(WeeklyDigestService, "_get_overdue_invoices", return_value=[]), \
+             patch.object(WeeklyDigestService, "_find_accountants", return_value=recipients), \
+             patch("app.services.weekly_digest_service.email_service") as mock_email:
             mock_email.send_email.return_value = True
-            WeeklyDigestService._send_digest_to_user(user, digest_data)
-            mock_email.send_email.assert_called_once()
+            result = WeeklyDigestService.send_weekly_digest(mock_db, company_id=7)
+        assert result["success"] is True
 
-    def test_send_digest_email_exception(self, mock_db):
-        """Cover except branch in _send_digest_to_user."""
+    def test_send_digest_email_false_return(self, mock_db):
+        """Cover line 296: email returns False."""
         from app.services.weekly_digest_service import WeeklyDigestService
         user = MagicMock()
         user.email = "fail@test.com"
-        digest_data = {"company_name": "TestCo", "top_vehicles": [], "overdue_invoices": []}
+        company = MagicMock()
+        company.name = "TestCo"
+        mock_db.get.return_value = company
 
-        with patch("app.services.weekly_digest_service.email_service") as mock_email:
-            mock_email.send_email.side_effect = Exception("SMTP error")
-            # Should not raise
-            WeeklyDigestService._send_digest_to_user(user, digest_data)
+        with patch.object(WeeklyDigestService, "_get_dashboard_metrics", return_value={}), \
+             patch.object(WeeklyDigestService, "_get_top_clients", return_value=[]), \
+             patch.object(WeeklyDigestService, "_get_top_vehicles", return_value=[]), \
+             patch.object(WeeklyDigestService, "_get_overdue_invoices", return_value=[]), \
+             patch.object(WeeklyDigestService, "_find_accountants", return_value=[user]), \
+             patch("app.services.weekly_digest_service.email_service") as mock_email:
+            mock_email.send_email.return_value = False
+            result = WeeklyDigestService.send_weekly_digest(mock_db, company_id=7)
+        assert result["sent_count"] == 0
 
-    def test_send_all_digests_with_errors(self, mock_db):
-        """Cover lines 321-336: send_all with mixed success/failure."""
+    def test_send_digest_email_exception(self, mock_db):
+        """Cover except branch in send loop."""
         from app.services.weekly_digest_service import WeeklyDigestService
-        company1 = MagicMock()
-        company1.id = 1
-        company1.name = "GoodCo"
-        company2 = MagicMock()
-        company2.id = 2
-        company2.name = "BadCo"
-        mock_db.query.return_value.filter.return_value.all.return_value = [company1, company2]
+        user = MagicMock()
+        user.email = "err@test.com"
+        company = MagicMock()
+        company.name = "TestCo"
+        mock_db.get.return_value = company
+
+        with patch.object(WeeklyDigestService, "_get_dashboard_metrics", return_value={}), \
+             patch.object(WeeklyDigestService, "_get_top_clients", return_value=[]), \
+             patch.object(WeeklyDigestService, "_get_top_vehicles", return_value=[]), \
+             patch.object(WeeklyDigestService, "_get_overdue_invoices", return_value=[]), \
+             patch.object(WeeklyDigestService, "_find_accountants", return_value=[user]), \
+             patch("app.services.weekly_digest_service.email_service") as mock_email:
+            mock_email.send_email.side_effect = Exception("SMTP error")
+            result = WeeklyDigestService.send_weekly_digest(mock_db, company_id=7)
+        # Should not raise, just log error
+
+    def test_send_all_with_errors(self, mock_db):
+        """Cover lines 321-336: send_digests_for_all_companies with mixed results."""
+        from app.services.weekly_digest_service import WeeklyDigestService
+        c1 = MagicMock(id=1, name="GoodCo")
+        c2 = MagicMock(id=2, name="BadCo")
+        mock_db.query.return_value.filter.return_value.all.return_value = [c1, c2]
 
         def side_effect(db, cid):
             if cid == 1:
@@ -291,51 +324,43 @@ class TestWeeklyDigestExtraBranches:
             return {"success": False, "recipients_count": 0, "error": "No users"}
 
         with patch.object(WeeklyDigestService, "send_weekly_digest", side_effect=side_effect):
-            result = WeeklyDigestService.send_all_digests(mock_db)
+            result = WeeklyDigestService.send_digests_for_all_companies(mock_db)
         assert result["total_sent"] == 1
         assert len(result["errors"]) == 1
 
-    def test_send_all_digests_exception(self, mock_db):
-        """Cover except branch in send_all_digests loop."""
+    def test_send_all_exception(self, mock_db):
+        """Cover except in send_all loop."""
         from app.services.weekly_digest_service import WeeklyDigestService
-        company = MagicMock()
-        company.id = 1
-        company.name = "FailCo"
-        mock_db.query.return_value.filter.return_value.all.return_value = [company]
+        c = MagicMock(id=1, name="FailCo")
+        mock_db.query.return_value.filter.return_value.all.return_value = [c]
 
         with patch.object(WeeklyDigestService, "send_weekly_digest", side_effect=Exception("Boom")):
-            result = WeeklyDigestService.send_all_digests(mock_db)
+            result = WeeklyDigestService.send_digests_for_all_companies(mock_db)
         assert len(result["errors"]) >= 1
 
-    def test_get_company_users_empty_employees(self, mock_db):
+    def test_find_accountants_empty(self, mock_db):
         """Cover line 371: empty employees returns []."""
         from app.services.weekly_digest_service import WeeklyDigestService
         mock_db.query.return_value.filter.return_value.all.return_value = []
-        result = WeeklyDigestService._get_company_users(mock_db, company_id=7)
+        result = WeeklyDigestService._find_accountants(mock_db, company_id=7)
         assert result == []
 
-    def test_get_company_users_with_company_filter(self, mock_db):
-        """Cover lines 377-395: user filtering by company_id."""
+    def test_find_accountants_with_users(self, mock_db):
+        """Cover lines 377-395: user filtering."""
         from app.services.weekly_digest_service import WeeklyDigestService
         emp = MagicMock()
         emp.user_id = 10
-        mock_db.query.return_value.filter.return_value.all.side_effect = [
-            [emp],  # employees query
-            [MagicMock(id=10, email="u@test.com", company_id=7, is_superuser=False)],  # users query
-        ]
-        result = WeeklyDigestService._get_company_users(mock_db, company_id=7)
-        assert len(result) >= 0  # May filter out if company_id doesn't match
+        user = MagicMock(id=10, email="acc@test.com", company_id=7, is_superuser=False)
+        mock_db.query.return_value.filter.return_value.all.side_effect = [[emp], [user]]
+        result = WeeklyDigestService._find_accountants(mock_db, company_id=7)
+        assert len(result) >= 0
 
-    def test_get_company_users_superuser(self, mock_db):
-        """Cover superuser inclusion in filter."""
+    def test_find_accountants_superuser(self, mock_db):
+        """Cover superuser inclusion."""
         from app.services.weekly_digest_service import WeeklyDigestService
         emp = MagicMock()
         emp.user_id = 10
         superuser = MagicMock(id=10, email="admin@test.com", company_id=99, is_superuser=True)
-        mock_db.query.return_value.filter.return_value.all.side_effect = [
-            [emp],
-            [superuser],
-        ]
-        result = WeeklyDigestService._get_company_users(mock_db, company_id=7)
-        # Superuser should be included even with different company_id
+        mock_db.query.return_value.filter.return_value.all.side_effect = [[emp], [superuser]]
+        result = WeeklyDigestService._find_accountants(mock_db, company_id=7)
         assert len(result) >= 0
