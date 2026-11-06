@@ -423,8 +423,9 @@ class TestFinanceServiceFinalBranches:
         mock_db.get.side_effect = [act, request, contractor]
 
         with patch("app.services.finance_service.generate_act_pdf", return_value=b"pdf"), \
-             patch("app.services.finance_service.upload_to_storage", return_value={"path": "/tmp/act.pdf", "size": 100}), \
+             patch("app.services.finance_service.storage_service") as mock_storage, \
              patch("app.services.finance_service.UploadedFile"):
+            mock_storage.upload_bytes.return_value = {"path": "/tmp/act.pdf", "size": 100}
             result = generate_and_save_act_pdf(act_id=1, db=mock_db)
         # contractor should have been fetched from request.client_id
 
