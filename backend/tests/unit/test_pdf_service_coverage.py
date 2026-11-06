@@ -112,7 +112,7 @@ class TestGenerateInvoicePdf:
     def test_error_falls_back_to_fpdf(self):
         from app.services.pdf_service import generate_invoice_pdf
         invoice = SimpleNamespace(document_number="INV-001", items=[], invoice_date="2026-11-06", subtotal=1000, total=1200, vat_amount=0, vat_rate=0, tax_system="usn_6")
-        with patch("app.services.pdf_service.Environment", side_effect=Exception("template fail")):
+        with patch("jinja2.Environment", side_effect=Exception("template fail")):
             with patch("app.services.pdf_service._generate_invoice_pdf_fpdf", return_value=b"fpdf-bytes") as mock_fpdf:
                 result = generate_invoice_pdf(invoice)
         assert result == b"fpdf-bytes"
@@ -136,7 +136,7 @@ class TestGenerateActPdf:
     def test_error_falls_back_to_fpdf(self):
         from app.services.pdf_service import generate_act_pdf
         act = SimpleNamespace(document_number="ACT-001", act_date="2026-11-06", total_amount=5000, tax_system="osno", vat_rate=20, is_vat_included=True)
-        with patch("app.services.pdf_service.Environment", side_effect=Exception("fail")):
+        with patch("jinja2.Environment", side_effect=Exception("fail")):
             with patch("app.services.pdf_service._generate_act_pdf_fpdf", return_value=b"fpdf-act") as mock_fpdf:
                 result = generate_act_pdf(act)
         assert result == b"fpdf-act"
@@ -181,7 +181,7 @@ class TestGenerateMaintenanceOrderPdf:
     def test_fallback_html(self):
         from app.services.pdf_service import generate_maintenance_order_pdf
         order = {"order_number": "MO-001", "vehicle_name": "KAMAZ", "status": "open", "title": "Test", "total_cost": 1000}
-        with patch("app.services.pdf_service.Environment", side_effect=Exception("fail")):
+        with patch("jinja2.Environment", side_effect=Exception("fail")):
             result = generate_maintenance_order_pdf(order)
         assert b"MO-001" in result
         assert b"KAMAZ" in result
@@ -205,6 +205,6 @@ class TestGenerateActMaintenancePdf:
     def test_fallback_html(self):
         from app.services.pdf_service import generate_act_maintenance_pdf
         order = {"order_number": "ACT-MO-001", "vehicle_name": "Bulldozer", "total_cost": 20000}
-        with patch("app.services.pdf_service.Environment", side_effect=Exception("fail")):
+        with patch("jinja2.Environment", side_effect=Exception("fail")):
             result = generate_act_maintenance_pdf(order)
         assert b"ACT-MO-001" in result
