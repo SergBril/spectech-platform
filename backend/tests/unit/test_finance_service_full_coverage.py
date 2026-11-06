@@ -375,37 +375,35 @@ class TestFinanceServiceFinalBranches:
     def test_invoice_email_no_contact_email(self, mock_db):
         """Cover line 206: warning when client contact_email not found."""
         from app.services.finance_service import create_invoice
+        from decimal import Decimal
         user = MagicMock()
         user.id = 1
         user.company_id = 7
-        contractor = MagicMock()
-        contractor.contact_email = None  # No email!
-        contractor.name = "TestCo"
-        contractor.id = 5
+
+        # Client exists but has no contact_email
+        client_no_email = MagicMock()
+        client_no_email.contact_email = None
+        client_no_email.name = "TestCo"
+        client_no_email.id = 5
 
         payload = {
             "client_id": 5,
             "items": [{"description": "Test", "quantity": 1, "unit_price": 100}],
             "tax_system": "usn",
         }
-        # Mock db operations
-        mock_db.get.return_value = contractor
-        mock_db.execute.return_value.scalar.return_value = 0
-        mock_db.query.return_value.filter.return_value.first.return_value = None
 
-        with patch("app.services.finance_service.email_service"), \
-             patch("app.services.finance_service.Invoice") as MockInvoice, \
-             patch("app.services.finance_service.InvoiceItem"):
-            inv_instance = MagicMock()
-            inv_instance.document_number = "INV-001"
-            inv_instance.client_id = 5
-            inv_instance.tax_system = "usn"
-            inv_instance.items = []
-            MockInvoice.return_value = inv_instance
-            try:
-                create_invoice(mock_db, payload, user)
-            except Exception:
-                pass  # We just need line 206 to execute
+        # db.get is called multiple times:
+        # 1. For duplicate check (returns None)
+        # 2. For client lookup after commit (returns client_no_email)
+        mock_db.scalar.return_value = None  # no duplicate
+        mock_db.get.return_value = client_no_email
+
+        with patch("app.services.finance_service.email_service") as mock_email, \
+             patch("app.services.finance_service.generate_document_number", return_value="INV-001"):
+            result = create_invoice(mock_db, payload, user)
+
+        # Email should NOT have been sent (no contact_email)
+        mock_email.send_invoice_created.assert_not_called()
 
     def test_act_pdf_contractor_from_request(self, mock_db):
         """Cover line 316: contractor fetched from request.client_id."""
