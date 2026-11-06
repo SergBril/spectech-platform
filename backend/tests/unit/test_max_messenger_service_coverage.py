@@ -1,4 +1,14 @@
 """Coverage tests for max_messenger_service."""
+import sys
+from types import ModuleType
+from unittest.mock import MagicMock
+
+# Mock UserCompany if not in auth module
+_auth_mod = sys.modules.get("app.models.auth")
+if _auth_mod and not hasattr(_auth_mod, "UserCompany"):
+    _auth_mod.UserCompany = MagicMock
+
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
