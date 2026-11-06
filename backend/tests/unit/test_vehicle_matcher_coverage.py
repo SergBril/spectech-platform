@@ -261,9 +261,10 @@ class TestVehicleMatcherEdgeCases:
         from app.services.marketplace.vehicle_matcher import VehicleMatcherService
         svc = VehicleMatcherService()
 
-        parent_cat = MagicMock()
-        parent_cat.id = 10
-        parent_cat.parent_id = None
+        # cat_id=10 has parent_id=5 -> triggers sibling block
+        cat = MagicMock()
+        cat.id = 10
+        cat.parent_id = 5  # Has parent!
 
         sibling = MagicMock()
         sibling.id = 11
@@ -271,16 +272,17 @@ class TestVehicleMatcherEdgeCases:
         child = MagicMock()
         child.id = 12
 
-        # db.get returns parent_cat, db.query returns siblings then children
-        mock_db.get.return_value = parent_cat
+        mock_db.get.return_value = cat
+        # Two queries: siblings (parent_id==5), then children (parent_id==10)
         mock_db.query.return_value.filter.return_value.all.side_effect = [
-            [sibling],   # siblings query
-            [child],     # children query
+            [sibling],   # siblings of cat (same parent)
+            [child],     # children of cat
         ]
 
         result = svc._get_compatible_categories(mock_db, cat_id=10)
         assert 11 in result  # sibling
         assert 12 in result  # child
+        assert 5 in result   # parent
 
     def test_score_missing_attribute_definition(self, mock_db):
         """Cover line 236: defn not found -> continue."""
