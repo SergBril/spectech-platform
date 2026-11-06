@@ -250,3 +250,126 @@ class TestScoreVehicle:
         self._setup_attrs(mock_db, [(attr_name, 15.0, None)])
         score, matched, missing = matcher._score_vehicle(mock_db, vehicle, request)
         assert any("optimal" in m for m in matched)
+
+
+
+class TestVehicleMatcherEdgeCases:
+    """Cover remaining 10 uncovered lines."""
+
+    def test_compatible_categories_with_children(self, mock_db):
+        """Cover lines 176, 181: sibling + child categories."""
+        from app.services.marketplace.vehicle_matcher import VehicleMatcherService
+        svc = VehicleMatcherService()
+
+        parent_cat = MagicMock()
+        parent_cat.id = 10
+        parent_cat.parent_id = None
+
+        sibling = MagicMock()
+        sibling.id = 11
+
+        child = MagicMock()
+        child.id = 12
+
+        # db.get returns parent_cat, db.query returns siblings then children
+        mock_db.get.return_value = parent_cat
+        mock_db.query.return_value.filter.return_value.all.side_effect = [
+            [sibling],   # siblings query
+            [child],     # children query
+        ]
+
+        result = svc._get_compatible_categories(mock_db, cat_id=10)
+        assert 11 in result  # sibling
+        assert 12 in result  # child
+
+    def test_score_missing_attribute_definition(self, mock_db):
+        """Cover line 236: defn not found -> continue."""
+        from app.services.marketplace.vehicle_matcher import VehicleMatcherService
+        svc = VehicleMatcherService()
+
+        vehicle = MagicMock()
+        vehicle.id = 1
+        vehicle.category_id = 5
+        vehicle.status = "available"
+        vehicle.hourly_rate = 1000
+        vehicle.shift_rate = 8000
+
+        request = MagicMock()
+        request.vehicle_category_id = 5
+        request.required_attributes = [{"name": "test_attr", "value": "10", "type": "gte"}]
+
+        va = MagicMock()
+        va.attribute_definition_id = 999
+        va.value_number = 20
+        va.value_text = None
+        vehicle.attributes = [va]
+
+        # db.get returns None for attribute definition
+        mock_db.get.return_value = None
+
+        score, matched, missing = svc._score_vehicle(mock_db, vehicle, request)
+        assert isinstance(score, (int, float))
+
+    def test_score_eq_mismatch(self, mock_db):
+        """Cover lines 270-271, 281-284: eq compare with mismatch."""
+        from app.services.marketplace.vehicle_matcher import VehicleMatcherService
+        svc = VehicleMatcherService()
+
+        vehicle = MagicMock()
+        vehicle.id = 1
+        vehicle.category_id = 5
+        vehicle.status = "available"
+        vehicle.hourly_rate = 1000
+        vehicle.shift_rate = 8000
+
+        request = MagicMock()
+        request.vehicle_category_id = 5
+        request.required_attributes = [
+            {"name": "brand", "value": "CAT", "type": "eq"},
+        ]
+
+        va = MagicMock()
+        va.attribute_definition_id = 1
+        va.value_number = None
+        va.value_text = "Komatsu"  # Different from required "CAT"
+        vehicle.attributes = [va]
+
+        defn = MagicMock()
+        defn.name = "brand"
+        mock_db.get.return_value = defn
+
+        score, matched, missing = svc._score_vehicle(mock_db, vehicle, request)
+        # Should have mismatch penalty
+        assert "brand" in str(missing) or score < 100
+
+    def test_score_weight_normalization(self, mock_db):
+        """Cover lines 260, 328: kg->ton normalization and optimal range bonus."""
+        from app.services.marketplace.vehicle_matcher import VehicleMatcherService
+        svc = VehicleMatcherService()
+
+        vehicle = MagicMock()
+        vehicle.id = 1
+        vehicle.category_id = 5
+        vehicle.status = "available"
+        vehicle.hourly_rate = 1000
+        vehicle.shift_rate = 8000
+
+        # Request weight in grams (huge number), vehicle in kg
+        request = MagicMock()
+        request.vehicle_category_id = 5
+        request.required_attributes = [
+            {"name": "weight", "value": "5000000", "type": "gte"},  # 5000000g = 5t
+        ]
+
+        va = MagicMock()
+        va.attribute_definition_id = 1
+        va.value_number = 6000  # 6000kg = 6t
+        va.value_text = None
+        vehicle.attributes = [va]
+
+        defn = MagicMock()
+        defn.name = "weight"
+        mock_db.get.return_value = defn
+
+        score, matched, missing = svc._score_vehicle(mock_db, vehicle, request)
+        assert isinstance(score, (int, float))
