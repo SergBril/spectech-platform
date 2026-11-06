@@ -5,17 +5,23 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+import types as _types
+
+
 @pytest.fixture(autouse=True)
 def mock_firebase():
     """Mock firebase_admin module before any test imports it."""
     mock_fb = MagicMock()
     mock_creds = MagicMock()
-    mock_messaging = MagicMock()
-    mock_fb.credentials = mock_creds
-    mock_fb.initialize_app = MagicMock(return_value=MagicMock())
+    # Use real types.ModuleType so 'from firebase_admin import messaging' works
+    mock_messaging = _types.ModuleType("firebase_admin.messaging")
     mock_messaging.MulticastMessage = MagicMock()
     mock_messaging.Notification = MagicMock()
     mock_messaging.send_each_for_multicast = MagicMock()
+
+    mock_fb.credentials = mock_creds
+    mock_fb.messaging = mock_messaging  # Critical: 'from firebase_admin import messaging' uses this
+    mock_fb.initialize_app = MagicMock(return_value=MagicMock())
 
     originals = {}
     for mod_name in ["firebase_admin", "firebase_admin.credentials", "firebase_admin.messaging"]:
@@ -131,11 +137,9 @@ class TestSendToUser:
         mock_db = MagicMock()
         mock_db.execute.return_value.scalars.return_value.all.return_value = ["token1", "token2"]
 
-        # Use SimpleNamespace to avoid MagicMock comparison issues
         from types import SimpleNamespace
         mock_response = SimpleNamespace(success_count=2, failure_count=0)
-        messaging_mock = mock_firebase["messaging"]
-        messaging_mock.send_each_for_multicast.return_value = mock_response
+        mock_firebase["messaging"].send_each_for_multicast.return_value = mock_response
 
         result = await svc.send_to_user(1, "Title", "Body", data={"key": "val"}, db=mock_db)
         assert result is True
