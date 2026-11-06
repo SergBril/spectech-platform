@@ -319,14 +319,10 @@ class TestFuelServiceRemainingBranches:
             id=1, name="KAMAZ", engine_hours=0,
             fuel_norm_per_hour=None, fuel_norm_per_100km=None,
         )
-        # Average price will be ~55, this refuel at 80 -> 45% over
-        cheap_refuel = SimpleNamespace(
-            id=1, vehicle_id=1, transaction_type="refuel", volume=50.0,
-            total_cost=2750.0, price_per_liter=55.0, occurred_at=now - timedelta(days=5),
-        )
+        # avg_price=55 from company-wide query; this refuel at 80/l -> 45% over
         expensive_refuel = SimpleNamespace(
             id=2, vehicle_id=1, transaction_type="refuel", volume=10.0,
-            total_cost=800.0, price_per_liter=80.0, occurred_at=now,
+            total_cost=800.0, occurred_at=now,
         )
 
         call_count = [0]
@@ -334,18 +330,23 @@ class TestFuelServiceRemainingBranches:
             call_count[0] += 1
             mock_q = MagicMock()
             if call_count[0] == 1:
+                # Vehicle list query
                 mock_q.filter.return_value.all.return_value = [vehicle]
             elif call_count[0] == 2:
-                # Drains - empty
+                # Drains query (order_by)
                 mock_q.filter.return_value.order_by.return_value.all.return_value = []
             elif call_count[0] == 3:
-                # sum(volume) scalar
+                # sum(volume) scalar for high_consumption check
                 mock_q.filter.return_value.scalar.return_value = 0
             elif call_count[0] == 4:
-                # Recent refuels for price check
-                mock_q.filter.return_value.order_by.return_value.all.return_value = [cheap_refuel, expensive_refuel]
+                # avg_price query: .join().filter().scalar() -> 55.0
+                mock_q.join.return_value.filter.return_value.scalar.return_value = 55.0
+            elif call_count[0] == 5:
+                # Recent refuels: .filter().order_by().limit().all()
+                mock_q.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [expensive_refuel]
             else:
                 mock_q.filter.return_value.all.return_value = []
+                mock_q.filter.return_value.order_by.return_value.all.return_value = []
             return mock_q
 
         mock_db.query.side_effect = query_side_effect
