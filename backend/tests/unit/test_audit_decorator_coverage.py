@@ -38,8 +38,9 @@ class TestAuditLogDecorator:
         assert call_kwargs["resource_id"] == 42
         assert call_kwargs["ip_address"] == "127.0.0.1"
 
-    @pytest.mark.asyncio
-    async def test_async_func_with_audit(self):
+    def test_async_func_with_audit(self):
+        """Async func wrapped by decorator - call via asyncio.run."""
+        import asyncio
         from app.services.audit_decorator import audit_log
 
         @audit_log("update", "user")
@@ -50,7 +51,8 @@ class TestAuditLogDecorator:
         user = SimpleNamespace(id=1)
 
         with patch("app.services.audit_service.log_action") as mock_log:
-            result = await update_user(db=db, current_user=user)
+            coro = update_user(db=db, current_user=user)
+            result = asyncio.get_event_loop().run_until_complete(coro)
 
         assert result["id"] == 7
         mock_log.assert_called_once()
