@@ -90,8 +90,9 @@ class TestParseCsv:
 
     def test_csv_parse_error_returns_empty(self, service):
         """Cover except branch in parse_csv (lines 79-80)."""
-        # Pass non-string to trigger exception in csv.DictReader
-        result = service.parse_csv(None)
+        # Pass an object that breaks io.StringIO to trigger except
+        with patch("app.services.bank_integration_service.io.StringIO", side_effect=Exception("broken")):
+            result = service.parse_csv("any,csv,data")
         assert result == []
 
 class TestSyncPaymentsToDb:
