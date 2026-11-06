@@ -402,3 +402,52 @@ class TestAcceptRejectNotFound:
             db.get.return_value = None
             await service._reject_request(mock_update, 999)
         db.close.assert_called()
+
+
+
+class TestMyVehiclesEmpty:
+    """Cover my_vehicles empty list branch (lines 223-227)."""
+
+    @pytest.mark.asyncio
+    async def test_no_vehicles(self, service, mock_update, mock_context):
+        user = SimpleNamespace(id=1, company_id=7)
+        with patch("app.services.telegram_bot.SessionLocal") as MockDB:
+            db = MagicMock()
+            MockDB.return_value = db
+            # First query returns user, second returns empty vehicles
+            user_query = MagicMock()
+            user_query.filter.return_value.first.return_value = user
+            vehicles_query = MagicMock()
+            vehicles_query.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
+            db.query.side_effect = [user_query, vehicles_query]
+            await service.my_vehicles(mock_update, mock_context)
+        call_args = mock_update.callback_query.edit_message_text.call_args[0][0]
+        assert "нет техники" in call_args.lower() or "РЈ РІР°СЃ РЅРµС‚" in call_args
+
+
+class TestRunBotWithProxySuccess:
+    """Cover run_bot proxy success path (line 409)."""
+
+    def test_proxy_success(self, service):
+        import app.services.telegram_bot as mod
+        original_token = mod.settings.TELEGRAM_BOT_TOKEN
+        original_proxy = mod.settings.TELEGRAM_PROXY_URL
+        mod.settings.TELEGRAM_BOT_TOKEN = "test_token"
+        mod.settings.TELEGRAM_PROXY_URL = "http://proxy:8080"
+
+        mock_app = MagicMock()
+        mock_builder = MagicMock()
+        mock_builder.token.return_value = mock_builder
+        mock_builder.request.return_value = mock_builder
+        mock_builder.build.return_value = mock_app
+        mock_app.run_polling.side_effect = lambda **kw: None
+
+        try:
+            with patch.object(mod, "Application") as MockApp:
+                MockApp.builder.return_value = mock_builder
+                service.run_bot()
+        finally:
+            mod.settings.TELEGRAM_BOT_TOKEN = original_token
+            mod.settings.TELEGRAM_PROXY_URL = original_proxy
+        assert service.application == mock_app
+        mock_builder.request.assert_called_once()
