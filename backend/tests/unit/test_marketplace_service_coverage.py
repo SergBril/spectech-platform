@@ -17,17 +17,22 @@ class TestPublishVehicle:
 
     def test_success(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
-        vehicle = SimpleNamespace(
-            id=1, company_id=7, is_deleted=False,
-            is_published=False, hourly_rate=None, shift_rate=None,
-        )
+        vehicle = MagicMock()
+        vehicle.id = 1
+        vehicle.company_id = 7
+        vehicle.is_deleted = False
+        vehicle.hourly_rate = None
+        vehicle.shift_rate = None
+        vehicle.name = "KAMAZ"
         mock_db.get.return_value = vehicle
         result = MarketplaceService.publish_vehicle(
             mock_db, vehicle_id=1, company_id=7,
             hourly_rate=Decimal("1500"), description="Test",
         )
-        assert result.is_published is True
+        assert vehicle.is_available_for_rent is True
+        assert vehicle.marketplace_commission_agreed is True
         mock_db.commit.assert_called()
+        mock_db.refresh.assert_called()
 
     def test_vehicle_not_found(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
@@ -37,17 +42,63 @@ class TestPublishVehicle:
 
     def test_wrong_company(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
-        vehicle = SimpleNamespace(id=1, company_id=99, is_deleted=False)
+        vehicle = MagicMock()
+        vehicle.company_id = 99
+        vehicle.is_deleted = False
         mock_db.get.return_value = vehicle
         with pytest.raises(ValueError, match="another company"):
             MarketplaceService.publish_vehicle(mock_db, vehicle_id=1, company_id=7, hourly_rate=Decimal("100"))
 
+    def test_deleted_vehicle(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        vehicle = MagicMock()
+        vehicle.company_id = 7
+        vehicle.is_deleted = True
+        mock_db.get.return_value = vehicle
+        with pytest.raises(ValueError, match="deleted"):
+            MarketplaceService.publish_vehicle(mock_db, vehicle_id=1, company_id=7, hourly_rate=Decimal("100"))
+
     def test_no_rates(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
-        vehicle = SimpleNamespace(id=1, company_id=7, is_deleted=False)
+        vehicle = MagicMock()
+        vehicle.company_id = 7
+        vehicle.is_deleted = False
+        vehicle.hourly_rate = None
+        vehicle.shift_rate = None
         mock_db.get.return_value = vehicle
         with pytest.raises(ValueError, match="rate"):
             MarketplaceService.publish_vehicle(mock_db, vehicle_id=1, company_id=7)
+
+    def test_existing_vehicle_rate(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        vehicle = MagicMock()
+        vehicle.company_id = 7
+        vehicle.is_deleted = False
+        vehicle.hourly_rate = Decimal("1000")
+        vehicle.shift_rate = None
+        vehicle.name = "KAMAZ"
+        mock_db.get.return_value = vehicle
+        # No new rate passed, but vehicle already has hourly_rate
+        result = MarketplaceService.publish_vehicle(mock_db, vehicle_id=1, company_id=7)
+        assert vehicle.is_available_for_rent is True
+
+    def test_with_all_params(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        vehicle = MagicMock()
+        vehicle.company_id = 7
+        vehicle.is_deleted = False
+        vehicle.hourly_rate = None
+        vehicle.shift_rate = None
+        vehicle.name = "KAMAZ"
+        mock_db.get.return_value = vehicle
+        result = MarketplaceService.publish_vehicle(
+            mock_db, vehicle_id=1, company_id=7,
+            hourly_rate=Decimal("1500"), shift_rate=Decimal("12000"),
+            downtime_hourly_rate=Decimal("500"), description="Full",
+            photos=["url1"], base_location_lat=55.75, base_location_lon=37.62,
+        )
+        assert vehicle.downtime_hourly_rate == Decimal("500")
+        assert vehicle.base_location_lat == 55.75
 
 
 class TestUnpublishVehicle:
@@ -55,10 +106,13 @@ class TestUnpublishVehicle:
 
     def test_success(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
-        vehicle = SimpleNamespace(id=1, company_id=7, is_published=True)
+        vehicle = MagicMock()
+        vehicle.id = 1
+        vehicle.company_id = 7
+        vehicle.is_available_for_rent = True
         mock_db.get.return_value = vehicle
         result = MarketplaceService.unpublish_vehicle(mock_db, vehicle_id=1, company_id=7)
-        assert result.is_published is False
+        assert vehicle.is_available_for_rent is False
         mock_db.commit.assert_called()
 
     def test_not_found(self, mock_db):
@@ -67,13 +121,24 @@ class TestUnpublishVehicle:
         with pytest.raises(ValueError):
             MarketplaceService.unpublish_vehicle(mock_db, vehicle_id=999, company_id=7)
 
+    def test_wrong_company(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        vehicle = MagicMock()
+        vehicle.company_id = 99
+        mock_db.get.return_value = vehicle
+        with pytest.raises(ValueError, match="another company"):
+            MarketplaceService.unpublish_vehicle(mock_db, vehicle_id=1, company_id=7)
+
 
 class TestUpdateListing:
     """Cover update_listing (lines 115-147)."""
 
     def test_success(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
-        vehicle = SimpleNamespace(id=1, company_id=7, is_published=True)
+        vehicle = MagicMock()
+        vehicle.company_id = 7
+        vehicle.is_available_for_rent = True
+        vehicle.name = "KAMAZ"
         mock_db.get.return_value = vehicle
         result = MarketplaceService.update_listing(
             mock_db, vehicle_id=1, company_id=7,
@@ -81,11 +146,19 @@ class TestUpdateListing:
         )
         mock_db.commit.assert_called()
 
+    def test_not_found(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        mock_db.get.return_value = None
+        with pytest.raises(ValueError):
+            MarketplaceService.update_listing(mock_db, vehicle_id=999, company_id=7)
+
     def test_not_published(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
-        vehicle = SimpleNamespace(id=1, company_id=7, is_published=False)
+        vehicle = MagicMock()
+        vehicle.company_id = 7
+        vehicle.is_available_for_rent = False
         mock_db.get.return_value = vehicle
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="published"):
             MarketplaceService.update_listing(mock_db, vehicle_id=1, company_id=7, hourly_rate=Decimal("100"))
 
 
@@ -97,18 +170,20 @@ class TestSearchVehicles:
         mock_scalars = MagicMock()
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
-        result = MarketplaceService.search_vehicles(mock_db, company_id=7)
+        result = MarketplaceService.search_vehicles(mock_db)
         assert isinstance(result, list)
 
-    def test_with_filters(self, mock_db):
+    def test_with_all_filters(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
         mock_scalars = MagicMock()
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
         result = MarketplaceService.search_vehicles(
-            mock_db, company_id=7, category_id=1,
-            min_hourly_rate=Decimal("1000"), max_hourly_rate=Decimal("5000"),
+            mock_db, category_id=1, search="kama",
+            min_hourly_rate=1000, max_hourly_rate=5000,
             lat=55.75, lon=37.62, radius_km=50,
+            available_from=date(2026, 12, 1), available_to=date(2026, 12, 5),
+            limit=10, offset=0,
         )
         assert isinstance(result, list)
 
@@ -118,7 +193,9 @@ class TestGetVehicleDetails:
 
     def test_found(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
-        vehicle = SimpleNamespace(id=1, is_published=True, is_deleted=False)
+        vehicle = MagicMock()
+        vehicle.is_available_for_rent = True
+        vehicle.is_deleted = False
         mock_db.get.return_value = vehicle
         result = MarketplaceService.get_vehicle_details(mock_db, vehicle_id=1)
         assert result == vehicle
@@ -129,15 +206,26 @@ class TestGetVehicleDetails:
         result = MarketplaceService.get_vehicle_details(mock_db, vehicle_id=999)
         assert result is None
 
+    def test_not_available(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        vehicle = MagicMock()
+        vehicle.is_available_for_rent = False
+        vehicle.is_deleted = False
+        mock_db.get.return_value = vehicle
+        result = MarketplaceService.get_vehicle_details(mock_db, vehicle_id=1)
+        assert result is None
+
 
 class TestGetAvailabilityCalendar:
     """Cover get_availability_calendar (lines 252-320)."""
 
     def test_empty(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
-        vehicle = SimpleNamespace(id=1)
+        vehicle = MagicMock()
         mock_db.get.return_value = vehicle
-        mock_db.query.return_value.filter.return_value.all.return_value = []
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_db.scalars.return_value = mock_scalars
         result = MarketplaceService.get_availability_calendar(
             mock_db, vehicle_id=1, month_start=date(2026, 11, 1),
         )
@@ -149,10 +237,13 @@ class TestCreateRequestFromListing:
 
     def test_success(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
-        vehicle = SimpleNamespace(
-            id=1, company_id=7, is_published=True, is_deleted=False,
-            hourly_rate=Decimal("1500"), shift_rate=None,
-        )
+        vehicle = MagicMock()
+        vehicle.id = 1
+        vehicle.company_id = 7
+        vehicle.is_available_for_rent = True
+        vehicle.is_deleted = False
+        vehicle.hourly_rate = Decimal("1500")
+        vehicle.shift_rate = None
         mock_db.get.return_value = vehicle
         mock_db.query.return_value.filter.return_value.first.return_value = None
         result = MarketplaceService.create_request_from_listing(
@@ -166,14 +257,30 @@ class TestCreateRequestFromListing:
 class TestFilterAvailable:
     """Cover _filter_available (lines 441-481)."""
 
-    def test_filter(self, mock_db):
+    def test_empty_ids(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
-        vehicle = SimpleNamespace(id=1)
-        mock_db.query.return_value.filter.return_value.all.return_value = []
-        result = MarketplaceService._filter_available(
-            mock_db, [vehicle], date(2026, 12, 1), date(2026, 12, 5),
-        )
-        assert isinstance(result, list)
+        result = MarketplaceService._filter_available(mock_db, [], date(2026, 12, 1), date(2026, 12, 5))
+        assert result == set()
+
+    def test_all_available(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_db.scalars.return_value = mock_scalars
+        result = MarketplaceService._filter_available(mock_db, [1, 2, 3], date(2026, 12, 1), date(2026, 12, 5))
+        assert result == {1, 2, 3}
+
+    def test_some_busy(self, mock_db):
+        from app.services.marketplace_service import MarketplaceService
+        rental = MagicMock()
+        item = MagicMock()
+        item.vehicle_id = 2
+        rental.items = [item]
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = [rental]
+        mock_db.scalars.return_value = mock_scalars
+        result = MarketplaceService._filter_available(mock_db, [1, 2, 3], date(2026, 12, 1), date(2026, 12, 5))
+        assert result == {1, 3}
 
 
 class TestHaversine:
