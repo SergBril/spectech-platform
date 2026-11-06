@@ -296,20 +296,19 @@ class TestFinalBranches:
     """Cover last 7 uncovered lines."""
 
     def test_log_update_to_sent_fails(self, service):
-        """Cover lines 249-250: exception during log update to sent."""
+        """Cover lines 249-250: exception inside try block during log update to sent."""
         call_count = [0]
         def make_session():
             call_count[0] += 1
+            db = MagicMock()
             if call_count[0] == 1:
                 # First call: create log entry - works fine
-                db = MagicMock()
-                mock_log = MagicMock()
-                mock_log.id = 1
                 db.add = MagicMock()
                 return db
             else:
-                # Second call: update log to sent - raises exception
-                raise Exception("DB connection lost")
+                # Second call: inside try block, get() raises -> hits except on line 249
+                db.get.side_effect = Exception("DB connection lost")
+                return db
 
         mock_server = MagicMock()
         mock_server.ehlo = MagicMock(return_value=(250, b"OK"))
@@ -328,18 +327,19 @@ class TestFinalBranches:
         assert result is True
 
     def test_log_update_to_failed_fails(self, service):
-        """Cover lines 266-267: exception during log update to failed."""
+        """Cover lines 266-267: exception inside try block during log update to failed."""
         call_count = [0]
         def make_session():
             call_count[0] += 1
+            db = MagicMock()
             if call_count[0] == 1:
                 # First call: create log entry - works fine
-                db = MagicMock()
                 db.add = MagicMock()
                 return db
             else:
-                # Second call: update log to failed - raises exception
-                raise Exception("DB gone")
+                # Second call: inside except->try block, get() raises -> hits except on line 266
+                db.get.side_effect = Exception("DB gone")
+                return db
 
         with patch("app.core.db.SessionLocal", side_effect=make_session), \
              patch("app.services.email_service.smtplib.SMTP", side_effect=Exception("SMTP boom")), \
