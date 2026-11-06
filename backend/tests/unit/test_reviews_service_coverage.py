@@ -654,3 +654,14 @@ class TestFinalBranches:
         rental = SimpleNamespace(client_id=10, company_id=7, items=[])
         result = ReviewsService._resolve_reviewed_company(mock_db, rental, 10, "unknown_type")
         assert result is None
+
+
+    def test_owner_to_client_items_but_not_owner(self, mock_db):
+        """Cover line 510: items exist but no vehicle owned by contractor."""
+        from app.services.reviews_service import ReviewsService
+        item = type("Item", (), {"vehicle_id": 1})()
+        rental = SimpleNamespace(client_id=10, items=[item])
+        vehicle = SimpleNamespace(owner_id=99)  # NOT contractor 20
+        mock_db.get.return_value = vehicle
+        result = ReviewsService._verify_participant(mock_db, rental, 20, "owner_to_client")
+        assert result is False
