@@ -451,7 +451,8 @@ class TestCalendarItemSkip:
 class TestCreateRequestNotifyBranches:
     """Cover lines 393, 403-404: async notify task creation and exception."""
 
-    def test_notify_with_owner(self, mock_db):
+    def test_notify_with_owner_and_loop(self, mock_db):
+        """Cover line 393: loop.create_task called successfully."""
         from app.services.marketplace_service import MarketplaceService
         vehicle = MagicMock()
         vehicle.id = 1
@@ -463,19 +464,20 @@ class TestCreateRequestNotifyBranches:
         owner.name = "Ivan"
         owner.id = 20
 
-        # db.get sequence: Vehicle(1), Contractor(20)
         mock_db.get.side_effect = [vehicle, owner]
-        # _filter_available: no busy rentals
         mock_scalars = MagicMock()
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
 
-        result = MarketplaceService.create_request_from_listing(
-            mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
-            work_type="excavation", planned_start=datetime(2026, 12, 1),
-            planned_end=datetime(2026, 12, 5),
-        )
-        mock_db.add.assert_called()
+        # Mock the event loop so create_task works
+        mock_loop = MagicMock()
+        with patch("asyncio.get_running_loop", return_value=mock_loop):
+            result = MarketplaceService.create_request_from_listing(
+                mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
+                work_type="excavation", planned_start=datetime(2026, 12, 1),
+                planned_end=datetime(2026, 12, 5),
+            )
+        mock_loop.create_task.assert_called_once()
         mock_db.commit.assert_called()
 
     def test_notify_no_event_loop(self, mock_db):
@@ -496,8 +498,7 @@ class TestCreateRequestNotifyBranches:
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
 
-        # Patch asyncio.get_running_loop to raise RuntimeError
-        with patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
+        with patch("asyncio.get_running_loop", side_effect=RuntimeError("no running event loop")):
             result = MarketplaceService.create_request_from_listing(
                 mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
                 work_type="test", planned_start=datetime(2026, 12, 1),
@@ -505,23 +506,29 @@ class TestCreateRequestNotifyBranches:
             )
         mock_db.commit.assert_called()
 
-    def test_notify_exception_caught(self, mock_db):
-        """Cover line 404: outer exception handler."""
+    def test_notify_outer_exception(self, mock_db):
+        """Cover line 404: outer except catches any exception during notify."""
         from app.services.marketplace_service import MarketplaceService
         vehicle = MagicMock()
         vehicle.id = 1
         vehicle.is_available_for_rent = True
         vehicle.owner_id = 20
         vehicle.name = "KAMAZ"
+        owner = MagicMock()
+        owner.email = "owner@test.com"
+        owner.name = "Ivan"
+        owner.id = 20
 
-        mock_db.get.side_effect = [vehicle, None]  # owner not found -> owner=None, skips notify
+        mock_db.get.side_effect = [vehicle, owner]
         mock_scalars = MagicMock()
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
 
-        result = MarketplaceService.create_request_from_listing(
-            mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
-            work_type="test", planned_start=datetime(2026, 12, 1),
-            planned_end=datetime(2026, 12, 5),
-        )
+        # Make get_running_loop raise a non-RuntimeError exception
+        with patch("asyncio.get_running_loop", side_effect=OSError("unexpected")):
+            result = MarketplaceService.create_request_from_listing(
+                mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
+                work_type="test", planned_start=datetime(2026, 12, 1),
+                planned_end=datetime(2026, 12, 5),
+            )
         mock_db.commit.assert_called()
