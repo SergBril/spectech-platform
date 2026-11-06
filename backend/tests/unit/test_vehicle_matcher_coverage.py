@@ -365,3 +365,15 @@ class TestVehicleMatcherEdgeCases:
         )
         score, matched, missing = svc._score_vehicle(mock_db, vehicle, request)
         assert any("optimal" in m for m in matched)
+
+
+    def test_score_gte_missing_attr(self, mock_db):
+        """Cover lines 270-271: gte attr not found -> missing + score -= 10."""
+        # No attributes at all for this vehicle
+        svc, vehicle, request = self._make_score_setup(
+            mock_db, [], requirements={"min_tonnage": "5"}
+        )
+        # db.get won't be called since no attrs
+        score, matched, missing = svc._score_vehicle(mock_db, vehicle, request)
+        assert any("Грузоподъёмность" in m for m in missing)
+        assert score < 50  # Penalty applied
