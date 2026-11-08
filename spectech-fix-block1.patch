@@ -1,0 +1,123 @@
+From fde67e1b1a9e88807af0c74b9c8178bb26e44c28 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 8 Nov 2026 17:19:37 +0300
+Subject: [PATCH] =?UTF-8?q?fix:=20=D0=BF=D0=B0=D0=B4=D0=B5=D0=BD=D0=B8?=
+ =?UTF-8?q?=D0=B5=20=D1=81=D1=82=D1=80=D0=B0=D0=BD=D0=B8=D1=86=D1=8B=20?=
+ =?UTF-8?q?=D0=BB=D0=BE=D0=B3=D0=BE=D0=B2=20=D1=81=D0=B8=D0=BD=D1=85=D1=80?=
+ =?UTF-8?q?=D0=BE=D0=BD=D0=B8=D0=B7=D0=B0=D1=86=D0=B8=D0=B8,=20=D0=BD?=
+ =?UTF-8?q?=D0=B5=D0=B4=D0=BE=D1=81=D1=82=D0=B0=D1=8E=D1=89=D0=B8=D0=B5=20?=
+ =?UTF-8?q?=D0=B7=D0=B0=D0=B2=D0=B8=D1=81=D0=B8=D0=BC=D0=BE=D1=81=D1=82?=
+ =?UTF-8?q?=D0=B8,=20=D0=BA=D0=BE=D0=BD=D1=84=D0=BB=D0=B8=D0=BA=D1=82=20ht?=
+ =?UTF-8?q?tpx,=20=D0=B4=D1=83=D0=B1=D0=BB=D1=8C=20=D0=B8=D0=BC=D0=B5?=
+ =?UTF-8?q?=D0=BD=D0=B8=20=D1=82=D0=B5=D1=81=D1=82=D0=B0?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- SyncLogsPage: добавлен default export (lazy-загрузка падала), исправлен вызов showToast
+- AuthContext: поле user_type в User
+- tsconfig.node.json: lib ES2023 (ошибки tsc в vite.config.ts)
+- requirements.txt: openpyxl, python-telegram-bot (импортируются, но не устанавливались в Docker)
+- requirements-dev.txt: убран httpx==0.27.2 (конфликт с 0.27.0)
+- переименован дублирующийся test_payout_service.py (ломал сбор всех тестов)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EGZYSgsZ9GrBwsWCXR5Ppq
+---
+ backend/requirements-dev.txt                           |  2 --
+ backend/requirements.txt                               |  4 ++++
+ ...ayout_service.py => test_finance_payout_service.py} |  0
+ frontend/src/contexts/AuthContext.tsx                  |  1 +
+ frontend/src/pages/SyncLogsPage.tsx                    |  4 +++-
+ frontend/tsconfig.node.json                            | 10 ++++++++--
+ 6 files changed, 16 insertions(+), 5 deletions(-)
+ rename backend/tests/unit/finance/{test_payout_service.py => test_finance_payout_service.py} (100%)
+
+diff --git a/backend/requirements-dev.txt b/backend/requirements-dev.txt
+index cf4f67e..a3374f3 100644
+--- a/backend/requirements-dev.txt
++++ b/backend/requirements-dev.txt
+@@ -3,7 +3,6 @@ aiosqlite==0.20.0
+ pytest==8.3.3
+ pytest-asyncio==0.24.0
+ pytest-cov==5.0.0
+-httpx==0.27.2
+ requests==2.34.2
+ 
+ # Code Quality
+@@ -33,5 +32,4 @@ detect-secrets==1.4.0
+ # Testing
+ pytest==8.3.3
+ pytest-asyncio==0.24.0
+-httpx==0.27.2
+ pytest-cov==5.0.0
+diff --git a/backend/requirements.txt b/backend/requirements.txt
+index 9e05fab..17385d5 100644
+--- a/backend/requirements.txt
++++ b/backend/requirements.txt
+@@ -135,3 +135,7 @@ pytest==8.3.3
+ pytest-cov==5.0.0
+ pytest-asyncio==0.24.0
+ apscheduler>=3.10,<4.0
++
++# Добавлено при диагностике 2026-11: импортируются в коде, но отсутствовали
++openpyxl==3.1.5
++python-telegram-bot[socks]==21.10
+diff --git a/backend/tests/unit/finance/test_payout_service.py b/backend/tests/unit/finance/test_finance_payout_service.py
+similarity index 100%
+rename from backend/tests/unit/finance/test_payout_service.py
+rename to backend/tests/unit/finance/test_finance_payout_service.py
+diff --git a/frontend/src/contexts/AuthContext.tsx b/frontend/src/contexts/AuthContext.tsx
+index 49d80f1..cc80a27 100644
+--- a/frontend/src/contexts/AuthContext.tsx
++++ b/frontend/src/contexts/AuthContext.tsx
+@@ -10,6 +10,7 @@ interface User {
+   company_id: number;  // ← ДОБАВИТЬ
+   is_superuser: boolean;
+   role?: string;
++  user_type?: string;
+ }
+ 
+ interface AuthContextType {
+diff --git a/frontend/src/pages/SyncLogsPage.tsx b/frontend/src/pages/SyncLogsPage.tsx
+index 33184c3..26520f9 100644
+--- a/frontend/src/pages/SyncLogsPage.tsx
++++ b/frontend/src/pages/SyncLogsPage.tsx
+@@ -59,7 +59,7 @@ export const SyncLogsPage: React.FC = () => {
+       setLogs(res.data.items || res.data);
+       setTotal(res.data.total || (res.data.items || res.data).length);
+     } catch (err: any) {
+-      showToast('Ошибка загрузки логов синхронизации', 'error');
++      showToast.error('Ошибка загрузки логов синхронизации');
+     } finally {
+       setLoading(false);
+     }
+@@ -235,3 +235,5 @@ export const SyncLogsPage: React.FC = () => {
+     </Layout>
+   );
+ };
++
++export default SyncLogsPage;
+diff --git a/frontend/tsconfig.node.json b/frontend/tsconfig.node.json
+index 9b53820..f254054 100644
+--- a/frontend/tsconfig.node.json
++++ b/frontend/tsconfig.node.json
+@@ -5,7 +5,13 @@
+     "module": "ESNext",
+     "moduleResolution": "bundler",
+     "allowSyntheticDefaultImports": true,
+-    "strict": false
++    "strict": false,
++    "target": "ES2022",
++    "lib": [
++      "ES2023"
++    ]
+   },
+-  "include": ["vite.config.ts"]
++  "include": [
++    "vite.config.ts"
++  ]
+ }
+-- 
+2.43.0
+

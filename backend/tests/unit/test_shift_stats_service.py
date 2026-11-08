@@ -10,6 +10,23 @@ import pytest
 @pytest.fixture
 def mock_db():
     db = MagicMock()
+    # Support _get_task_hours: db.get(User, user_id) -> mock with full_name
+    def _db_get_side_effect(model, pk):
+        from app.models.auth import User
+        if model == User or (hasattr(model, '__name__') and model.__name__ == 'User'):
+            return SimpleNamespace(full_name="Test Driver", id=pk)
+        return MagicMock(id=pk)
+    db.get.side_effect = _db_get_side_effect
+    # Support requests_map loading in _get_task_hours
+    from datetime import datetime as dt
+    mock_request = SimpleNamespace(
+        id=1, planned_start=dt(2026, 11, 3, 8, 0), planned_end=dt(2026, 11, 3, 17, 0)
+    )
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = [mock_request]
+    mock_execute_result = MagicMock()
+    mock_execute_result.scalars.return_value = mock_scalars
+    db.execute.return_value = mock_execute_result
     return db
 
 
@@ -89,7 +106,7 @@ class TestGetDriverKpi:
 
     def test_with_profiles_and_tasks(self, service, mock_db):
         profile = SimpleNamespace(employee_contractor_id=10)
-        emp = SimpleNamespace(first_name="Иван", last_name="Петров")
+        emp = SimpleNamespace(user_id=99)
         task = SimpleNamespace(
             operator_id=10,
             shift_date=date(2026, 11, 5),
@@ -156,7 +173,7 @@ class TestGetCostPerHourReport:
             planned_end=datetime(2026, 11, 5, 16, 0, tzinfo=UTC),
         )
         fuel = SimpleNamespace(vehicle_id=1, quantity_liters=50.0)
-        emp = SimpleNamespace(first_name="Иван", last_name="Петров")
+        emp = SimpleNamespace(user_id=99)
 
         call_count = {"n": 0}
 
@@ -220,7 +237,7 @@ class TestExportDriverKpiExcel:
 
     def test_export_with_profiles_and_tasks(self, service, mock_db):
         profile = SimpleNamespace(employee_contractor_id=10)
-        emp = SimpleNamespace(first_name="Иван", last_name="Петров")
+        emp = SimpleNamespace(user_id=99)
         task = SimpleNamespace(
             operator_id=10,
             shift_date=date(2026, 11, 5),
@@ -314,7 +331,7 @@ class TestGetDriverKpi:
         from datetime import UTC, datetime
 
         profile = SimpleNamespace(employee_contractor_id=10)
-        emp = SimpleNamespace(first_name="Иван", last_name="Петров")
+        emp = SimpleNamespace(user_id=99)
         task = SimpleNamespace(
             operator_id=10,
             shift_date=date(2026, 11, 5),
@@ -340,7 +357,7 @@ class TestGetDriverKpi:
         result = service.get_driver_kpi(mock_db, 1, "2026-11-01", "2026-11-30")
         assert len(result["drivers"]) == 1
         driver = result["drivers"][0]
-        assert driver["driver_name"] == "Иван Петров"
+        assert driver["driver_name"] == "Test Driver"
         assert driver["shift_count"] == 1
         assert driver["total_hours"] == 8.0
 
@@ -530,7 +547,7 @@ class TestGetCostPerHourReport:
             planned_end=datetime(2026, 11, 5, 16, 0, tzinfo=UTC),
         )
         fuel = SimpleNamespace(vehicle_id=1, quantity_liters=50.0)
-        emp = SimpleNamespace(first_name="Иван", last_name="Петров")
+        emp = SimpleNamespace(user_id=99)
 
         call_count = {"n": 0}
 
@@ -554,7 +571,7 @@ class TestGetCostPerHourReport:
         assert len(result["vehicles"]) == 1
         v = result["vehicles"][0]
         assert v["hours"] == 8.0
-        assert v["driver_name"] == "Иван Петров"
+        assert v["driver_name"] == "Test Driver"
 
 
 class TestGetCostForecast:

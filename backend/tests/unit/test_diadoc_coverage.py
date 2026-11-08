@@ -105,14 +105,16 @@ class TestDiadocServiceAsync:
 
 
 class TestDiadocRoutesWithMock:
-    @patch("app.api.routes.shifts.diadoc.diadoc_service")
+    @patch("app.services.diadoc_service.diadoc_service")
     def test_list_counterparties_route(self, mock_svc, client, auth_headers):
+        mock_svc.authenticate = AsyncMock(return_value="fake-token")
         mock_svc.get_counterparties = AsyncMock(return_value=[{"id": "box1"}])
         resp = client.get("/api/v1/shifts/diadoc/counterparties", headers=auth_headers)
         assert resp.status_code in (200, 500)
 
-    @patch("app.api.routes.shifts.diadoc.diadoc_service")
+    @patch("app.services.diadoc_service.diadoc_service")
     def test_get_document_status_route(self, mock_svc, client, auth_headers):
+        mock_svc.authenticate = AsyncMock(return_value="fake-token")
         mock_svc.get_document_status = AsyncMock(return_value={"status": "delivered"})
         resp = client.get(
             "/api/v1/shifts/diadoc/status/test-doc-id", headers=auth_headers

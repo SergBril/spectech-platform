@@ -240,7 +240,7 @@ class TestPublishRequest:
         )
         mock_db.get.return_value = request
         user = SimpleNamespace(id=5)
-        service.publish_request(mock_db, 1, 1, user)
+        result = service.publish_request(mock_db, 1, 1, user)
         assert result.is_published is True
         mock_db.commit.assert_not_called()
 
@@ -256,7 +256,7 @@ class TestPublishRequest:
         )
         mock_db.get.return_value = request
         user = SimpleNamespace(id=5)
-        service.publish_request(mock_db, 1, 1, user)
+        result = service.publish_request(mock_db, 1, 1, user)
         assert request.is_published is True
         assert request.published_at is not None
         mock_db.commit.assert_called_once()
@@ -335,7 +335,7 @@ class TestCreateOfferSuccess:
         )
 
         with patch.object(service, "_build_offer_response", return_value={"id": 5}):
-            service.create_offer_on_request(mock_db, 1, 10, data, 1)
+            result = service.create_offer_on_request(mock_db, 1, 10, data, 1)
 
         assert result["id"] == 5
         mock_db.add.assert_called()
@@ -447,7 +447,7 @@ class TestCreateSurplusRequest:
             MockRequest.return_value = mock_req_instance
             MockLog.return_value = SimpleNamespace()
 
-            service.create_surplus_request(mock_db, 1, data, user)
+            result = service.create_surplus_request(mock_db, 1, data, user)
 
         assert result["id"] == 100
         assert result["vehicle_name"] == "Экскаватор JCB"

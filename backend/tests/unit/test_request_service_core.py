@@ -40,7 +40,7 @@ class TestAssignVehicle:
 
     @pytest.mark.asyncio
     async def test_request_wrong_company(self, service, mock_db):
-        SimpleNamespace(company_id=2, status="new")
+        req = SimpleNamespace(company_id=2, status="new")
         mock_db.get.return_value = req
         from app.services.request_service import RequestServiceError
 
@@ -50,7 +50,7 @@ class TestAssignVehicle:
 
     @pytest.mark.asyncio
     async def test_request_closed(self, service, mock_db):
-        SimpleNamespace(company_id=1, status="closed")
+        req = SimpleNamespace(company_id=1, status="closed")
         mock_db.get.return_value = req
         from app.services.request_service import RequestServiceError
 
@@ -60,7 +60,7 @@ class TestAssignVehicle:
 
     @pytest.mark.asyncio
     async def test_vehicle_not_found(self, service, mock_db):
-        SimpleNamespace(company_id=1, status="new")
+        req = SimpleNamespace(company_id=1, status="new")
         mock_db.get.side_effect = lambda m, i: req if i == 1 else None
         from app.services.request_service import RequestServiceError
 
@@ -70,7 +70,7 @@ class TestAssignVehicle:
 
     @pytest.mark.asyncio
     async def test_vehicle_unavailable_status(self, service, mock_db):
-        SimpleNamespace(company_id=1, status="new")
+        req = SimpleNamespace(company_id=1, status="new")
         vehicle = SimpleNamespace(company_id=1, status="repair", name="Broken")
         mock_db.get.side_effect = lambda m, i: req if i == 1 else vehicle
         from app.services.request_service import RequestServiceError
@@ -81,7 +81,7 @@ class TestAssignVehicle:
 
     @pytest.mark.asyncio
     async def test_marketplace_no_commission(self, service, mock_db):
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1,
             company_id=1,
             status="new",
@@ -106,7 +106,7 @@ class TestAssignVehicle:
 
     @pytest.mark.asyncio
     async def test_invalid_period(self, service, mock_db):
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1,
             company_id=1,
             status="new",
@@ -129,7 +129,7 @@ class TestAssignVehicle:
 
     @pytest.mark.asyncio
     async def test_overlapping_assignment(self, service, mock_db):
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1,
             company_id=1,
             status="new",
@@ -158,7 +158,7 @@ class TestAssignVehicle:
 
     @pytest.mark.asyncio
     async def test_idempotent_existing_assignment(self, service, mock_db):
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1,
             company_id=1,
             status="new",
@@ -176,13 +176,13 @@ class TestAssignVehicle:
         mock_db.get.side_effect = lambda m, i: req if i == 1 else vehicle
         mock_db.scalar.return_value = None  # no overlap
         mock_db.query.return_value.filter.return_value.first.return_value = existing
-        await service.assign_vehicle(1, 2, None, 1, 1)
+        result = await service.assign_vehicle(1, 2, None, 1, 1)
         assert result == req
         mock_db.refresh.assert_called_once_with(req)
 
     @pytest.mark.asyncio
     async def test_successful_assignment(self, service, mock_db):
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1,
             company_id=1,
             status="new",
@@ -203,7 +203,7 @@ class TestAssignVehicle:
         mock_db.query.return_value.filter.return_value.first.return_value = (
             None  # no existing
         )
-        await service.assign_vehicle(1, 2, 5, 1, 1)
+        result = await service.assign_vehicle(1, 2, 5, 1, 1)
         assert result == req
         mock_db.add.assert_called()
         mock_db.commit.assert_called_once()
@@ -223,14 +223,14 @@ class TestBulkResponseAction:
     @pytest.mark.asyncio
     async def test_assignment_not_found(self, service, mock_db):
         mock_db.get.return_value = None
-        await service.bulk_response_action([999], "approve", "", 1, 1)
+        result = await service.bulk_response_action([999], "approve", "", 1, 1)
         assert result["processed"] == 0
         assert len(result["errors"]) == 1
 
     @pytest.mark.asyncio
     async def test_access_denied(self, service, mock_db):
         assignment = SimpleNamespace(request_id=10, status="pending_approval")
-        SimpleNamespace(company_id=2)  # different company
+        req = SimpleNamespace(company_id=2)  # different company
 
         def mock_get(model, pk):
             if pk == 1:
@@ -240,14 +240,14 @@ class TestBulkResponseAction:
             return None
 
         mock_db.get.side_effect = mock_get
-        await service.bulk_response_action([1], "approve", "", 1, 1)
+        result = await service.bulk_response_action([1], "approve", "", 1, 1)
         assert len(result["errors"]) == 1
         assert "Access denied" in result["errors"][0]["error"]
 
     @pytest.mark.asyncio
     async def test_already_processed(self, service, mock_db):
         assignment = SimpleNamespace(request_id=10, status="approved")
-        SimpleNamespace(company_id=1)
+        req = SimpleNamespace(company_id=1)
 
         def mock_get(model, pk):
             if pk == 1:
@@ -255,7 +255,7 @@ class TestBulkResponseAction:
             return req
 
         mock_db.get.side_effect = mock_get
-        await service.bulk_response_action([1], "approve", "", 1, 1)
+        result = await service.bulk_response_action([1], "approve", "", 1, 1)
         assert len(result["errors"]) == 1
         assert "Already approved" in result["errors"][0]["error"]
 
@@ -264,7 +264,7 @@ class TestBulkResponseAction:
         assignment = SimpleNamespace(
             id=1, request_id=10, status="pending_approval", vehicle_id=2
         )
-        SimpleNamespace(company_id=1, id=10, status="new")
+        req = SimpleNamespace(company_id=1, id=10, status="new")
 
         def mock_get(model, pk):
             if pk == 1:
@@ -275,7 +275,7 @@ class TestBulkResponseAction:
 
         mock_db.get.side_effect = mock_get
         mock_db.execute.return_value.scalars.return_value.all.return_value = []
-        await service.bulk_response_action([1], "reject", "Not suitable", 1, 1)
+        result = await service.bulk_response_action([1], "reject", "Not suitable", 1, 1)
         assert result["processed"] == 1
         assert assignment.status == "rejected"
         mock_db.commit.assert_called_once()
@@ -286,12 +286,12 @@ class TestListRequests:
 
     def test_basic_list(self, service, mock_db):
         mock_db.scalars.return_value.all.return_value = []
-        service.list_requests([1])
+        result = service.list_requests([1])
         assert isinstance(result, list)
 
     def test_with_all_filters(self, service, mock_db):
         mock_db.scalars.return_value.all.return_value = []
-        service.list_requests(
+        result = service.list_requests(
             [1, 2],
             status_filter="new",
             priority="high",
@@ -318,7 +318,7 @@ class TestAssignVehicleFullSuccess:
         from datetime import datetime
         from types import SimpleNamespace
 
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1,
             company_id=1,
             status="new",
@@ -341,7 +341,7 @@ class TestAssignVehicleFullSuccess:
 
         mock_notify = AsyncMock()
         with patch("app.services.request_service.create_notification", mock_notify):
-            await service.assign_vehicle(1, 2, 5, 1, 1)
+            result = await service.assign_vehicle(1, 2, 5, 1, 1)
 
         assert result == req
         mock_db.commit.assert_called_once()
@@ -353,7 +353,7 @@ class TestAssignVehicleFullSuccess:
         from datetime import datetime
         from types import SimpleNamespace
 
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1,
             company_id=1,
             status="new",
@@ -378,7 +378,7 @@ class TestAssignVehicleFullSuccess:
             "app.services.request_service.create_notification",
             side_effect=Exception("notify fail"),
         ):
-            await service.assign_vehicle(1, 2, None, 1, 1)
+            result = await service.assign_vehicle(1, 2, None, 1, 1)
 
         assert result == req
         mock_db.commit.assert_called_once()
@@ -390,7 +390,7 @@ class TestAssignVehicleFullSuccess:
 
         from sqlalchemy.exc import IntegrityError
 
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1,
             company_id=1,
             status="new",
@@ -470,7 +470,7 @@ class TestListRequestsEnrichment:
 
         mock_db.get.side_effect = mock_get
 
-        service.list_requests([1])
+        result = service.list_requests([1])
         assert len(result) == 1
         assert result[0]["client_name"] == "ООО Клиент"
         assert result[0]["vehicle_category_name"] == "Краны"
@@ -488,7 +488,7 @@ class TestBulkResponseApprove:
         assignment = SimpleNamespace(
             id=1, request_id=10, status="pending_approval", vehicle_id=2, assigned_by=5
         )
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=10,
             company_id=1,
             status="new",
@@ -521,7 +521,7 @@ class TestBulkResponseApprove:
             patch("app.services.websocket_manager.manager") as mock_manager,
         ):
             mock_manager.send_to_user = mock_ws
-            await service.bulk_response_action([1], "approve", "", 1, 1)
+            result = await service.bulk_response_action([1], "approve", "", 1, 1)
 
         assert result["processed"] == 1
         assert assignment.status == "approved"
@@ -542,7 +542,7 @@ class TestCreateRequestNotifications:
         from types import SimpleNamespace
         from unittest.mock import MagicMock
 
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1,
             company_id=1,
             work_type="crane",
@@ -594,7 +594,7 @@ class TestCreateRequestNotifications:
         from types import SimpleNamespace
 
         # Simulate the notification block directly
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1,
             work_type="crane",
             object_address="Москва",
@@ -648,7 +648,7 @@ class TestUpdateRequestPatch:
     ):
         from types import SimpleNamespace
 
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1, company_id=1, status="new", work_type="crane", created_by=10
         )
         mock_db.get.return_value = req
@@ -657,7 +657,7 @@ class TestUpdateRequestPatch:
         with patch(
             "app.services.notification_service.create_notification", mock_notify
         ):
-            await service.update_request_patch(1, {"status": "processing"}, 1, 5)
+            result = await service.update_request_patch(1, {"status": "processing"}, 1, 5)
 
         assert result == req
         mock_db.add.assert_called()  # RequestStatusLog added
@@ -669,12 +669,12 @@ class TestUpdateRequestPatch:
     async def test_patch_no_status_change(self, service, mock_db):
         from types import SimpleNamespace
 
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1, company_id=1, status="new", work_type="crane", created_by=10
         )
         mock_db.get.return_value = req
 
-        await service.update_request_patch(1, {"comment": "updated"}, 1, 5)
+        result = await service.update_request_patch(1, {"comment": "updated"}, 1, 5)
 
         assert result == req
         assert req.comment == "updated"
@@ -693,7 +693,7 @@ class TestUpdateRequestPatch:
     async def test_patch_same_user_no_notification(self, service, mock_db):
         from types import SimpleNamespace
 
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1, company_id=1, status="new", work_type="crane", created_by=5
         )
         mock_db.get.return_value = req
@@ -785,7 +785,7 @@ class TestCreateRequestFull:
             patch("app.services.notification_service.create_notification", mock_notify),
             patch("app.services.pricing_service.pricing_service", mock_pricing),
         ):
-            await service.create_request(payload, 1, 5)
+            result = await service.create_request(payload, 1, 5)
 
         assert result is not None
         assert len(created_requests) == 1
@@ -872,7 +872,7 @@ class TestCreateRequestFull:
             ),
             patch("app.services.pricing_service.pricing_service", mock_pricing),
         ):
-            await service.create_request(payload, 1, 5)
+            result = await service.create_request(payload, 1, 5)
 
         assert result is not None
         mock_max.notify_company_dispatchers.assert_called_once()
@@ -884,7 +884,7 @@ class TestUpdateRequestPut:
     def test_put_full_update(self, service, mock_db):
         from types import SimpleNamespace
 
-        SimpleNamespace(
+        req = SimpleNamespace(
             id=1,
             company_id=1,
             status="new",
@@ -925,7 +925,7 @@ class TestUpdateRequestPut:
     def test_put_assigned_request_blocked(self, service, mock_db):
         from types import SimpleNamespace
 
-        SimpleNamespace(id=1, company_id=1, status="assigned")
+        req = SimpleNamespace(id=1, company_id=1, status="assigned")
         mock_db.get.return_value = req
         from app.services.request_service import RequestServiceError
 
