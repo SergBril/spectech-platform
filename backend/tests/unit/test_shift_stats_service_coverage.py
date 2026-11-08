@@ -110,3 +110,117 @@ class TestGetPlatformOverview:
         mock_db.execute.return_value = mock_scalar_result
         result = service.get_platform_overview(mock_db, company_id=7)
         assert isinstance(result, dict)
+
+
+
+class TestLargeMethodsWithRealDB:
+    """Cover large methods using real SQLite DB (empty results)."""
+
+    def test_get_driver_kpi(self, service, db_session):
+        result = service.get_driver_kpi(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, (list, dict))
+
+    def test_get_fuel_consumption_stats(self, service, db_session):
+        result = service.get_fuel_consumption_stats(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07", vehicle_id=None)
+        assert isinstance(result, (list, dict))
+
+    def test_get_fuel_consumption_stats_with_vehicle(self, service, db_session):
+        result = service.get_fuel_consumption_stats(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07", vehicle_id=1)
+        assert isinstance(result, (list, dict))
+
+    def test_get_utilization_stats(self, service, db_session):
+        result = service.get_utilization_stats(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, (list, dict))
+
+    def test_get_cost_per_hour_report(self, service, db_session):
+        result = service.get_cost_per_hour_report(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, (list, dict))
+
+    def test_get_pnl_per_vehicle(self, service, db_session):
+        result = service.get_pnl_per_vehicle(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, (list, dict))
+
+    def test_get_cost_forecast(self, service, db_session):
+        result = service.get_cost_forecast(db_session, company_id=999)
+        assert isinstance(result, dict)
+
+    def test_get_fuel_dashboard(self, service, db_session):
+        result = service.get_fuel_dashboard(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, dict)
+
+    def test_export_cost_per_hour_excel(self, service, db_session):
+        result = service.export_cost_per_hour_excel(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert result is not None
+
+    def test_export_driver_kpi_excel(self, service, db_session):
+        result = service.export_driver_kpi_excel(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert result is not None
+
+    def test_export_fuel_consumption_excel(self, service, db_session):
+        result = service.export_fuel_consumption_excel(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07", vehicle_id=None)
+        assert result is not None
+
+    def test_export_pnl_excel(self, service, db_session):
+        result = service.export_pnl_excel(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert result is not None
+
+    def test_export_utilization_excel(self, service, db_session):
+        result = service.export_utilization_excel(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert result is not None
+
+
+
+class TestLargeMethodsWithRealDB:
+    """Cover large methods using real SQLite DB (empty results)."""
+
+    def test_get_driver_kpi(self, service, db_session):
+        result = service.get_driver_kpi(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, (list, dict))
+
+    def test_get_fuel_consumption_stats(self, service, db_session):
+        result = service.get_fuel_consumption_stats(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07", vehicle_id=None)
+        assert isinstance(result, (list, dict))
+
+    def test_get_fuel_consumption_stats_with_vehicle(self, service, db_session):
+        result = service.get_fuel_consumption_stats(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07", vehicle_id=1)
+        assert isinstance(result, (list, dict))
+
+    def test_get_utilization_stats(self, service, db_session):
+        result = service.get_utilization_stats(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, (list, dict))
+
+    def test_get_cost_per_hour_report(self, service, db_session):
+        result = service.get_cost_per_hour_report(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, (list, dict))
+
+    def test_get_pnl_per_vehicle(self, service, db_session):
+        result = service.get_pnl_per_vehicle(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, (list, dict))
+
+    def test_get_cost_forecast(self, service, db_session):
+        result = service.get_cost_forecast(db_session, company_id=999)
+        assert isinstance(result, dict)
+
+    def test_get_fuel_dashboard(self, service, db_session):
+        result = service.get_fuel_dashboard(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, dict)
+
+    def test_export_cost_per_hour_excel(self, service, db_session):
+        result = service.export_cost_per_hour_excel(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert result is not None
+
+    def test_export_driver_kpi_excel(self, service, db_session):
+        result = service.export_driver_kpi_excel(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert result is not None
+
+    def test_export_fuel_consumption_excel(self, service, db_session):
+        result = service.export_fuel_consumption_excel(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07", vehicle_id=None)
+        assert result is not None
+
+    def test_export_pnl_excel(self, service, db_session):
+        result = service.export_pnl_excel(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert result is not None
+
+    def test_export_utilization_excel(self, service, db_session):
+        result = service.export_utilization_excel(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
+        assert result is not None

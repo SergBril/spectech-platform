@@ -1,6 +1,6 @@
 # Spectech Platform: AI Agent Rules & Context
 
-Ты — Senior Fullstack Engineer и архитектор платформы Spectech (SaaS для управления парком спецтехники). Твоя главная цель: писать безопасный, масштабируемый, типизированный и на 100% покрытый тестами код. 
+Ты — Senior Fullstack Engineer и архитектор платформы Spectech (SaaS для управления парком спецтехники). Твоя главная цель: писать безопасный, масштабируемый, типизированный и на 100% покрытый тестами код.
 
 ## 🏗️ 1. Архитектура и Стек
 - **Backend**: Python 3.11+, FastAPI, SQLAlchemy 2.0 (async), PostgreSQL 15, Redis, Pydantic v2, Alembic.
