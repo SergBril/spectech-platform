@@ -497,9 +497,10 @@ def export_acts_for_1c(
     )
 
 
+@router.post("/acts/auto-generate", summary="🤖 Автогенерация актов за период")
 def auto_generate_acts(
-    date_from: str = Body(...),
-    date_to: str = Body(...),
+    date_from: str = Body(..., description="Начальная дата в формате YYYY-MM-DD"),
+    date_to: str = Body(..., description="Конечная дата в формате YYYY-MM-DD"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
@@ -513,7 +514,7 @@ def auto_generate_acts(
     d_from = date_type.fromisoformat(date_from)
     d_to = date_type.fromisoformat(date_to)
 
-    # Get completed shifts without linked act
+    # Получаем завершенные смены без привязанного акта
     tasks = (
         db.execute(
             select(ShiftTask)
@@ -531,7 +532,7 @@ def auto_generate_acts(
     skipped = 0
 
     for t in tasks:
-        # Check if act already exists for this shift
+        # Проверяем, не существует ли уже акт для этой смены
         existing_act = db.execute(
             select(func.count()).select_from(Act).where(Act.shift_task_id == t.id)
         ).scalar()
@@ -552,7 +553,7 @@ def auto_generate_acts(
 
         distance = getattr(t, "odometer_distance", None) or 0
 
-        # Default hourly rate (can be configured per vehicle/driver later)
+        # Базовая ставка (в будущем можно настроить для каждой техники/водителя)
         hourly_rate = Decimal(str(getattr(vehicle, "hourly_rate", 0) or 1500))
         total_amount = hourly_rate * Decimal(str(hours))
         vat_amount = total_amount * Decimal("0.2")
@@ -583,4 +584,9 @@ def auto_generate_acts(
         created += 1
 
     db.commit()
-    return {"created": created, "skipped": skipped, "period": f"{d_from} — {d_to}"}
+    return {
+        "message": "Акты успешно сгенерированы",
+        "created": created,
+        "skipped": skipped,
+        "period": f"{d_from} — {d_to}",
+    }
