@@ -68,7 +68,7 @@ class TestUpdateCostRatesRealDB:
 
     def test_create_new(self, service, db_session):
         from app.models.auth import User
-        user = User(email="test_cost@test.com", password_hash="x", role="admin", status="active")
+        user = User(email="test_cost@test.com", password_hash="x", role="admin", status="active", full_name="Test User")
         db_session.add(user)
         db_session.commit()
         db_session.refresh(user)
@@ -87,7 +87,7 @@ class TestUpdateCostRatesRealDB:
 
     def test_update_existing(self, service, db_session):
         from app.models.auth import User
-        user = User(email="test_cost2@test.com", password_hash="x", role="admin", status="active")
+        user = User(email="test_cost2@test.com", password_hash="x", role="admin", status="active", full_name="Test User 2")
         db_session.add(user)
         db_session.commit()
         db_session.refresh(user)
