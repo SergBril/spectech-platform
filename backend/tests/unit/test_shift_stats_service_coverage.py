@@ -308,11 +308,13 @@ class TestShiftStatsWithData:
 
     def test_get_driver_kpi_with_data(self, service, populated_db, db_session):
         result = service.get_driver_kpi(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07")
-        assert isinstance(result, list)
+        assert isinstance(result, dict)
+        assert "drivers" in result
 
     def test_get_cost_per_hour_report_with_data(self, service, populated_db, db_session):
         result = service.get_cost_per_hour_report(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07")
-        assert isinstance(result, list)
+        assert isinstance(result, dict)
+        assert "vehicles" in result
 
     def test_get_fuel_consumption_stats_with_data(self, service, populated_db, db_session):
         result = service.get_fuel_consumption_stats(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07", vehicle_id=None)
