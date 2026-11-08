@@ -224,3 +224,128 @@ class TestLargeMethodsWithRealDB:
     def test_export_utilization_excel(self, service, db_session):
         result = service.export_utilization_excel(db_session, company_id=999, date_from="2026-11-01", date_to="2026-11-07")
         assert result is not None
+
+
+
+class TestShiftStatsWithData:
+    """Cover branches that require actual data in DB."""
+
+    @pytest.fixture
+    def populated_db(self, db_session):
+        """Create test data for shift_stats methods."""
+        from datetime import date as date_type, datetime
+        from app.models.auth import User
+        from app.models.catalog import Vehicle
+        from app.models.contractor import Contractor, Employee, DriverProfile
+        from app.models.dispatch import Request
+        from app.models.shift import ShiftTask, ShiftFuelEntry
+
+        # Company (Contractor model)
+        company = Contractor(
+            type="company", name="Test Co", inn="1234567890",
+            is_public_lead=False, is_active=True
+        )
+        db_session.add(company)
+        db_session.flush()
+
+        # User
+        user = User(email="stats@test.com", password_hash="x", role="admin", status="active", full_name="Stats User", company_id=company.id)
+        db_session.add(user)
+        db_session.flush()
+
+        # Vehicle
+        vehicle = Vehicle(
+            id_type="vehicle", id_value="V001", name="Excavator CAT 320",
+            status="active", company_id=company.id, fuel_norm_per_hour=15.0
+        )
+        db_session.add(vehicle)
+        db_session.flush()
+
+        # Employee + DriverProfile
+        emp = Employee(contractor_id=company.id, position="driver", role_in_system="operator", hire_date=date_type(2025, 1, 1), user_id=user.id)
+        db_session.add(emp)
+        db_session.flush()
+
+        dp = DriverProfile(
+            employee_contractor_id=emp.contractor_id,
+            license_number="DL001", license_category="C",
+            license_issue_date=date_type(2020, 1, 1),
+            license_expiry_date=date_type(2030, 1, 1),
+        )
+        db_session.add(dp)
+        db_session.flush()
+
+        # Request (required for ShiftTask)
+        req = Request(
+            client_id=company.id, status="confirmed", request_type="rental",
+            planned_start=datetime(2026, 11, 3, 8, 0), planned_end=datetime(2026, 11, 3, 17, 0),
+            region="Москва",
+        )
+        db_session.add(req)
+        db_session.flush()
+
+        # ShiftTasks
+        task1 = ShiftTask(
+            request_id=req.id, operator_id=emp.contractor_id, vehicle_id=vehicle.id,
+            shift_date=date_type(2026, 11, 3), shift_number=1,
+            status="completed", company_id=company.id,
+        )
+        task2 = ShiftTask(
+            request_id=req.id, operator_id=emp.contractor_id, vehicle_id=vehicle.id,
+            shift_date=date_type(2026, 11, 4), shift_number=1,
+            status="completed", company_id=company.id,
+        )
+        db_session.add_all([task1, task2])
+        db_session.flush()
+
+        # Fuel entries
+        fuel1 = ShiftFuelEntry(shift_task_id=task1.id, vehicle_id=vehicle.id, fuel_type="diesel", quantity_liters=50.0, engine_hours=8.0)
+        fuel2 = ShiftFuelEntry(shift_task_id=task2.id, vehicle_id=vehicle.id, fuel_type="diesel", quantity_liters=45.0, engine_hours=7.5)
+        db_session.add_all([fuel1, fuel2])
+        db_session.commit()
+
+        return {"company_id": company.id, "user": user, "vehicle_id": vehicle.id}
+
+    def test_get_driver_kpi_with_data(self, service, populated_db, db_session):
+        result = service.get_driver_kpi(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, list)
+
+    def test_get_cost_per_hour_report_with_data(self, service, populated_db, db_session):
+        result = service.get_cost_per_hour_report(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, list)
+
+    def test_get_fuel_consumption_stats_with_data(self, service, populated_db, db_session):
+        result = service.get_fuel_consumption_stats(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07", vehicle_id=None)
+        assert isinstance(result, (list, dict))
+
+    def test_get_fuel_consumption_stats_with_vehicle_filter(self, service, populated_db, db_session):
+        result = service.get_fuel_consumption_stats(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07", vehicle_id=populated_db["vehicle_id"])
+        assert isinstance(result, (list, dict))
+
+    def test_get_utilization_stats_with_data(self, service, populated_db, db_session):
+        result = service.get_utilization_stats(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07")
+        assert isinstance(result, (list, dict))
+
+    def test_export_cost_per_hour_excel_with_data(self, service, populated_db, db_session):
+        result = service.export_cost_per_hour_excel(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07")
+        assert result is not None
+
+    def test_export_driver_kpi_excel_with_data(self, service, populated_db, db_session):
+        result = service.export_driver_kpi_excel(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07")
+        assert result is not None
+
+    def test_export_fuel_consumption_excel_with_data(self, service, populated_db, db_session):
+        result = service.export_fuel_consumption_excel(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07", vehicle_id=None)
+        assert result is not None
+
+    def test_export_pnl_excel_with_data(self, service, populated_db, db_session):
+        result = service.export_pnl_excel(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07")
+        assert result is not None
+
+    def test_export_utilization_excel_with_data(self, service, populated_db, db_session):
+        result = service.export_utilization_excel(db_session, company_id=populated_db["company_id"], date_from="2026-11-01", date_to="2026-11-07")
+        assert result is not None
+
+    def test_get_platform_overview_with_data(self, service, populated_db, db_session):
+        result = service.get_platform_overview(db_session, company_id=populated_db["company_id"])
+        assert isinstance(result, dict)

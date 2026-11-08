@@ -838,7 +838,11 @@ class ShiftStatsService:
                 )
                 if first_driver:
                     emp = db.get(Employee, first_driver)
-                    driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
+                    if emp and emp.user_id:
+                        u = db.get(User, emp.user_id)
+                        driver_name = u.full_name if u else ""
+                    else:
+                        driver_name = ""
 
             result.append(
                 {
@@ -939,11 +943,11 @@ class ShiftStatsService:
         kpi_list = []
         for profile in drivers:
             emp = db.get(Employee, profile.employee_contractor_id)
-            driver_name = (
-                f"{emp.first_name} {emp.last_name}"
-                if emp
-                else f"Driver#{profile.employee_contractor_id}"
-            )
+            if emp and emp.user_id:
+                u = db.get(User, emp.user_id)
+                driver_name = u.full_name if u else f"Driver#{profile.employee_contractor_id}"
+            else:
+                driver_name = f"Driver#{profile.employee_contractor_id}"
 
             d_tasks = [
                 t for t in tasks if t.operator_id == profile.employee_contractor_id
