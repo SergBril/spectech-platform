@@ -54,6 +54,7 @@ class TestMultiTenantSecurity:
         company: Company,
         second_company: Company,
         other_user: User,
+        auth_headers: dict,
     ):
         """❌ Пользователь НЕ может сгенерировать акты для чужой компании."""
         # 1. Создаем завершенную смену для ВТОРОЙ компании
@@ -68,24 +69,35 @@ class TestMultiTenantSecurity:
         db_session.commit()
         db_session.refresh(vehicle)
 
+        # Create a request first (ShiftTask requires request_id)
+        from app.models.dispatch import Request as DispatchRequest
+        req = DispatchRequest(
+            company_id=second_company.id,
+            client_id=second_company.id,
+            status="completed",
+            work_type="earthworks",
+            object_address="Test",
+            vehicle_category_id=1,
+            planned_start=date.today() - timedelta(days=1),
+            planned_end=date.today(),
+        )
+        db_session.add(req)
+        db_session.commit()
+        db_session.refresh(req)
+
         shift = ShiftTask(
             company_id=second_company.id,
             vehicle_id=vehicle.id,
+            request_id=req.id,
             shift_date=date.today() - timedelta(days=1),
+            shift_number=1,
             status="completed",
-            planned_start=date.today() - timedelta(days=1, hours=8),
-            planned_end=date.today() - timedelta(days=1),
         )
         db_session.add(shift)
         db_session.commit()
 
-        # 2. Получаем токен для пользователя из ПЕРВОЙ компании
-        login_response = client.post(
-            "/api/v1/auth/login",
-            json={"email": "test@test.com", "password": "password"},
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        # 2. Используем auth_headers из фикстуры (admin_user первой компании)
+        headers = auth_headers
 
         # 3. Пытаемся сгенерировать акты (должны быть отфильтрованы по company_id)
         response = client.post(
