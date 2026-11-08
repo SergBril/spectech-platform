@@ -5,6 +5,8 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fastapi import HTTPException
+
 from app.models.auth import User
 from app.models.bank_statement import BankTransaction
 from app.models.catalog import Vehicle
