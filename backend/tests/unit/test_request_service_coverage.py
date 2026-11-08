@@ -384,7 +384,7 @@ class TestGetRequestTimeline:
     """Cover get_request_timeline (lines 836-898)."""
 
     def test_success(self, service, mock_db):
-        request = _make_full_request()
+        request = _make_full_request()  # company_id=7 matches call arg
         log = SimpleNamespace(
             id=1,
             from_status="open",
@@ -406,25 +406,13 @@ class TestGetRequestTimeline:
 
         mock_db.get.side_effect = mock_get
 
-        # First execute: access check (scalar_one_or_none)
-        # Second execute: logs query (scalars().all())
-        access_result = MagicMock()
-        access_result.scalar_one_or_none.return_value = SimpleNamespace(id=1)  # has access via assignment
-
+        # company_id matches -> no access check execute, only logs query
         logs_scalars = MagicMock()
         logs_scalars.all.return_value = [log]
         logs_result = MagicMock()
         logs_result.scalars.return_value = logs_scalars
 
-        exec_calls = []
-
-        def mock_execute(stmt):
-            exec_calls.append(stmt)
-            if len(exec_calls) == 1:
-                return access_result
-            return logs_result
-
-        mock_db.execute.side_effect = mock_execute
+        mock_db.execute.return_value = logs_result
 
         result = service.get_request_timeline(1, 7)
         assert len(result) == 1
