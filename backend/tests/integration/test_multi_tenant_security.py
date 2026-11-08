@@ -61,6 +61,8 @@ class TestMultiTenantSecurity:
             name="Чужой трактор",
             company_id=second_company.id,
             status="free",
+            id_type="STS",
+            id_value="AA000000",
         )
         db_session.add(vehicle)
         db_session.commit()

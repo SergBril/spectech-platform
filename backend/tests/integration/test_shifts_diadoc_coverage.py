@@ -39,8 +39,12 @@ class TestDiadocEndpoints:
         assert resp.status_code in (200, 404, 422)
 
     def test_auto_generate_acts(self, client, auth_headers):
-        resp = client.post("/api/v1/shifts/acts/auto-generate", headers=auth_headers)
-        assert resp.status_code in (200, 404, 500)
+        resp = client.post(
+            "/api/v1/shifts/acts/auto-generate",
+            json={"date_from": "2026-11-01", "date_to": "2026-11-30"},
+            headers=auth_headers,
+        )
+        assert resp.status_code in (200, 404, 422, 500)
 
     def test_send_act(self, client, auth_headers):
         resp = client.post(
