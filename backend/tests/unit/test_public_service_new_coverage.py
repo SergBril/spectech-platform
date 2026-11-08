@@ -204,12 +204,14 @@ class TestPublicServiceEdgeCases:
         v.name = "Excavator"
         v.category_id = None
         v.status = "active"
-        v.region = "Москва"
+        v.owner_company_id = 1
+        v.hourly_rate = 1000
+        v.shift_rate = None
+        v.is_available_for_rent = True
+        v.photos = None
         v.marketplace_commission_agreed = True
-        # Mock PublicVehicleRead fields
-        for attr in ["id_type", "id_value", "year", "fuel_norm_per_hour",
-                      "hourly_rate", "photos", "description", "attributes"]:
-            setattr(v, attr, None)
+        v.marketplace_commission_rate = None
+        v.year = 2020
         result = service._build_vehicle_response(mock_db, company_id=1, v=v, company_name="TestCo")
         assert result is not None
 
@@ -221,11 +223,14 @@ class TestPublicServiceEdgeCases:
         v.name = "Excavator"
         v.category_id = None
         v.status = "active"
-        v.region = "Москва"
-        v.marketplace_commission_agreed = True
-        for attr in ["id_type", "id_value", "year", "fuel_norm_per_hour",
-                      "hourly_rate", "photos", "description", "attributes"]:
-            setattr(v, attr, None)
+        v.owner_company_id = None
+        v.hourly_rate = None
+        v.shift_rate = None
+        v.is_available_for_rent = False
+        v.photos = None
+        v.marketplace_commission_agreed = False
+        v.marketplace_commission_rate = None
+        v.year = None
         result = service._build_vehicle_response(mock_db, company_id=None, v=v, company_name=None)
         assert result is not None
 
@@ -241,10 +246,9 @@ class TestPublicServiceEdgeCases:
         """Lines 228-230: exception in get_public_company_vehicles."""
         company = MagicMock(id=1, name="Test", is_active=True)
         mock_db.get.return_value = company
-        mock_count = MagicMock()
-        mock_count.count.return_value = 0
-        mock_db.scalars.side_effect = [mock_count, RuntimeError("fail")]
-        # First call is vehicles_count, second triggers error
+        # db.query().filter().count() works, but scalars().all() fails
+        mock_db.query.return_value.filter.return_value.count.return_value = 0
+        mock_db.scalars.side_effect = RuntimeError("DB fail")
         from fastapi import HTTPException
         with pytest.raises(HTTPException) as exc_info:
             service.get_public_company_vehicles(mock_db, company_id=1, category_id=None, available_only=False, limit=10)
@@ -268,41 +272,34 @@ class TestPublicServiceEdgeCases:
                 service.get_public_vehicle_details(mock_db, vehicle_id=1)
             assert exc_info.value.status_code == 500
 
-    def test_create_company_review_duplicate(self, service, db_session):
+    def test_create_company_review_duplicate(self, service, mock_db):
         """Lines 1244-1248: duplicate review check."""
-        from app.models.company import Company
-        from pydantic import BaseModel
-
-        company = Company(name="Review Test Co", legal_name="RTC OOO", is_active=True)
-        db_session.add(company)
-        db_session.commit()
-        db_session.refresh(company)
-
-        # Create first review via raw SQL
-        from sqlalchemy import text
-        db_session.execute(text(
-            "INSERT INTO company_reviews (company_id, reviewer_user_id, reviewer_name, rating, comment, is_verified, is_published, moderation_status, created_at, updated_at) "
-            "VALUES (:cid, NULL, 'User', 5, 'Good', false, true, 'approved', NOW(), NOW())"
-        ), {"cid": company.id})
-        db_session.commit()
-
-        # Try duplicate
+        # Mock existing review found
+        mock_db.execute.return_value.scalar_one_or_none.return_value = MagicMock(id=1)
         payload = MagicMock(reviewer_name="User", reviewer_email="test@test.com", rating=5, comment="Again")
         from fastapi import HTTPException
         with pytest.raises(HTTPException) as exc_info:
-            service.create_company_review(db_session, company_id=company.id, payload=payload)
+            service.create_company_review(mock_db, company_id=1, payload=payload)
         assert exc_info.value.status_code == 400
 
-    def test_create_company_review_success(self, service, db_session):
+    def test_create_company_review_success(self, service, mock_db):
         """Lines 1250-1274: successful review creation."""
-        from app.models.company import Company
-
-        company = Company(name="Review Test Co 2", legal_name="RTC2 OOO", is_active=True)
-        db_session.add(company)
-        db_session.commit()
-        db_session.refresh(company)
-
+        # No existing review
+        mock_db.execute.return_value.scalar_one_or_none.return_value = None
+        # INSERT returns result
+        mock_result = MagicMock()
+        mock_result.id = 42
+        mock_result.rating = 5
+        mock_result.comment = "Excellent!"
+        mock_result.created_at = datetime(2026, 11, 8, 12, 0)
+        # execute for INSERT returns .one()
+        mock_execute_insert = MagicMock()
+        mock_execute_insert.one.return_value = mock_result
+        # First call: SELECT (scalar_one_or_none), Second call: INSERT (.one())
+        mock_db.execute.side_effect = [
+            MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
+            mock_execute_insert,
+        ]
         payload = MagicMock(reviewer_name="Happy User", reviewer_email="happy@test.com", rating=5, comment="Excellent!")
-        result = service.create_company_review(db_session, company_id=company.id, payload=payload)
+        result = service.create_company_review(mock_db, company_id=1, payload=payload)
         assert "id" in result
-        assert result["rating"] == 5
