@@ -444,7 +444,7 @@ class TestGetRequestTimeline:
         request = _make_full_request(company_id=99)
         mock_db.get.return_value = request
         access_result = MagicMock()
-        access_result.scalar_one_or_none.return_value = SimpleNamespace(id=1)  # has access via assignment
+        access_result.scalar_one_or_none.return_value = None  # no access
         mock_db.execute.return_value = access_result
         with pytest.raises(RequestServiceError) as exc_info:
             service.get_request_timeline(1, 7)
