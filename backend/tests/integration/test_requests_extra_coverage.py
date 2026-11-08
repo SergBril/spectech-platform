@@ -1,4 +1,4 @@
-﻿"""Additional tests for requests API coverage improvement."""
+"""Additional tests for requests API coverage improvement."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -17,6 +18,7 @@ def auth_headers(auth_token):
 @pytest.fixture
 def admin_auth_token(admin_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(admin_user)
 
 
@@ -41,11 +43,16 @@ class TestListRequestsFilters:
         assert resp.status_code == 200
 
     def test_filter_by_date_range(self, client, auth_headers):
-        resp = client.get("/api/v1/requests?date_from=2025-01-01&date_to=2026-12-31", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/requests?date_from=2025-01-01&date_to=2026-12-31",
+            headers=auth_headers,
+        )
         assert resp.status_code == 200
 
     def test_sort_asc(self, client, auth_headers):
-        resp = client.get("/api/v1/requests?sort_by=created_at&sort_order=asc", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/requests?sort_by=created_at&sort_order=asc", headers=auth_headers
+        )
         assert resp.status_code == 200
 
     def test_pagination(self, client, auth_headers):
@@ -65,7 +72,9 @@ class TestGetMatchingVehicles:
     """Cover get_matching_vehicles (lines 1181-1196)."""
 
     def test_matching_not_found(self, client, auth_headers):
-        resp = client.get("/api/v1/requests/99999/matching-vehicles", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/requests/99999/matching-vehicles", headers=auth_headers
+        )
         assert resp.status_code == 404
 
 

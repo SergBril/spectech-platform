@@ -1,4 +1,4 @@
-﻿"""Tests for storage_service, signature_service, marketplace_service coverage."""
+"""Tests for storage_service, signature_service, marketplace_service coverage."""
 
 import pytest
 

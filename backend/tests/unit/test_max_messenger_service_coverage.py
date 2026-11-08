@@ -1,14 +1,16 @@
 """Coverage tests for max_messenger_service."""
+
 import sys
-from types import ModuleType
 from unittest.mock import MagicMock
 
 # Mock UserCompany if not in auth module
 _auth_mod = sys.modules.get("app.models.auth")
 if _auth_mod and not hasattr(_auth_mod, "UserCompany"):
+
     class _MockUserCompany:
         user_id = MagicMock()
         company_id = MagicMock()
+
     _auth_mod.UserCompany = _MockUserCompany
 
 
@@ -23,6 +25,7 @@ def service():
     with patch("app.core.config.settings") as mock_settings:
         mock_settings.MAX_BOT_TOKEN = "test_token"
         from app.services.max_messenger_service import MaxMessengerService
+
         svc = MaxMessengerService()
     return svc
 
@@ -32,6 +35,7 @@ def disabled_service():
     with patch("app.core.config.settings") as mock_settings:
         mock_settings.MAX_BOT_TOKEN = ""
         from app.services.max_messenger_service import MaxMessengerService
+
         svc = MaxMessengerService()
     return svc
 
@@ -104,7 +108,12 @@ class TestNotifyUser:
         db = MagicMock()
         user = SimpleNamespace(id=1, max_chat_id="chat_42")
         db.get.return_value = user
-        with patch.object(service, "send_message", new_callable=AsyncMock, return_value={"status": "sent"}) as mock:
+        with patch.object(
+            service,
+            "send_message",
+            new_callable=AsyncMock,
+            return_value={"status": "sent"},
+        ) as mock:
             result = await service.notify_user(db, 1, "Title", "Body")
         assert result["status"] == "sent"
         mock.assert_called_once()
@@ -122,10 +131,19 @@ class TestNotifyCompanyDispatchers:
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = [1, 2, 3]
         db.execute.return_value = mock_result
-        with patch.object(service, "notify_user", new_callable=AsyncMock, return_value={"status": "sent"}) as mock_notify:
+        with patch.object(
+            service,
+            "notify_user",
+            new_callable=AsyncMock,
+            return_value={"status": "sent"},
+        ) as mock_notify:
             # Patch select to return something SQLAlchemy won't reject
-            with patch("app.services.max_messenger_service.select", return_value=MagicMock()):
-                results = await service.notify_company_dispatchers(db, 7, "Alert", "Body")
+            with patch(
+                "app.services.max_messenger_service.select", return_value=MagicMock()
+            ):
+                results = await service.notify_company_dispatchers(
+                    db, 7, "Alert", "Body"
+                )
         assert len(results) == 3
         assert mock_notify.call_count == 3
 
@@ -135,7 +153,9 @@ class TestNotifyCompanyDispatchers:
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = []
         db.execute.return_value = mock_result
-        with patch("app.services.max_messenger_service.select", return_value=MagicMock()):
+        with patch(
+            "app.services.max_messenger_service.select", return_value=MagicMock()
+        ):
             results = await service.notify_company_dispatchers(db, 7, "Alert", "Body")
         assert results == []
 
@@ -145,53 +165,79 @@ class TestMaxNotificationTemplates:
 
     def test_request_created(self):
         from app.services.max_messenger_service import MaxNotificationTemplates
-        title, body = MaxNotificationTemplates.request_created(1, "Earthworks", "Moscow", "2026-11-07")
+
+        title, body = MaxNotificationTemplates.request_created(
+            1, "Earthworks", "Moscow", "2026-11-07"
+        )
         assert "#1" in body
         assert "Earthworks" in body
 
     def test_offer_received(self):
         from app.services.max_messenger_service import MaxNotificationTemplates
-        title, body = MaxNotificationTemplates.offer_received(1, "OOO Test", 50000.0, "KAMAZ")
+
+        title, body = MaxNotificationTemplates.offer_received(
+            1, "OOO Test", 50000.0, "KAMAZ"
+        )
         assert "50,000" in body
         assert "KAMAZ" in body
 
     def test_payment_received(self):
         from app.services.max_messenger_service import MaxNotificationTemplates
-        title, body = MaxNotificationTemplates.payment_received("INV-001", 100000.0, "Payer")
+
+        title, body = MaxNotificationTemplates.payment_received(
+            "INV-001", 100000.0, "Payer"
+        )
         assert "100,000" in body
 
     def test_shift_completed(self):
         from app.services.max_messenger_service import MaxNotificationTemplates
-        title, body = MaxNotificationTemplates.shift_completed(42, "Excavator", "2026-11-06", 8.5)
+
+        title, body = MaxNotificationTemplates.shift_completed(
+            42, "Excavator", "2026-11-06", 8.5
+        )
         assert "8.5" in body
 
     def test_salary_approved(self):
         from app.services.max_messenger_service import MaxNotificationTemplates
-        title, body = MaxNotificationTemplates.salary_approved(1, "Ivanov", 87000.0, "Nov 2026")
+
+        title, body = MaxNotificationTemplates.salary_approved(
+            1, "Ivanov", 87000.0, "Nov 2026"
+        )
         assert "87,000" in body
 
     def test_geofence_alert_enter(self):
         from app.services.max_messenger_service import MaxNotificationTemplates
-        title, body = MaxNotificationTemplates.geofence_alert("KAMAZ", "Site A", "enter", "12:00")
+
+        title, body = MaxNotificationTemplates.geofence_alert(
+            "KAMAZ", "Site A", "enter", "12:00"
+        )
         assert "🟢" in title
 
     def test_geofence_alert_exit(self):
         from app.services.max_messenger_service import MaxNotificationTemplates
-        title, body = MaxNotificationTemplates.geofence_alert("KAMAZ", "Site A", "exit", "12:00")
+
+        title, body = MaxNotificationTemplates.geofence_alert(
+            "KAMAZ", "Site A", "exit", "12:00"
+        )
         assert "🔴" in title
 
     def test_maintenance_due(self):
         from app.services.max_messenger_service import MaxNotificationTemplates
-        title, body = MaxNotificationTemplates.maintenance_due("KAMAZ", 500.0, 480.0, 20.0)
+
+        title, body = MaxNotificationTemplates.maintenance_due(
+            "KAMAZ", 500.0, 480.0, 20.0
+        )
         assert "500" in body
 
     def test_engine_hours_warning(self):
         from app.services.max_messenger_service import MaxNotificationTemplates
+
         title, body = MaxNotificationTemplates.engine_hours_warning("KAMAZ", 12.5, 10.0)
         assert "12.5" in body
 
     def test_sync_error(self):
         from app.services.max_messenger_service import MaxNotificationTemplates
+
         title, body = MaxNotificationTemplates.sync_error("Wialon", "Timeout", 5)
         assert "Wialon" in body
         assert "5" in body
@@ -200,8 +246,10 @@ class TestMaxNotificationTemplates:
 class TestGlobalSingletons:
     def test_templates_exist(self):
         from app.services.max_messenger_service import notification_templates
+
         assert notification_templates is not None
 
     def test_service_exists(self):
         from app.services.max_messenger_service import max_messenger_service
+
         assert max_messenger_service is not None

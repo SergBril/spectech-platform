@@ -1,4 +1,4 @@
-﻿"""Final coverage push - GPS and Files routes to hit 60%."""
+"""Final coverage push - GPS and Files routes to hit 60%."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -15,6 +16,7 @@ def auth_headers(auth_token):
 
 
 # ==================== GPS ====================
+
 
 class TestGpsRoutes:
     def test_import_points_validation(self, client, auth_headers):
@@ -42,11 +44,14 @@ class TestGpsRoutes:
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_patch_provider_vehicle_not_found(self, client, auth_headers):
-        resp = client.patch("/api/v1/gps/providers/vehicles/99999", json={}, headers=auth_headers)
+        resp = client.patch(
+            "/api/v1/gps/providers/vehicles/99999", json={}, headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
 
 # ==================== FILES DEEP ====================
+
 
 class TestFilesDeep:
     def test_upload_no_file(self, client, auth_headers):

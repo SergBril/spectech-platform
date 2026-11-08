@@ -1,4 +1,4 @@
-﻿"""Tests for contractor INN suggestion endpoint."""
+"""Tests for contractor INN suggestion endpoint."""
 
 from fastapi.testclient import TestClient
 

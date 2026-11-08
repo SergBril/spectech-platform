@@ -1,4 +1,4 @@
-﻿"""Tests for reviews_service coverage improvement."""
+"""Tests for reviews_service coverage improvement."""
 
 import pytest
 

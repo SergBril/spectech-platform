@@ -1,4 +1,5 @@
 """Coverage tests for telegram_bot."""
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,7 +9,9 @@ import pytest
 @pytest.fixture
 def mock_update():
     update = MagicMock()
-    update.effective_user = SimpleNamespace(id=12345, first_name="Test", full_name="Test User")
+    update.effective_user = SimpleNamespace(
+        id=12345, first_name="Test", full_name="Test User"
+    )
     update.message = AsyncMock()
     update.callback_query = AsyncMock()
     update.callback_query.data = ""
@@ -23,6 +26,7 @@ def mock_context():
 @pytest.fixture
 def service():
     from app.services.telegram_bot import TelegramBotService
+
     return TelegramBotService()
 
 
@@ -57,6 +61,7 @@ class TestLinkAccount:
     @pytest.mark.asyncio
     async def test_returns_awaiting_code(self, service, mock_update, mock_context):
         from app.services.telegram_bot import AWAITING_CODE
+
         result = await service.link_account(mock_update, mock_context)
         assert result == AWAITING_CODE
         mock_update.message.reply_text.assert_called_once()
@@ -68,6 +73,7 @@ class TestHandleLinkCode:
     @pytest.mark.asyncio
     async def test_invalid_code(self, service, mock_update, mock_context):
         from app.services.telegram_bot import AWAITING_CODE
+
         mock_update.message.text = "bad_code"
         with patch("app.services.telegram_bot.SessionLocal") as MockDB:
             db = MagicMock()
@@ -79,6 +85,7 @@ class TestHandleLinkCode:
     @pytest.mark.asyncio
     async def test_valid_code(self, service, mock_update, mock_context):
         from telegram.ext import ConversationHandler
+
         mock_update.message.text = "ABC123"
         user = SimpleNamespace(id=1, telegram_id=None, telegram_link_code="ABC123")
         with patch("app.services.telegram_bot.SessionLocal") as MockDB:
@@ -93,6 +100,7 @@ class TestHandleLinkCode:
     @pytest.mark.asyncio
     async def test_exception_handling(self, service, mock_update, mock_context):
         from telegram.ext import ConversationHandler
+
         mock_update.message.text = "CODE"
         with patch("app.services.telegram_bot.SessionLocal") as MockDB:
             db = MagicMock()
@@ -108,6 +116,7 @@ class TestCancel:
     @pytest.mark.asyncio
     async def test_cancel(self, service, mock_update, mock_context):
         from telegram.ext import ConversationHandler
+
         result = await service.cancel(mock_update, mock_context)
         assert result == ConversationHandler.END
 
@@ -132,8 +141,26 @@ class TestMyRentals:
             MockDB.return_value = db
             # First query: find user; Second query: rentals
             db.query.side_effect = [
-                MagicMock(filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=user)))),
-                MagicMock(filter=MagicMock(return_value=MagicMock(order_by=MagicMock(return_value=MagicMock(limit=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))))))),
+                MagicMock(
+                    filter=MagicMock(
+                        return_value=MagicMock(first=MagicMock(return_value=user))
+                    )
+                ),
+                MagicMock(
+                    filter=MagicMock(
+                        return_value=MagicMock(
+                            order_by=MagicMock(
+                                return_value=MagicMock(
+                                    limit=MagicMock(
+                                        return_value=MagicMock(
+                                            all=MagicMock(return_value=[])
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
             ]
             await service.my_rentals(mock_update, mock_context)
         mock_update.callback_query.edit_message_text.assert_called()
@@ -141,19 +168,41 @@ class TestMyRentals:
     @pytest.mark.asyncio
     async def test_with_rentals(self, service, mock_update, mock_context):
         from datetime import date
+
         from app.models.rental import RentalStatus
+
         user = SimpleNamespace(id=1, company_id=7)
         rental = SimpleNamespace(
-            id=1, status=RentalStatus.ACTIVE,
-            start_date=date(2026, 11, 1), end_date=date(2026, 11, 30),
+            id=1,
+            status=RentalStatus.ACTIVE,
+            start_date=date(2026, 11, 1),
+            end_date=date(2026, 11, 30),
             total_amount=50000.0,
         )
         with patch("app.services.telegram_bot.SessionLocal") as MockDB:
             db = MagicMock()
             MockDB.return_value = db
             db.query.side_effect = [
-                MagicMock(filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=user)))),
-                MagicMock(filter=MagicMock(return_value=MagicMock(order_by=MagicMock(return_value=MagicMock(limit=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[rental])))))))),
+                MagicMock(
+                    filter=MagicMock(
+                        return_value=MagicMock(first=MagicMock(return_value=user))
+                    )
+                ),
+                MagicMock(
+                    filter=MagicMock(
+                        return_value=MagicMock(
+                            order_by=MagicMock(
+                                return_value=MagicMock(
+                                    limit=MagicMock(
+                                        return_value=MagicMock(
+                                            all=MagicMock(return_value=[rental])
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
             ]
             await service.my_rentals(mock_update, mock_context)
         mock_update.callback_query.edit_message_text.assert_called()
@@ -175,14 +224,35 @@ class TestMyVehicles:
     async def test_with_vehicles(self, service, mock_update, mock_context):
         user = SimpleNamespace(id=1, company_id=7)
         vehicle = SimpleNamespace(
-            name="KAMAZ", status="free", is_available_for_rent=True, hourly_rate=1500.0,
+            name="KAMAZ",
+            status="free",
+            is_available_for_rent=True,
+            hourly_rate=1500.0,
         )
         with patch("app.services.telegram_bot.SessionLocal") as MockDB:
             db = MagicMock()
             MockDB.return_value = db
             db.query.side_effect = [
-                MagicMock(filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=user)))),
-                MagicMock(filter=MagicMock(return_value=MagicMock(order_by=MagicMock(return_value=MagicMock(limit=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[vehicle])))))))),
+                MagicMock(
+                    filter=MagicMock(
+                        return_value=MagicMock(first=MagicMock(return_value=user))
+                    )
+                ),
+                MagicMock(
+                    filter=MagicMock(
+                        return_value=MagicMock(
+                            order_by=MagicMock(
+                                return_value=MagicMock(
+                                    limit=MagicMock(
+                                        return_value=MagicMock(
+                                            all=MagicMock(return_value=[vehicle])
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
             ]
             await service.my_vehicles(mock_update, mock_context)
         mock_update.callback_query.edit_message_text.assert_called()
@@ -207,8 +277,26 @@ class TestNewRequests:
             db = MagicMock()
             MockDB.return_value = db
             db.query.side_effect = [
-                MagicMock(filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=user)))),
-                MagicMock(filter=MagicMock(return_value=MagicMock(order_by=MagicMock(return_value=MagicMock(limit=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))))))),
+                MagicMock(
+                    filter=MagicMock(
+                        return_value=MagicMock(first=MagicMock(return_value=user))
+                    )
+                ),
+                MagicMock(
+                    filter=MagicMock(
+                        return_value=MagicMock(
+                            order_by=MagicMock(
+                                return_value=MagicMock(
+                                    limit=MagicMock(
+                                        return_value=MagicMock(
+                                            all=MagicMock(return_value=[])
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
             ]
             await service.new_requests(mock_update, mock_context)
         mock_update.callback_query.edit_message_text.assert_called()
@@ -216,17 +304,37 @@ class TestNewRequests:
     @pytest.mark.asyncio
     async def test_with_requests(self, service, mock_update, mock_context):
         from datetime import UTC, datetime
+
         user = SimpleNamespace(id=1, company_id=7)
         req = SimpleNamespace(
-            id=42, work_type="earthworks",
+            id=42,
+            work_type="earthworks",
             planned_start=datetime(2026, 11, 10, 8, 0, tzinfo=UTC),
         )
         with patch("app.services.telegram_bot.SessionLocal") as MockDB:
             db = MagicMock()
             MockDB.return_value = db
             db.query.side_effect = [
-                MagicMock(filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=user)))),
-                MagicMock(filter=MagicMock(return_value=MagicMock(order_by=MagicMock(return_value=MagicMock(limit=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[req])))))))),
+                MagicMock(
+                    filter=MagicMock(
+                        return_value=MagicMock(first=MagicMock(return_value=user))
+                    )
+                ),
+                MagicMock(
+                    filter=MagicMock(
+                        return_value=MagicMock(
+                            order_by=MagicMock(
+                                return_value=MagicMock(
+                                    limit=MagicMock(
+                                        return_value=MagicMock(
+                                            all=MagicMock(return_value=[req])
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
             ]
             await service.new_requests(mock_update, mock_context)
         mock_update.callback_query.edit_message_text.assert_called()
@@ -304,6 +412,7 @@ class TestRunBot:
 
     def test_no_token(self, service):
         import app.services.telegram_bot as mod
+
         original_token = mod.settings.TELEGRAM_BOT_TOKEN
         mod.settings.TELEGRAM_BOT_TOKEN = ""
         try:
@@ -314,6 +423,7 @@ class TestRunBot:
 
     def test_with_token_no_proxy(self, service):
         import app.services.telegram_bot as mod
+
         original_token = mod.settings.TELEGRAM_BOT_TOKEN
         original_proxy = mod.settings.TELEGRAM_PROXY_URL
         mod.settings.TELEGRAM_BOT_TOKEN = "test_token"
@@ -326,8 +436,10 @@ class TestRunBot:
         mock_app.run_polling.side_effect = lambda **kw: None
 
         try:
-            with patch.object(mod, "Application") as MockApp, \
-                 patch.dict("os.environ", {}, clear=True):
+            with (
+                patch.object(mod, "Application") as MockApp,
+                patch.dict("os.environ", {}, clear=True),
+            ):
                 MockApp.builder.return_value = mock_builder
                 service.run_bot()
         finally:
@@ -337,6 +449,7 @@ class TestRunBot:
 
     def test_proxy_error_returns_early(self, service):
         import app.services.telegram_bot as mod
+
         original_token = mod.settings.TELEGRAM_BOT_TOKEN
         original_proxy = mod.settings.TELEGRAM_PROXY_URL
         mod.settings.TELEGRAM_BOT_TOKEN = "test_token"
@@ -353,8 +466,8 @@ class TestRunBot:
 class TestGlobalSingleton:
     def test_exists(self):
         from app.services.telegram_bot import telegram_bot_service
-        assert telegram_bot_service is not None
 
+        assert telegram_bot_service is not None
 
 
 class TestHandleCallbackStartMenu:
@@ -404,7 +517,6 @@ class TestAcceptRejectNotFound:
         db.close.assert_called()
 
 
-
 class TestMyVehiclesEmpty:
     """Cover my_vehicles empty list branch (lines 223-227)."""
 
@@ -418,7 +530,9 @@ class TestMyVehiclesEmpty:
             user_query = MagicMock()
             user_query.filter.return_value.first.return_value = user
             vehicles_query = MagicMock()
-            vehicles_query.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
+            vehicles_query.filter.return_value.order_by.return_value.limit.return_value.all.return_value = (
+                []
+            )
             db.query.side_effect = [user_query, vehicles_query]
             await service.my_vehicles(mock_update, mock_context)
         call_args = mock_update.callback_query.edit_message_text.call_args[0][0]
@@ -430,6 +544,7 @@ class TestRunBotWithProxySuccess:
 
     def test_proxy_success(self, service):
         import app.services.telegram_bot as mod
+
         original_token = mod.settings.TELEGRAM_BOT_TOKEN
         original_proxy = mod.settings.TELEGRAM_PROXY_URL
         mod.settings.TELEGRAM_BOT_TOKEN = "test_token"

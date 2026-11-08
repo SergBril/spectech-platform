@@ -1,4 +1,4 @@
-﻿"""Mega coverage push - shifts/finance, bank_matching, salaries, rbac."""
+"""Mega coverage push - shifts/finance, bank_matching, salaries, rbac."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -15,6 +16,7 @@ def auth_headers(auth_token):
 
 
 # ==================== SHIFTS FINANCE ====================
+
 
 class TestShiftsFinance:
     def test_finance_dashboard(self, client, auth_headers):
@@ -28,25 +30,32 @@ class TestShiftsFinance:
 
 # ==================== BANK MATCHING SERVICE ====================
 
+
 class TestBankMatchingService:
     def test_extract_invoice_number_valid(self):
         from app.services.bank_matching_service import BankMatchingService
-        result = BankMatchingService.extract_invoice_number("Оплата по счету №123 от 01.01.2025")
+
+        result = BankMatchingService.extract_invoice_number(
+            "Оплата по счету №123 от 01.01.2025"
+        )
         assert result is not None or result is None
 
     def test_extract_invoice_number_none(self):
         from app.services.bank_matching_service import BankMatchingService
+
         result = BankMatchingService.extract_invoice_number(None)
         assert result is None
 
     def test_extract_invoice_number_empty(self):
         from app.services.bank_matching_service import BankMatchingService
+
         result = BankMatchingService.extract_invoice_number("")
         assert result is None
 
     @pytest.mark.skip(reason="BankMatchingService API mismatch")
     def test_match_transaction_no_data(self, db_session):
         from app.services.bank_matching_service import BankMatchingService
+
         try:
             svc = BankMatchingService()
             result = svc.match_transaction(db_session, transaction_id=99999)
@@ -56,6 +65,7 @@ class TestBankMatchingService:
 
     def test_apply_match_not_found(self, db_session):
         from app.services.bank_matching_service import BankMatchingService
+
         try:
             BankMatchingService.apply_match(db_session, tx=None, match_result={})
         except Exception:
@@ -63,6 +73,7 @@ class TestBankMatchingService:
 
 
 # ==================== SALARIES ====================
+
 
 class TestSalariesRoutes:
     def test_calculate_validation(self, client, auth_headers):
@@ -92,6 +103,7 @@ class TestSalariesRoutes:
 
 # ==================== RBAC ====================
 
+
 class TestRbacRoutes:
     def test_list_roles(self, client, auth_headers):
         resp = client.get("/api/v1/rbac/roles", headers=auth_headers)
@@ -106,11 +118,15 @@ class TestRbacRoutes:
         assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
 
     def test_assign_permission_not_found(self, client, auth_headers):
-        resp = client.post("/api/v1/rbac/roles/99999/permissions/99999", headers=auth_headers)
+        resp = client.post(
+            "/api/v1/rbac/roles/99999/permissions/99999", headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
 
     def test_remove_permission_not_found(self, client, auth_headers):
-        resp = client.delete("/api/v1/rbac/roles/99999/permissions/99999", headers=auth_headers)
+        resp = client.delete(
+            "/api/v1/rbac/roles/99999/permissions/99999", headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
 
     def test_user_roles_not_found(self, client, auth_headers):
@@ -118,11 +134,17 @@ class TestRbacRoutes:
         assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
 
     def test_assign_user_role_not_found(self, client, auth_headers):
-        resp = client.post("/api/v1/rbac/users/99999/roles", json={"role_id": 99999}, headers=auth_headers)
+        resp = client.post(
+            "/api/v1/rbac/users/99999/roles",
+            json={"role_id": 99999},
+            headers=auth_headers,
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
 
     def test_remove_user_role_not_found(self, client, auth_headers):
-        resp = client.delete("/api/v1/rbac/users/99999/roles/99999", headers=auth_headers)
+        resp = client.delete(
+            "/api/v1/rbac/users/99999/roles/99999", headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_my_permissions(self, client, auth_headers):

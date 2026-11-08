@@ -1,4 +1,4 @@
-﻿"""Absolute final tests to hit 60% coverage."""
+"""Absolute final tests to hit 60% coverage."""
 
 # ==================== MAX MESSENGER DIRECT ====================
 

@@ -1,4 +1,4 @@
-﻿"""Tests for admin, analytics, benchmark, email API coverage improvement."""
+"""Tests for admin, analytics, benchmark, email API coverage improvement."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -17,6 +18,7 @@ def auth_headers(auth_token):
 @pytest.fixture
 def admin_auth_token(admin_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(admin_user)
 
 
@@ -26,6 +28,7 @@ def admin_auth_headers(admin_auth_token):
 
 
 # ==================== ADMIN ====================
+
 
 class TestAdminStats:
     """Cover admin stats (line 36)."""
@@ -77,11 +80,15 @@ class TestAdminUserActivity:
 
 # ==================== ANALYTICS ====================
 
+
 class TestAnalyticsRevenueChart:
     """Cover revenue chart (line 16)."""
 
     def test_chart(self, client, auth_headers):
-        resp = client.get("/api/v1/analytics/revenue-chart?date_from=2025-01-01&date_to=2026-12-31", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/analytics/revenue-chart?date_from=2025-01-01&date_to=2026-12-31",
+            headers=auth_headers,
+        )
         assert resp.status_code in (200, 422)
 
 
@@ -111,6 +118,7 @@ class TestAnalyticsSparkline:
 
 # ==================== BENCHMARK ====================
 
+
 class TestBenchmark:
     """Cover benchmark endpoints."""
 
@@ -120,6 +128,7 @@ class TestBenchmark:
 
 
 # ==================== EMAIL ====================
+
 
 class TestEmailTemplates:
     """Cover email templates endpoints."""

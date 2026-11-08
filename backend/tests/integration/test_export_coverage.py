@@ -1,4 +1,4 @@
-﻿"""Integration tests for export.py endpoints."""
+"""Integration tests for export.py endpoints."""
 
 
 class TestExportEndpoints:

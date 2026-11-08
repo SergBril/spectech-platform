@@ -1,4 +1,4 @@
-﻿"""Tests for maintenance API coverage improvement."""
+"""Tests for maintenance API coverage improvement."""
 
 import pytest
 

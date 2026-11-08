@@ -1,4 +1,4 @@
-﻿"""Tests for public API coverage improvement."""
+"""Tests for public API coverage improvement."""
 
 import pytest
 
@@ -71,6 +71,7 @@ class TestCategories:
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -95,6 +96,8 @@ class TestMarketplaceReviews:
     """Cover marketplace reviews endpoints (lines 1215-1330)."""
 
     def test_list_reviews(self, client, sample_company):
-        resp = client.get(f"/api/v1/public/companies/{sample_company.id}/marketplace-reviews")
+        resp = client.get(
+            f"/api/v1/public/companies/{sample_company.id}/marketplace-reviews"
+        )
         # Table may not exist yet in test DB
         assert resp.status_code in (200, 500)

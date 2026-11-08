@@ -1,4 +1,4 @@
-﻿"""Tests for tasks API coverage improvement."""
+"""Tests for tasks API coverage improvement."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -18,11 +19,15 @@ class TestTasksGeneratePdf:
     """Cover async PDF generation tasks (lines 25, 51)."""
 
     def test_invoice_pdf_async(self, client, auth_headers):
-        resp = client.post("/api/v1/tasks/invoices/99999/generate-pdf-async", headers=auth_headers)
+        resp = client.post(
+            "/api/v1/tasks/invoices/99999/generate-pdf-async", headers=auth_headers
+        )
         assert resp.status_code in (200, 404, 403, 422)
 
     def test_act_pdf_async(self, client, auth_headers):
-        resp = client.post("/api/v1/tasks/acts/99999/generate-pdf-async", headers=auth_headers)
+        resp = client.post(
+            "/api/v1/tasks/acts/99999/generate-pdf-async", headers=auth_headers
+        )
         assert resp.status_code in (200, 404, 403, 422)
 
 
@@ -39,7 +44,9 @@ class TestTasksStatus:
 
     @pytest.mark.skip(reason="Requires Redis/Celery connection")
     def test_status_not_found(self, client, auth_headers):
-        resp = client.get("/api/v1/tasks/tasks/nonexistent-task-id/status", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/tasks/tasks/nonexistent-task-id/status", headers=auth_headers
+        )
         assert resp.status_code in (404, 200, 500)
 
 
@@ -68,7 +75,9 @@ class TestTasksTelematics:
 
     @pytest.mark.skip(reason="Requires Redis/Celery connection")
     def test_detect_offline(self, client, auth_headers):
-        resp = client.post("/api/v1/tasks/telematics/detect-offline", headers=auth_headers)
+        resp = client.post(
+            "/api/v1/tasks/telematics/detect-offline", headers=auth_headers
+        )
         assert resp.status_code in (200, 403, 500)
 
 
@@ -76,7 +85,9 @@ class TestTasksScheduled:
     """Cover scheduled tasks (lines 231, 248, 262)."""
 
     def test_morning_digest(self, client, auth_headers):
-        resp = client.post("/api/v1/tasks/scheduled/morning-digest", headers=auth_headers)
+        resp = client.post(
+            "/api/v1/tasks/scheduled/morning-digest", headers=auth_headers
+        )
         assert resp.status_code in (200, 403)
 
     @pytest.mark.skip(reason="Requires Redis/Celery connection")
@@ -86,5 +97,7 @@ class TestTasksScheduled:
 
     @pytest.mark.skip(reason="Requires Redis/Celery connection")
     def test_aggregate_engine_hours(self, client, auth_headers):
-        resp = client.post("/api/v1/tasks/scheduled/aggregate-engine-hours", headers=auth_headers)
+        resp = client.post(
+            "/api/v1/tasks/scheduled/aggregate-engine-hours", headers=auth_headers
+        )
         assert resp.status_code in (200, 403, 500)

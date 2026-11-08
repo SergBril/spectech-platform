@@ -6,6 +6,7 @@ class TestTranslateUnit:
 
     def test_known_units(self):
         from app.services.translations import translate_unit
+
         assert translate_unit("hourly") == "час"
         assert translate_unit("shift") == "смена"
         assert translate_unit("km") == "км"
@@ -19,25 +20,30 @@ class TestTranslateUnit:
 
     def test_case_insensitive(self):
         from app.services.translations import translate_unit
+
         assert translate_unit("HOURLY") == "час"
         assert translate_unit("Shift") == "смена"
 
     def test_strips_whitespace(self):
         from app.services.translations import translate_unit
+
         assert translate_unit("  km  ") == "км"
 
     def test_unknown_returns_as_is(self):
         from app.services.translations import translate_unit
+
         assert translate_unit("gallon") == "gallon"
         assert translate_unit("custom_unit") == "custom_unit"
 
     def test_empty_returns_sht(self):
         from app.services.translations import translate_unit
+
         assert translate_unit("") == "шт"
         assert translate_unit(None) == "шт"
 
     def test_russian_passthrough(self):
         from app.services.translations import translate_unit
+
         assert translate_unit("шт") == "шт"
 
 
@@ -46,5 +52,6 @@ class TestUnitTranslationsDict:
 
     def test_dict_not_empty(self):
         from app.services.translations import UNIT_TRANSLATIONS
+
         assert len(UNIT_TRANSLATIONS) > 0
         assert "hourly" in UNIT_TRANSLATIONS

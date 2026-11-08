@@ -1,4 +1,4 @@
-﻿"""Tests for downtime, acts, email, addresses API coverage improvement."""
+"""Tests for downtime, acts, email, addresses API coverage improvement."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -15,6 +16,7 @@ def auth_headers(auth_token):
 
 
 # ==================== DOWNTIME ====================
+
 
 class TestDowntimeList:
     """Cover downtime list (line 51)."""
@@ -82,6 +84,7 @@ class TestDowntimeUpload:
 
 # ==================== ACTS ====================
 
+
 class TestActsPdf:
     """Cover act PDF endpoints (lines 15, 42, 69, 96)."""
 
@@ -104,6 +107,7 @@ class TestActsPdf:
 
 # ==================== EMAIL ====================
 
+
 class TestEmailLogs:
     """Cover email logs endpoints (lines 15, 65, 94)."""
 
@@ -122,9 +126,12 @@ class TestEmailLogs:
 
 # ==================== ADDRESSES ====================
 
+
 class TestAddresses:
     """Cover addresses endpoints."""
 
     def test_suggest(self, client, auth_headers):
-        resp = client.post("/api/v1/addresses/suggest", json={"query": "москва"}, headers=auth_headers)
+        resp = client.post(
+            "/api/v1/addresses/suggest", json={"query": "москва"}, headers=auth_headers
+        )
         assert resp.status_code in (200, 422, 405)

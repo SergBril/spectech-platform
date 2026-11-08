@@ -1,4 +1,4 @@
-﻿"""Tests for PublicService core marketplace methods with real logic coverage."""
+"""Tests for PublicService core marketplace methods with real logic coverage."""
 
 from datetime import date, datetime
 from decimal import Decimal

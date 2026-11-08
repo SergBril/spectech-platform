@@ -1,4 +1,4 @@
-﻿"""add_gps_sync_logs_table
+"""add_gps_sync_logs_table
 
 Revision ID: aa7734afe7ab
 Revises: f7a8b9c0d1e2

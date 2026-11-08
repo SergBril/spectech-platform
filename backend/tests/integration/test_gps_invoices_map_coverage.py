@@ -1,4 +1,4 @@
-﻿"""Tests for GPS, invoices, map API coverage improvement."""
+"""Tests for GPS, invoices, map API coverage improvement."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -15,6 +16,7 @@ def auth_headers(auth_token):
 
 
 # ==================== GPS ====================
+
 
 class TestGpsPoints:
     """Cover GPS points endpoints."""
@@ -48,11 +50,14 @@ class TestGpsProviders:
         assert resp.status_code == 200
 
     def test_patch_vehicle_not_found(self, client, auth_headers):
-        resp = client.patch("/api/v1/gps/providers/vehicles/99999", json={}, headers=auth_headers)
+        resp = client.patch(
+            "/api/v1/gps/providers/vehicles/99999", json={}, headers=auth_headers
+        )
         assert resp.status_code in (404, 422)
 
 
 # ==================== INVOICES ====================
+
 
 class TestInvoicesList:
     """Cover invoices list (line 25)."""
@@ -112,6 +117,7 @@ class TestInvoicesPdf:
 
 # ==================== MAP ====================
 
+
 class TestMapPositions:
     """Cover map vehicle positions (line 22)."""
 
@@ -135,7 +141,9 @@ class TestMapGeofences:
         resp = client.get("/api/v1/map/geofences", headers=auth_headers)
         assert resp.status_code == 200
 
-    @pytest.mark.skip(reason="Known bug: create_geofence uses payload dict access without validation")
+    @pytest.mark.skip(
+        reason="Known bug: create_geofence uses payload dict access without validation"
+    )
     def test_create_geofence_validation(self, client, auth_headers):
         resp = client.post("/api/v1/map/geofences", json={}, headers=auth_headers)
         assert resp.status_code in (422, 403)
@@ -161,5 +169,7 @@ class TestMapProviders:
         assert resp.status_code in (200, 400, 422)
 
     def test_request_provider(self, client, auth_headers):
-        resp = client.post("/api/v1/map/providers/request", json={}, headers=auth_headers)
+        resp = client.post(
+            "/api/v1/map/providers/request", json={}, headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 422)

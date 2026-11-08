@@ -1,4 +1,4 @@
-﻿"""Tests for RequestService core methods with real logic coverage."""
+"""Tests for RequestService core methods with real logic coverage."""
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -229,7 +229,6 @@ class TestBulkResponseAction:
 
     @pytest.mark.asyncio
     async def test_access_denied(self, service, mock_db):
-
         assignment = SimpleNamespace(request_id=10, status="pending_approval")
         SimpleNamespace(company_id=2)  # different company
 

@@ -1,4 +1,4 @@
-﻿"""Tests for catalog, email_bulk, email_templates, driver, companies routes."""
+"""Tests for catalog, email_bulk, email_templates, driver, companies routes."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -15,6 +16,7 @@ def auth_headers(auth_token):
 
 
 # ==================== CATALOG ====================
+
 
 class TestCatalogRoutes:
     def test_list_categories(self, client, auth_headers):
@@ -32,6 +34,7 @@ class TestCatalogRoutes:
 
 # ==================== EMAIL BULK ====================
 
+
 class TestEmailBulkRoutes:
     def test_send_bulk_validation(self, client, auth_headers):
         resp = client.post("/api/v1/email-bulk/send", json={}, headers=auth_headers)
@@ -43,6 +46,7 @@ class TestEmailBulkRoutes:
 
 
 # ==================== EMAIL TEMPLATES ====================
+
 
 class TestEmailTemplatesRoutes:
     def test_list_templates(self, client, auth_headers):
@@ -58,7 +62,9 @@ class TestEmailTemplatesRoutes:
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_update_template_not_found(self, client, auth_headers):
-        resp = client.put("/api/v1/email-templates/99999", json={}, headers=auth_headers)
+        resp = client.put(
+            "/api/v1/email-templates/99999", json={}, headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_delete_template_not_found(self, client, auth_headers):
@@ -67,6 +73,7 @@ class TestEmailTemplatesRoutes:
 
 
 # ==================== DRIVER ====================
+
 
 class TestDriverRoutes:
     def test_my_shifts(self, client, auth_headers):
@@ -78,7 +85,9 @@ class TestDriverRoutes:
         assert resp.status_code in (404, 403)
 
     def test_report_shift_not_found(self, client, auth_headers):
-        resp = client.post("/api/v1/driver/shifts/99999/report", json={}, headers=auth_headers)
+        resp = client.post(
+            "/api/v1/driver/shifts/99999/report", json={}, headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_my_salary(self, client, auth_headers):
@@ -92,22 +101,29 @@ class TestDriverRoutes:
 
 # ==================== COMPANIES ====================
 
+
 class TestCompaniesRoutes:
     def test_tax_settings_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/companies/99999/tax-settings", headers=auth_headers)
         assert resp.status_code in (404, 403)
 
     def test_patch_tax_settings_not_found(self, client, auth_headers):
-        resp = client.patch("/api/v1/companies/99999/tax-settings", json={}, headers=auth_headers)
+        resp = client.patch(
+            "/api/v1/companies/99999/tax-settings", json={}, headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_patch_requisites_not_found(self, client, auth_headers):
-        resp = client.patch("/api/v1/companies/99999/requisites", json={}, headers=auth_headers)
+        resp = client.patch(
+            "/api/v1/companies/99999/requisites", json={}, headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     @pytest.mark.skip(reason="DaData suggest route path mismatch")
     def test_dadata_suggest(self, client, auth_headers):
-        resp = client.get("/api/v1/companies/dadata/suggest/company?query=test", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/companies/dadata/suggest/company?query=test", headers=auth_headers
+        )
         assert resp.status_code in (200, 403, 422)
 
     def test_edo_settings_get(self, client, auth_headers):

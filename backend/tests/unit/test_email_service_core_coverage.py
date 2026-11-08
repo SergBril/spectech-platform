@@ -1,11 +1,11 @@
 """Coverage tests for email_service (core methods)."""
+
 import sys
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # Mock app.models.email before importing EmailService
 _email_mod = ModuleType("app.models.email")
@@ -45,8 +45,13 @@ def _make_mock_smtp():
 
 @pytest.fixture
 def service():
-    with patch("app.services.email_service.settings") as mock_settings, \
-         patch("app.services.email_service.premailer_transform", side_effect=lambda html: html):
+    with (
+        patch("app.services.email_service.settings") as mock_settings,
+        patch(
+            "app.services.email_service.premailer_transform",
+            side_effect=lambda html: html,
+        ),
+    ):
         mock_settings.EMAIL_ENABLED = True
         mock_settings.FRONTEND_URL = "http://localhost:3000"
         mock_settings.SMTP_FROM_NAME = "Spectech"
@@ -56,6 +61,7 @@ def service():
         mock_settings.SMTP_USER = "user"
         mock_settings.SMTP_PASSWORD = "pass"
         from app.services.email_service import EmailService
+
         svc = EmailService()
     return svc
 
@@ -67,10 +73,13 @@ class TestInit:
         assert service.enabled is True
 
     def test_disabled(self):
-        with patch("app.services.email_service.settings") as mock_settings, \
-             patch("app.services.email_service.premailer_transform"):
+        with (
+            patch("app.services.email_service.settings") as mock_settings,
+            patch("app.services.email_service.premailer_transform"),
+        ):
             mock_settings.EMAIL_ENABLED = False
             from app.services.email_service import EmailService
+
             svc = EmailService()
         assert svc.enabled is False
 
@@ -79,26 +88,36 @@ class TestRenderTemplate:
     """Cover _render_template (lines 38-45)."""
 
     def test_renders_with_context(self, service):
-        import tempfile, os
+        import os
+        import tempfile
+
         tmpdir = tempfile.mkdtemp()
         tpl_path = os.path.join(tmpdir, "test.html")
         with open(tpl_path, "w") as f:
             f.write("<html><body>{{ name }}</body></html>")
         service.jinja_env.loader.searchpath = [tmpdir]
-        with patch("app.services.email_service.premailer_transform", side_effect=lambda html: html):
+        with patch(
+            "app.services.email_service.premailer_transform",
+            side_effect=lambda html: html,
+        ):
             result = service._render_template("test.html", {"name": "Ivan"})
         assert "Ivan" in result
         os.unlink(tpl_path)
         os.rmdir(tmpdir)
 
     def test_adds_frontend_url(self, service):
-        import tempfile, os
+        import os
+        import tempfile
+
         tmpdir = tempfile.mkdtemp()
         tpl_path = os.path.join(tmpdir, "url_test.html")
         with open(tpl_path, "w") as f:
             f.write("<html>{{ frontend_url }}</html>")
         service.jinja_env.loader.searchpath = [tmpdir]
-        with patch("app.services.email_service.premailer_transform", side_effect=lambda html: html):
+        with patch(
+            "app.services.email_service.premailer_transform",
+            side_effect=lambda html: html,
+        ):
             result = service._render_template("url_test.html", {})
         assert "localhost" in result  # FRONTEND_URL from real settings
         os.unlink(tpl_path)
@@ -110,24 +129,28 @@ class TestAttachFile:
 
     def test_pdf_attachment(self, service):
         from email.mime.multipart import MIMEMultipart
+
         msg = MIMEMultipart()
         service._attach_file(msg, "report.pdf", b"pdf content")
         assert len(msg.get_payload()) == 1
 
     def test_generic_attachment(self, service):
         from email.mime.multipart import MIMEMultipart
+
         msg = MIMEMultipart()
         service._attach_file(msg, "data.csv", b"csv content")
         assert len(msg.get_payload()) == 1
 
     def test_empty_content_skipped(self, service):
         from email.mime.multipart import MIMEMultipart
+
         msg = MIMEMultipart()
         service._attach_file(msg, "empty.pdf", b"")
         assert len(msg.get_payload()) == 0
 
     def test_none_content_skipped(self, service):
         from email.mime.multipart import MIMEMultipart
+
         msg = MIMEMultipart()
         service._attach_file(msg, "none.pdf", None)
         assert len(msg.get_payload()) == 0
@@ -140,8 +163,13 @@ class TestSendEmail:
         mock_db = MagicMock()
         mock_log = _MockEmailLog()
         mock_db.get.return_value = mock_log
-        with patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.email_service.premailer_transform", side_effect=lambda html: html):
+        with (
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch(
+                "app.services.email_service.premailer_transform",
+                side_effect=lambda html: html,
+            ),
+        ):
             with pytest.raises(ValueError, match="Either"):
                 service.send_email(to_email="test@test.com", subject="Test")
 
@@ -150,9 +178,11 @@ class TestSendEmail:
         mock_log = _MockEmailLog()
         mock_db.get.return_value = mock_log
         mock_server = _make_mock_smtp()
-        with patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
-             patch("app.services.email_service.settings") as ms:
+        with (
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch("app.services.email_service.smtplib.SMTP", return_value=mock_server),
+            patch("app.services.email_service.settings") as ms,
+        ):
             ms.SMTP_PORT = 587
             ms.SMTP_HOST = "smtp.test.com"
             ms.SMTP_USER = "u"
@@ -160,8 +190,10 @@ class TestSendEmail:
             ms.SMTP_FROM_NAME = "T"
             ms.SMTP_FROM_EMAIL = "t@t.com"
             result = service.send_email(
-                to_email="test@test.com", subject="Test",
-                body="Hello", html_body="<b>Hello</b>",
+                to_email="test@test.com",
+                subject="Test",
+                body="Hello",
+                html_body="<b>Hello</b>",
             )
         assert result is True
         mock_server.send_message.assert_called_once()
@@ -171,9 +203,13 @@ class TestSendEmail:
         mock_log = _MockEmailLog()
         mock_db.get.return_value = mock_log
         mock_server = _make_mock_smtp()
-        with patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.email_service.smtplib.SMTP_SSL", return_value=mock_server), \
-             patch("app.services.email_service.settings") as ms:
+        with (
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch(
+                "app.services.email_service.smtplib.SMTP_SSL", return_value=mock_server
+            ),
+            patch("app.services.email_service.settings") as ms,
+        ):
             ms.SMTP_PORT = 465
             ms.SMTP_HOST = "smtp.test.com"
             ms.SMTP_USER = "u"
@@ -188,9 +224,11 @@ class TestSendEmail:
         mock_log = _MockEmailLog()
         mock_db.get.return_value = mock_log
         mock_server = _make_mock_smtp()
-        with patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
-             patch("app.services.email_service.settings") as ms:
+        with (
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch("app.services.email_service.smtplib.SMTP", return_value=mock_server),
+            patch("app.services.email_service.settings") as ms,
+        ):
             ms.SMTP_PORT = 25
             ms.SMTP_HOST = "smtp.test.com"
             ms.SMTP_USER = ""
@@ -205,9 +243,14 @@ class TestSendEmail:
         mock_db = MagicMock()
         mock_log = _MockEmailLog()
         mock_db.get.return_value = mock_log
-        with patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.email_service.smtplib.SMTP", side_effect=Exception("SMTP fail")), \
-             patch("app.services.email_service.settings") as ms:
+        with (
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch(
+                "app.services.email_service.smtplib.SMTP",
+                side_effect=Exception("SMTP fail"),
+            ),
+            patch("app.services.email_service.settings") as ms,
+        ):
             ms.SMTP_PORT = 587
             ms.SMTP_HOST = "smtp.test.com"
             ms.SMTP_USER = "u"
@@ -222,9 +265,11 @@ class TestSendEmail:
         mock_log = _MockEmailLog()
         mock_db.get.return_value = mock_log
         mock_server = _make_mock_smtp()
-        with patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
-             patch("app.services.email_service.settings") as ms:
+        with (
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch("app.services.email_service.smtplib.SMTP", return_value=mock_server),
+            patch("app.services.email_service.settings") as ms,
+        ):
             ms.SMTP_PORT = 587
             ms.SMTP_HOST = "smtp.test.com"
             ms.SMTP_USER = "u"
@@ -232,7 +277,9 @@ class TestSendEmail:
             ms.SMTP_FROM_NAME = "T"
             ms.SMTP_FROM_EMAIL = "t@t.com"
             result = service.send_email(
-                to_email="t@t.com", subject="S", body="B",
+                to_email="t@t.com",
+                subject="S",
+                body="B",
                 attachments=[{"filename": "test.pdf", "content": b"data"}],
             )
         assert result is True
@@ -242,9 +289,11 @@ class TestSendEmail:
         mock_log = _MockEmailLog()
         mock_db.get.return_value = mock_log
         mock_server = _make_mock_smtp()
-        with patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
-             patch("app.services.email_service.settings") as ms:
+        with (
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch("app.services.email_service.smtplib.SMTP", return_value=mock_server),
+            patch("app.services.email_service.settings") as ms,
+        ):
             ms.SMTP_PORT = 587
             ms.SMTP_HOST = "smtp.test.com"
             ms.SMTP_USER = "u"
@@ -252,7 +301,9 @@ class TestSendEmail:
             ms.SMTP_FROM_NAME = "T"
             ms.SMTP_FROM_EMAIL = "t@t.com"
             result = service.send_email(
-                to_email="t@t.com", subject="S", body="B",
+                to_email="t@t.com",
+                subject="S",
+                body="B",
                 attachments=[12345],
             )
         assert result is True
@@ -260,6 +311,7 @@ class TestSendEmail:
     def test_log_creation_failure_continues(self, service):
         mock_server = _make_mock_smtp()
         call_count = [0]
+
         def session_factory():
             call_count[0] += 1
             if call_count[0] == 1:
@@ -268,9 +320,12 @@ class TestSendEmail:
             mock_log = _MockEmailLog()
             db.get.return_value = mock_log
             return db
-        with patch("app.core.db.SessionLocal", side_effect=session_factory), \
-             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
-             patch("app.services.email_service.settings") as ms:
+
+        with (
+            patch("app.core.db.SessionLocal", side_effect=session_factory),
+            patch("app.services.email_service.smtplib.SMTP", return_value=mock_server),
+            patch("app.services.email_service.settings") as ms,
+        ):
             ms.SMTP_PORT = 587
             ms.SMTP_HOST = "smtp.test.com"
             ms.SMTP_USER = "u"
@@ -281,7 +336,9 @@ class TestSendEmail:
         assert result is True
 
     def test_template_mode(self, service):
-        import tempfile, os
+        import os
+        import tempfile
+
         tmpdir = tempfile.mkdtemp()
         tpl_path = os.path.join(tmpdir, "invoice.html")
         with open(tpl_path, "w") as f:
@@ -291,10 +348,15 @@ class TestSendEmail:
         mock_log = _MockEmailLog()
         mock_db.get.return_value = mock_log
         mock_server = _make_mock_smtp()
-        with patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
-             patch("app.services.email_service.premailer_transform", side_effect=lambda html: html), \
-             patch("app.services.email_service.settings") as ms:
+        with (
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch("app.services.email_service.smtplib.SMTP", return_value=mock_server),
+            patch(
+                "app.services.email_service.premailer_transform",
+                side_effect=lambda html: html,
+            ),
+            patch("app.services.email_service.settings") as ms,
+        ):
             ms.SMTP_PORT = 587
             ms.SMTP_HOST = "smtp.test.com"
             ms.SMTP_USER = "u"
@@ -302,7 +364,8 @@ class TestSendEmail:
             ms.SMTP_FROM_NAME = "T"
             ms.SMTP_FROM_EMAIL = "t@t.com"
             result = service.send_email(
-                to_email="t@t.com", subject="S",
+                to_email="t@t.com",
+                subject="S",
                 template_name="invoice.html",
                 context={"invoice_id": 42},
             )
@@ -315,7 +378,9 @@ class TestSendEmailExtra:
     """Cover remaining send_email branches."""
 
     def test_file_path_attachment(self, service):
-        import tempfile, os
+        import os
+        import tempfile
+
         tmpfile = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         tmpfile.write(b"file data")
         tmpfile.close()
@@ -324,9 +389,13 @@ class TestSendEmailExtra:
         mock_db.get.return_value = mock_log
         mock_server = _make_mock_smtp()
         try:
-            with patch("app.core.db.SessionLocal", return_value=mock_db), \
-                 patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
-                 patch("app.services.email_service.settings") as ms:
+            with (
+                patch("app.core.db.SessionLocal", return_value=mock_db),
+                patch(
+                    "app.services.email_service.smtplib.SMTP", return_value=mock_server
+                ),
+                patch("app.services.email_service.settings") as ms,
+            ):
                 ms.SMTP_PORT = 587
                 ms.SMTP_HOST = "smtp.test.com"
                 ms.SMTP_USER = "u"
@@ -334,7 +403,9 @@ class TestSendEmailExtra:
                 ms.SMTP_FROM_NAME = "T"
                 ms.SMTP_FROM_EMAIL = "t@t.com"
                 result = service.send_email(
-                    to_email="t@t.com", subject="S", body="B",
+                    to_email="t@t.com",
+                    subject="S",
+                    body="B",
                     attachments=[Path(tmpfile.name)],
                 )
             assert result is True
@@ -342,7 +413,9 @@ class TestSendEmailExtra:
             os.unlink(tmpfile.name)
 
     def test_string_path_attachment(self, service):
-        import tempfile, os
+        import os
+        import tempfile
+
         tmpfile = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
         tmpfile.write(b"string path data")
         tmpfile.close()
@@ -351,9 +424,13 @@ class TestSendEmailExtra:
         mock_db.get.return_value = mock_log
         mock_server = _make_mock_smtp()
         try:
-            with patch("app.core.db.SessionLocal", return_value=mock_db), \
-                 patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
-                 patch("app.services.email_service.settings") as ms:
+            with (
+                patch("app.core.db.SessionLocal", return_value=mock_db),
+                patch(
+                    "app.services.email_service.smtplib.SMTP", return_value=mock_server
+                ),
+                patch("app.services.email_service.settings") as ms,
+            ):
                 ms.SMTP_PORT = 587
                 ms.SMTP_HOST = "smtp.test.com"
                 ms.SMTP_USER = "u"
@@ -361,7 +438,9 @@ class TestSendEmailExtra:
                 ms.SMTP_FROM_NAME = "T"
                 ms.SMTP_FROM_EMAIL = "t@t.com"
                 result = service.send_email(
-                    to_email="t@t.com", subject="S", body="B",
+                    to_email="t@t.com",
+                    subject="S",
+                    body="B",
                     attachments=[tmpfile.name],
                 )
             assert result is True
@@ -375,16 +454,20 @@ class TestSendEmailExtra:
 
         def make_session():
             db = MagicMock()
+
             # When add is called, capture the log object
             def capture_add(obj):
                 obj.id = 1
+
             db.add.side_effect = capture_add
             db.get.return_value = shared_log
             return db
 
-        with patch("app.core.db.SessionLocal", side_effect=make_session), \
-             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
-             patch("app.services.email_service.settings") as ms:
+        with (
+            patch("app.core.db.SessionLocal", side_effect=make_session),
+            patch("app.services.email_service.smtplib.SMTP", return_value=mock_server),
+            patch("app.services.email_service.settings") as ms,
+        ):
             ms.SMTP_PORT = 587
             ms.SMTP_HOST = "smtp.test.com"
             ms.SMTP_USER = "u"
@@ -401,15 +484,21 @@ class TestSendEmailExtra:
 
         def make_session():
             db = MagicMock()
+
             def capture_add(obj):
                 obj.id = 1
+
             db.add.side_effect = capture_add
             db.get.return_value = shared_log
             return db
 
-        with patch("app.core.db.SessionLocal", side_effect=make_session), \
-             patch("app.services.email_service.smtplib.SMTP", side_effect=Exception("fail")), \
-             patch("app.services.email_service.settings") as ms:
+        with (
+            patch("app.core.db.SessionLocal", side_effect=make_session),
+            patch(
+                "app.services.email_service.smtplib.SMTP", side_effect=Exception("fail")
+            ),
+            patch("app.services.email_service.settings") as ms,
+        ):
             ms.SMTP_PORT = 587
             ms.SMTP_HOST = "smtp.test.com"
             ms.SMTP_USER = "u"
@@ -430,9 +519,11 @@ class TestSendEmailExtra:
         invoice.id = 42
         act = MagicMock()
         act.id = 99
-        with patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
-             patch("app.services.email_service.settings") as ms:
+        with (
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch("app.services.email_service.smtplib.SMTP", return_value=mock_server),
+            patch("app.services.email_service.settings") as ms,
+        ):
             ms.SMTP_PORT = 587
             ms.SMTP_HOST = "smtp.test.com"
             ms.SMTP_USER = "u"
@@ -440,7 +531,9 @@ class TestSendEmailExtra:
             ms.SMTP_FROM_NAME = "T"
             ms.SMTP_FROM_EMAIL = "t@t.com"
             result = service.send_email(
-                to_email="t@t.com", subject="S", body="B",
+                to_email="t@t.com",
+                subject="S",
+                body="B",
                 context={"invoice": invoice, "act": act, "company_id": 7},
             )
         assert result is True
@@ -451,9 +544,11 @@ class TestSendEmailExtra:
         mock_log = _MockEmailLog()
         mock_db.get.return_value = mock_log
         mock_server = _make_mock_smtp()
-        with patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
-             patch("app.services.email_service.settings") as ms:
+        with (
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch("app.services.email_service.smtplib.SMTP", return_value=mock_server),
+            patch("app.services.email_service.settings") as ms,
+        ):
             ms.SMTP_PORT = 25
             ms.SMTP_HOST = "smtp.test.com"
             ms.SMTP_USER = None

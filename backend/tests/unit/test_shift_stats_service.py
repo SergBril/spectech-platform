@@ -1,4 +1,4 @@
-﻿"""Tests for ShiftStatsService uncovered methods."""
+"""Tests for ShiftStatsService uncovered methods."""
 
 from datetime import UTC, date, datetime
 from types import SimpleNamespace

@@ -56,11 +56,11 @@ class ContractorUpdate(BaseModel):
     tax_system: str | None = Field(None, max_length=20)
     is_active: bool | None = None
 
-
     bank_account: str | None = None
     bik: str | None = None
     bank_name: str | None = None
     correspondent_account: str | None = None
+
 
 class ContractorRead(BaseModel):
     """Схема чтения контрагента."""

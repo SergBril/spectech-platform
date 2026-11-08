@@ -1,4 +1,5 @@
 """Coverage tests for digital_signature_service."""
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -9,6 +10,7 @@ def stub_service():
     with patch("app.core.config.settings") as mock_settings:
         mock_settings.SIGNATURE_PROVIDER = "stub"
         from app.services.digital_signature_service import DigitalSignatureService
+
         return DigitalSignatureService()
 
 
@@ -20,6 +22,7 @@ def cryptopro_service():
         mock_settings.GOSUSLUGI_CLIENT_ID = ""
         mock_settings.GOSUSLUGI_SECRET = ""
         from app.services.digital_signature_service import DigitalSignatureService
+
         return DigitalSignatureService()
 
 
@@ -31,6 +34,7 @@ def gosuslugi_service():
         mock_settings.GOSUSLUGI_CLIENT_ID = "client_id"
         mock_settings.GOSUSLUGI_SECRET = "secret"
         from app.services.digital_signature_service import DigitalSignatureService
+
         return DigitalSignatureService()
 
 
@@ -62,14 +66,18 @@ class TestSignDocument:
 
     @pytest.mark.asyncio
     async def test_cryptopro_delegates(self, cryptopro_service):
-        with patch.object(cryptopro_service, "_sign_cryptopro", new_callable=AsyncMock) as mock:
+        with patch.object(
+            cryptopro_service, "_sign_cryptopro", new_callable=AsyncMock
+        ) as mock:
             mock.return_value = {"signature": "sig", "status": "signed"}
             result = await cryptopro_service.sign_document(b"data", "thumbprint")
         mock.assert_called_once_with(b"data", "thumbprint")
 
     @pytest.mark.asyncio
     async def test_gosuslugi_delegates(self, gosuslugi_service):
-        with patch.object(gosuslugi_service, "_sign_gosuslugi", new_callable=AsyncMock) as mock:
+        with patch.object(
+            gosuslugi_service, "_sign_gosuslugi", new_callable=AsyncMock
+        ) as mock:
             mock.return_value = {"signature": "sig", "status": "signed"}
             result = await gosuslugi_service.sign_document(b"data")
         mock.assert_called_once_with(b"data")
@@ -154,4 +162,5 @@ class TestVerifySignature:
 class TestGlobalSingleton:
     def test_exists(self):
         from app.services.digital_signature_service import digital_signature_service
+
         assert digital_signature_service is not None

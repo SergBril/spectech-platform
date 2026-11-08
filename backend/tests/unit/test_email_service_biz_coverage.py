@@ -1,4 +1,5 @@
 """Coverage tests for email_service business methods."""
+
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -6,17 +7,25 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # Ensure mocks exist
 _email_mod = sys.modules.get("app.models.email")
 if not _email_mod:
     _email_mod = ModuleType("app.models.email")
+
     class _ES:
-        pending = "pending"; sent = "sent"; failed = "failed"
+        pending = "pending"
+        sent = "sent"
+        failed = "failed"
+
     class _EL:
         def __init__(self, **kw):
-            self.id = 1; self.status = None; self.sent_at = None; self.error_message = None
-            for k, v in kw.items(): setattr(self, k, v)
+            self.id = 1
+            self.status = None
+            self.sent_at = None
+            self.error_message = None
+            for k, v in kw.items():
+                setattr(self, k, v)
+
     _email_mod.EmailLog = _EL
     _email_mod.EmailStatus = _ES
     sys.modules["app.models.email"] = _email_mod
@@ -24,14 +33,22 @@ if not _email_mod:
 
 @pytest.fixture
 def service():
-    with patch("app.services.email_service.settings") as ms, \
-         patch("app.services.email_service.premailer_transform", side_effect=lambda h: h):
+    with (
+        patch("app.services.email_service.settings") as ms,
+        patch(
+            "app.services.email_service.premailer_transform", side_effect=lambda h: h
+        ),
+    ):
         ms.EMAIL_ENABLED = True
         ms.FRONTEND_URL = "http://localhost"
-        ms.SMTP_FROM_NAME = "T"; ms.SMTP_FROM_EMAIL = "t@t.com"
-        ms.SMTP_HOST = "h"; ms.SMTP_PORT = 587
-        ms.SMTP_USER = "u"; ms.SMTP_PASSWORD = "p"
+        ms.SMTP_FROM_NAME = "T"
+        ms.SMTP_FROM_EMAIL = "t@t.com"
+        ms.SMTP_HOST = "h"
+        ms.SMTP_PORT = 587
+        ms.SMTP_USER = "u"
+        ms.SMTP_PASSWORD = "p"
         from app.services.email_service import EmailService
+
         svc = EmailService()
     return svc
 
@@ -42,9 +59,13 @@ class TestSendInvoiceCreated:
     def test_without_pdf(self, service):
         invoice = SimpleNamespace(id=1, document_number="INV-001")
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
-        with patch.object(service, "send_email", return_value=True) as mock_send, \
-             patch("app.core.db.SessionLocal", return_value=mock_db):
+        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
+            None
+        )
+        with (
+            patch.object(service, "send_email", return_value=True) as mock_send,
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+        ):
             result = service.send_invoice_created(invoice, "c@c.com", "Client")
         assert result is True
         mock_send.assert_called_once()
@@ -54,10 +75,17 @@ class TestSendInvoiceCreated:
         invoice = SimpleNamespace(id=1, document_number="INV-001")
         uploaded = SimpleNamespace(storage_path="/tmp/inv.pdf")
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = uploaded
-        with patch.object(service, "send_email", return_value=True) as mock_send, \
-             patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.storage_service.get_file", return_value=b"%PDF-fake-content"):
+        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
+            uploaded
+        )
+        with (
+            patch.object(service, "send_email", return_value=True) as mock_send,
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch(
+                "app.services.storage_service.get_file",
+                return_value=b"%PDF-fake-content",
+            ),
+        ):
             result = service.send_invoice_created(invoice, "c@c.com", "Client")
         assert result is True
         att = mock_send.call_args[1]["attachments"]
@@ -65,8 +93,10 @@ class TestSendInvoiceCreated:
 
     def test_pdf_fetch_error(self, service):
         invoice = SimpleNamespace(id=1, document_number="INV-001")
-        with patch.object(service, "send_email", return_value=True) as mock_send, \
-             patch("app.core.db.SessionLocal", side_effect=Exception("DB fail")):
+        with (
+            patch.object(service, "send_email", return_value=True) as mock_send,
+            patch("app.core.db.SessionLocal", side_effect=Exception("DB fail")),
+        ):
             result = service.send_invoice_created(invoice, "c@c.com", "Client")
         assert result is True
         assert mock_send.call_args[1]["attachments"] is None
@@ -78,9 +108,13 @@ class TestSendActSigned:
     def test_without_pdf(self, service):
         act = SimpleNamespace(id=1, document_number="ACT-001")
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
-        with patch.object(service, "send_email", return_value=True) as mock_send, \
-             patch("app.core.db.SessionLocal", return_value=mock_db):
+        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
+            None
+        )
+        with (
+            patch.object(service, "send_email", return_value=True) as mock_send,
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+        ):
             result = service.send_act_signed(act, "u@u.com", "User")
         assert result is True
 
@@ -88,17 +122,23 @@ class TestSendActSigned:
         act = SimpleNamespace(id=1, document_number="ACT-001")
         uploaded = SimpleNamespace(storage_path="/tmp/act.pdf")
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = uploaded
-        with patch.object(service, "send_email", return_value=True) as mock_send, \
-             patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.storage_service.get_file", return_value=b"%PDF-act"):
+        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
+            uploaded
+        )
+        with (
+            patch.object(service, "send_email", return_value=True) as mock_send,
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch("app.services.storage_service.get_file", return_value=b"%PDF-act"),
+        ):
             result = service.send_act_signed(act, "u@u.com", "User")
         assert result is True
 
     def test_error_continues(self, service):
         act = SimpleNamespace(id=1, document_number="ACT-001")
-        with patch.object(service, "send_email", return_value=True) as mock_send, \
-             patch("app.core.db.SessionLocal", side_effect=Exception("fail")):
+        with (
+            patch.object(service, "send_email", return_value=True) as mock_send,
+            patch("app.core.db.SessionLocal", side_effect=Exception("fail")),
+        ):
             result = service.send_act_signed(act, "u@u.com", "User")
         assert result is True
 
@@ -122,7 +162,12 @@ class TestSimpleDelegates:
     def test_send_request_status_changed(self, service):
         req = SimpleNamespace(id=42)
         with patch.object(service, "send_email", return_value=True) as m:
-            assert service.send_request_status_changed(req, "u@u.com", "U", "new", "accepted", "ok") is True
+            assert (
+                service.send_request_status_changed(
+                    req, "u@u.com", "U", "new", "accepted", "ok"
+                )
+                is True
+            )
         ctx = m.call_args[1]["context"]
         assert ctx["new_status"] == "accepted"
 
@@ -148,20 +193,37 @@ class TestSimpleDelegates:
     def test_send_dispute_escalated(self, service):
         dispute = SimpleNamespace(id=10)
         with patch.object(service, "send_email", return_value=True) as m:
-            assert service.send_dispute_escalated(dispute, "m@m.com", "Mgr", "disp", "ceo") is True
+            assert (
+                service.send_dispute_escalated(dispute, "m@m.com", "Mgr", "disp", "ceo")
+                is True
+            )
         ctx = m.call_args[1]["context"]
         assert ctx["from_role"] == "disp"
 
     def test_send_invoice_paid_full(self, service):
-        inv = SimpleNamespace(document_number="INV-001", status=SimpleNamespace(value="paid"))
+        inv = SimpleNamespace(
+            document_number="INV-001", status=SimpleNamespace(value="paid")
+        )
         with patch.object(service, "send_email", return_value=True) as m:
-            assert service.send_invoice_paid(inv, 50000, "2026-11-06", "Payer", "7701", "c@c.com", "C") is True
+            assert (
+                service.send_invoice_paid(
+                    inv, 50000, "2026-11-06", "Payer", "7701", "c@c.com", "C"
+                )
+                is True
+            )
         assert "полностью оплачен" in m.call_args[1]["subject"]
 
     def test_send_invoice_paid_partial(self, service):
-        inv = SimpleNamespace(document_number="INV-001", status=SimpleNamespace(value="partial"))
+        inv = SimpleNamespace(
+            document_number="INV-001", status=SimpleNamespace(value="partial")
+        )
         with patch.object(service, "send_email", return_value=True) as m:
-            assert service.send_invoice_paid(inv, 30000, "2026-11-06", "Payer", None, "c@c.com", "C") is True
+            assert (
+                service.send_invoice_paid(
+                    inv, 30000, "2026-11-06", "Payer", None, "c@c.com", "C"
+                )
+                is True
+            )
         assert "Получена оплата" in m.call_args[1]["subject"]
 
 
@@ -169,35 +231,51 @@ class TestSendPayoutApproved:
     """Cover send_payout_approved (lines 487-555)."""
 
     def test_pdf_bytes_attached(self, service):
-        payout = SimpleNamespace(document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2)
+        payout = SimpleNamespace(
+            document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2
+        )
         owner = SimpleNamespace(name="OOO Test")
         vehicle = SimpleNamespace(name="KAMAZ")
         mock_db = MagicMock()
-        mock_db.get.side_effect = lambda cls, id_: owner if cls.__name__ != "Vehicle" else vehicle
+        mock_db.get.side_effect = lambda cls, id_: (
+            owner if cls.__name__ != "Vehicle" else vehicle
+        )
         pdf_bytes = b"%PDF-" + b"x" * 200
-        with patch.object(service, "send_email", return_value=True) as mock_send, \
-             patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.pdf_service.generate_payout_pdf", return_value=pdf_bytes):
+        with (
+            patch.object(service, "send_email", return_value=True) as mock_send,
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch(
+                "app.services.pdf_service.generate_payout_pdf", return_value=pdf_bytes
+            ),
+        ):
             result = service.send_payout_approved(payout, "o@o.com", "Owner")
         assert result is True
         att = mock_send.call_args[1]["attachments"]
         assert att is not None
 
     def test_pdf_too_small_skipped(self, service):
-        payout = SimpleNamespace(document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2)
+        payout = SimpleNamespace(
+            document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2
+        )
         mock_db = MagicMock()
         mock_db.get.return_value = None
-        with patch.object(service, "send_email", return_value=True) as mock_send, \
-             patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.pdf_service.generate_payout_pdf", return_value=b"tiny"):
+        with (
+            patch.object(service, "send_email", return_value=True) as mock_send,
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch("app.services.pdf_service.generate_payout_pdf", return_value=b"tiny"),
+        ):
             result = service.send_payout_approved(payout, "o@o.com", "Owner")
         assert result is True
         assert mock_send.call_args[1]["attachments"] is None
 
     def test_pdf_error_continues(self, service):
-        payout = SimpleNamespace(document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2)
-        with patch.object(service, "send_email", return_value=True) as mock_send, \
-             patch("app.core.db.SessionLocal", side_effect=Exception("fail")):
+        payout = SimpleNamespace(
+            document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2
+        )
+        with (
+            patch.object(service, "send_email", return_value=True) as mock_send,
+            patch("app.core.db.SessionLocal", side_effect=Exception("fail")),
+        ):
             result = service.send_payout_approved(payout, "o@o.com", "Owner")
         assert result is True
         assert mock_send.call_args[1]["attachments"] is None
@@ -206,8 +284,8 @@ class TestSendPayoutApproved:
 class TestGlobalSingleton:
     def test_exists(self):
         from app.services.email_service import email_service
-        assert email_service is not None
 
+        assert email_service is not None
 
 
 class TestRemainingBranches:
@@ -218,14 +296,20 @@ class TestRemainingBranches:
         invoice = SimpleNamespace(id=1, document_number="INV-001")
         uploaded = SimpleNamespace(storage_path="/tmp/inv.pdf")
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = uploaded
+        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
+            uploaded
+        )
         fake_path = MagicMock()
         fake_path.exists.return_value = True
         fake_path.unlink.side_effect = PermissionError("locked")
-        with patch.object(service, "send_email", return_value=True), \
-             patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.storage_service.get_file", return_value=b"%PDF-content"), \
-             patch("tempfile.NamedTemporaryFile") as mock_tmp:
+        with (
+            patch.object(service, "send_email", return_value=True),
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch(
+                "app.services.storage_service.get_file", return_value=b"%PDF-content"
+            ),
+            patch("tempfile.NamedTemporaryFile") as mock_tmp,
+        ):
             mock_tmp.return_value.__enter__ = lambda s: s
             mock_tmp.return_value.__exit__ = lambda *a: False
             mock_tmp.return_value.name = "/tmp/fake.pdf"
@@ -242,22 +326,30 @@ class TestRemainingBranches:
         act = SimpleNamespace(id=1, document_number="ACT-001")
         uploaded = SimpleNamespace(storage_path="/tmp/act.pdf")
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = uploaded
+        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
+            uploaded
+        )
         fake_path = MagicMock()
         fake_path.exists.return_value = True
         fake_path.unlink.side_effect = OSError("busy")
-        with patch.object(service, "send_email", return_value=True), \
-             patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.storage_service.get_file", return_value=b"%PDF-act"), \
-             patch("app.services.email_service.Path") as MockPath:
+        with (
+            patch.object(service, "send_email", return_value=True),
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch("app.services.storage_service.get_file", return_value=b"%PDF-act"),
+            patch("app.services.email_service.Path") as MockPath,
+        ):
             MockPath.return_value = fake_path
             result = service.send_act_signed(act, "u@u.com", "U")
         assert result is True
 
     def test_payout_approved_pdf_file_path(self, service):
         """Cover lines 524-540: PDF as file path string."""
-        import tempfile, os
-        payout = SimpleNamespace(document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2)
+        import os
+        import tempfile
+
+        payout = SimpleNamespace(
+            document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2
+        )
         mock_db = MagicMock()
         mock_db.get.return_value = None
         # Create a real temp PDF file > 100 bytes
@@ -265,9 +357,14 @@ class TestRemainingBranches:
         tmpf.write(b"%PDF-" + b"x" * 200)
         tmpf.close()
         try:
-            with patch.object(service, "send_email", return_value=True) as mock_send, \
-                 patch("app.core.db.SessionLocal", return_value=mock_db), \
-                 patch("app.services.pdf_service.generate_payout_pdf", return_value=tmpf.name):
+            with (
+                patch.object(service, "send_email", return_value=True) as mock_send,
+                patch("app.core.db.SessionLocal", return_value=mock_db),
+                patch(
+                    "app.services.pdf_service.generate_payout_pdf",
+                    return_value=tmpf.name,
+                ),
+            ):
                 result = service.send_payout_approved(payout, "o@o.com", "Owner")
             assert result is True
             att = mock_send.call_args[1]["attachments"]
@@ -280,16 +377,22 @@ class TestRemainingBranches:
 
     def test_payout_approved_pdf_file_missing(self, service):
         """Cover lines 548-551: PDF file path but file missing."""
-        payout = SimpleNamespace(document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2)
+        payout = SimpleNamespace(
+            document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2
+        )
         mock_db = MagicMock()
         mock_db.get.return_value = None
-        with patch.object(service, "send_email", return_value=True) as mock_send, \
-             patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.pdf_service.generate_payout_pdf", return_value="/nonexistent/file.pdf"):
+        with (
+            patch.object(service, "send_email", return_value=True) as mock_send,
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch(
+                "app.services.pdf_service.generate_payout_pdf",
+                return_value="/nonexistent/file.pdf",
+            ),
+        ):
             result = service.send_payout_approved(payout, "o@o.com", "Owner")
         assert result is True
         assert mock_send.call_args[1]["attachments"] is None
-
 
 
 class TestFinalBranches:
@@ -308,6 +411,7 @@ class TestFinalBranches:
                 # First call: create log entry
                 def capture_add(obj):
                     obj.id = 42
+
                 db.add.side_effect = capture_add
                 return db
             else:
@@ -322,18 +426,24 @@ class TestFinalBranches:
         mock_server.send_message = MagicMock()
         mock_server.quit = MagicMock()
 
-        with patch("app.core.db.SessionLocal", side_effect=make_session), \
-             patch("app.services.email_service.smtplib.SMTP", return_value=mock_server), \
-             patch("app.services.email_service.settings") as ms:
-            ms.SMTP_PORT = 587; ms.SMTP_HOST = "h"
-            ms.SMTP_USER = "u"; ms.SMTP_PASSWORD = "p"
-            ms.SMTP_FROM_NAME = "T"; ms.SMTP_FROM_EMAIL = "t@t.com"
+        with (
+            patch("app.core.db.SessionLocal", side_effect=make_session),
+            patch("app.services.email_service.smtplib.SMTP", return_value=mock_server),
+            patch("app.services.email_service.settings") as ms,
+        ):
+            ms.SMTP_PORT = 587
+            ms.SMTP_HOST = "h"
+            ms.SMTP_USER = "u"
+            ms.SMTP_PASSWORD = "p"
+            ms.SMTP_FROM_NAME = "T"
+            ms.SMTP_FROM_EMAIL = "t@t.com"
             result = service.send_email(to_email="t@t.com", subject="S", body="B")
         assert result is True
 
     def test_log_update_to_failed_fails(self, service):
         """Cover lines 266-267: exception inside try block during log update to failed."""
         call_count = [0]
+
         def make_session():
             call_count[0] += 1
             db = MagicMock()
@@ -341,6 +451,7 @@ class TestFinalBranches:
                 # First call: create log entry
                 def capture_add(obj):
                     obj.id = 42
+
                 db.add.side_effect = capture_add
                 return db
             else:
@@ -348,31 +459,47 @@ class TestFinalBranches:
                 db.get.side_effect = Exception("DB gone")
                 return db
 
-        with patch("app.core.db.SessionLocal", side_effect=make_session), \
-             patch("app.services.email_service.smtplib.SMTP", side_effect=Exception("SMTP boom")), \
-             patch("app.services.email_service.settings") as ms:
-            ms.SMTP_PORT = 587; ms.SMTP_HOST = "h"
-            ms.SMTP_USER = "u"; ms.SMTP_PASSWORD = "p"
-            ms.SMTP_FROM_NAME = "T"; ms.SMTP_FROM_EMAIL = "t@t.com"
+        with (
+            patch("app.core.db.SessionLocal", side_effect=make_session),
+            patch(
+                "app.services.email_service.smtplib.SMTP",
+                side_effect=Exception("SMTP boom"),
+            ),
+            patch("app.services.email_service.settings") as ms,
+        ):
+            ms.SMTP_PORT = 587
+            ms.SMTP_HOST = "h"
+            ms.SMTP_USER = "u"
+            ms.SMTP_PASSWORD = "p"
+            ms.SMTP_FROM_NAME = "T"
+            ms.SMTP_FROM_EMAIL = "t@t.com"
             with pytest.raises(Exception, match="SMTP boom"):
                 service.send_email(to_email="t@t.com", subject="S", body="B")
 
     def test_payout_unexpected_pdf_type(self, service):
         """Cover line 540: unexpected PDF result type."""
-        payout = SimpleNamespace(document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2)
+        payout = SimpleNamespace(
+            document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2
+        )
         mock_db = MagicMock()
         mock_db.get.return_value = None
-        with patch.object(service, "send_email", return_value=True) as mock_send, \
-             patch("app.core.db.SessionLocal", return_value=mock_db), \
-             patch("app.services.pdf_service.generate_payout_pdf", return_value=12345):
+        with (
+            patch.object(service, "send_email", return_value=True) as mock_send,
+            patch("app.core.db.SessionLocal", return_value=mock_db),
+            patch("app.services.pdf_service.generate_payout_pdf", return_value=12345),
+        ):
             result = service.send_payout_approved(payout, "o@o.com", "Owner")
         assert result is True
         assert mock_send.call_args[1]["attachments"] is None
 
     def test_payout_temp_cleanup_error(self, service):
         """Cover lines 550-551: temp_path_to_cleanup.unlink() exception."""
-        import tempfile, os
-        payout = SimpleNamespace(document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2)
+        import os
+        import tempfile
+
+        payout = SimpleNamespace(
+            document_number="PAY-001", net_amount=50000, owner_id=1, vehicle_id=2
+        )
         mock_db = MagicMock()
         mock_db.get.return_value = None
         # Create real file so exists() returns True
@@ -381,13 +508,20 @@ class TestFinalBranches:
         tmpf.close()
         # Make unlink fail by making file read-only and using a wrapper
         original_unlink = Path.unlink
+
         def failing_unlink(self, *a, **kw):
             raise PermissionError("locked")
+
         try:
-            with patch.object(service, "send_email", return_value=True) as mock_send, \
-                 patch("app.core.db.SessionLocal", return_value=mock_db), \
-                 patch("app.services.pdf_service.generate_payout_pdf", return_value=tmpf.name), \
-                 patch.object(Path, "unlink", failing_unlink):
+            with (
+                patch.object(service, "send_email", return_value=True) as mock_send,
+                patch("app.core.db.SessionLocal", return_value=mock_db),
+                patch(
+                    "app.services.pdf_service.generate_payout_pdf",
+                    return_value=tmpf.name,
+                ),
+                patch.object(Path, "unlink", failing_unlink),
+            ):
                 result = service.send_payout_approved(payout, "o@o.com", "Owner")
             assert result is True
         finally:

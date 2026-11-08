@@ -1,4 +1,4 @@
-﻿"""Final 60% push - shifts/finance with mocked Depends params."""
+"""Final 60% push - shifts/finance with mocked Depends params."""
 
 from unittest.mock import MagicMock
 

@@ -1,4 +1,4 @@
-﻿"""Tests for reportlab_pdf_generator, maintenance_service, alert_engine coverage."""
+"""Tests for reportlab_pdf_generator, maintenance_service, alert_engine coverage."""
 
 # ==================== REPORTLAB PDF GENERATOR ====================
 from datetime import UTC

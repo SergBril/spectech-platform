@@ -1,4 +1,4 @@
-﻿"""Tests for telematics API coverage improvement."""
+"""Tests for telematics API coverage improvement."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -17,6 +18,7 @@ def auth_headers(auth_token):
 @pytest.fixture
 def admin_auth_token(admin_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(admin_user)
 
 
@@ -29,12 +31,17 @@ class TestGetVehicleTrack:
     """Cover get_vehicle_track (lines 338-364)."""
 
     def test_track_empty(self, client, auth_headers, sample_vehicle):
-        resp = client.get(f"/api/v1/telematics/gps/{sample_vehicle.id}", headers=auth_headers)
+        resp = client.get(
+            f"/api/v1/telematics/gps/{sample_vehicle.id}", headers=auth_headers
+        )
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
     def test_track_with_limit(self, client, auth_headers, sample_vehicle):
-        resp = client.get(f"/api/v1/telematics/gps/{sample_vehicle.id}?limit=10&order=desc", headers=auth_headers)
+        resp = client.get(
+            f"/api/v1/telematics/gps/{sample_vehicle.id}?limit=10&order=desc",
+            headers=auth_headers,
+        )
         assert resp.status_code == 200
 
     def test_track_vehicle_not_found(self, client, auth_headers):
@@ -46,7 +53,9 @@ class TestGetTrackStats:
     """Cover get_track_stats (lines 365-456)."""
 
     def test_stats_empty(self, client, auth_headers, sample_vehicle):
-        resp = client.get(f"/api/v1/telematics/gps/{sample_vehicle.id}/stats", headers=auth_headers)
+        resp = client.get(
+            f"/api/v1/telematics/gps/{sample_vehicle.id}/stats", headers=auth_headers
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["points_count"] == 0
@@ -91,15 +100,21 @@ class TestGetFuelAnalytics:
         assert resp.status_code == 200
 
     def test_consumption(self, client, auth_headers):
-        resp = client.get("/api/v1/telematics/fuel/analytics/consumption", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/telematics/fuel/analytics/consumption", headers=auth_headers
+        )
         assert resp.status_code == 200
 
     def test_by_vehicle(self, client, auth_headers):
-        resp = client.get("/api/v1/telematics/fuel/analytics/by-vehicle", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/telematics/fuel/analytics/by-vehicle", headers=auth_headers
+        )
         assert resp.status_code == 200
 
     def test_anomalies(self, client, auth_headers):
-        resp = client.get("/api/v1/telematics/fuel/analytics/anomalies", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/telematics/fuel/analytics/anomalies", headers=auth_headers
+        )
         assert resp.status_code == 200
 
 

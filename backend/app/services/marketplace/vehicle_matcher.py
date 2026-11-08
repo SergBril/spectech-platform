@@ -19,7 +19,6 @@ logger = logging.getLogger("spectech.vehicle_matcher")
 
 
 class VehicleMatcherService:
-
     # Маппинг: подкатегория заказа → совместимые категории техники
     REQUEST_SUBCAT_TO_VEHICLE_CATS = {
         8: [2],  # Экскаваторы гусеничные → Экскаваторы

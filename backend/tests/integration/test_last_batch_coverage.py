@@ -1,4 +1,4 @@
-﻿"""Tests for gps_trace, gdemoi, websocket_auth, websocket route, sentry_config."""
+"""Tests for gps_trace, gdemoi, websocket_auth, websocket route, sentry_config."""
 
 import pytest
 

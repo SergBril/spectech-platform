@@ -1,4 +1,5 @@
 """Coverage tests for storage_service."""
+
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
@@ -15,6 +16,7 @@ class TestEnsureBucketExists:
 
     def test_bucket_exists(self):
         from app.services import storage_service
+
         s3 = _make_s3()
         s3.head_bucket.return_value = {}
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
@@ -23,16 +25,22 @@ class TestEnsureBucketExists:
 
     def test_bucket_404_creates(self):
         from app.services import storage_service
+
         s3 = _make_s3()
-        s3.head_bucket.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadBucket")
+        s3.head_bucket.side_effect = ClientError(
+            {"Error": {"Code": "404"}}, "HeadBucket"
+        )
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
             storage_service.ensure_bucket_exists()
         s3.create_bucket.assert_called_once()
 
     def test_other_error_raises(self):
         from app.services import storage_service
+
         s3 = _make_s3()
-        s3.head_bucket.side_effect = ClientError({"Error": {"Code": "500"}}, "HeadBucket")
+        s3.head_bucket.side_effect = ClientError(
+            {"Error": {"Code": "500"}}, "HeadBucket"
+        )
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
             with pytest.raises(ClientError):
                 storage_service.ensure_bucket_exists()
@@ -43,8 +51,11 @@ class TestUploadFile:
 
     def _run(self, s3, *args, **kwargs):
         from app.services import storage_service
-        with patch.object(storage_service, "_get_s3_client", return_value=s3), \
-             patch.object(storage_service, "ensure_bucket_exists"):
+
+        with (
+            patch.object(storage_service, "_get_s3_client", return_value=s3),
+            patch.object(storage_service, "ensure_bucket_exists"),
+        ):
             return storage_service.upload_file(*args, **kwargs)
 
     def test_success(self):
@@ -76,10 +87,15 @@ class TestUploadBytes:
 
     def test_delegates(self):
         from app.services import storage_service
+
         s3 = _make_s3()
-        with patch.object(storage_service, "_get_s3_client", return_value=s3), \
-             patch.object(storage_service, "ensure_bucket_exists"):
-            result = storage_service.upload_bytes(b"hello", "test.txt", content_type="text/plain")
+        with (
+            patch.object(storage_service, "_get_s3_client", return_value=s3),
+            patch.object(storage_service, "ensure_bucket_exists"),
+        ):
+            result = storage_service.upload_bytes(
+                b"hello", "test.txt", content_type="text/plain"
+            )
         assert result["size"] == 5
 
 
@@ -88,6 +104,7 @@ class TestGetFile:
 
     def test_success(self):
         from app.services import storage_service
+
         s3 = _make_s3()
         s3.get_object.return_value = {"Body": BytesIO(b"file content")}
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
@@ -96,6 +113,7 @@ class TestGetFile:
 
     def test_error_raises(self):
         from app.services import storage_service
+
         s3 = _make_s3()
         s3.get_object.side_effect = ClientError({"Error": {"Code": "404"}}, "GetObject")
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
@@ -108,12 +126,14 @@ class TestDeleteFile:
 
     def test_success(self):
         from app.services import storage_service
+
         s3 = _make_s3()
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
             assert storage_service.delete_file("uploads/test.pdf") is True
 
     def test_error_returns_false(self):
         from app.services import storage_service
+
         s3 = _make_s3()
         s3.delete_object.side_effect = ClientError({"Error": {"Code": "500"}}, "Delete")
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
@@ -125,6 +145,7 @@ class TestGeneratePresignedUrl:
 
     def test_success_replaces_minio(self):
         from app.services import storage_service
+
         s3 = _make_s3()
         s3.generate_presigned_url.return_value = "http://minio:9000/bucket/key"
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
@@ -133,8 +154,11 @@ class TestGeneratePresignedUrl:
 
     def test_error_raises(self):
         from app.services import storage_service
+
         s3 = _make_s3()
-        s3.generate_presigned_url.side_effect = ClientError({"Error": {"Code": "500"}}, "Sign")
+        s3.generate_presigned_url.side_effect = ClientError(
+            {"Error": {"Code": "500"}}, "Sign"
+        )
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
             with pytest.raises(ClientError):
                 storage_service.generate_presigned_url("test.pdf")
@@ -145,11 +169,17 @@ class TestListFiles:
 
     def test_with_files(self):
         from datetime import UTC, datetime
+
         from app.services import storage_service
+
         s3 = _make_s3()
         s3.list_objects_v2.return_value = {
             "Contents": [
-                {"Key": "a.pdf", "Size": 100, "LastModified": datetime(2026, 1, 1, tzinfo=UTC)},
+                {
+                    "Key": "a.pdf",
+                    "Size": 100,
+                    "LastModified": datetime(2026, 1, 1, tzinfo=UTC),
+                },
             ]
         }
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
@@ -158,6 +188,7 @@ class TestListFiles:
 
     def test_empty(self):
         from app.services import storage_service
+
         s3 = _make_s3()
         s3.list_objects_v2.return_value = {}
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
@@ -166,6 +197,7 @@ class TestListFiles:
 
     def test_error_returns_empty(self):
         from app.services import storage_service
+
         s3 = _make_s3()
         s3.list_objects_v2.side_effect = ClientError({"Error": {"Code": "500"}}, "List")
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
@@ -178,6 +210,7 @@ class TestGetStorageStats:
 
     def test_success(self):
         from app.services import storage_service
+
         s3 = _make_s3()
         s3.list_objects_v2.return_value = {"Contents": [{"Size": 1048576}]}
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
@@ -187,6 +220,7 @@ class TestGetStorageStats:
 
     def test_error_returns_zero(self):
         from app.services import storage_service
+
         s3 = _make_s3()
         s3.list_objects_v2.side_effect = Exception("fail")
         with patch.object(storage_service, "_get_s3_client", return_value=s3):
@@ -200,12 +234,14 @@ class TestUploadBytesWithMetadata:
 
     def test_delegates(self):
         from app.services import storage_service
+
         s3 = _make_s3()
-        with patch.object(storage_service, "_get_s3_client", return_value=s3), \
-             patch.object(storage_service, "ensure_bucket_exists"):
+        with (
+            patch.object(storage_service, "_get_s3_client", return_value=s3),
+            patch.object(storage_service, "ensure_bucket_exists"),
+        ):
             result = storage_service.upload_bytes_with_metadata(b"pdf", "doc.pdf")
         assert result["size"] == 3
-
 
 
 class TestGetS3Client:
@@ -213,6 +249,7 @@ class TestGetS3Client:
 
     def test_returns_boto3_client(self):
         from app.services.storage_service import _get_s3_client
+
         with patch("app.services.storage_service.boto3") as mock_boto3:
             mock_client = MagicMock()
             mock_boto3.client.return_value = mock_client

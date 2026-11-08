@@ -1,4 +1,4 @@
-﻿"""Маршруты для работы с адресами через DaData API."""
+"""Маршруты для работы с адресами через DaData API."""
 
 import logging
 from typing import Any

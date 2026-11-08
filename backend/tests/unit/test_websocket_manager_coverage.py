@@ -1,4 +1,5 @@
 """Coverage tests for websocket_manager."""
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 @pytest.fixture
 def manager():
     from app.services.websocket_manager import ConnectionManager
+
     return ConnectionManager()
 
 
@@ -183,7 +185,10 @@ class TestBroadcastToChat:
         await manager.broadcast_to_chat(1, {"msg": "hello"})
         ws_ok.send_json.assert_called_once()
         # Failed connection should be removed
-        assert 1 not in manager.chat_connections or ws_fail not in manager.chat_connections.get(1, [])
+        assert (
+            1 not in manager.chat_connections
+            or ws_fail not in manager.chat_connections.get(1, [])
+        )
 
 
 class TestGlobalManager:
@@ -191,4 +196,5 @@ class TestGlobalManager:
 
     def test_singleton_exists(self):
         from app.services.websocket_manager import manager
+
         assert manager is not None

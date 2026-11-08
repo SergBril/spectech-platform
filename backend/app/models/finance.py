@@ -1,4 +1,4 @@
-﻿from datetime import date, datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 
@@ -368,15 +368,22 @@ class Payment(Base):
 
 class EdoSendLog(Base):
     """Лог отправок документов в ЭДО."""
+
     __tablename__ = "edo_send_logs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     act_id: Mapped[int | None] = mapped_column(ForeignKey("acts.id"), nullable=True)
     document_number: Mapped[str] = mapped_column(String(100), nullable=False)
-    operator: Mapped[str] = mapped_column(String(50), nullable=False)  # diadoc, sbis, kaluga
-    status: Mapped[str] = mapped_column(String(50), nullable=False)  # success, failed, pending
+    operator: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # diadoc, sbis, kaluga
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # success, failed, pending
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
     xml_size: Mapped[int | None] = mapped_column(nullable=True)
     sig_size: Mapped[int | None] = mapped_column(nullable=True)
     sent_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
-    sent_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    sent_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )

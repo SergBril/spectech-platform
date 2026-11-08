@@ -1,4 +1,4 @@
-﻿"""Tests for drivers API coverage improvement."""
+"""Tests for drivers API coverage improvement."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -22,7 +23,9 @@ class TestListDrivers:
         assert resp.status_code == 200
 
     def test_list_with_filters(self, client, auth_headers):
-        resp = client.get("/api/v1/drivers?search=test&status=active", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/drivers?search=test&status=active", headers=auth_headers
+        )
         assert resp.status_code == 200
 
 
@@ -62,7 +65,9 @@ class TestBulkBindUsers:
     """Cover bulk bind users (line 498)."""
 
     def test_bulk_bind_validation(self, client, auth_headers):
-        resp = client.post("/api/v1/drivers/bulk-bind-users", json={}, headers=auth_headers)
+        resp = client.post(
+            "/api/v1/drivers/bulk-bind-users", json={}, headers=auth_headers
+        )
         assert resp.status_code in (422, 400)
 
 

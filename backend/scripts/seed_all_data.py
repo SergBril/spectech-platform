@@ -1,4 +1,4 @@
-﻿"""Seed script: creates test data for drivers, invoices, maintenance, fuel."""
+"""Seed script: creates test data for drivers, invoices, maintenance, fuel."""
 
 import random
 from datetime import date, datetime, timedelta

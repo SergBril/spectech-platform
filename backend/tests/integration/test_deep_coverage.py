@@ -1,4 +1,4 @@
-﻿"""Deep coverage - hit internal branches in contractors, companies, deps."""
+"""Deep coverage - hit internal branches in contractors, companies, deps."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -16,15 +17,22 @@ def auth_headers(auth_token):
 
 # ==================== CONTRACTORS DEEP ====================
 
+
 class TestContractorsDeep:
     def test_suggest_inn_empty(self, client, auth_headers):
         """Hit the 'inn is empty' branch."""
-        resp = client.post("/api/v1/contractors/suggest-inn", json={"inn": ""}, headers=auth_headers)
+        resp = client.post(
+            "/api/v1/contractors/suggest-inn", json={"inn": ""}, headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_suggest_inn_nonexistent(self, client, auth_headers):
         """Hit the DaData lookup branch."""
-        resp = client.post("/api/v1/contractors/suggest-inn", json={"inn": "0000000000"}, headers=auth_headers)
+        resp = client.post(
+            "/api/v1/contractors/suggest-inn",
+            json={"inn": "0000000000"},
+            headers=auth_headers,
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_create_employee_not_found(self, client, auth_headers):
@@ -43,6 +51,7 @@ class TestContractorsDeep:
 
 
 # ==================== COMPANIES DEEP ====================
+
 
 class TestCompaniesDeep:
     def test_patch_requisites_with_data(self, client, auth_headers):
@@ -80,10 +89,12 @@ class TestCompaniesDeep:
 
 # ==================== DEPS DEEP ====================
 
+
 class TestDepsDeep:
     def test_get_current_company_id(self, db_session, sample_user):
         """Cover get_current_company_id with valid user."""
         from app.api.deps import get_current_company_id
+
         try:
             result = get_current_company_id(user=sample_user, db=db_session)
             assert isinstance(result, int)
@@ -93,5 +104,6 @@ class TestDepsDeep:
     def test_require_permission_callable(self, db_session, sample_user, auth_headers):
         """Cover require_permission dependency factory."""
         from app.api.deps import require_permission
+
         dep = require_permission("vehicle", "write")
         assert callable(dep)

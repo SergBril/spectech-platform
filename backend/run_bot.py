@@ -33,11 +33,11 @@ def main():
             "   3. Перезапустите run_bot.py"
         )
         sys.exit(0)
-    
+
     logger.info("🤖 Starting Spectech Telegram Bot...")
-    logger.info(f"📡 Telegram API: https://api.telegram.org")
+    logger.info("📡 Telegram API: https://api.telegram.org")
     logger.info("⚠️  Note: В РФ может потребоваться VPN/прокси")
-    
+
     try:
         telegram_bot_service.run_bot()
     except KeyboardInterrupt:

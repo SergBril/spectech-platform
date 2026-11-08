@@ -1,4 +1,4 @@
-﻿"""Tests for export endpoints (Excel, PDF, CSV)."""
+"""Tests for export endpoints (Excel, PDF, CSV)."""
 
 from fastapi.testclient import TestClient
 

@@ -1,4 +1,4 @@
-﻿"""Seed script for GPS points."""
+"""Seed script for GPS points."""
 
 import random
 from datetime import UTC, datetime, timedelta

@@ -1,4 +1,5 @@
 """Coverage tests for sms_service."""
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -9,6 +10,7 @@ class TestSMSServiceInit:
 
     def test_enabled_with_token(self):
         from app.services.sms_service import SMSService
+
         with patch("app.services.sms_service.settings") as mock_settings:
             mock_settings.GREENSMS_API_URL = "https://api.greensms.ru"
             mock_settings.GREENSMS_API_TOKEN = "test_token"
@@ -17,6 +19,7 @@ class TestSMSServiceInit:
 
     def test_disabled_without_token(self):
         from app.services.sms_service import SMSService
+
         with patch("app.services.sms_service.settings") as mock_settings:
             mock_settings.GREENSMS_API_URL = "https://api.greensms.ru"
             mock_settings.GREENSMS_API_TOKEN = ""
@@ -30,6 +33,7 @@ class TestSMSServiceSend:
     @pytest.mark.asyncio
     async def test_stub_when_disabled(self):
         from app.services.sms_service import SMSService
+
         with patch("app.services.sms_service.settings") as mock_settings:
             mock_settings.GREENSMS_API_URL = "https://api.greensms.ru"
             mock_settings.GREENSMS_API_TOKEN = ""
@@ -40,6 +44,7 @@ class TestSMSServiceSend:
     @pytest.mark.asyncio
     async def test_success_200(self):
         from app.services.sms_service import SMSService
+
         with patch("app.services.sms_service.settings") as mock_settings:
             mock_settings.GREENSMS_API_URL = "https://api.greensms.ru"
             mock_settings.GREENSMS_API_TOKEN = "token"
@@ -52,13 +57,16 @@ class TestSMSServiceSend:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.sms_service.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "app.services.sms_service.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await svc.send("+79991234567", "Test")
         assert result is True
 
     @pytest.mark.asyncio
     async def test_failed_non_200(self):
         from app.services.sms_service import SMSService
+
         with patch("app.services.sms_service.settings") as mock_settings:
             mock_settings.GREENSMS_API_URL = "https://api.greensms.ru"
             mock_settings.GREENSMS_API_TOKEN = "token"
@@ -72,13 +80,16 @@ class TestSMSServiceSend:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.sms_service.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "app.services.sms_service.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await svc.send("+79991234567", "Test")
         assert result is False
 
     @pytest.mark.asyncio
     async def test_exception_returns_false(self):
         from app.services.sms_service import SMSService
+
         with patch("app.services.sms_service.settings") as mock_settings:
             mock_settings.GREENSMS_API_URL = "https://api.greensms.ru"
             mock_settings.GREENSMS_API_TOKEN = "token"
@@ -89,7 +100,9 @@ class TestSMSServiceSend:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.sms_service.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "app.services.sms_service.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await svc.send("+79991234567", "Test")
         assert result is False
 
@@ -99,4 +112,5 @@ class TestGlobalSingleton:
 
     def test_singleton_exists(self):
         from app.services.sms_service import sms_service
+
         assert sms_service is not None

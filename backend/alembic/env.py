@@ -1,4 +1,4 @@
-﻿"""Alembic environment configuration for PostgreSQL."""
+"""Alembic environment configuration for PostgreSQL."""
 
 import os
 from logging.config import fileConfig

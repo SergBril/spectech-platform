@@ -1,4 +1,4 @@
-﻿"""Tests for VehicleMatcherService internal methods and MapixAdapter coverage."""
+"""Tests for VehicleMatcherService internal methods and MapixAdapter coverage."""
 
 from datetime import UTC
 

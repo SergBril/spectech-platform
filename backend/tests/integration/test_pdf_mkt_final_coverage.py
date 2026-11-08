@@ -1,4 +1,4 @@
-﻿"""Tests for remaining pdf_generator and marketplace_service coverage."""
+"""Tests for remaining pdf_generator and marketplace_service coverage."""
 
 from datetime import UTC, date, datetime
 from decimal import Decimal

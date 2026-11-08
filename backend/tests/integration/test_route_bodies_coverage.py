@@ -5,10 +5,11 @@ from unittest.mock import AsyncMock, patch
 
 
 class TestDiadocRouteBodies:
-    """Cover diadoc.py route handler bodies (lines 53-86, 146-162, 175-225, 322-345, 394-454, 470-537)."""
+    """Cover diadoc.py route handler bodies."""
 
-    @patch("app.api.routes.shifts.diadoc.digital_signature_service")
-    @patch("app.api.routes.shifts.diadoc.diadoc_service")
+    # ИСПРАВЛЕНО: порядок декораторов теперь строго соответствует порядку аргументов (снизу вверх)
+    @patch("app.services.digital_signature_service.digital_signature_service")
+    @patch("app.services.diadoc_service.diadoc_service")
     def test_send_act_with_real_act(
         self,
         mock_diadoc,
@@ -19,6 +20,8 @@ class TestDiadocRouteBodies:
         company,
         sample_contractor,
     ):
+        from unittest.mock import AsyncMock
+
         from app.models.finance import Act
 
         act = Act(
@@ -32,6 +35,8 @@ class TestDiadocRouteBodies:
         db_session.commit()
         db_session.refresh(act)
 
+        # Теперь это ТОЧНО применяется к diadoc_service
+        mock_diadoc.authenticate = AsyncMock(return_value="fake_token")
         mock_diadoc.send_act = AsyncMock(
             return_value={"message_id": "msg-1", "status": "sent"}
         )
@@ -42,8 +47,11 @@ class TestDiadocRouteBodies:
         )
         assert resp.status_code in (200, 404, 422, 500)
 
-    @patch("app.api.routes.shifts.diadoc.diadoc_service")
+    @patch("app.services.diadoc_service.diadoc_service")
     def test_bulk_send_acts(self, mock_diadoc, client, auth_headers):
+        from unittest.mock import AsyncMock
+
+        mock_diadoc.authenticate = AsyncMock(return_value="fake_token")
         mock_diadoc.send_act = AsyncMock(return_value={"message_id": "msg-1"})
         resp = client.post(
             "/api/v1/shifts/diadoc/bulk-send",
@@ -52,8 +60,11 @@ class TestDiadocRouteBodies:
         )
         assert resp.status_code in (200, 422, 500)
 
-    @patch("app.api.routes.shifts.diadoc.diadoc_service")
+    @patch("app.services.diadoc_service.diadoc_service")
     def test_refresh_statuses(self, mock_diadoc, client, auth_headers):
+        from unittest.mock import AsyncMock
+
+        mock_diadoc.authenticate = AsyncMock(return_value="fake_token")
         mock_diadoc.get_document_status = AsyncMock(
             return_value={"status": "delivered"}
         )
@@ -62,7 +73,7 @@ class TestDiadocRouteBodies:
         )
         assert resp.status_code in (200, 500)
 
-    @patch("app.api.routes.shifts.diadoc.digital_signature_service")
+    @patch("app.services.digital_signature_service.digital_signature_service")
     def test_verify_signature_route(
         self, mock_sign, client, auth_headers, db_session, company, sample_contractor
     ):
@@ -89,7 +100,7 @@ class TestDiadocRouteBodies:
 class TestMaxMessengerRouteBodies:
     """Cover max_messenger.py route handler bodies (lines 20-117, 126-133)."""
 
-    @patch("app.api.routes.shifts.max_messenger.max_messenger_service")
+    @patch("app.services.max_messenger_service.max_messenger_service")
     def test_webhook_message_processing(self, mock_svc, client, db_session, company):
         from app.models.auth import User
 
@@ -120,12 +131,12 @@ class TestMaxMessengerRouteBodies:
         )
         assert resp.status_code in (200, 400, 404, 422, 500)
 
-    @patch("app.api.routes.shifts.max_messenger.max_messenger_service")
+    @patch("app.services.max_messenger_service.max_messenger_service")
     def test_bind_link_generation(self, mock_svc, client, auth_headers):
         resp = client.get("/api/v1/shifts/max/bind-link", headers=auth_headers)
         assert resp.status_code in (200, 404, 405)
 
-    @patch("app.api.routes.shifts.max_messenger.max_messenger_service")
+    @patch("app.services.max_messenger_service.max_messenger_service")
     def test_bind_status_check(self, mock_svc, client, auth_headers):
         resp = client.get("/api/v1/shifts/max/bind-status", headers=auth_headers)
         assert resp.status_code in (200, 404, 405)

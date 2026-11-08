@@ -1,4 +1,4 @@
-﻿"""Сервис публичных API эндпоинтов."""
+"""Сервис публичных API эндпоинтов."""
 
 import logging
 from decimal import Decimal
@@ -642,7 +642,6 @@ class PublicService:
         for req in requests_list:
             cat_name = None
             if req.vehicle_category_id:
-
                 cat = db.get(Category, req.vehicle_category_id)
                 cat_name = cat.name if cat else None
 

@@ -1,4 +1,4 @@
-﻿"""MAX (VK) Bot API notification service с graceful degradation."""
+"""MAX (VK) Bot API notification service с graceful degradation."""
 
 import logging
 

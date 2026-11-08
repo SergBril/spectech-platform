@@ -1,4 +1,4 @@
-﻿"""Tests for payments, email, contractors, shifts routes - final coverage push."""
+"""Tests for payments, email, contractors, shifts routes - final coverage push."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -15,6 +16,7 @@ def auth_headers(auth_token):
 
 
 # ==================== PAYMENTS ====================
+
 
 class TestPaymentsRoutes:
     def test_list_payments(self, client, auth_headers):
@@ -32,6 +34,7 @@ class TestPaymentsRoutes:
 
 # ==================== EMAIL ====================
 
+
 class TestEmailRoutes:
     def test_email_logs(self, client, auth_headers):
         resp = client.get("/api/v1/email/logs", headers=auth_headers)
@@ -47,6 +50,7 @@ class TestEmailRoutes:
 
 
 # ==================== CONTRACTORS ====================
+
 
 class TestContractorsRoutes:
     def test_list_contractors(self, client, auth_headers):
@@ -74,11 +78,14 @@ class TestContractorsRoutes:
         assert resp.status_code in (200, 400, 403, 404, 422)
 
     def test_suggest_inn_validation(self, client, auth_headers):
-        resp = client.post("/api/v1/contractors/suggest-inn", json={}, headers=auth_headers)
+        resp = client.post(
+            "/api/v1/contractors/suggest-inn", json={}, headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 422)
 
 
 # ==================== SHIFTS ====================
+
 
 class TestShiftsRoutes:
     def test_shifts_alerts(self, client, auth_headers):

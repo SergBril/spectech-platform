@@ -1,4 +1,4 @@
-﻿"""Tests for GPS routes and mapix_sync_task coverage."""
+"""Tests for GPS routes and mapix_sync_task coverage."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -15,6 +16,7 @@ def auth_headers(auth_token):
 
 
 # ==================== GPS ROUTES ====================
+
 
 class TestGpsPointsImport:
     def test_import_validation(self, client, auth_headers):
@@ -52,15 +54,19 @@ class TestGpsProvidersVehicles:
         assert resp.status_code in (200, 403)
 
     def test_patch_not_found(self, client, auth_headers):
-        resp = client.patch("/api/v1/gps/providers/vehicles/99999", json={}, headers=auth_headers)
+        resp = client.patch(
+            "/api/v1/gps/providers/vehicles/99999", json={}, headers=auth_headers
+        )
         assert resp.status_code in (404, 422, 403)
 
 
 # ==================== MAPIX SYNC TASK ====================
 
+
 class TestMapixSyncTask:
     def test_sync_no_providers(self, db_session):
         from app.tasks.mapix_sync_task import sync_gps_positions
+
         # Should handle gracefully when no providers configured
         try:
             sync_gps_positions()

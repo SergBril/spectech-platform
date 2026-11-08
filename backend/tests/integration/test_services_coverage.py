@@ -1,4 +1,4 @@
-﻿"""Tests for services coverage improvement."""
+"""Tests for services coverage improvement."""
 
 from datetime import UTC
 

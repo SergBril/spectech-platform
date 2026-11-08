@@ -42,7 +42,9 @@ class InvoiceCreate(BaseModel):
     vat_amount: Decimal | None = Field(default=None, ge=0, decimal_places=2)
     total: Decimal | None = Field(default=None, ge=0, decimal_places=2)
     paid_amount: Decimal | None = Field(default=None, ge=0, decimal_places=2)
-    status: str | None = Field(default=None, description="draft, sent, paid, overdue, cancelled")
+    status: str | None = Field(
+        default=None, description="draft, sent, paid, overdue, cancelled"
+    )
 
     # Поля для НДС
     tax_system: str = Field(

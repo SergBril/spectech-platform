@@ -158,7 +158,6 @@ class TestAutoEscalateOverdue:
 
 
 class TestScheduler:
-
     @pytest.fixture(autouse=True)
     def _isolated_scheduler(self):
         from app.tasks.scheduler import scheduler

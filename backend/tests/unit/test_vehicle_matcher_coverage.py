@@ -252,13 +252,13 @@ class TestScoreVehicle:
         assert any("optimal" in m for m in matched)
 
 
-
 class TestVehicleMatcherEdgeCases:
     """Cover remaining uncovered lines."""
 
     def test_compatible_categories_with_children(self, mock_db):
         """Cover lines 176, 181: sibling + child categories."""
         from app.services.marketplace.vehicle_matcher import VehicleMatcherService
+
         svc = VehicleMatcherService()
 
         cat = MagicMock()
@@ -272,7 +272,8 @@ class TestVehicleMatcherEdgeCases:
 
         mock_db.get.return_value = cat
         mock_db.query.return_value.filter.return_value.all.side_effect = [
-            [sibling], [child],
+            [sibling],
+            [child],
         ]
 
         result = svc._get_compatible_categories(mock_db, cat_id=10)
@@ -283,6 +284,7 @@ class TestVehicleMatcherEdgeCases:
     def _make_score_setup(self, mock_db, vehicle_attrs, requirements=None):
         """Helper to set up _score_vehicle mocks."""
         from app.services.marketplace.vehicle_matcher import VehicleMatcherService
+
         svc = VehicleMatcherService()
 
         vehicle = MagicMock()
@@ -366,7 +368,6 @@ class TestVehicleMatcherEdgeCases:
         score, matched, missing = svc._score_vehicle(mock_db, vehicle, request)
         assert any("optimal" in m for m in matched)
 
-
     def test_score_gte_missing_attr(self, mock_db):
         """Cover lines 270-271: gte attr not found -> missing + score -= 10."""
         # No attributes at all for this vehicle
@@ -376,4 +377,6 @@ class TestVehicleMatcherEdgeCases:
         # db.get won't be called since no attrs
         score, matched, missing = svc._score_vehicle(mock_db, vehicle, request)
         assert any("Грузоподъёмность" in m for m in missing)
-        assert "Грузоподъёмность" in str(missing)  # Penalty applied but region bonus offsets
+        assert "Грузоподъёмность" in str(
+            missing
+        )  # Penalty applied but region bonus offsets

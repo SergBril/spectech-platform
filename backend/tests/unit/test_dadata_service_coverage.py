@@ -1,4 +1,5 @@
 """Tests for DaDataService - async-correct."""
+
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,7 +9,10 @@ import pytest
 @pytest.fixture
 def service():
     from app.services.dadata_service import DaDataService
-    with patch.dict(os.environ, {"DADATA_API_KEY": "test-key-123", "DADATA_TOKEN": "test-token"}):
+
+    with patch.dict(
+        os.environ, {"DADATA_API_KEY": "test-key-123", "DADATA_TOKEN": "test-token"}
+    ):
         return DaDataService()
 
 
@@ -18,7 +22,10 @@ class TestInit:
 
     def test_without_key(self):
         from app.services.dadata_service import DaDataService
-        with patch.dict(os.environ, {"DADATA_API_KEY": "", "DADATA_TOKEN": ""}, clear=False):
+
+        with patch.dict(
+            os.environ, {"DADATA_API_KEY": "", "DADATA_TOKEN": ""}, clear=False
+        ):
             svc = DaDataService()
         assert svc.api_key == ""
 
@@ -27,7 +34,10 @@ class TestSuggestPartyByInn:
     @pytest.mark.asyncio
     async def test_no_api_key(self):
         from app.services.dadata_service import DaDataService
-        with patch.dict(os.environ, {"DADATA_API_KEY": "", "DADATA_TOKEN": ""}, clear=False):
+
+        with patch.dict(
+            os.environ, {"DADATA_API_KEY": "", "DADATA_TOKEN": ""}, clear=False
+        ):
             svc = DaDataService()
         result = await svc.suggest_party_by_inn("1234567890")
         assert result is None
@@ -47,23 +57,27 @@ class TestSuggestPartyByInn:
         resp = MagicMock()
         resp.status_code = 200
         resp.json.return_value = {
-            "suggestions": [{
-                "data": {
-                    "name": {"full_with_opf": "OOO Test", "short_with_opf": "Test"},
-                    "inn": "1234567890",
-                    "kpp": "123456789",
-                    "address": {"value": "Moscow"},
-                    "finance": {"bank_name": "Sber", "bank_bik": "044525225"},
-                    "management": {"name": "Ivanov"},
+            "suggestions": [
+                {
+                    "data": {
+                        "name": {"full_with_opf": "OOO Test", "short_with_opf": "Test"},
+                        "inn": "1234567890",
+                        "kpp": "123456789",
+                        "address": {"value": "Moscow"},
+                        "finance": {"bank_name": "Sber", "bank_bik": "044525225"},
+                        "management": {"name": "Ivanov"},
+                    }
                 }
-            }]
+            ]
         }
         mock_client = AsyncMock()
         mock_client.post.return_value = resp
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.dadata_service.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "app.services.dadata_service.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await service.suggest_party_by_inn("1234567890")
         assert result is not None
         assert result["inn"] == "1234567890"
@@ -78,7 +92,9 @@ class TestSuggestPartyByInn:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.dadata_service.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "app.services.dadata_service.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await service.suggest_party_by_inn("1234567890")
         assert result is None
 
@@ -92,19 +108,24 @@ class TestSuggestPartyByInn:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.dadata_service.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "app.services.dadata_service.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await service.suggest_party_by_inn("1234567890")
         assert result is None
 
     @pytest.mark.asyncio
     async def test_timeout(self, service):
         import httpx
+
         mock_client = AsyncMock()
         mock_client.post.side_effect = httpx.TimeoutException("timeout")
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.dadata_service.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "app.services.dadata_service.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await service.suggest_party_by_inn("1234567890")
         assert result is None
 
@@ -115,7 +136,9 @@ class TestSuggestPartyByInn:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.dadata_service.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "app.services.dadata_service.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await service.suggest_party_by_inn("1234567890")
         assert result is None
 
@@ -124,9 +147,17 @@ class TestParsePartyData:
     def test_full_data(self, service):
         data = {
             "name": {"full_with_opf": "OOO Full", "short_with_opf": "Short"},
-            "inn": "123", "kpp": "456", "ogrn": "789", "okpo": "012",
+            "inn": "123",
+            "kpp": "456",
+            "ogrn": "789",
+            "okpo": "012",
             "address": {"value": "Addr"},
-            "finance": {"bank_name": "Bank", "bank_bik": "BIK", "bank_account": "ACC", "bank_correspondent_account": "CORR"},
+            "finance": {
+                "bank_name": "Bank",
+                "bank_bik": "BIK",
+                "bank_account": "ACC",
+                "bank_correspondent_account": "CORR",
+            },
             "management": {"name": "Boss", "post": "CEO"},
             "type": "LEGAL",
             "state": {"status": "ACTIVE"},
@@ -151,7 +182,10 @@ class TestSuggestBankByBik:
     @pytest.mark.asyncio
     async def test_no_api_key(self):
         from app.services.dadata_service import DaDataService
-        with patch.dict(os.environ, {"DADATA_API_KEY": "", "DADATA_TOKEN": ""}, clear=False):
+
+        with patch.dict(
+            os.environ, {"DADATA_API_KEY": "", "DADATA_TOKEN": ""}, clear=False
+        ):
             svc = DaDataService()
         result = await svc.suggest_bank_by_bik("044525225")
         assert result is None
@@ -166,21 +200,25 @@ class TestSuggestBankByBik:
         resp = MagicMock()
         resp.status_code = 200
         resp.json.return_value = {
-            "suggestions": [{
-                "data": {
-                    "name": {"short": "Sberbank"},
-                    "bik": "044525225",
-                    "correspondent_account": "30101810400000000225",
-                    "address": {"value": "Moscow"},
+            "suggestions": [
+                {
+                    "data": {
+                        "name": {"short": "Sberbank"},
+                        "bik": "044525225",
+                        "correspondent_account": "30101810400000000225",
+                        "address": {"value": "Moscow"},
+                    }
                 }
-            }]
+            ]
         }
         mock_client = AsyncMock()
         mock_client.post.return_value = resp
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.dadata_service.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "app.services.dadata_service.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await service.suggest_bank_by_bik("044525225")
         assert result is not None
         assert result["bik"] == "044525225"
@@ -194,7 +232,9 @@ class TestSuggestBankByBik:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.dadata_service.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "app.services.dadata_service.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await service.suggest_bank_by_bik("044525225")
         assert result is None
 
@@ -208,7 +248,9 @@ class TestSuggestBankByBik:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.dadata_service.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "app.services.dadata_service.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await service.suggest_bank_by_bik("044525225")
         assert result is None
 
@@ -219,6 +261,8 @@ class TestSuggestBankByBik:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.dadata_service.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "app.services.dadata_service.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await service.suggest_bank_by_bik("044525225")
         assert result is None

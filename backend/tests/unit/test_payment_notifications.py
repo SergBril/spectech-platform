@@ -23,7 +23,6 @@ class TestPaymentNotificationService:
                 new_callable=AsyncMock,
             ),
         ):
-
             mock_email.send_invoice_paid.return_value = True
             mock_tg.send_message = AsyncMock(return_value=True)
 
@@ -69,7 +68,6 @@ class TestPaymentNotificationService:
                 new_callable=AsyncMock,
             ),
         ):
-
             mock_email.send_invoice_paid.return_value = True
             mock_tg.send_message = AsyncMock(return_value=True)
 
@@ -109,7 +107,6 @@ class TestPaymentNotificationService:
             patch("app.services.payment_notifications.email_service") as mock_email,
             patch("app.services.payment_notifications.telegram_service") as mock_tg,
         ):
-
             mock_email.send_invoice_paid.side_effect = Exception("SMTP error")
             mock_tg.send_message = AsyncMock(return_value=True)
 
@@ -147,7 +144,6 @@ class TestPaymentNotificationService:
             patch("app.services.payment_notifications.email_service") as mock_email,
             patch("app.services.payment_notifications.telegram_service") as mock_tg,
         ):
-
             mock_email.send_invoice_paid.return_value = True
             mock_tg.send_message = AsyncMock(return_value=False)
 

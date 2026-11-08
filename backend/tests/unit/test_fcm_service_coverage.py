@@ -1,11 +1,10 @@
 """Coverage tests for fcm_service."""
+
 import sys
-from unittest.mock import AsyncMock, MagicMock, patch
+import types as _types
+from unittest.mock import MagicMock, patch
 
 import pytest
-
-
-import types as _types
 
 
 @pytest.fixture(autouse=True)
@@ -20,11 +19,17 @@ def mock_firebase():
     mock_messaging.send_each_for_multicast = MagicMock()
 
     mock_fb.credentials = mock_creds
-    mock_fb.messaging = mock_messaging  # Critical: 'from firebase_admin import messaging' uses this
+    mock_fb.messaging = (
+        mock_messaging  # Critical: 'from firebase_admin import messaging' uses this
+    )
     mock_fb.initialize_app = MagicMock(return_value=MagicMock())
 
     originals = {}
-    for mod_name in ["firebase_admin", "firebase_admin.credentials", "firebase_admin.messaging"]:
+    for mod_name in [
+        "firebase_admin",
+        "firebase_admin.credentials",
+        "firebase_admin.messaging",
+    ]:
         originals[mod_name] = sys.modules.get(mod_name)
 
     sys.modules["firebase_admin"] = mock_fb
@@ -45,6 +50,7 @@ class TestFCMServiceInit:
 
     def test_enabled_with_path(self):
         from app.services.fcm_service import FCMService
+
         with patch("app.core.config.settings") as mock_settings:
             mock_settings.FCM_CREDENTIALS_PATH = "/path/to/creds.json"
             svc = FCMService()
@@ -52,6 +58,7 @@ class TestFCMServiceInit:
 
     def test_disabled_without_path(self):
         from app.services.fcm_service import FCMService
+
         with patch("app.core.config.settings") as mock_settings:
             mock_settings.FCM_CREDENTIALS_PATH = ""
             svc = FCMService()
@@ -63,6 +70,7 @@ class TestGetApp:
 
     def test_returns_none_when_disabled(self):
         from app.services.fcm_service import FCMService
+
         with patch("app.core.config.settings") as mock_settings:
             mock_settings.FCM_CREDENTIALS_PATH = ""
             svc = FCMService()
@@ -70,6 +78,7 @@ class TestGetApp:
 
     def test_initializes_firebase(self, mock_firebase):
         from app.services.fcm_service import FCMService
+
         with patch("app.core.config.settings") as mock_settings:
             mock_settings.FCM_CREDENTIALS_PATH = "/path/to/creds.json"
             svc = FCMService()
@@ -82,6 +91,7 @@ class TestGetApp:
 
     def test_returns_cached_app(self):
         from app.services.fcm_service import FCMService
+
         with patch("app.core.config.settings") as mock_settings:
             mock_settings.FCM_CREDENTIALS_PATH = "/path/to/creds.json"
             svc = FCMService()
@@ -91,6 +101,7 @@ class TestGetApp:
 
     def test_init_failure_disables(self, mock_firebase):
         from app.services.fcm_service import FCMService
+
         with patch("app.core.config.settings") as mock_settings:
             mock_settings.FCM_CREDENTIALS_PATH = "/bad/path.json"
             svc = FCMService()
@@ -107,6 +118,7 @@ class TestSendToUser:
     @pytest.mark.asyncio
     async def test_stub_when_disabled(self):
         from app.services.fcm_service import FCMService
+
         with patch("app.core.config.settings") as mock_settings:
             mock_settings.FCM_CREDENTIALS_PATH = ""
             svc = FCMService()
@@ -116,6 +128,7 @@ class TestSendToUser:
     @pytest.mark.asyncio
     async def test_no_tokens_returns_false(self):
         from app.services.fcm_service import FCMService
+
         with patch("app.core.config.settings") as mock_settings:
             mock_settings.FCM_CREDENTIALS_PATH = "/creds.json"
             svc = FCMService()
@@ -129,24 +142,32 @@ class TestSendToUser:
     @pytest.mark.asyncio
     async def test_success_with_tokens(self, mock_firebase):
         from app.services.fcm_service import FCMService
+
         with patch("app.core.config.settings") as mock_settings:
             mock_settings.FCM_CREDENTIALS_PATH = "/creds.json"
             svc = FCMService()
         svc._app = MagicMock()
 
         mock_db = MagicMock()
-        mock_db.execute.return_value.scalars.return_value.all.return_value = ["token1", "token2"]
+        mock_db.execute.return_value.scalars.return_value.all.return_value = [
+            "token1",
+            "token2",
+        ]
 
         from types import SimpleNamespace
+
         mock_response = SimpleNamespace(success_count=2, failure_count=0)
         mock_firebase["messaging"].send_each_for_multicast.return_value = mock_response
 
-        result = await svc.send_to_user(1, "Title", "Body", data={"key": "val"}, db=mock_db)
+        result = await svc.send_to_user(
+            1, "Title", "Body", data={"key": "val"}, db=mock_db
+        )
         assert result is True
 
     @pytest.mark.asyncio
     async def test_send_error_returns_false(self, mock_firebase):
         from app.services.fcm_service import FCMService
+
         with patch("app.core.config.settings") as mock_settings:
             mock_settings.FCM_CREDENTIALS_PATH = "/creds.json"
             svc = FCMService()
@@ -155,7 +176,9 @@ class TestSendToUser:
         mock_db = MagicMock()
         mock_db.execute.return_value.scalars.return_value.all.return_value = ["token1"]
 
-        mock_firebase["messaging"].send_each_for_multicast.side_effect = Exception("FCM error")
+        mock_firebase["messaging"].send_each_for_multicast.side_effect = Exception(
+            "FCM error"
+        )
 
         result = await svc.send_to_user(1, "Title", "Body", db=mock_db)
         assert result is False
@@ -163,6 +186,7 @@ class TestSendToUser:
     @pytest.mark.asyncio
     async def test_no_db_no_tokens(self):
         from app.services.fcm_service import FCMService
+
         with patch("app.core.config.settings") as mock_settings:
             mock_settings.FCM_CREDENTIALS_PATH = "/creds.json"
             svc = FCMService()
@@ -176,4 +200,5 @@ class TestGlobalSingleton:
 
     def test_singleton_exists(self):
         from app.services.fcm_service import fcm_service
+
         assert fcm_service is not None

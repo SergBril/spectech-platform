@@ -1,4 +1,4 @@
-﻿"""Tests for PayoutService."""
+"""Tests for PayoutService."""
 
 from datetime import date
 from decimal import Decimal

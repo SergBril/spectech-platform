@@ -1,4 +1,5 @@
 """Coverage tests for minio_service."""
+
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -14,14 +15,17 @@ def mock_s3():
 
 @pytest.fixture
 def service(mock_s3):
-    with patch("app.services.minio_service.boto3") as mock_boto3, \
-         patch("app.services.minio_service.settings") as mock_settings:
+    with (
+        patch("app.services.minio_service.boto3") as mock_boto3,
+        patch("app.services.minio_service.settings") as mock_settings,
+    ):
         mock_boto3.client.return_value = mock_s3
         mock_settings.MINIO_ENDPOINT = "http://localhost:9000"
         mock_settings.MINIO_ROOT_USER = "minioadmin"
         mock_settings.MINIO_ROOT_PASSWORD = "minioadmin"
         mock_settings.MINIO_BUCKET = "test-bucket"
         from app.services.minio_service import MinIOService
+
         svc = MinIOService()
     svc.s3_client = mock_s3
     return svc
@@ -54,14 +58,20 @@ class TestUploadFile:
         assert result["content_type"] is None
 
     def test_client_error_raises(self, service, mock_s3):
-        mock_s3.put_object.side_effect = ClientError({"Error": {"Code": "500"}}, "PutObject")
-        file = SimpleNamespace(filename="test.pdf", content_type="application/pdf", file=BytesIO(b"data"))
+        mock_s3.put_object.side_effect = ClientError(
+            {"Error": {"Code": "500"}}, "PutObject"
+        )
+        file = SimpleNamespace(
+            filename="test.pdf", content_type="application/pdf", file=BytesIO(b"data")
+        )
         with pytest.raises(Exception, match="Не удалось загрузить"):
             service.upload_file(file)
 
     def test_unexpected_error_raises(self, service, mock_s3):
         mock_s3.put_object.side_effect = RuntimeError("unexpected")
-        file = SimpleNamespace(filename="test.pdf", content_type="application/pdf", file=BytesIO(b"data"))
+        file = SimpleNamespace(
+            filename="test.pdf", content_type="application/pdf", file=BytesIO(b"data")
+        )
         with pytest.raises(RuntimeError):
             service.upload_file(file)
 
@@ -70,13 +80,17 @@ class TestGetPresignedUrl:
     """Cover get_presigned_url (lines 70-85)."""
 
     def test_success(self, service, mock_s3):
-        mock_s3.generate_presigned_url.return_value = "http://localhost:9000/bucket/key?sig=abc"
+        mock_s3.generate_presigned_url.return_value = (
+            "http://localhost:9000/bucket/key?sig=abc"
+        )
         url = service.get_presigned_url("docs/file.pdf", expiration=7200)
         assert "sig=abc" in url
         mock_s3.generate_presigned_url.assert_called_once()
 
     def test_client_error_raises(self, service, mock_s3):
-        mock_s3.generate_presigned_url.side_effect = ClientError({"Error": {"Code": "404"}}, "Sign")
+        mock_s3.generate_presigned_url.side_effect = ClientError(
+            {"Error": {"Code": "404"}}, "Sign"
+        )
         with pytest.raises(ClientError):
             service.get_presigned_url("nonexistent.pdf")
 
@@ -89,7 +103,9 @@ class TestDeleteFile:
         mock_s3.delete_object.assert_called_once()
 
     def test_client_error_returns_false(self, service, mock_s3):
-        mock_s3.delete_object.side_effect = ClientError({"Error": {"Code": "500"}}, "Delete")
+        mock_s3.delete_object.side_effect = ClientError(
+            {"Error": {"Code": "500"}}, "Delete"
+        )
         assert service.delete_file("docs/file.pdf") is False
 
 
@@ -106,10 +122,16 @@ class TestCheckConnection:
 
     def test_head_bucket_success(self, service, mock_s3):
         mock_s3.head_bucket.return_value = {}
-        with patch.dict("os.environ", {}, clear=True), \
-             patch("sys.modules", {k: v for k, v in __import__("sys").modules.items() if k != "pytest"}):
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch(
+                "sys.modules",
+                {k: v for k, v in __import__("sys").modules.items() if k != "pytest"},
+            ),
+        ):
             # Remove pytest from modules to test real path
             import sys
+
             original = sys.modules.pop("pytest", None)
             try:
                 result = service.check_connection()
@@ -119,8 +141,11 @@ class TestCheckConnection:
         # May still skip due to other detection, but covers the code
 
     def test_head_bucket_fails(self, service, mock_s3):
-        mock_s3.head_bucket.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadBucket")
+        mock_s3.head_bucket.side_effect = ClientError(
+            {"Error": {"Code": "404"}}, "HeadBucket"
+        )
         import sys
+
         original = sys.modules.pop("pytest", None)
         try:
             with patch.dict("os.environ", {}, clear=True):
@@ -136,4 +161,5 @@ class TestGlobalSingleton:
 
     def test_exists(self):
         from app.services.minio_service import minio_service
+
         assert minio_service is not None

@@ -1,4 +1,4 @@
-﻿"""Tests for telematics_service and remaining alert_engine coverage."""
+"""Tests for telematics_service and remaining alert_engine coverage."""
 
 # ==================== TELEMATICS SERVICE ====================
 from datetime import UTC

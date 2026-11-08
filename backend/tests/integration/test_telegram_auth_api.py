@@ -1,4 +1,4 @@
-﻿"""Интеграционные тесты Telegram-привязки пользователя."""
+"""Интеграционные тесты Telegram-привязки пользователя."""
 
 from fastapi.testclient import TestClient
 

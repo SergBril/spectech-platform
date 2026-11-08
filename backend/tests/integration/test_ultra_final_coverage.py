@@ -1,4 +1,4 @@
-﻿"""Ultra-final coverage push - files and email_bulk routes."""
+"""Ultra-final coverage push - files and email_bulk routes."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -15,6 +16,7 @@ def auth_headers(auth_token):
 
 
 # ==================== FILES ====================
+
 
 class TestFilesRoutes:
     def test_upload_validation(self, client, auth_headers):
@@ -43,6 +45,7 @@ class TestFilesRoutes:
 
 
 # ==================== EMAIL BULK ====================
+
 
 class TestEmailBulkFull:
     def test_bulk_send_validation(self, client, auth_headers):

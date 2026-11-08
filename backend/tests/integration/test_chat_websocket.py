@@ -45,7 +45,10 @@ class TestChatWebSocket:
                 print(f"🔍 Received data: {data}")  # Логируем
                 assert data["type"] == "message"
                 assert data["data"]["message_type"] == "system_event"
-                assert "присоединился" in data["data"]["content"] or "user_joined" in data["data"]["content"]
+                assert (
+                    "присоединился" in data["data"]["content"]
+                    or "user_joined" in data["data"]["content"]
+                )
             except Exception as e:
                 raise AssertionError(f"Failed to receive system join message: {e}")
 

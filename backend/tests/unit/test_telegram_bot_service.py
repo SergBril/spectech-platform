@@ -1,4 +1,4 @@
-﻿"""Tests for TelegramBotService."""
+"""Tests for TelegramBotService."""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch

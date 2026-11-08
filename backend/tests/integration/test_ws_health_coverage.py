@@ -1,4 +1,4 @@
-﻿"""Tests for websocket_manager async methods and health endpoints."""
+"""Tests for websocket_manager async methods and health endpoints."""
 
 import pytest
 

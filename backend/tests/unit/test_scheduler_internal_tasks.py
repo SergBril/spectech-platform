@@ -1,4 +1,4 @@
-﻿"""Tests for scheduler internal tasks with real function extraction."""
+"""Tests for scheduler internal tasks with real function extraction."""
 
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 

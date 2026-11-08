@@ -1,4 +1,4 @@
-﻿"""Tests for finance_service."""
+"""Tests for finance_service."""
 
 from decimal import Decimal
 from types import SimpleNamespace
@@ -350,15 +350,15 @@ class TestGenerateAndSaveInvoicePdf:
         mock_db.commit.assert_called()
 
 
-
-
 class TestFinanceServiceFinalBranches:
     """Cover remaining 9 uncovered lines."""
 
     def test_invalid_tax_system_fallback(self, mock_db):
         """Cover lines 76-77: invalid tax_system falls back to OSNO."""
-        from app.services.finance_service import calculate_invoice_totals
         from decimal import Decimal
+
+        from app.services.finance_service import calculate_invoice_totals
+
         invoice = MagicMock()
         invoice.tax_system = "INVALID_TAX_SYSTEM"
         invoice.vat_rate = Decimal("20")
@@ -374,8 +374,9 @@ class TestFinanceServiceFinalBranches:
 
     def test_invoice_email_no_contact_email(self, mock_db):
         """Cover line 206: warning when client contact_email not found."""
+
         from app.services.finance_service import create_invoice
-        from decimal import Decimal
+
         user = MagicMock()
         user.id = 1
         user.company_id = 7
@@ -398,8 +399,13 @@ class TestFinanceServiceFinalBranches:
         mock_db.scalar.return_value = None  # no duplicate
         mock_db.get.return_value = client_no_email
 
-        with patch("app.services.finance_service.email_service") as mock_email, \
-             patch("app.services.finance_service.generate_document_number", return_value="INV-001"):
+        with (
+            patch("app.services.finance_service.email_service") as mock_email,
+            patch(
+                "app.services.finance_service.generate_document_number",
+                return_value="INV-001",
+            ),
+        ):
             result = create_invoice(mock_db, payload, user)
 
         # Email should NOT have been sent (no contact_email)
@@ -408,6 +414,7 @@ class TestFinanceServiceFinalBranches:
     def test_act_pdf_contractor_from_request(self, mock_db):
         """Cover line 316: contractor fetched from request.client_id."""
         from app.services.finance_service import generate_and_save_act_pdf
+
         act = MagicMock()
         act.document_number = "ACT-001"
         act.contractor_id = None
@@ -420,22 +427,31 @@ class TestFinanceServiceFinalBranches:
         # db.get sequence: act(found), request(found), contractor(from request.client_id)
         mock_db.get.side_effect = [act, request, contractor]
 
-        with patch("app.services.finance_service.generate_act_pdf", return_value=b"pdf"), \
-             patch("app.services.finance_service.storage_service") as mock_storage, \
-             patch("app.services.finance_service.UploadedFile"):
-            mock_storage.upload_bytes.return_value = {"path": "/tmp/act.pdf", "size": 100}
+        with (
+            patch("app.services.finance_service.generate_act_pdf", return_value=b"pdf"),
+            patch("app.services.finance_service.storage_service") as mock_storage,
+            patch("app.services.finance_service.UploadedFile"),
+        ):
+            mock_storage.upload_bytes.return_value = {
+                "path": "/tmp/act.pdf",
+                "size": 100,
+            }
             result = generate_and_save_act_pdf(act_id=1, db=mock_db)
         # contractor should have been fetched from request.client_id
 
     def test_invoice_pdf_generation_exception(self, mock_db):
         """Cover lines 417-422: exception in auto-generate PDF returns None."""
         from app.services.finance_service import generate_and_save_invoice_pdf
+
         invoice = MagicMock()
         invoice.document_number = "INV-001"
         invoice.company_id = 7
         invoice.created_by = 1
         mock_db.get.return_value = invoice
 
-        with patch("app.services.finance_service.generate_act_pdf", side_effect=Exception("PDF error")):
+        with patch(
+            "app.services.finance_service.generate_act_pdf",
+            side_effect=Exception("PDF error"),
+        ):
             result = generate_and_save_invoice_pdf(invoice_id=1, db=mock_db)
         assert result is None

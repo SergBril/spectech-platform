@@ -1,4 +1,4 @@
-﻿"""Конфигурация приложения через pydantic-settings."""
+"""Конфигурация приложения через pydantic-settings."""
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict

@@ -1,4 +1,4 @@
-﻿"""Batch coverage tests for catalog, auth, alert_engine."""
+"""Batch coverage tests for catalog, auth, alert_engine."""
 
 from datetime import UTC
 

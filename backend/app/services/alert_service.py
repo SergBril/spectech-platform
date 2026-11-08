@@ -13,8 +13,8 @@ async def check_and_notify_idle_vehicles(
     db: Session, company_id: int, target_date: date_type
 ):
     """Проверить простаивающую технику и отправить уведомления."""
-    from app.models.shift import ShiftTask
     from app.models.catalog import Vehicle
+    from app.models.shift import ShiftTask
 
     vehicles = (
         db.execute(select(Vehicle).where(Vehicle.company_id == company_id))

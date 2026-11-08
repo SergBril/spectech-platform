@@ -1,4 +1,4 @@
-﻿"""Coverage push - invoices and map routes."""
+"""Coverage push - invoices and map routes."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -15,6 +16,7 @@ def auth_headers(auth_token):
 
 
 # ==================== INVOICES ====================
+
 
 class TestInvoicesRoutes:
     def test_list_invoices(self, client, auth_headers):
@@ -50,11 +52,14 @@ class TestInvoicesRoutes:
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_regenerate_pdf_not_found(self, client, auth_headers):
-        resp = client.post("/api/v1/invoices/99999/regenerate-pdf", headers=auth_headers)
+        resp = client.post(
+            "/api/v1/invoices/99999/regenerate-pdf", headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
 
 # ==================== MAP ====================
+
 
 class TestMapRoutes:
     def test_vehicle_positions(self, client, auth_headers):
@@ -62,7 +67,10 @@ class TestMapRoutes:
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_vehicle_track_not_found(self, client, auth_headers):
-        resp = client.get("/api/v1/map/vehicles/99999/track?date_from=2025-01-01&date_to=2025-01-02", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/map/vehicles/99999/track?date_from=2025-01-01&date_to=2025-01-02",
+            headers=auth_headers,
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_geofences_list(self, client, auth_headers):
@@ -70,7 +78,9 @@ class TestMapRoutes:
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_create_geofence_validation(self, client, auth_headers):
-        resp = client.post("/api/v1/map/geofences", json={"name": "test"}, headers=auth_headers)
+        resp = client.post(
+            "/api/v1/map/geofences", json={"name": "test"}, headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
 
     def test_update_geofence_not_found(self, client, auth_headers):
@@ -90,5 +100,7 @@ class TestMapRoutes:
         assert resp.status_code in (200, 400, 403, 404, 405, 422)
 
     def test_providers_request(self, client, auth_headers):
-        resp = client.post("/api/v1/map/providers/request", json={}, headers=auth_headers)
+        resp = client.post(
+            "/api/v1/map/providers/request", json={}, headers=auth_headers
+        )
         assert resp.status_code in (200, 400, 403, 404, 405, 422)

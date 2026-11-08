@@ -1,4 +1,4 @@
-﻿"""Tests for export and maintenance API coverage improvement."""
+"""Tests for export and maintenance API coverage improvement."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -15,6 +16,7 @@ def auth_headers(auth_token):
 
 
 # ==================== EXPORT ====================
+
 
 class TestExportInvoicesCsv:
     """Cover export invoices CSV (line 114)."""
@@ -41,6 +43,7 @@ class TestExportRequestReport:
 
 
 # ==================== MAINTENANCE ====================
+
 
 class TestMaintenanceList:
     """Cover maintenance list endpoint."""
@@ -82,7 +85,9 @@ class TestMaintenanceOrderPdf:
         assert resp.status_code in (401, 404, 500)
 
     def test_order_act_pdf_not_found(self, client, auth_headers):
-        resp = client.get("/api/v1/maintenance/orders/99999/act/pdf", headers=auth_headers)
+        resp = client.get(
+            "/api/v1/maintenance/orders/99999/act/pdf", headers=auth_headers
+        )
         assert resp.status_code in (401, 404, 500)
 
 
@@ -90,5 +95,7 @@ class TestMaintenanceSendAct:
     """Cover send act endpoint (line 690)."""
 
     def test_send_act_not_found(self, client, auth_headers):
-        resp = client.post("/api/v1/maintenance/orders/99999/send-act", headers=auth_headers)
+        resp = client.post(
+            "/api/v1/maintenance/orders/99999/send-act", headers=auth_headers
+        )
         assert resp.status_code in (404, 400, 500)

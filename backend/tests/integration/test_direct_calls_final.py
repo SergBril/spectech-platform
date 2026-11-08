@@ -1,4 +1,4 @@
-﻿"""Direct function calls to hit internal branches - final 60% push."""
+"""Direct function calls to hit internal branches - final 60% push."""
 
 import pytest
 

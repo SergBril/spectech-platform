@@ -1,4 +1,4 @@
-﻿"""Tests for acts, admin, benchmark, auth routes - big coverage boost."""
+"""Tests for acts, admin, benchmark, auth routes - big coverage boost."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -15,6 +16,7 @@ def auth_headers(auth_token):
 
 
 # ==================== ACTS ====================
+
 
 class TestActsRoutes:
     def test_act_pdf_not_found(self, client, auth_headers):
@@ -35,6 +37,7 @@ class TestActsRoutes:
 
 
 # ==================== ADMIN ====================
+
 
 class TestAdminRoutes:
     def test_stats(self, client, auth_headers):
@@ -64,6 +67,7 @@ class TestAdminRoutes:
 
 # ==================== BENCHMARK ====================
 
+
 class TestBenchmarkRoutes:
     def test_fast(self, client, auth_headers):
         resp = client.get("/api/v1/benchmark/fast", headers=auth_headers)
@@ -87,6 +91,7 @@ class TestBenchmarkRoutes:
 
 
 # ==================== AUTH ====================
+
 
 class TestAuthRoutes:
     def test_register_validation(self, client):

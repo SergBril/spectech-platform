@@ -1,4 +1,4 @@
-﻿"""Tests for invoice_service, digital_signature, bank_integration, websocket_manager, email_tasks."""
+"""Tests for invoice_service, digital_signature, bank_integration, websocket_manager, email_tasks."""
 
 import pytest
 

@@ -1,4 +1,5 @@
 """Coverage tests for request_service."""
+
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -14,6 +15,7 @@ def mock_db():
 @pytest.fixture
 def service(mock_db):
     from app.services.request_service import RequestService
+
     return RequestService(mock_db)
 
 
@@ -22,6 +24,7 @@ class TestRequestServiceError:
 
     def test_init(self):
         from app.services.request_service import RequestServiceError
+
         err = RequestServiceError(404, "Not found")
         assert err.status_code == 404
         assert err.detail == "Not found"
@@ -34,6 +37,7 @@ class TestAssignVehicle:
     @pytest.mark.asyncio
     async def test_request_not_found(self, service, mock_db):
         from app.services.request_service import RequestServiceError
+
         mock_db.get.return_value = None
         with pytest.raises(RequestServiceError) as exc_info:
             await service.assign_vehicle(1, 1, None, 7, 1)
@@ -42,6 +46,7 @@ class TestAssignVehicle:
     @pytest.mark.asyncio
     async def test_request_wrong_company(self, service, mock_db):
         from app.services.request_service import RequestServiceError
+
         request = SimpleNamespace(company_id=99, status="open")
         mock_db.get.return_value = request
         with pytest.raises(RequestServiceError) as exc_info:
@@ -51,6 +56,7 @@ class TestAssignVehicle:
     @pytest.mark.asyncio
     async def test_request_closed(self, service, mock_db):
         from app.services.request_service import RequestServiceError
+
         request = SimpleNamespace(company_id=7, status="closed")
         mock_db.get.return_value = request
         with pytest.raises(RequestServiceError) as exc_info:
@@ -60,14 +66,17 @@ class TestAssignVehicle:
     @pytest.mark.asyncio
     async def test_vehicle_not_found(self, service, mock_db):
         from app.services.request_service import RequestServiceError
+
         request = SimpleNamespace(company_id=7, status="open")
         vehicle = None
         call_count = {"n": 0}
+
         def mock_get(model, obj_id):
             call_count["n"] += 1
             if call_count["n"] == 1:
                 return request
             return vehicle
+
         mock_db.get.side_effect = mock_get
         with pytest.raises(RequestServiceError) as exc_info:
             await service.assign_vehicle(1, 1, None, 7, 1)
@@ -76,12 +85,15 @@ class TestAssignVehicle:
     @pytest.mark.asyncio
     async def test_vehicle_unavailable_status(self, service, mock_db):
         from app.services.request_service import RequestServiceError
+
         request = SimpleNamespace(company_id=7, status="open")
         vehicle = SimpleNamespace(company_id=7, status="repair", name="KAMAZ")
         call_count = {"n": 0}
+
         def mock_get(model, obj_id):
             call_count["n"] += 1
             return request if call_count["n"] == 1 else vehicle
+
         mock_db.get.side_effect = mock_get
         with pytest.raises(RequestServiceError) as exc_info:
             await service.assign_vehicle(1, 1, None, 7, 1)
@@ -90,14 +102,26 @@ class TestAssignVehicle:
     @pytest.mark.asyncio
     async def test_marketplace_commission_not_agreed(self, service, mock_db):
         from app.services.request_service import RequestServiceError
-        request = SimpleNamespace(company_id=7, status="open", source_channel="marketplace")
-        vehicle = SimpleNamespace(company_id=7, status="active", name="KAMAZ", marketplace_commission_agreed=False)
+
+        request = SimpleNamespace(
+            company_id=7, status="open", source_channel="marketplace"
+        )
+        vehicle = SimpleNamespace(
+            company_id=7,
+            status="active",
+            name="KAMAZ",
+            marketplace_commission_agreed=False,
+        )
         call_count = {"n": 0}
+
         def mock_get(model, obj_id):
             call_count["n"] += 1
             return request if call_count["n"] == 1 else vehicle
+
         mock_db.get.side_effect = mock_get
-        with patch("app.services.request_service.create_notification", new_callable=AsyncMock):
+        with patch(
+            "app.services.request_service.create_notification", new_callable=AsyncMock
+        ):
             with pytest.raises(RequestServiceError) as exc_info:
                 await service.assign_vehicle(1, 1, None, 7, 1)
             assert exc_info.value.status_code == 403
@@ -105,13 +129,27 @@ class TestAssignVehicle:
     @pytest.mark.asyncio
     async def test_invalid_dates(self, service, mock_db):
         from app.services.request_service import RequestServiceError
+
         now = datetime.now(UTC)
-        request = SimpleNamespace(company_id=7, status="open", source_channel=None, planned_start=now + timedelta(days=2), planned_end=now + timedelta(days=1))
-        vehicle = SimpleNamespace(company_id=7, status="active", name="KAMAZ", marketplace_commission_agreed=True)
+        request = SimpleNamespace(
+            company_id=7,
+            status="open",
+            source_channel=None,
+            planned_start=now + timedelta(days=2),
+            planned_end=now + timedelta(days=1),
+        )
+        vehicle = SimpleNamespace(
+            company_id=7,
+            status="active",
+            name="KAMAZ",
+            marketplace_commission_agreed=True,
+        )
         call_count = {"n": 0}
+
         def mock_get(model, obj_id):
             call_count["n"] += 1
             return request if call_count["n"] == 1 else vehicle
+
         mock_db.get.side_effect = mock_get
         with pytest.raises(RequestServiceError) as exc_info:
             await service.assign_vehicle(1, 1, None, 7, 1)
@@ -120,14 +158,30 @@ class TestAssignVehicle:
     @pytest.mark.asyncio
     async def test_overlapping_assignment(self, service, mock_db):
         from app.services.request_service import RequestServiceError
+
         now = datetime.now(UTC)
-        request = SimpleNamespace(company_id=7, status="open", source_channel=None, planned_start=now, planned_end=now + timedelta(days=1))
-        vehicle = SimpleNamespace(company_id=7, status="active", name="KAMAZ", marketplace_commission_agreed=True)
-        overlap = SimpleNamespace(request_id=99, planned_start=now, planned_end=now + timedelta(days=1))
+        request = SimpleNamespace(
+            company_id=7,
+            status="open",
+            source_channel=None,
+            planned_start=now,
+            planned_end=now + timedelta(days=1),
+        )
+        vehicle = SimpleNamespace(
+            company_id=7,
+            status="active",
+            name="KAMAZ",
+            marketplace_commission_agreed=True,
+        )
+        overlap = SimpleNamespace(
+            request_id=99, planned_start=now, planned_end=now + timedelta(days=1)
+        )
         call_count = {"n": 0}
+
         def mock_get(model, obj_id):
             call_count["n"] += 1
             return request if call_count["n"] == 1 else vehicle
+
         mock_db.get.side_effect = mock_get
         mock_db.scalar.return_value = overlap
         with pytest.raises(RequestServiceError) as exc_info:
@@ -137,13 +191,27 @@ class TestAssignVehicle:
     @pytest.mark.asyncio
     async def test_idempotent_existing_assignment(self, service, mock_db):
         now = datetime.now(UTC)
-        request = SimpleNamespace(id=1, company_id=7, status="open", source_channel=None, planned_start=now, planned_end=now + timedelta(days=1))
-        vehicle = SimpleNamespace(company_id=7, status="active", name="KAMAZ", marketplace_commission_agreed=True)
+        request = SimpleNamespace(
+            id=1,
+            company_id=7,
+            status="open",
+            source_channel=None,
+            planned_start=now,
+            planned_end=now + timedelta(days=1),
+        )
+        vehicle = SimpleNamespace(
+            company_id=7,
+            status="active",
+            name="KAMAZ",
+            marketplace_commission_agreed=True,
+        )
         existing = SimpleNamespace(id=5)
         call_count = {"n": 0}
+
         def mock_get(model, obj_id):
             call_count["n"] += 1
             return request if call_count["n"] == 1 else vehicle
+
         mock_db.get.side_effect = mock_get
         mock_db.scalar.return_value = None
         q = MagicMock()
@@ -155,12 +223,30 @@ class TestAssignVehicle:
     @pytest.mark.asyncio
     async def test_success_with_operator(self, service, mock_db):
         now = datetime.now(UTC)
-        request = SimpleNamespace(id=1, company_id=7, status="open", source_channel=None, planned_start=now, planned_end=now + timedelta(days=1), work_type="earthworks", assigned_vehicle_id=None, assigned_operator_id=None)
-        vehicle = SimpleNamespace(id=1, company_id=7, status="active", name="KAMAZ", marketplace_commission_agreed=True)
+        request = SimpleNamespace(
+            id=1,
+            company_id=7,
+            status="open",
+            source_channel=None,
+            planned_start=now,
+            planned_end=now + timedelta(days=1),
+            work_type="earthworks",
+            assigned_vehicle_id=None,
+            assigned_operator_id=None,
+        )
+        vehicle = SimpleNamespace(
+            id=1,
+            company_id=7,
+            status="active",
+            name="KAMAZ",
+            marketplace_commission_agreed=True,
+        )
         call_count = {"n": 0}
+
         def mock_get(model, obj_id):
             call_count["n"] += 1
             return request if call_count["n"] == 1 else vehicle
+
         mock_db.get.side_effect = mock_get
         mock_db.scalar.return_value = None
         q_assign = MagicMock()
@@ -168,27 +254,50 @@ class TestAssignVehicle:
         q_shift = MagicMock()
         q_shift.filter.return_value.first.return_value = None
         call_q = {"n": 0}
+
         def mock_query(model):
             call_q["n"] += 1
             return q_assign if call_q["n"] == 1 else q_shift
+
         mock_db.query.side_effect = mock_query
         mock_db.flush.side_effect = lambda: None
         mock_db.refresh.side_effect = lambda r: None
-        with patch("app.services.request_service.create_notification", new_callable=AsyncMock):
-            result = await service.assign_vehicle(1, 1, operator_id=5, company_id=7, user_id=1)
+        with patch(
+            "app.services.request_service.create_notification", new_callable=AsyncMock
+        ):
+            result = await service.assign_vehicle(
+                1, 1, operator_id=5, company_id=7, user_id=1
+            )
         mock_db.commit.assert_called()
 
     @pytest.mark.asyncio
     async def test_integrity_error(self, service, mock_db):
         from sqlalchemy.exc import IntegrityError
+
         from app.services.request_service import RequestServiceError
+
         now = datetime.now(UTC)
-        request = SimpleNamespace(id=1, company_id=7, status="open", source_channel=None, planned_start=now, planned_end=now + timedelta(days=1))
-        vehicle = SimpleNamespace(id=1, company_id=7, status="active", name="KAMAZ", marketplace_commission_agreed=True)
+        request = SimpleNamespace(
+            id=1,
+            company_id=7,
+            status="open",
+            source_channel=None,
+            planned_start=now,
+            planned_end=now + timedelta(days=1),
+        )
+        vehicle = SimpleNamespace(
+            id=1,
+            company_id=7,
+            status="active",
+            name="KAMAZ",
+            marketplace_commission_agreed=True,
+        )
         call_count = {"n": 0}
+
         def mock_get(model, obj_id):
             call_count["n"] += 1
             return request if call_count["n"] == 1 else vehicle
+
         mock_db.get.side_effect = mock_get
         mock_db.scalar.return_value = None
         q = MagicMock()
@@ -203,19 +312,32 @@ class TestAssignVehicle:
 
 def _make_full_request(**kwargs):
     defaults = {
-        "id": 1, "company_id": 7, "client_id": 10, "status": "open",
-        "priority": "normal", "work_type": "earthworks",
-        "object_address": "Moscow", "vehicle_category_id": 1,
-        "assigned_vehicle_id": None, "assigned_operator_id": None,
+        "id": 1,
+        "company_id": 7,
+        "client_id": 10,
+        "status": "open",
+        "priority": "normal",
+        "work_type": "earthworks",
+        "object_address": "Moscow",
+        "vehicle_category_id": 1,
+        "assigned_vehicle_id": None,
+        "assigned_operator_id": None,
         "assigned_owner_id": None,
         "planned_start": datetime(2026, 11, 1, tzinfo=UTC),
         "planned_end": datetime(2026, 11, 2, tzinfo=UTC),
-        "actual_start": None, "actual_end": None,
-        "shift_duration_hours": None, "client_rate": None,
-        "rate_type": None, "estimated_amount": None, "final_amount": None,
+        "actual_start": None,
+        "actual_end": None,
+        "shift_duration_hours": None,
+        "client_rate": None,
+        "rate_type": None,
+        "estimated_amount": None,
+        "final_amount": None,
         "created_at": datetime(2026, 10, 1, tzinfo=UTC),
-        "updated_at": None, "source_channel": None, "comment": None,
-        "created_by": 1, "request_type": None,
+        "updated_at": None,
+        "source_channel": None,
+        "comment": None,
+        "created_by": 1,
+        "request_type": None,
     }
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -240,12 +362,20 @@ class TestListRequests:
     def test_with_all_filters(self, service, mock_db):
         mock_db.scalars.return_value.all.return_value = []
         result = service.list_requests(
-            [7], status_filter="open", priority="high",
-            client_id=10, vehicle_category_id=1,
-            assigned_vehicle_id=5, work_type="crane",
-            search="test", date_from="2026-01-01",
-            date_to="2026-12-31", sort_by="created_at",
-            sort_order="asc", limit=10, offset=0,
+            [7],
+            status_filter="open",
+            priority="high",
+            client_id=10,
+            vehicle_category_id=1,
+            assigned_vehicle_id=5,
+            work_type="crane",
+            search="test",
+            date_from="2026-01-01",
+            date_to="2026-12-31",
+            sort_by="created_at",
+            sort_order="asc",
+            limit=10,
+            offset=0,
         )
         assert isinstance(result, list)
 
@@ -256,18 +386,24 @@ class TestGetRequestTimeline:
     def test_success(self, service, mock_db):
         request = _make_full_request()
         log = SimpleNamespace(
-            id=1, from_status="open", to_status="assigned",
-            changed_by_user_id=1, comment="test",
-            created_at=datetime.now(UTC), changed_at=datetime.now(UTC),
+            id=1,
+            from_status="open",
+            to_status="assigned",
+            changed_by_user_id=1,
+            comment="test",
+            created_at=datetime.now(UTC),
+            changed_at=datetime.now(UTC),
         )
         user = SimpleNamespace(full_name="Admin", email="a@test.com")
 
         call_count = {"n": 0}
+
         def mock_get(model, obj_id):
             call_count["n"] += 1
             if call_count["n"] == 1:
                 return request
             return user
+
         mock_db.get.side_effect = mock_get
 
         # First execute: access check (scalar_one_or_none)
@@ -281,11 +417,13 @@ class TestGetRequestTimeline:
         logs_result.scalars.return_value = logs_scalars
 
         exec_calls = []
+
         def mock_execute(stmt):
             exec_calls.append(stmt)
             if len(exec_calls) == 1:
                 return access_result
             return logs_result
+
         mock_db.execute.side_effect = mock_execute
 
         result = service.get_request_timeline(1, 7)
@@ -294,6 +432,7 @@ class TestGetRequestTimeline:
 
     def test_not_found_raises(self, service, mock_db):
         from app.services.request_service import RequestServiceError
+
         mock_db.get.return_value = None
         with pytest.raises(RequestServiceError) as exc_info:
             service.get_request_timeline(999, 7)
@@ -301,6 +440,7 @@ class TestGetRequestTimeline:
 
     def test_access_denied_raises(self, service, mock_db):
         from app.services.request_service import RequestServiceError
+
         request = _make_full_request(company_id=99)
         mock_db.get.return_value = request
         access_result = MagicMock()
@@ -316,6 +456,7 @@ class TestUpdateRequestPut:
 
     def test_not_found_raises(self, service, mock_db):
         from app.services.request_service import RequestServiceError
+
         mock_db.get.return_value = None
         with pytest.raises(RequestServiceError) as exc_info:
             service.update_request_put(1, 7, 1, work_type="crane")
@@ -323,6 +464,7 @@ class TestUpdateRequestPut:
 
     def test_assigned_raises(self, service, mock_db):
         from app.services.request_service import RequestServiceError
+
         req = _make_full_request(status="assigned")
         mock_db.get.return_value = req
         with pytest.raises(RequestServiceError) as exc_info:
@@ -349,6 +491,8 @@ class TestExportMethods:
 
     def test_export_excel(self, service, mock_db):
         mock_db.scalars.return_value.all.return_value = []
-        with patch("app.utils.export_utils.export_requests_excel", return_value=b"xlsx"):
+        with patch(
+            "app.utils.export_utils.export_requests_excel", return_value=b"xlsx"
+        ):
             result = service.export_requests_excel(company_ids=[7])
         assert result == b"xlsx"

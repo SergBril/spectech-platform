@@ -1,4 +1,4 @@
-﻿"""Tests for MarketplaceRouteService."""
+"""Tests for MarketplaceRouteService."""
 
 from datetime import UTC, datetime
 from types import SimpleNamespace

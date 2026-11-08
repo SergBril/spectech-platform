@@ -1,4 +1,4 @@
-﻿"""Tests for rbac_service coverage improvement."""
+"""Tests for rbac_service coverage improvement."""
 
 from types import SimpleNamespace
 

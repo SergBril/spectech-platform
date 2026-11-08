@@ -1,4 +1,4 @@
-﻿"""Главный файл приложения FastAPI."""
+"""Главный файл приложения FastAPI."""
 
 from dotenv import load_dotenv
 

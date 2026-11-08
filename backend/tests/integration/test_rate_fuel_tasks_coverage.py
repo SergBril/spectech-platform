@@ -1,4 +1,4 @@
-﻿"""Tests for rate_limiter, fuel_service remaining, pdf_tasks coverage."""
+"""Tests for rate_limiter, fuel_service remaining, pdf_tasks coverage."""
 
 import pytest
 

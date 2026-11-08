@@ -1,4 +1,4 @@
-﻿"""Tests for WialonAdapter GPS provider."""
+"""Tests for WialonAdapter GPS provider."""
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch

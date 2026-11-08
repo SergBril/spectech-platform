@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 
 logger = logging.getLogger("spectech.auth")
 import secrets
@@ -55,6 +55,7 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
     # Audit log login
     try:
         from app.services.audit_service import log_action
+
         log_action(db, user.id, "login", "user", user.id)
     except Exception:
         pass

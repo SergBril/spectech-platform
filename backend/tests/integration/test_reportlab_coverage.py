@@ -1,4 +1,4 @@
-﻿"""Tests for reportlab_pdf_generator coverage improvement."""
+"""Tests for reportlab_pdf_generator coverage improvement."""
 
 from datetime import UTC
 

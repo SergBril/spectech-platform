@@ -1,4 +1,4 @@
-﻿"""Unit-тесты утилит экспорта заявок (PDF/Excel)."""
+"""Unit-тесты утилит экспорта заявок (PDF/Excel)."""
 
 from datetime import UTC, datetime
 

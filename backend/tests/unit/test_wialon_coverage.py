@@ -1,7 +1,7 @@
 """Tests for WialonAdapter GPS provider - async-correct."""
-import json
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -9,11 +9,14 @@ import pytest
 @pytest.fixture
 def adapter():
     from app.services.gps_providers.wialon import WialonAdapter
-    return WialonAdapter({
-        "api_url": "https://test-api.wialon.com",
-        "login": "testuser",
-        "password": "testpass",
-    })
+
+    return WialonAdapter(
+        {
+            "api_url": "https://test-api.wialon.com",
+            "login": "testuser",
+            "password": "testpass",
+        }
+    )
 
 
 def _make_client(get_response=None, post_response=None):
@@ -119,17 +122,23 @@ class TestFetchPositions:
         units_resp.json.return_value = {"items": [{"id": 100}]}
         msg_resp = MagicMock(status_code=200)
         msg_resp.json.return_value = {
-            "messages": [{
-                "pos": {"y": 55.75, "x": 37.61, "s": 600, "c": 1800},
-                "t": 1700000000, "uid": 100
-            }]
+            "messages": [
+                {
+                    "pos": {"y": 55.75, "x": 37.61, "s": 600, "c": 1800},
+                    "t": 1700000000,
+                    "uid": 100,
+                }
+            ]
         }
         mock_client = AsyncMock()
         mock_client.post.side_effect = [units_resp, msg_resp]
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client,
+        ):
             result = await adapter._fetch_positions()
         assert len(result) == 1
         assert result[0].latitude == 55.75
@@ -144,7 +153,10 @@ class TestFetchPositions:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client,
+        ):
             result = await adapter._fetch_positions()
         assert result == []
 
@@ -160,7 +172,10 @@ class TestFetchPositions:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client,
+        ):
             result = await adapter._fetch_positions()
         assert result == []
 
@@ -178,7 +193,10 @@ class TestFetchPositions:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client,
+        ):
             result = await adapter._fetch_positions()
         assert result == []
 
@@ -196,7 +214,10 @@ class TestFetchPositions:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client,
+        ):
             result = await adapter._fetch_positions()
         assert isinstance(result, list)
 
@@ -205,27 +226,41 @@ class TestGetLastPosition:
     @pytest.mark.asyncio
     async def test_impl_returns_first(self, adapter):
         mock_point = MagicMock()
-        with patch.object(adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[mock_point]):
+        with patch.object(
+            adapter,
+            "_fetch_positions",
+            new_callable=AsyncMock,
+            return_value=[mock_point],
+        ):
             result = await adapter._get_last_position_impl()
         assert result == mock_point
 
     @pytest.mark.asyncio
     async def test_impl_empty(self, adapter):
-        with patch.object(adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]):
+        with patch.object(
+            adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]
+        ):
             result = await adapter._get_last_position_impl()
         assert result is None
 
     @pytest.mark.asyncio
     async def test_with_db(self, adapter):
         mock_db = MagicMock()
-        with patch.object(adapter, "_logged_call", new_callable=AsyncMock, return_value=None) as mock_lc:
+        with patch.object(
+            adapter, "_logged_call", new_callable=AsyncMock, return_value=None
+        ) as mock_lc:
             result = await adapter.get_last_position(db=mock_db, company_id=7)
         mock_lc.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_without_db(self, adapter):
         mock_point = MagicMock()
-        with patch.object(adapter, "_get_last_position_impl", new_callable=AsyncMock, return_value=mock_point):
+        with patch.object(
+            adapter,
+            "_get_last_position_impl",
+            new_callable=AsyncMock,
+            return_value=mock_point,
+        ):
             result = await adapter.get_last_position()
         assert result == mock_point
 
@@ -234,20 +269,33 @@ class TestGetAllPositions:
     @pytest.mark.asyncio
     async def test_async(self, adapter):
         mock_points = [MagicMock()]
-        with patch.object(adapter, "_fetch_positions", new_callable=AsyncMock, return_value=mock_points):
+        with patch.object(
+            adapter,
+            "_fetch_positions",
+            new_callable=AsyncMock,
+            return_value=mock_points,
+        ):
             result = await adapter.get_all_positions()
         assert result == mock_points
 
     def test_sync_no_loop(self, adapter):
-        with patch.object(adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]), \
-             patch("asyncio.run", return_value=[]):
+        with (
+            patch.object(
+                adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]
+            ),
+            patch("asyncio.run", return_value=[]),
+        ):
             result = adapter.get_all_positions_sync()
         assert isinstance(result, list)
 
     def test_sync_with_running_loop(self, adapter):
-        with patch.object(adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]), \
-             patch("asyncio.run", side_effect=RuntimeError("already running")), \
-             patch("concurrent.futures.ThreadPoolExecutor") as MockExec:
+        with (
+            patch.object(
+                adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]
+            ),
+            patch("asyncio.run", side_effect=RuntimeError("already running")),
+            patch("concurrent.futures.ThreadPoolExecutor") as MockExec,
+        ):
             mock_future = MagicMock()
             mock_future.result.return_value = []
             inst = MagicMock()
@@ -267,18 +315,26 @@ class TestGetTrack:
         units_resp.json.return_value = {"items": [{"id": 100}]}
         msg_resp = MagicMock(status_code=200)
         msg_resp.json.return_value = {
-            "messages": [{
-                "pos": {"y": 55.75, "x": 37.61, "s": 500, "c": 900},
-                "t": 1700000000, "uid": 100
-            }]
+            "messages": [
+                {
+                    "pos": {"y": 55.75, "x": 37.61, "s": 500, "c": 900},
+                    "t": 1700000000,
+                    "uid": 100,
+                }
+            ]
         }
         mock_client = AsyncMock()
         mock_client.post.side_effect = [units_resp, msg_resp]
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
-            result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client,
+        ):
+            result = await adapter.get_track(
+                datetime(2026, 11, 1), datetime(2026, 11, 2)
+            )
         assert len(result) == 1
 
     @pytest.mark.asyncio
@@ -291,8 +347,13 @@ class TestGetTrack:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
-            result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client,
+        ):
+            result = await adapter.get_track(
+                datetime(2026, 11, 1), datetime(2026, 11, 2)
+            )
         assert result == []
 
     @pytest.mark.asyncio
@@ -303,9 +364,14 @@ class TestGetTrack:
         mock_client.post.side_effect = Exception("network fail")
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client,
+        ):
             try:
-                result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
+                result = await adapter.get_track(
+                    datetime(2026, 11, 1), datetime(2026, 11, 2)
+                )
             except Exception:
                 result = []
         assert result == []
@@ -321,27 +387,37 @@ class TestTestConnection:
         resp.json.return_value = {"eid": "tok"}
         mock_client.get.return_value = resp
 
-        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client,
+        ):
             result = await adapter._test_connection_impl()
         assert result is True
 
     @pytest.mark.asyncio
     async def test_impl_failure(self, adapter):
-        with patch("app.services.gps_providers.wialon.create_retry_client", side_effect=Exception("fail")):
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            side_effect=Exception("fail"),
+        ):
             result = await adapter._test_connection_impl()
         assert result is False
 
     @pytest.mark.asyncio
     async def test_with_db(self, adapter):
         mock_db = MagicMock()
-        with patch.object(adapter, "_logged_call", new_callable=AsyncMock, return_value=True) as mock_lc:
+        with patch.object(
+            adapter, "_logged_call", new_callable=AsyncMock, return_value=True
+        ) as mock_lc:
             result = await adapter.test_connection(db=mock_db, company_id=7)
         mock_lc.assert_called_once()
         assert result is True
 
     @pytest.mark.asyncio
     async def test_without_db(self, adapter):
-        with patch.object(adapter, "_test_connection_impl", new_callable=AsyncMock, return_value=True):
+        with patch.object(
+            adapter, "_test_connection_impl", new_callable=AsyncMock, return_value=True
+        ):
             result = await adapter.test_connection()
         assert result is True
 
@@ -349,14 +425,17 @@ class TestTestConnection:
 class TestInit:
     def test_default_api_url(self):
         from app.services.gps_providers.wialon import WialonAdapter
+
         a = WialonAdapter({"login": "u", "password": "p"})
         assert "wialon.com" in a.api_url
 
     def test_custom_api_url_trailing_slash(self):
         from app.services.gps_providers.wialon import WialonAdapter
-        a = WialonAdapter({"api_url": "https://custom.wialon.com/", "login": "u", "password": "p"})
-        assert not a.api_url.endswith("/")
 
+        a = WialonAdapter(
+            {"api_url": "https://custom.wialon.com/", "login": "u", "password": "p"}
+        )
+        assert not a.api_url.endswith("/")
 
 
 class TestGetTrackEdgeCases:
@@ -375,8 +454,13 @@ class TestGetTrackEdgeCases:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
-            result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client,
+        ):
+            result = await adapter.get_track(
+                datetime(2026, 11, 1), datetime(2026, 11, 2)
+            )
         assert result == []
 
     @pytest.mark.asyncio
@@ -394,6 +478,11 @@ class TestGetTrackEdgeCases:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.services.gps_providers.wialon.create_retry_client", return_value=mock_client):
-            result = await adapter.get_track(datetime(2026, 11, 1), datetime(2026, 11, 2))
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client,
+        ):
+            result = await adapter.get_track(
+                datetime(2026, 11, 1), datetime(2026, 11, 2)
+            )
         assert isinstance(result, list)

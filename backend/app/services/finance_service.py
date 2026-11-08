@@ -120,7 +120,9 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
         subtotal = _get_field(payload, "subtotal") or Decimal("0.00")
         vat_rate = _get_field(payload, "vat_rate", Decimal("20.00"))
         vat_amount = _get_field(payload, "vat_amount") or (
-            (subtotal * vat_rate / Decimal("100")).quantize(Decimal("0.01")) if subtotal else Decimal("0.00")
+            (subtotal * vat_rate / Decimal("100")).quantize(Decimal("0.01"))
+            if subtotal
+            else Decimal("0.00")
         )
         total = _get_field(payload, "total") or (subtotal + vat_amount)
         paid_amount = _get_field(payload, "paid_amount") or Decimal("0.00")

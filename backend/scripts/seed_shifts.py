@@ -1,4 +1,4 @@
-﻿"""Seed script for shift tasks and reports."""
+"""Seed script for shift tasks and reports."""
 
 import random
 import time

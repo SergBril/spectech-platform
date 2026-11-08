@@ -1,4 +1,4 @@
-﻿"""Tests for WeeklyDigestService."""
+"""Tests for WeeklyDigestService."""
 
 from datetime import date
 from types import SimpleNamespace
@@ -119,7 +119,6 @@ class TestSendWeeklyDigest:
             patch.object(WeeklyDigestService, "_get_overdue_invoices", return_value=[]),
             patch.object(WeeklyDigestService, "_find_accountants", return_value=[]),
         ):
-
             result = WeeklyDigestService.send_weekly_digest(mock_db, 1)
 
         assert result["success"] is True
@@ -146,7 +145,6 @@ class TestSendWeeklyDigest:
             ),
             patch("app.services.weekly_digest_service.email_service") as mock_email,
         ):
-
             mock_email.send_email.return_value = True
             result = WeeklyDigestService.send_weekly_digest(mock_db, 1)
 

@@ -1,4 +1,4 @@
-﻿"""make email_logs.company_id nullable
+"""make email_logs.company_id nullable
 
 Revision ID: c8d9e0f1a2b3
 Revises: b7c8d9e0f1a2

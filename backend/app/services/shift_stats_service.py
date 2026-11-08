@@ -2,10 +2,9 @@
 
 import logging
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
-from fastapi import HTTPException
 
 from app.models.auth import User
 from app.models.bank_statement import BankTransaction
@@ -947,7 +946,9 @@ class ShiftStatsService:
             emp = db.get(Employee, profile.employee_contractor_id)
             if emp and emp.user_id:
                 u = db.get(User, emp.user_id)
-                driver_name = u.full_name if u else f"Driver#{profile.employee_contractor_id}"
+                driver_name = (
+                    u.full_name if u else f"Driver#{profile.employee_contractor_id}"
+                )
             else:
                 driver_name = f"Driver#{profile.employee_contractor_id}"
 

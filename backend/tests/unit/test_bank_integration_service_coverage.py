@@ -1,8 +1,6 @@
 """Coverage tests for bank_integration_service."""
+
 from unittest.mock import MagicMock, patch
-
-
-from unittest.mock import MagicMock, patch, patch
 
 import pytest
 
@@ -10,6 +8,7 @@ import pytest
 @pytest.fixture
 def service():
     from app.services.bank_integration_service import BankIntegrationService
+
     return BankIntegrationService()
 
 
@@ -86,8 +85,6 @@ class TestParseCsv:
         result = service.parse_csv("")
         assert result == []
 
-
-
     def test_csv_parse_error_returns_empty(self, service):
         """Cover except branch in parse_csv (lines 79-80)."""
         # Pass an object that breaks io.StringIO to trigger except
@@ -95,20 +92,39 @@ class TestParseCsv:
             result = service.parse_csv("any,csv,data")
         assert result == []
 
+
 class TestSyncPaymentsToDb:
     """Cover sync_payments_to_db (lines 90-138)."""
 
     def test_creates_new(self, service):
         db = MagicMock()
         db.execute.return_value.scalar_one_or_none.return_value = None
-        payments = [{"doc_number": "1", "doc_date": "06.11.2026", "payer_inn": "7701",
-                      "payer_name": "A", "payer_account": "407", "payee_inn": "7702",
-                      "payee_name": "B", "payee_account": "408", "amount": 1000.0,
-                      "purpose": "Test", "status": "processed"}]
+        payments = [
+            {
+                "doc_number": "1",
+                "doc_date": "06.11.2026",
+                "payer_inn": "7701",
+                "payer_name": "A",
+                "payer_account": "407",
+                "payee_inn": "7702",
+                "payee_name": "B",
+                "payee_account": "408",
+                "amount": 1000.0,
+                "purpose": "Test",
+                "status": "processed",
+            }
+        ]
 
         mock_txn_class = MagicMock()
-        with patch.dict("sys.modules", {"app.models.bank": MagicMock(BankTransaction=mock_txn_class)}), \
-             patch("app.services.bank_integration_service.select", return_value=MagicMock()):
+        with (
+            patch.dict(
+                "sys.modules",
+                {"app.models.bank": MagicMock(BankTransaction=mock_txn_class)},
+            ),
+            patch(
+                "app.services.bank_integration_service.select", return_value=MagicMock()
+            ),
+        ):
             result = service.sync_payments_to_db(db, 7, payments)
 
         assert result["created"] == 1
@@ -120,14 +136,32 @@ class TestSyncPaymentsToDb:
         db = MagicMock()
         existing = MagicMock()
         db.execute.return_value.scalar_one_or_none.return_value = existing
-        payments = [{"doc_number": "1", "doc_date": "06.11.2026", "payer_inn": "7701",
-                      "payer_name": "A", "payer_account": "407", "payee_inn": "7702",
-                      "payee_name": "B", "payee_account": "408", "amount": 1000.0,
-                      "purpose": "Test", "status": "processed"}]
+        payments = [
+            {
+                "doc_number": "1",
+                "doc_date": "06.11.2026",
+                "payer_inn": "7701",
+                "payer_name": "A",
+                "payer_account": "407",
+                "payee_inn": "7702",
+                "payee_name": "B",
+                "payee_account": "408",
+                "amount": 1000.0,
+                "purpose": "Test",
+                "status": "processed",
+            }
+        ]
 
         mock_txn_class = MagicMock()
-        with patch.dict("sys.modules", {"app.models.bank": MagicMock(BankTransaction=mock_txn_class)}), \
-             patch("app.services.bank_integration_service.select", return_value=MagicMock()):
+        with (
+            patch.dict(
+                "sys.modules",
+                {"app.models.bank": MagicMock(BankTransaction=mock_txn_class)},
+            ),
+            patch(
+                "app.services.bank_integration_service.select", return_value=MagicMock()
+            ),
+        ):
             result = service.sync_payments_to_db(db, 7, payments)
 
         assert result["created"] == 0
@@ -140,16 +174,19 @@ class TestGetText:
 
     def test_found_with_text(self, service):
         from xml.etree.ElementTree import fromstring
+
         root = fromstring("<root><tag>value</tag></root>")
         assert service._get_text(root, "tag") == "value"
 
     def test_not_found(self, service):
         from xml.etree.ElementTree import fromstring
+
         root = fromstring("<root></root>")
         assert service._get_text(root, "missing") == ""
 
     def test_empty_text(self, service):
         from xml.etree.ElementTree import fromstring
+
         root = fromstring("<root><tag></tag></root>")
         assert service._get_text(root, "tag") == ""
 
@@ -157,4 +194,5 @@ class TestGetText:
 class TestGlobalSingleton:
     def test_exists(self):
         from app.services.bank_integration_service import bank_integration_service
+
         assert bank_integration_service is not None

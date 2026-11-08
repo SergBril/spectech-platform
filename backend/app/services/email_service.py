@@ -1,4 +1,4 @@
-﻿"""Email service для отправки уведомлений через SMTP."""
+"""Email service для отправки уведомлений через SMTP."""
 
 import logging
 import smtplib

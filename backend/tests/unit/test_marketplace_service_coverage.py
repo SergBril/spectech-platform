@@ -1,7 +1,7 @@
 """Coverage tests for marketplace_service."""
-from datetime import date, datetime, timedelta
+
+from datetime import date, datetime
 from decimal import Decimal
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,6 +17,7 @@ class TestPublishVehicle:
 
     def test_success(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.id = 1
         vehicle.company_id = 7
@@ -26,8 +27,11 @@ class TestPublishVehicle:
         vehicle.name = "KAMAZ"
         mock_db.get.return_value = vehicle
         result = MarketplaceService.publish_vehicle(
-            mock_db, vehicle_id=1, company_id=7,
-            hourly_rate=Decimal("1500"), description="Test",
+            mock_db,
+            vehicle_id=1,
+            company_id=7,
+            hourly_rate=Decimal("1500"),
+            description="Test",
         )
         assert vehicle.is_available_for_rent is True
         assert vehicle.marketplace_commission_agreed is True
@@ -36,30 +40,40 @@ class TestPublishVehicle:
 
     def test_vehicle_not_found(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         mock_db.get.return_value = None
         with pytest.raises(ValueError, match="not found"):
-            MarketplaceService.publish_vehicle(mock_db, vehicle_id=999, company_id=7, hourly_rate=Decimal("100"))
+            MarketplaceService.publish_vehicle(
+                mock_db, vehicle_id=999, company_id=7, hourly_rate=Decimal("100")
+            )
 
     def test_wrong_company(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.company_id = 99
         vehicle.is_deleted = False
         mock_db.get.return_value = vehicle
         with pytest.raises(ValueError, match="another company"):
-            MarketplaceService.publish_vehicle(mock_db, vehicle_id=1, company_id=7, hourly_rate=Decimal("100"))
+            MarketplaceService.publish_vehicle(
+                mock_db, vehicle_id=1, company_id=7, hourly_rate=Decimal("100")
+            )
 
     def test_deleted_vehicle(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.company_id = 7
         vehicle.is_deleted = True
         mock_db.get.return_value = vehicle
         with pytest.raises(ValueError, match="deleted"):
-            MarketplaceService.publish_vehicle(mock_db, vehicle_id=1, company_id=7, hourly_rate=Decimal("100"))
+            MarketplaceService.publish_vehicle(
+                mock_db, vehicle_id=1, company_id=7, hourly_rate=Decimal("100")
+            )
 
     def test_no_rates(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.company_id = 7
         vehicle.is_deleted = False
@@ -71,6 +85,7 @@ class TestPublishVehicle:
 
     def test_existing_vehicle_rate(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.company_id = 7
         vehicle.is_deleted = False
@@ -84,6 +99,7 @@ class TestPublishVehicle:
 
     def test_with_all_params(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.company_id = 7
         vehicle.is_deleted = False
@@ -92,10 +108,16 @@ class TestPublishVehicle:
         vehicle.name = "KAMAZ"
         mock_db.get.return_value = vehicle
         result = MarketplaceService.publish_vehicle(
-            mock_db, vehicle_id=1, company_id=7,
-            hourly_rate=Decimal("1500"), shift_rate=Decimal("12000"),
-            downtime_hourly_rate=Decimal("500"), description="Full",
-            photos=["url1"], base_location_lat=55.75, base_location_lon=37.62,
+            mock_db,
+            vehicle_id=1,
+            company_id=7,
+            hourly_rate=Decimal("1500"),
+            shift_rate=Decimal("12000"),
+            downtime_hourly_rate=Decimal("500"),
+            description="Full",
+            photos=["url1"],
+            base_location_lat=55.75,
+            base_location_lon=37.62,
         )
         assert vehicle.downtime_hourly_rate == Decimal("500")
         assert vehicle.base_location_lat == 55.75
@@ -106,23 +128,28 @@ class TestUnpublishVehicle:
 
     def test_success(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.id = 1
         vehicle.company_id = 7
         vehicle.is_available_for_rent = True
         mock_db.get.return_value = vehicle
-        result = MarketplaceService.unpublish_vehicle(mock_db, vehicle_id=1, company_id=7)
+        result = MarketplaceService.unpublish_vehicle(
+            mock_db, vehicle_id=1, company_id=7
+        )
         assert vehicle.is_available_for_rent is False
         mock_db.commit.assert_called()
 
     def test_not_found(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         mock_db.get.return_value = None
         with pytest.raises(ValueError):
             MarketplaceService.unpublish_vehicle(mock_db, vehicle_id=999, company_id=7)
 
     def test_wrong_company(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.company_id = 99
         mock_db.get.return_value = vehicle
@@ -135,30 +162,38 @@ class TestUpdateListing:
 
     def test_success(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.company_id = 7
         vehicle.is_available_for_rent = True
         vehicle.name = "KAMAZ"
         mock_db.get.return_value = vehicle
         result = MarketplaceService.update_listing(
-            mock_db, vehicle_id=1, company_id=7,
-            hourly_rate=Decimal("2000"), description="Updated",
+            mock_db,
+            vehicle_id=1,
+            company_id=7,
+            hourly_rate=Decimal("2000"),
+            description="Updated",
         )
         mock_db.commit.assert_called()
 
     def test_not_found(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         mock_db.get.return_value = None
         with pytest.raises(ValueError):
             MarketplaceService.update_listing(mock_db, vehicle_id=999, company_id=7)
 
     def test_wrong_company(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.company_id = 99
         mock_db.get.return_value = vehicle
         with pytest.raises(ValueError, match="another company"):
-            MarketplaceService.update_listing(mock_db, vehicle_id=1, company_id=7, hourly_rate=Decimal("100"))
+            MarketplaceService.update_listing(
+                mock_db, vehicle_id=1, company_id=7, hourly_rate=Decimal("100")
+            )
 
 
 class TestSearchVehicles:
@@ -166,6 +201,7 @@ class TestSearchVehicles:
 
     def test_empty(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         mock_scalars = MagicMock()
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
@@ -174,15 +210,23 @@ class TestSearchVehicles:
 
     def test_with_all_filters(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         mock_scalars = MagicMock()
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
         result = MarketplaceService.search_vehicles(
-            mock_db, category_id=1, search="kama",
-            min_hourly_rate=1000, max_hourly_rate=5000,
-            lat=55.75, lon=37.62, radius_km=50,
-            available_from=date(2026, 12, 1), available_to=date(2026, 12, 5),
-            limit=10, offset=0,
+            mock_db,
+            category_id=1,
+            search="kama",
+            min_hourly_rate=1000,
+            max_hourly_rate=5000,
+            lat=55.75,
+            lon=37.62,
+            radius_km=50,
+            available_from=date(2026, 12, 1),
+            available_to=date(2026, 12, 5),
+            limit=10,
+            offset=0,
         )
         assert isinstance(result, list)
 
@@ -192,6 +236,7 @@ class TestGetVehicleDetails:
 
     def test_found(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.is_available_for_rent = True
         vehicle.is_deleted = False
@@ -201,12 +246,14 @@ class TestGetVehicleDetails:
 
     def test_not_found(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         mock_db.get.return_value = None
         result = MarketplaceService.get_vehicle_details(mock_db, vehicle_id=999)
         assert result is None
 
     def test_not_available(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.is_available_for_rent = False
         vehicle.is_deleted = False
@@ -220,16 +267,21 @@ class TestGetAvailabilityCalendar:
 
     def test_empty(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         mock_scalars = MagicMock()
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
         result = MarketplaceService.get_availability_calendar(
-            mock_db, vehicle_id=1, from_date=date(2026, 11, 1), to_date=date(2026, 11, 30),
+            mock_db,
+            vehicle_id=1,
+            from_date=date(2026, 11, 1),
+            to_date=date(2026, 11, 30),
         )
         assert isinstance(result, list)
 
     def test_default_dates(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         mock_scalars = MagicMock()
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
@@ -242,6 +294,7 @@ class TestCreateRequestFromListing:
 
     def test_success(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.id = 1
         vehicle.company_id = 7
@@ -255,22 +308,32 @@ class TestCreateRequestFromListing:
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
         result = MarketplaceService.create_request_from_listing(
-            mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
-            work_type="excavation", planned_start=datetime(2026, 12, 1),
-            planned_end=datetime(2026, 12, 5), comment="Need excavator",
+            mock_db,
+            vehicle_id=1,
+            client_contractor_id=5,
+            company_id=5,
+            work_type="excavation",
+            planned_start=datetime(2026, 12, 1),
+            planned_end=datetime(2026, 12, 5),
+            comment="Need excavator",
         )
         mock_db.add.assert_called()
         mock_db.commit.assert_called()
 
     def test_vehicle_not_available(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.is_available_for_rent = False
         mock_db.get.return_value = vehicle
         with pytest.raises(ValueError, match="not available"):
             MarketplaceService.create_request_from_listing(
-                mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
-                work_type="test", planned_start=datetime(2026, 12, 1),
+                mock_db,
+                vehicle_id=1,
+                client_contractor_id=5,
+                company_id=5,
+                work_type="test",
+                planned_start=datetime(2026, 12, 1),
                 planned_end=datetime(2026, 12, 5),
             )
 
@@ -280,19 +343,26 @@ class TestFilterAvailable:
 
     def test_empty_ids(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
-        result = MarketplaceService._filter_available(mock_db, [], date(2026, 12, 1), date(2026, 12, 5))
+
+        result = MarketplaceService._filter_available(
+            mock_db, [], date(2026, 12, 1), date(2026, 12, 5)
+        )
         assert result == set()
 
     def test_all_available(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         mock_scalars = MagicMock()
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
-        result = MarketplaceService._filter_available(mock_db, [1, 2, 3], date(2026, 12, 1), date(2026, 12, 5))
+        result = MarketplaceService._filter_available(
+            mock_db, [1, 2, 3], date(2026, 12, 1), date(2026, 12, 5)
+        )
         assert result == {1, 2, 3}
 
     def test_some_busy(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         rental = MagicMock()
         item = MagicMock()
         item.vehicle_id = 2
@@ -300,7 +370,9 @@ class TestFilterAvailable:
         mock_scalars = MagicMock()
         mock_scalars.all.return_value = [rental]
         mock_db.scalars.return_value = mock_scalars
-        result = MarketplaceService._filter_available(mock_db, [1, 2, 3], date(2026, 12, 1), date(2026, 12, 5))
+        result = MarketplaceService._filter_available(
+            mock_db, [1, 2, 3], date(2026, 12, 1), date(2026, 12, 5)
+        )
         assert result == {1, 3}
 
 
@@ -309,14 +381,15 @@ class TestHaversine:
 
     def test_same_point(self):
         from app.services.marketplace_service import MarketplaceService
+
         result = MarketplaceService._haversine(55.75, 37.62, 55.75, 37.62)
         assert result == 0.0
 
     def test_different_points(self):
         from app.services.marketplace_service import MarketplaceService
+
         result = MarketplaceService._haversine(55.75, 37.62, 59.93, 30.32)
         assert result > 0
-
 
 
 class TestAvailabilityCalendarWithRentals:
@@ -324,6 +397,7 @@ class TestAvailabilityCalendarWithRentals:
 
     def test_with_busy_dates(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         rental = MagicMock()
         rental.start_date = datetime(2026, 11, 5)
         rental.end_date = datetime(2026, 11, 7)
@@ -336,7 +410,10 @@ class TestAvailabilityCalendarWithRentals:
         mock_scalars.all.return_value = [rental]
         mock_db.scalars.return_value = mock_scalars
         result = MarketplaceService.get_availability_calendar(
-            mock_db, vehicle_id=1, from_date=date(2026, 11, 1), to_date=date(2026, 11, 30),
+            mock_db,
+            vehicle_id=1,
+            from_date=date(2026, 11, 1),
+            to_date=date(2026, 11, 30),
         )
         assert isinstance(result, list)
         # Should have some busy dates
@@ -349,16 +426,22 @@ class TestCreateRequestExtraBranches:
 
     def test_vehicle_not_found(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         mock_db.get.return_value = None
         with pytest.raises(ValueError, match="not found"):
             MarketplaceService.create_request_from_listing(
-                mock_db, vehicle_id=999, client_contractor_id=5, company_id=5,
-                work_type="test", planned_start=datetime(2026, 12, 1),
+                mock_db,
+                vehicle_id=999,
+                client_contractor_id=5,
+                company_id=5,
+                work_type="test",
+                planned_start=datetime(2026, 12, 1),
                 planned_end=datetime(2026, 12, 5),
             )
 
     def test_not_available_period(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.id = 1
         vehicle.is_available_for_rent = True
@@ -373,8 +456,12 @@ class TestCreateRequestExtraBranches:
         mock_db.scalars.return_value = mock_scalars
         with pytest.raises(ValueError, match="not available for the selected period"):
             MarketplaceService.create_request_from_listing(
-                mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
-                work_type="test", planned_start=datetime(2026, 12, 1),
+                mock_db,
+                vehicle_id=1,
+                client_contractor_id=5,
+                company_id=5,
+                work_type="test",
+                planned_start=datetime(2026, 12, 1),
                 planned_end=datetime(2026, 12, 5),
             )
 
@@ -385,6 +472,7 @@ class TestNotifyOwnerNewRequest:
     @pytest.mark.asyncio
     async def test_success(self):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.name = "KAMAZ"
         request = MagicMock()
@@ -396,14 +484,17 @@ class TestNotifyOwnerNewRequest:
         # email_service is imported inside the function via local import
         with patch("app.services.email_service.email_service") as mock_email:
             await MarketplaceService._notify_owner_new_request(
-                vehicle=vehicle, request=request,
-                owner_name="Ivan", owner_email="ivan@test.com",
+                vehicle=vehicle,
+                request=request,
+                owner_name="Ivan",
+                owner_email="ivan@test.com",
             )
             mock_email.send_email.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_email_failure(self):
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.name = "KAMAZ"
         request = MagicMock()
@@ -416,10 +507,11 @@ class TestNotifyOwnerNewRequest:
             mock_email.send_email.side_effect = Exception("SMTP error")
             # Should not raise, just log error
             await MarketplaceService._notify_owner_new_request(
-                vehicle=vehicle, request=request,
-                owner_name="Ivan", owner_email="ivan@test.com",
+                vehicle=vehicle,
+                request=request,
+                owner_name="Ivan",
+                owner_email="ivan@test.com",
             )
-
 
 
 class TestCalendarItemSkip:
@@ -427,6 +519,7 @@ class TestCalendarItemSkip:
 
     def test_mixed_vehicle_items(self, mock_db):
         from app.services.marketplace_service import MarketplaceService
+
         # Rental has items for vehicle 1 AND vehicle 99
         rental = MagicMock()
         rental.start_date = datetime(2026, 11, 5)
@@ -442,7 +535,10 @@ class TestCalendarItemSkip:
         mock_scalars.all.return_value = [rental]
         mock_db.scalars.return_value = mock_scalars
         result = MarketplaceService.get_availability_calendar(
-            mock_db, vehicle_id=1, from_date=date(2026, 11, 1), to_date=date(2026, 11, 30),
+            mock_db,
+            vehicle_id=1,
+            from_date=date(2026, 11, 1),
+            to_date=date(2026, 11, 30),
         )
         busy = [d for d in result if not d["available"]]
         assert len(busy) == 3  # Only vehicle 1 dates marked busy
@@ -454,6 +550,7 @@ class TestCreateRequestNotifyBranches:
     def test_notify_with_owner_and_loop(self, mock_db):
         """Cover line 393: loop.create_task called successfully."""
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.id = 1
         vehicle.is_available_for_rent = True
@@ -473,8 +570,12 @@ class TestCreateRequestNotifyBranches:
         mock_loop = MagicMock()
         with patch("asyncio.get_running_loop", return_value=mock_loop):
             result = MarketplaceService.create_request_from_listing(
-                mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
-                work_type="excavation", planned_start=datetime(2026, 12, 1),
+                mock_db,
+                vehicle_id=1,
+                client_contractor_id=5,
+                company_id=5,
+                work_type="excavation",
+                planned_start=datetime(2026, 12, 1),
                 planned_end=datetime(2026, 12, 5),
             )
         mock_loop.create_task.assert_called_once()
@@ -483,6 +584,7 @@ class TestCreateRequestNotifyBranches:
     def test_notify_no_event_loop(self, mock_db):
         """Cover line 403: RuntimeError when no event loop."""
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.id = 1
         vehicle.is_available_for_rent = True
@@ -498,10 +600,17 @@ class TestCreateRequestNotifyBranches:
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
 
-        with patch("asyncio.get_running_loop", side_effect=RuntimeError("no running event loop")):
+        with patch(
+            "asyncio.get_running_loop",
+            side_effect=RuntimeError("no running event loop"),
+        ):
             result = MarketplaceService.create_request_from_listing(
-                mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
-                work_type="test", planned_start=datetime(2026, 12, 1),
+                mock_db,
+                vehicle_id=1,
+                client_contractor_id=5,
+                company_id=5,
+                work_type="test",
+                planned_start=datetime(2026, 12, 1),
                 planned_end=datetime(2026, 12, 5),
             )
         mock_db.commit.assert_called()
@@ -509,6 +618,7 @@ class TestCreateRequestNotifyBranches:
     def test_notify_outer_exception(self, mock_db):
         """Cover line 404: outer except catches any exception during notify."""
         from app.services.marketplace_service import MarketplaceService
+
         vehicle = MagicMock()
         vehicle.id = 1
         vehicle.is_available_for_rent = True
@@ -527,8 +637,12 @@ class TestCreateRequestNotifyBranches:
         # Make get_running_loop raise a non-RuntimeError exception
         with patch("asyncio.get_running_loop", side_effect=OSError("unexpected")):
             result = MarketplaceService.create_request_from_listing(
-                mock_db, vehicle_id=1, client_contractor_id=5, company_id=5,
-                work_type="test", planned_start=datetime(2026, 12, 1),
+                mock_db,
+                vehicle_id=1,
+                client_contractor_id=5,
+                company_id=5,
+                work_type="test",
+                planned_start=datetime(2026, 12, 1),
                 planned_end=datetime(2026, 12, 5),
             )
         mock_db.commit.assert_called()

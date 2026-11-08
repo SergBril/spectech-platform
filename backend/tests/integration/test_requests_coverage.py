@@ -1,4 +1,4 @@
-﻿"""Tests for requests API coverage improvement."""
+"""Tests for requests API coverage improvement."""
 
 from datetime import UTC, datetime, timedelta
 

@@ -1,4 +1,4 @@
-﻿"""Coverage push - reportlab_pdf_generator + vehicle_matcher to hit 60%."""
+"""Coverage push - reportlab_pdf_generator + vehicle_matcher to hit 60%."""
 
 # ==================== REPORTLAB PDF GENERATOR ====================
 

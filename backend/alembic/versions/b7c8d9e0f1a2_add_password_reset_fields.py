@@ -1,4 +1,4 @@
-﻿"""add password reset fields
+"""add password reset fields
 
 Revision ID: b7c8d9e0f1a2
 Revises: a33b982eb9ef

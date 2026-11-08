@@ -1,4 +1,4 @@
-﻿"""Final coverage push - analytics, downtime, reviews routes + deps."""
+"""Final coverage push - analytics, downtime, reviews routes + deps."""
 
 import pytest
 
@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture
 def auth_token(sample_user):
     from app.services.auth_service import create_access_token
+
     return create_access_token(sample_user)
 
 
@@ -15,6 +16,7 @@ def auth_headers(auth_token):
 
 
 # ==================== ANALYTICS ====================
+
 
 class TestAnalyticsRoutes:
     def test_revenue_chart(self, client, auth_headers):
@@ -35,6 +37,7 @@ class TestAnalyticsRoutes:
 
 
 # ==================== DOWNTIME ====================
+
 
 class TestDowntimeRoutes:
     def test_list_downtime(self, client, auth_headers):
@@ -68,6 +71,7 @@ class TestDowntimeRoutes:
 
 # ==================== REVIEWS ====================
 
+
 class TestReviewsRoutes:
     def test_list_reviews(self, client, auth_headers):
         resp = client.get("/api/v1/reviews", headers=auth_headers)
@@ -88,14 +92,17 @@ class TestReviewsRoutes:
 
 # ==================== DEPS ====================
 
+
 class TestDeps:
     def test_require_permission_factory(self):
         from app.api.deps import require_permission
+
         dep = require_permission("vehicle", "read")
         assert callable(dep)
 
     def test_get_current_user_optional_no_token(self, db_session):
         from app.api.deps import get_current_user_optional
+
         try:
             result = get_current_user_optional(db=db_session)
             assert result is None
@@ -104,6 +111,7 @@ class TestDeps:
 
     def test_get_user_company_ids_no_user(self, db_session):
         from app.api.deps import get_user_company_ids
+
         try:
             result = get_user_company_ids(user=None, db=db_session)
             assert isinstance(result, list)

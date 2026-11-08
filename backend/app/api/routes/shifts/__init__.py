@@ -1,4 +1,4 @@
-﻿"""Shifts router package - auto-refactored from monolithic shifts.py"""
+"""Shifts router package - auto-refactored from monolithic shifts.py"""
 
 from fastapi import APIRouter
 

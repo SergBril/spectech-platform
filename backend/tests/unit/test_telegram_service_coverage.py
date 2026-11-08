@@ -1,4 +1,5 @@
 """Coverage tests for telegram_service."""
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,6 +19,7 @@ def mock_settings():
 def service(mock_settings):
     with patch("app.services.telegram_service.settings", mock_settings):
         from app.services.telegram_service import TelegramService
+
         svc = TelegramService()
     return svc
 
@@ -28,6 +30,7 @@ class TestInit:
     def test_enabled_with_token(self, mock_settings):
         with patch("app.services.telegram_service.settings", mock_settings):
             from app.services.telegram_service import TelegramService
+
             svc = TelegramService()
         assert svc.enabled is True
 
@@ -35,6 +38,7 @@ class TestInit:
         mock_settings.TELEGRAM_ENABLED = False
         with patch("app.services.telegram_service.settings", mock_settings):
             from app.services.telegram_service import TelegramService
+
             svc = TelegramService()
         assert svc.enabled is False
 
@@ -42,6 +46,7 @@ class TestInit:
         mock_settings.TELEGRAM_BOT_TOKEN = ""
         with patch("app.services.telegram_service.settings", mock_settings):
             from app.services.telegram_service import TelegramService
+
             svc = TelegramService()
         assert svc.enabled is False
 
@@ -75,6 +80,7 @@ class TestIsAvailable:
     @pytest.mark.asyncio
     async def test_timeout_error(self, service):
         import httpx
+
         mock_client = AsyncMock()
         mock_client.get.side_effect = httpx.TimeoutException("timeout")
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -160,6 +166,7 @@ class TestSendMessage:
     async def test_timeout_marks_unavailable(self, service):
         service._is_available = True
         import httpx
+
         mock_client = AsyncMock()
         mock_client.post.side_effect = httpx.TimeoutException("timeout")
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -201,7 +208,9 @@ class TestSendAlert:
 
     @pytest.mark.asyncio
     async def test_delegates(self, service):
-        with patch.object(service, "send_message", new_callable=AsyncMock, return_value=True) as mock:
+        with patch.object(
+            service, "send_message", new_callable=AsyncMock, return_value=True
+        ) as mock:
             result = await service.send_alert("Title", "Body", urgency="warning")
         assert result is True
         mock.assert_called_once()
@@ -211,7 +220,9 @@ class TestSendAlert:
 
     @pytest.mark.asyncio
     async def test_unknown_urgency(self, service):
-        with patch.object(service, "send_message", new_callable=AsyncMock, return_value=True) as mock:
+        with patch.object(
+            service, "send_message", new_callable=AsyncMock, return_value=True
+        ) as mock:
             await service.send_alert("T", "B", urgency="unknown")
         text = mock.call_args[1]["text"]
         assert "📢" in text
@@ -222,7 +233,9 @@ class TestSendDisputeAlert:
 
     @pytest.mark.asyncio
     async def test_delegates(self, service):
-        with patch.object(service, "send_message", new_callable=AsyncMock, return_value=True) as mock:
+        with patch.object(
+            service, "send_message", new_callable=AsyncMock, return_value=True
+        ) as mock:
             result = await service.send_dispute_alert(42, "payment", "Ivanov")
         assert result is True
         text = mock.call_args[1]["text"]
@@ -235,8 +248,12 @@ class TestSendEscalationAlert:
 
     @pytest.mark.asyncio
     async def test_delegates(self, service):
-        with patch.object(service, "send_message", new_callable=AsyncMock, return_value=True) as mock:
-            result = await service.send_escalation_alert(42, "manager", "director", "SLA breach")
+        with patch.object(
+            service, "send_message", new_callable=AsyncMock, return_value=True
+        ) as mock:
+            result = await service.send_escalation_alert(
+                42, "manager", "director", "SLA breach"
+            )
         assert result is True
         text = mock.call_args[1]["text"]
         assert "#42" in text
@@ -246,4 +263,5 @@ class TestSendEscalationAlert:
 class TestGlobalSingleton:
     def test_exists(self):
         from app.services.telegram_service import telegram_service
+
         assert telegram_service is not None

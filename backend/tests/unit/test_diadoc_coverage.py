@@ -1,4 +1,4 @@
-﻿"""Tests for diadoc_service with proper async mocking."""
+"""Tests for diadoc_service with proper async mocking."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 

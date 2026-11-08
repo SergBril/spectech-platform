@@ -23,7 +23,6 @@ class TestNotificationDispatcher:
                 new_callable=AsyncMock,
             ),
         ):
-
             mock_email.send_rental_completed.return_value = True
             mock_tg.send_alert = AsyncMock(return_value=True)
 
@@ -64,7 +63,6 @@ class TestNotificationDispatcher:
                 new_callable=AsyncMock,
             ),
         ):
-
             mock_email.send_rental_completed.side_effect = Exception("SMTP error")
             mock_tg.send_alert = AsyncMock(return_value=True)
 
@@ -96,7 +94,6 @@ class TestNotificationDispatcher:
             patch("app.services.notification_dispatcher.email_service") as mock_email,
             patch("app.services.notification_dispatcher.telegram_service") as mock_tg,
         ):
-
             mock_email.send_rental_completed.return_value = True
             mock_tg.send_alert = AsyncMock(return_value=False)  # Telegram unavailable
 
@@ -127,7 +124,6 @@ class TestNotificationDispatcher:
             patch("app.services.notification_dispatcher.email_service") as mock_email,
             patch("app.services.notification_dispatcher.telegram_service") as mock_tg,
         ):
-
             mock_email.send_dispute_opened.return_value = True
             mock_tg.send_dispute_alert = AsyncMock(return_value=True)
 
@@ -153,7 +149,6 @@ class TestNotificationDispatcher:
             patch("app.services.notification_dispatcher.email_service") as mock_email,
             patch("app.services.notification_dispatcher.telegram_service") as mock_tg,
         ):
-
             mock_email.send_dispute_escalated.return_value = True
             mock_tg.send_escalation_alert = AsyncMock(return_value=True)
 
@@ -179,7 +174,6 @@ class TestNotificationDispatcher:
             patch("app.services.notification_dispatcher.email_service") as mock_email,
             patch("app.services.notification_dispatcher.telegram_service") as mock_tg,
         ):
-
             mock_email.send_payout_created.return_value = True
             mock_tg.send_alert = AsyncMock(return_value=True)
 

@@ -1,4 +1,4 @@
-﻿"""Coverage push toward 65% - bank_matching, mapix, fuel_service, storage."""
+"""Coverage push toward 65% - bank_matching, mapix, fuel_service, storage."""
 
 import pytest
 

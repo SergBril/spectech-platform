@@ -24,9 +24,11 @@ ENCODING = "windows-1251"
 def _generate_id_file(sender_inn: str, receiver_inn: str) -> str:
     now = datetime.datetime.now()
     date_part = now.strftime("%Y%m%d")
-    hash_part = hashlib.md5(
-        f"{sender_inn}{receiver_inn}{now.isoformat()}".encode()
-    ).hexdigest()[:5].upper()
+    hash_part = (
+        hashlib.md5(f"{sender_inn}{receiver_inn}{now.isoformat()}".encode())
+        .hexdigest()[:5]
+        .upper()
+    )
     return f"{receiver_inn}_{sender_inn}_{date_part}_{hash_part}"
 
 
@@ -51,7 +53,9 @@ def _parse_address(addr_str: str) -> dict:
         part = part.strip()
         if part[:2].isdigit():
             result["КодРегион"] = part[:2]
-        elif any(kw in part.lower() for kw in ["москв", "санкт", "новосиб", "екатерин"]):
+        elif any(
+            kw in part.lower() for kw in ["москв", "санкт", "новосиб", "екатерин"]
+        ):
             result["НаимРегион"] = part
         elif any(kw in part.lower() for kw in ["ул", "пр", "пер", "пл", "шоссе"]):
             result["Улица"] = part
@@ -108,9 +112,25 @@ def _add_goods_table(doc: ET.Element, items: list, vat_rate: float, show_vat: bo
     vat_total = 0.0
     total_total = 0.0
 
-    valid_rates = ["0%", "5%", "7%", "10%", "18%", "20%", "22%",
-                   "9,09%", "16,67%", "18,03%", "5/105", "7/107",
-                   "10/110", "18/118", "20/120", "22/122", "без НДС"]
+    valid_rates = [
+        "0%",
+        "5%",
+        "7%",
+        "10%",
+        "18%",
+        "20%",
+        "22%",
+        "9,09%",
+        "16,67%",
+        "18,03%",
+        "5/105",
+        "7/107",
+        "10/110",
+        "18/118",
+        "20/120",
+        "22/122",
+        "без НДС",
+    ]
 
     for idx, item in enumerate(items, start=1):
         sved = ET.SubElement(tabl, "СведТов")
@@ -164,7 +184,11 @@ def _add_goods_table(doc: ET.Element, items: list, vat_rate: float, show_vat: bo
 def _add_signer(root: ET.Element, company):
     podp = ET.SubElement(root, "Подписант")
     podp.set("СпосПодтПолном", "1")
-    podp.set("Должн", getattr(company, "director_position", "Генеральный директор") or "Генеральный директор")
+    podp.set(
+        "Должн",
+        getattr(company, "director_position", "Генеральный директор")
+        or "Генеральный директор",
+    )
     fio = ET.SubElement(podp, "ФИО")
     director = getattr(company, "director_name", "") or ""
     parts = director.split()
@@ -195,11 +219,17 @@ def generate_upd_xml(act, company, client, request=None, items=None) -> bytes:
         else:
             subtotal, vat = total, 0.0
         work = getattr(request, "work_type", None) or "Работы по акту"
-        items = [{
-            "description": work, "unit": "шт", "quantity": 1.0,
-            "unit_price": subtotal, "subtotal": subtotal,
-            "vat_amount": vat, "total": total,
-        }]
+        items = [
+            {
+                "description": work,
+                "unit": "шт",
+                "quantity": 1.0,
+                "unit_price": subtotal,
+                "subtotal": subtotal,
+                "vat_amount": vat,
+                "total": total,
+            }
+        ]
 
     sender_inn = getattr(company, "inn", "") or "7700000001"
     receiver_inn = getattr(client, "inn", "") or "7700000001"
@@ -217,7 +247,9 @@ def generate_upd_xml(act, company, client, request=None, items=None) -> bytes:
     doc.set("НаимДокОпр", "Универсальный передаточный документ")
 
     sv_sf = ET.SubElement(doc, "СвСчФакт")
-    sv_sf.set("НомерДок", getattr(act, "document_number", "") or str(getattr(act, "id", "1")))
+    sv_sf.set(
+        "НомерДок", getattr(act, "document_number", "") or str(getattr(act, "id", "1"))
+    )
     sv_sf.set("ДатаДок", _fmt_date(act_date))
 
     _add_participant(sv_sf, "СвПрод", company, is_seller=True)

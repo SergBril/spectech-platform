@@ -1,4 +1,5 @@
 """Coverage tests for audit_decorator."""
+
 import asyncio
 import inspect
 from types import SimpleNamespace
@@ -30,7 +31,9 @@ class TestAuditLogDecorator:
         request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
 
         with patch("app.services.audit_service.log_action") as mock_log:
-            result = _call_decorated(create_vehicle, db=db, current_user=user, request=request)
+            result = _call_decorated(
+                create_vehicle, db=db, current_user=user, request=request
+            )
 
         assert result["id"] == 42
         mock_log.assert_called_once()
@@ -43,6 +46,7 @@ class TestAuditLogDecorator:
         """Async func: decorator wraps in async wrapper, inner func called sync
         returning coroutine which wrapper returns. We await the outer wrapper."""
         import inspect
+
         from app.services.audit_decorator import audit_log
 
         @audit_log("update", "user")
@@ -110,7 +114,9 @@ class TestAuditLogDecorator:
         db = MagicMock()
         user = SimpleNamespace(id=1)
 
-        with patch("app.services.audit_service.log_action", side_effect=Exception("DB fail")):
+        with patch(
+            "app.services.audit_service.log_action", side_effect=Exception("DB fail")
+        ):
             result = _call_decorated(my_func, db=db, current_user=user)
 
         assert result["id"] == 1

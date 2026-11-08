@@ -1,4 +1,4 @@
-﻿"""Tests for MarketplaceService remaining methods and pdf_generator generate functions."""
+"""Tests for MarketplaceService remaining methods and pdf_generator generate functions."""
 
 from datetime import date
 from decimal import Decimal
