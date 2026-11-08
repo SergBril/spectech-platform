@@ -10,6 +10,7 @@ interface User {
   company_id: number;  // ← ДОБАВИТЬ
   is_superuser: boolean;
   role?: string;
+  user_type?: string;
 }
 
 interface AuthContextType {

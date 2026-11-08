@@ -59,7 +59,7 @@ export const SyncLogsPage: React.FC = () => {
       setLogs(res.data.items || res.data);
       setTotal(res.data.total || (res.data.items || res.data).length);
     } catch (err: any) {
-      showToast('Ошибка загрузки логов синхронизации', 'error');
+      showToast.error('Ошибка загрузки логов синхронизации');
     } finally {
       setLoading(false);
     }
@@ -235,3 +235,5 @@ export const SyncLogsPage: React.FC = () => {
     </Layout>
   );
 };
+
+export default SyncLogsPage;

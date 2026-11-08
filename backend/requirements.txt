@@ -135,3 +135,7 @@ pytest==8.3.3
 pytest-cov==5.0.0
 pytest-asyncio==0.24.0
 apscheduler>=3.10,<4.0
+
+# Добавлено при диагностике 2026-11: импортируются в коде, но отсутствовали
+openpyxl==3.1.5
+python-telegram-bot[socks]==21.10
