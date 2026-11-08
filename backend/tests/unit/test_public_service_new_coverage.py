@@ -200,11 +200,12 @@ class TestPublicServiceEdgeCases:
         """Lines 84-85: v.company exists."""
         v = MagicMock()
         v.company = MagicMock(name="TestCo")
+        v.category = None  # Avoid MagicMock auto-attribute returning non-string
         v.id = 1
         v.name = "Excavator"
         v.category_id = None
         v.status = "active"
-        v.owner_company_id = 1
+        v.company_id = 1
         v.hourly_rate = 1000
         v.shift_rate = None
         v.is_available_for_rent = True
@@ -219,11 +220,12 @@ class TestPublicServiceEdgeCases:
         """Lines 84-85: v.company raises exception."""
         v = MagicMock()
         type(v).company = property(lambda self: (_ for _ in ()).throw(Exception("no company")))
+        v.category = None
         v.id = 1
         v.name = "Excavator"
         v.category_id = None
         v.status = "active"
-        v.owner_company_id = None
+        v.company_id = None
         v.hourly_rate = None
         v.shift_rate = None
         v.is_available_for_rent = False
@@ -284,22 +286,21 @@ class TestPublicServiceEdgeCases:
 
     def test_create_company_review_success(self, service, mock_db):
         """Lines 1250-1274: successful review creation."""
-        # No existing review
-        mock_db.execute.return_value.scalar_one_or_none.return_value = None
-        # INSERT returns result
+        # Raw SQL uses .first() for SELECT and .one() for INSERT
         mock_result = MagicMock()
         mock_result.id = 42
         mock_result.rating = 5
         mock_result.comment = "Excellent!"
         mock_result.created_at = datetime(2026, 11, 8, 12, 0)
-        # execute for INSERT returns .one()
-        mock_execute_insert = MagicMock()
-        mock_execute_insert.one.return_value = mock_result
-        # First call: SELECT (scalar_one_or_none), Second call: INSERT (.one())
-        mock_db.execute.side_effect = [
-            MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
-            mock_execute_insert,
-        ]
+
+        select_result = MagicMock()
+        select_result.first.return_value = None  # No duplicate
+
+        insert_result = MagicMock()
+        insert_result.one.return_value = mock_result
+
+        mock_db.execute.side_effect = [select_result, insert_result]
+
         payload = MagicMock(reviewer_name="Happy User", reviewer_email="happy@test.com", rating=5, comment="Excellent!")
         result = service.create_company_review(mock_db, company_id=1, payload=payload)
         assert "id" in result
