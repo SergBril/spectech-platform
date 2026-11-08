@@ -1,6 +1,6 @@
 """Tests for ShiftStatsService - real code execution."""
-from datetime import date, datetime
-from unittest.mock import MagicMock, patch
+from datetime import datetime
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -63,34 +63,47 @@ class TestGetRecentActions:
         assert result == []
 
 
-class TestUpdateCostRates:
-    def test_update_existing(self, service, mock_db):
-        existing = MagicMock()
-        existing.fuel_price_per_liter = 65.0
-        mock_db.execute.return_value.scalar_one_or_none.return_value = existing
-        user = MagicMock(id=1)
-        result = service.update_cost_rates(mock_db, company_id=7, fuel_price_per_liter=70.0, hourly_wage=600.0, amortization_per_hour=350.0, current_user=user)
-        assert existing.fuel_price_per_liter == 70.0
-        assert existing.updated_by == 1
-        mock_db.commit.assert_called_once()
+class TestUpdateCostRatesRealDB:
+    """Use real SQLite DB to avoid SQLAlchemy select() mock issues."""
+
+    def test_create_new(self, service, db_session):
+        from app.models.auth import User
+        user = User(email="test_cost@test.com", password_hash="x", role="admin", status="active")
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
+
+        result = service.update_cost_rates(
+            db_session, company_id=999,
+            fuel_price_per_liter=70.0, hourly_wage=600.0,
+            amortization_per_hour=350.0, current_user=user
+        )
         assert result["message"]
 
-    def test_create_new(self, service, mock_db):
-        mock_db.execute.return_value.scalar_one_or_none.return_value = None
-        user = MagicMock(id=1)
-        MockRates = MagicMock()
-        mock_rates_instance = MagicMock()
-        MockRates.return_value = mock_rates_instance
-        with patch("app.models.shift.CompanyCostRates", MockRates):
-            result = service.update_cost_rates(mock_db, company_id=7, fuel_price_per_liter=70.0, hourly_wage=600.0, amortization_per_hour=350.0, current_user=user)
-        mock_db.add.assert_called_once()
-        mock_db.commit.assert_called_once()
+        # Verify it was actually created
+        rates = service.get_cost_rates(db_session, company_id=999)
+        assert rates["fuel_price_per_liter"] == 70.0
+        assert rates["hourly_wage"] == 600.0
+
+    def test_update_existing(self, service, db_session):
+        from app.models.auth import User
+        user = User(email="test_cost2@test.com", password_hash="x", role="admin", status="active")
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
+
+        # Create first
+        service.update_cost_rates(db_session, company_id=998, fuel_price_per_liter=65.0, hourly_wage=500.0, amortization_per_hour=300.0, current_user=user)
+        # Update
+        result = service.update_cost_rates(db_session, company_id=998, fuel_price_per_liter=75.0, hourly_wage=650.0, amortization_per_hour=400.0, current_user=user)
         assert result["message"]
+
+        rates = service.get_cost_rates(db_session, company_id=998)
+        assert rates["fuel_price_per_liter"] == 75.0
 
 
 class TestGetPlatformOverview:
     def test_returns_overview_structure(self, service, mock_db):
-        # Each db.execute().scalar() call returns a count
         mock_scalar_result = MagicMock()
         mock_scalar_result.scalar.side_effect = [10, 5, 20, 3, 100000, 50000, 15]
         mock_scalar_result.scalars.return_value.all.return_value = []
