@@ -284,7 +284,7 @@ class TestShiftStatsWithData:
         db_session.add(req)
         db_session.flush()
 
-        # ShiftTasks
+        # ShiftTasks with planned times (needed for hours calculation)
         task1 = ShiftTask(
             request_id=req.id, operator_id=emp.contractor_id, vehicle_id=vehicle.id,
             shift_date=date_type(2026, 11, 3), shift_number=1,
@@ -295,13 +295,32 @@ class TestShiftStatsWithData:
             shift_date=date_type(2026, 11, 4), shift_number=1,
             status="completed", company_id=company.id,
         )
-        db_session.add_all([task1, task2])
+        task3 = ShiftTask(
+            request_id=req.id, operator_id=emp.contractor_id, vehicle_id=vehicle.id,
+            shift_date=date_type(2026, 11, 5), shift_number=1,
+            status="completed", company_id=company.id,
+        )
+        db_session.add_all([task1, task2, task3])
         db_session.flush()
 
-        # Fuel entries
+        # Set planned times via raw SQL (ShiftTask may not have these as columns)
+        from sqlalchemy import text as sql_text
+        try:
+            db_session.execute(sql_text("UPDATE shift_tasks SET planned_start=:s, planned_end=:e WHERE id=:id"),
+                {"s": "2026-11-03 08:00:00", "e": "2026-11-03 17:00:00", "id": task1.id})
+            db_session.execute(sql_text("UPDATE shift_tasks SET planned_start=:s, planned_end=:e WHERE id=:id"),
+                {"s": "2026-11-04 08:00:00", "e": "2026-11-04 17:00:00", "id": task2.id})
+            db_session.execute(sql_text("UPDATE shift_tasks SET planned_start=:s, planned_end=:e WHERE id=:id"),
+                {"s": "2026-11-05 08:00:00", "e": "2026-11-05 17:00:00", "id": task3.id})
+        except Exception:
+            pass  # Columns may not exist in test schema
+
+        # Fuel entries (4+ for anomaly detection: len(vals) >= 3)
         fuel1 = ShiftFuelEntry(shift_task_id=task1.id, vehicle_id=vehicle.id, fuel_type="diesel", quantity_liters=50.0, engine_hours=8.0)
         fuel2 = ShiftFuelEntry(shift_task_id=task2.id, vehicle_id=vehicle.id, fuel_type="diesel", quantity_liters=45.0, engine_hours=7.5)
-        db_session.add_all([fuel1, fuel2])
+        fuel3 = ShiftFuelEntry(shift_task_id=task3.id, vehicle_id=vehicle.id, fuel_type="diesel", quantity_liters=48.0, engine_hours=8.0)
+        fuel4 = ShiftFuelEntry(shift_task_id=task1.id, vehicle_id=vehicle.id, fuel_type="diesel", quantity_liters=200.0, engine_hours=8.0)  # anomaly
+        db_session.add_all([fuel1, fuel2, fuel3, fuel4])
         db_session.commit()
 
         return {"company_id": company.id, "user": user, "vehicle_id": vehicle.id}
