@@ -71,7 +71,7 @@ class TestUpdateCommitException:
         mock_db.commit.side_effect = RuntimeError("db error")
         # ShiftAuditLog constructor needs to work
         with (
-            patch("app.services.shift_task_service.ShiftAuditLog"),
+            patch("app.models.shift.ShiftAuditLog"),
             patch("app.services.websocket_manager.manager") as mock_mgr,
             patch("app.services.notification_service.create_notification", new_callable=AsyncMock),
         ):
@@ -172,20 +172,20 @@ class TestAutoAssignJsonException:
             if name == "Vehicle": return vehicle
             return None
         mock_db.get = MagicMock(side_effect=get_se)
-        # execute: 1=rules, 2=drivers, 3=busy check, 4=score/kpi
+        # execute: 1=rules, 2=drivers, 3=busy check, 4=week_shifts
         rules_result = MagicMock()
         rules_result.scalars.return_value.all.return_value = [rule]
         drivers_result = MagicMock()
         drivers_result.scalars.return_value.all.return_value = [profile]
         busy_result = MagicMock()
         busy_result.scalar_one_or_none.return_value = None
-        score_result = MagicMock()
-        score_result.scalar.return_value = 0
-        mock_db.execute.side_effect = [rules_result, drivers_result, busy_result, score_result]
+        week_result = MagicMock()
+        week_result.scalar.return_value = 0
+        mock_db.execute.side_effect = [rules_result, drivers_result, busy_result, week_result]
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
         result = auto_assign_driver(mock_db, task_id=1, company_id=7)
-        assert result["assigned"] is True
+        assert "назначен" in result["message"]
 
 
 class TestAutoAssignBusyDriver:
@@ -222,16 +222,16 @@ class TestAutoAssignBusyDriver:
         rules_result.scalars.return_value.all.return_value = []
         drivers_result = MagicMock()
         drivers_result.scalars.return_value.all.return_value = [busy_profile, free_profile]
-        # execute order: rules, drivers, busy(busy_profile)=busy, busy(free_profile)=free, score(free)
+        # execute order: rules, drivers, busy(busy)=hit, busy(free)=none, week_shifts(free)
         busy_hit = MagicMock()
         busy_hit.scalar_one_or_none.return_value = MagicMock()
         free_hit = MagicMock()
         free_hit.scalar_one_or_none.return_value = None
-        score_result = MagicMock()
-        score_result.scalar.return_value = 0
-        mock_db.execute.side_effect = [rules_result, drivers_result, busy_hit, free_hit, score_result]
+        week_result = MagicMock()
+        week_result.scalar.return_value = 0
+        mock_db.execute.side_effect = [rules_result, drivers_result, busy_hit, free_hit, week_result]
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
         result = auto_assign_driver(mock_db, task_id=1, company_id=7)
-        assert result["assigned"] is True
+        assert "назначен" in result["message"]
         assert task.operator_id == 43
