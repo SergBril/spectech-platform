@@ -28,10 +28,11 @@ class TestUpdReportlabWithItems:
 
     def test_upd_with_items_recalculates(self):
         from app.services.reportlab_pdf_generator import generate_upd_reportlab
+        from datetime import date as date_type
         act = SimpleNamespace(
-            document_number="ACT-001", act_date="2026-11-09",
+            document_number="ACT-001", act_date=date_type(2026, 11, 9),
             total_amount=240, vat_amount=40, vat_rate=20,
-            tax_system="osno",
+            tax_system="osno", request_id=42,
         )
         company = SimpleNamespace(name="OOO Test", inn="1234567890", kpp="123456789", address="Moscow")
         client = SimpleNamespace(name="OOO Client", inn="0987654321", kpp="987654321", address="SPb")
@@ -49,9 +50,11 @@ class TestTorg12PdfWithItems:
 
     def test_torg12_with_items_recalculates(self):
         from app.services.reportlab_pdf_generator import generate_torg12_reportlab
+        from datetime import date as date_type
         act = SimpleNamespace(
-            document_number="ACT-002", act_date="2026-11-09",
+            document_number="ACT-002", act_date=date_type(2026, 11, 9),
             total_amount=240, vat_amount=40, vat_rate=20,
+            tax_system="osno", request_id=43,
         )
         company = SimpleNamespace(name="OOO Test", inn="1234567890", kpp="123456789", address="Moscow")
         client = SimpleNamespace(name="OOO Client", inn="0987654321", kpp="987654321", address="SPb")
