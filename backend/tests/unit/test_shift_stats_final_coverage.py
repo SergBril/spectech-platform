@@ -1,9 +1,7 @@
-﻿"""Точечные тесты для shift_stats_service.py — покрытие оставшихся строк."""
+﻿"""Integration тесты для shift_stats_service.py — покрытие через real DB."""
 import pytest
-from datetime import datetime, date
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
-from fastapi import HTTPException
+from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from app.services.shift_stats_service import ShiftStatsService
 
@@ -13,98 +11,158 @@ def svc():
     return ShiftStatsService()
 
 
-# === Lines 196, 953: else branch when emp has no user_id ===
-class TestDriverKpiNoUser:
-    def test_driver_without_user(self, svc):
-        mock_db = MagicMock()
-        profile = SimpleNamespace(employee_contractor_id=42)
-        mock_db.query.return_value.filter.return_value.all.return_value = [profile]
-        emp = SimpleNamespace(user_id=None)
-        mock_db.get.side_effect = lambda model, id_: emp
-        mock_db.execute.return_value.fetchall.return_value = []
-        result = svc.export_driver_kpi_excel(mock_db, company_id=1, date_from="2026-11-01", date_to="2026-11-30")
+# === Lines 196, 953: driver without user (emp.user_id is None) ===
+class TestDriverKpiNoUserRealDb:
+    def test_driver_without_user(self, svc, db_session, company):
+        from app.models.contractor import Contractor
+        from app.models.employee import Employee
+
+        # Create contractor + employee WITHOUT user_id
+        c = Contractor(name="Driver NoUser", type="employee", company_id=company.id)
+        db_session.add(c)
+        db_session.flush()
+        emp = Employee(contractor_id=c.id, position="Operator", company_id=company.id)
+        db_session.add(emp)
+        db_session.commit()
+
+        result = svc.export_driver_kpi_excel(
+            db_session, company_id=company.id,
+            date_from="2026-11-01", date_to="2026-11-30",
+        )
         assert result is not None
 
 
 # === Line 311: vehicle_id filter in fuel consumption ===
-class TestFuelConsumptionWithVehicleId:
-    def test_with_vehicle_id(self, svc):
-        mock_db = MagicMock()
-        mock_db.execute.return_value.fetchall.return_value = []
+class TestFuelConsumptionWithVehicleIdRealDb:
+    def test_with_vehicle_id(self, svc, db_session, company, sample_vehicle):
         result = svc.get_fuel_consumption_stats(
-            mock_db, company_id=1, date_from="2026-11-01", date_to="2026-11-30", vehicle_id=5,
+            db_session, company_id=company.id,
+            date_from="2026-11-01", date_to="2026-11-30",
+            vehicle_id=sample_vehicle.id,
         )
         assert result is not None
 
 
-# === Lines 557, 561: Utilization color coding ===
-class TestUtilizationExcelColorCoding:
-    def test_high_and_medium_utilization(self, svc):
-        mock_db = MagicMock()
-        v1 = SimpleNamespace(id=1, name="Excavator")
-        v2 = SimpleNamespace(id=2, name="Crane")
+# === Lines 387-388: ImportError openpyxl ===
+class TestExportPnlImportError:
+    def test_import_error(self, svc, db_session, company):
+        from unittest.mock import patch
+        from fastapi import HTTPException
+        import builtins
 
-        now = datetime(2026, 11, 15, 8, 0)
-        end = datetime(2026, 11, 15, 18, 0)
-        task1 = SimpleNamespace(vehicle_id=1, operator_id=1, shift_date=date(2026, 11, 1), planned_start=now, planned_end=end)
-        task2 = SimpleNamespace(vehicle_id=2, operator_id=2, shift_date=date(2026, 11, 1), planned_start=now, planned_end=end)
+        original_import = builtins.__import__
+        def failing_import(name, *args, **kwargs):
+            if name == "openpyxl":
+                raise ImportError("no openpyxl")
+            return original_import(name, *args, **kwargs)
+        with patch.object(builtins, "__import__", side_effect=failing_import):
+            with pytest.raises(HTTPException, match="openpyxl not installed"):
+                svc.export_pnl_excel(
+                    db_session, company_id=company.id,
+                    date_from="2026-11-01", date_to="2026-11-30",
+                )
 
-        # Both vehicles and tasks use db.execute().scalars().all()
-        # First call -> vehicles, second call -> tasks
-        mock_scalars_vehicles = MagicMock()
-        mock_scalars_vehicles.all.return_value = [v1, v2]
-        mock_scalars_tasks = MagicMock()
-        mock_scalars_tasks.all.return_value = [task1, task2]
 
-        mock_exec_vehicles = MagicMock()
-        mock_exec_vehicles.scalars.return_value = mock_scalars_vehicles
-        mock_exec_tasks = MagicMock()
-        mock_exec_tasks.scalars.return_value = mock_scalars_tasks
+# === Lines 557, 561: Utilization color coding with real vehicles+tasks ===
+class TestUtilizationExcelColorCodingRealDb:
+    def test_high_and_medium_utilization(self, svc, db_session, company, sample_vehicle):
+        from app.models.shift import ShiftTask
 
-        mock_db.execute.side_effect = [mock_exec_vehicles, mock_exec_tasks]
+        # Create tasks for the vehicle across many days to get high utilization
+        for day in range(1, 25):
+            t = ShiftTask(
+                vehicle_id=sample_vehicle.id,
+                company_id=company.id,
+                shift_date=date(2026, 11, day),
+                planned_start=datetime(2026, 11, day, 8, 0),
+                planned_end=datetime(2026, 11, day, 18, 0),
+                status="completed",
+            )
+            db_session.add(t)
+        db_session.commit()
 
-        result = svc.export_utilization_excel(mock_db, company_id=1, date_from="2026-11-01", date_to="2026-11-30")
+        result = svc.export_utilization_excel(
+            db_session, company_id=company.id,
+            date_from="2026-11-01", date_to="2026-11-30",
+        )
         assert result is not None
 
 
 # === Lines 707-708: Fuel aggregation in daily trend ===
-class TestFuelDashboardDailyTrend:
-    def test_fuel_in_daily_data(self, svc):
-        mock_db = MagicMock()
-        shift_row = (date(2026, 11, 5), 1, "Excavator", 10)
-        fuel_entry = SimpleNamespace(quantity_liters=50.0, shift_task_id=1)
-        mock_db.execute.return_value.fetchall.side_effect = [
-            [shift_row],
-            [fuel_entry],
-            [],
-        ]
-        result = svc.get_fuel_dashboard(mock_db, company_id=1, date_from="2026-11-01", date_to="2026-11-30")
-        assert result is not None
+class TestFuelDashboardDailyTrendRealDb:
+    def test_fuel_in_daily_data(self, svc, db_session, company, sample_vehicle):
+        from app.models.shift import ShiftTask, ShiftFuelEntry
 
+        t = ShiftTask(
+            vehicle_id=sample_vehicle.id,
+            company_id=company.id,
+            shift_date=date(2026, 11, 5),
+            planned_start=datetime(2026, 11, 5, 8, 0),
+            planned_end=datetime(2026, 11, 5, 18, 0),
+            status="completed",
+        )
+        db_session.add(t)
+        db_session.flush()
 
-# === Line 846: else branch driver_name = "" ===
-class TestCostPerHourNoDriver:
-    def test_task_without_driver(self, svc):
-        mock_db = MagicMock()
-        mock_db.execute.return_value.fetchall.return_value = []
-        result = svc.get_cost_per_hour_report(
-            mock_db, company_id=1, date_from="2026-11-01", date_to="2026-11-30",
+        fe = ShiftFuelEntry(shift_task_id=t.id, quantity_liters=50.0, fuel_type="diesel")
+        db_session.add(fe)
+        db_session.commit()
+
+        result = svc.get_fuel_dashboard(
+            db_session, company_id=company.id,
+            date_from="2026-11-01", date_to="2026-11-30",
         )
         assert result is not None
 
 
-# === Lines 1137-1144: Anomaly detection with stddev ===
-class TestFuelAnomalyDetection:
-    def test_anomalies_detected(self, svc):
-        mock_db = MagicMock()
-        entries = [
-            (SimpleNamespace(quantity_liters=10.0), date(2026, 11, 1), "Excavator", 1),
-            (SimpleNamespace(quantity_liters=12.0), date(2026, 11, 2), "Excavator", 1),
-            (SimpleNamespace(quantity_liters=11.0), date(2026, 11, 3), "Excavator", 1),
-            (SimpleNamespace(quantity_liters=100.0), date(2026, 11, 4), "Excavator", 1),
-        ]
-        mock_db.execute.return_value.fetchall.return_value = entries
+# === Line 846: cost_per_hour task without driver ===
+class TestCostPerHourNoDriverRealDb:
+    def test_task_without_driver(self, svc, db_session, company, sample_vehicle):
+        from app.models.shift import ShiftTask
+
+        t = ShiftTask(
+            vehicle_id=sample_vehicle.id,
+            company_id=company.id,
+            shift_date=date(2026, 11, 5),
+            planned_start=datetime(2026, 11, 5, 8, 0),
+            planned_end=datetime(2026, 11, 5, 18, 0),
+            status="completed",
+            operator_id=None,
+        )
+        db_session.add(t)
+        db_session.commit()
+
+        result = svc.get_cost_per_hour_report(
+            db_session, company_id=company.id,
+            date_from="2026-11-01", date_to="2026-11-30",
+        )
+        assert result is not None
+
+
+# === Lines 1137-1144: Anomaly detection with >=3 fuel entries ===
+class TestFuelAnomalyDetectionRealDb:
+    def test_anomalies_detected(self, svc, db_session, company, sample_vehicle):
+        from app.models.shift import ShiftTask, ShiftFuelEntry
+
+        # Create 4 tasks with fuel entries, one anomalous
+        for day, liters in [(1, 10.0), (2, 12.0), (3, 11.0), (4, 100.0)]:
+            t = ShiftTask(
+                vehicle_id=sample_vehicle.id,
+                company_id=company.id,
+                shift_date=date(2026, 11, day),
+                planned_start=datetime(2026, 11, day, 8, 0),
+                planned_end=datetime(2026, 11, day, 18, 0),
+                status="completed",
+            )
+            db_session.add(t)
+            db_session.flush()
+            fe = ShiftFuelEntry(shift_task_id=t.id, quantity_liters=liters, fuel_type="diesel")
+            db_session.add(fe)
+        db_session.commit()
+
         result = svc.get_fuel_consumption_stats(
-            mock_db, company_id=1, date_from="2026-11-01", date_to="2026-11-30", vehicle_id=None,
+            db_session, company_id=company.id,
+            date_from="2026-11-01", date_to="2026-11-30",
+            vehicle_id=None,
         )
         assert result is not None
