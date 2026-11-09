@@ -139,24 +139,21 @@ class TestFontFallbackPaths:
         """Cover lines 53-62: system path found and registered successfully."""
         import importlib
         import sys
-        from pathlib import PurePosixPath, PureWindowsPath
         import app.services.reportlab_pdf_generator as mod
         orig_regular = mod.FONT_REGULAR
         orig_bold = mod.FONT_BOLD
         try:
             del sys.modules["app.services.reportlab_pdf_generator"]
-            # Mock Path.exists: local fonts don't exist, system paths do
-            original_exists = Path.exists
             def mock_exists(self):
                 s = str(self)
-                # System paths -> True
                 if "/usr/share/fonts" in s or "/app/fonts" in s:
                     return True
-                # Local fonts dir -> False
                 return False
+            mock_ttfont = MagicMock()
             with (
                 patch.object(Path, "exists", mock_exists),
-                patch("reportlab.pdfbase.pdfmetrics.registerFont"),
+                patch("app.services.reportlab_pdf_generator.TTFont", mock_ttfont),
+                patch("app.services.reportlab_pdf_generator.pdfmetrics.registerFont"),
             ):
                 fresh_mod = importlib.import_module("app.services.reportlab_pdf_generator")
                 assert fresh_mod.FONT_REGULAR == "DejaVu"
