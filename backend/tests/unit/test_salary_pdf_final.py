@@ -77,6 +77,42 @@ class TestGenerateSalaryPayslip:
             assert isinstance(pdf, bytes)
 
 
+class TestFontFallback:
+    def test_get_font_no_registered(self):
+        import app.services.salary_pdf as mod
+        original = mod._FONT_REGISTERED
+        try:
+            mod._FONT_REGISTERED = False
+            assert _get_font(bold=False) == "Helvetica"
+            assert _get_font(bold=True) == "Helvetica-Bold"
+        finally:
+            mod._FONT_REGISTERED = original
+
+    def test_payslip_without_fonts(self):
+        import app.services.salary_pdf as mod
+        original = mod._FONT_REGISTERED
+        try:
+            mod._FONT_REGISTERED = False
+            rec = _record()
+            pdf = generate_salary_payslip(rec, "Test")
+            assert isinstance(pdf, bytes)
+            assert pdf[:4] == b"%PDF"
+        finally:
+            mod._FONT_REGISTERED = original
+
+    def test_register_without_fonts(self):
+        import app.services.salary_pdf as mod
+        original = mod._FONT_REGISTERED
+        try:
+            mod._FONT_REGISTERED = False
+            rec = _record()
+            pdf = generate_salary_register_pdf([rec], "TestCo")
+            assert isinstance(pdf, bytes)
+            assert pdf[:4] == b"%PDF"
+        finally:
+            mod._FONT_REGISTERED = original
+
+
 class TestGenerateSalaryRegisterPdf:
     def test_empty_records(self):
         pdf = generate_salary_register_pdf([], "TestCo")
