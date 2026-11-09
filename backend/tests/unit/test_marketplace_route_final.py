@@ -31,7 +31,7 @@ class TestCreateOfferMaxNotification:
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
             if "Request" in name: return request_obj
-            if "Vehicle" in name: return vehicle
+            if "Vehicle" in name or "vehicle" in str(model).lower(): return vehicle
             return None
         mock_db.get = MagicMock(side_effect=get_se)
         mock_db.execute.return_value.scalar_one_or_none.return_value = None
@@ -65,7 +65,7 @@ class TestCreateOfferMaxNotification:
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
             if "Request" in name: return request_obj
-            if "Vehicle" in name: return vehicle
+            if "Vehicle" in name or "vehicle" in str(model).lower(): return vehicle
             return None
         mock_db.get = MagicMock(side_effect=get_se)
         mock_db.execute.return_value.scalar_one_or_none.return_value = None
