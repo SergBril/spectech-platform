@@ -34,8 +34,8 @@ class TestUpdReportlabWithItems:
             total_amount=240, vat_amount=40, vat_rate=20,
             tax_system="osno", request_id=42,
         )
-        company = SimpleNamespace(name="OOO Test", inn="1234567890", kpp="123456789", address="Moscow")
-        client = SimpleNamespace(name="OOO Client", inn="0987654321", kpp="987654321", address="SPb")
+        company = SimpleNamespace(name="OOO Test", inn="1234567890", kpp="123456789", address="Moscow", legal_address="Moscow, st. Lenina 1", bank_details={})
+        client = SimpleNamespace(name="OOO Client", inn="0987654321", kpp="987654321", address="SPb", legal_address="SPb, Nevsky 1", bank_details={})
         items = [
             {"description": "Item1", "unit": "шт", "quantity": 1, "unit_price": 100, "subtotal": 100, "vat_amount": 20, "total": 120},
             {"description": "Item2", "unit": "шт", "quantity": 1, "unit_price": 100, "subtotal": 100, "vat_amount": 20, "total": 120},
@@ -56,8 +56,8 @@ class TestTorg12PdfWithItems:
             total_amount=240, vat_amount=40, vat_rate=20,
             tax_system="osno", request_id=43,
         )
-        company = SimpleNamespace(name="OOO Test", inn="1234567890", kpp="123456789", address="Moscow")
-        client = SimpleNamespace(name="OOO Client", inn="0987654321", kpp="987654321", address="SPb")
+        company = SimpleNamespace(name="OOO Test", inn="1234567890", kpp="123456789", address="Moscow", legal_address="Moscow, st. Lenina 1", bank_details={})
+        client = SimpleNamespace(name="OOO Client", inn="0987654321", kpp="987654321", address="SPb", legal_address="SPb, Nevsky 1", bank_details={})
         items = [
             {"description": "Item1", "unit": "шт", "quantity": 2, "unit_price": 50, "subtotal": 100, "vat_amount": 20, "total": 120},
             {"description": "Item2", "unit": "шт", "quantity": 1, "unit_price": 100, "subtotal": 100, "vat_amount": 20, "total": 120},
