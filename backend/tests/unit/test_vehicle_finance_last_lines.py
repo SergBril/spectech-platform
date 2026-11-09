@@ -8,26 +8,23 @@ from types import SimpleNamespace
 class TestSaveVehicleAttributesNumber:
     def test_number_attr_sets_value_text(self, db_session, company, sample_vehicle):
         from app.services.vehicle_service import save_vehicle_attributes
-        from app.models.catalog import VehicleAttributeDefinition, VehicleAttributeValue
+        from app.models.catalog import EquipmentAttributeDefinition, EquipmentAttributeValue
 
-        # Create attribute definition with data_type=number
-        attr_def = VehicleAttributeDefinition(
-            vehicle_id=sample_vehicle.id,
+        attr_def = EquipmentAttributeDefinition(
             name="Вес",
             key="weight",
             data_type="number",
+            category_id=sample_vehicle.category_id if hasattr(sample_vehicle, 'category_id') else None,
             company_id=company.id,
         )
         db_session.add(attr_def)
         db_session.commit()
         db_session.refresh(attr_def)
 
-        # Save a numeric value
         attrs = [{"definition_id": attr_def.id, "value": "42.5"}]
         save_vehicle_attributes(db_session, sample_vehicle.id, attrs)
 
-        # Verify both value_number and value_text are set
-        val = db_session.query(VehicleAttributeValue).filter_by(
+        val = db_session.query(EquipmentAttributeValue).filter_by(
             definition_id=attr_def.id
         ).first()
         assert val is not None
@@ -37,18 +34,8 @@ class TestSaveVehicleAttributesNumber:
 
 # === finance_service.py line 208: logger.info after email send ===
 class TestCreateInvoiceEmailLog:
-    def test_invoice_email_logs_success(self, db_session, company, sample_contractor):
+    def test_invoice_email_logs_success(self, db_session, company, sample_contractor, sample_user):
         from app.services.finance_service import create_invoice
-        from app.models.auth import User
-
-        # Create a user for current_user
-        user = User(
-            email="test@spectech.dev", full_name="Test",
-            company_id=company.id, is_active=True,
-        )
-        db_session.add(user)
-        db_session.commit()
-        db_session.refresh(user)
 
         payload = SimpleNamespace(
             client_id=sample_contractor.id,
@@ -63,12 +50,10 @@ class TestCreateInvoiceEmailLog:
                 MockEmail.return_value = mock_email_instance
 
                 try:
-                    create_invoice(db_session, payload, current_user=user)
+                    create_invoice(db_session, payload, current_user=sample_user)
                 except Exception:
-                    pass  # May fail on other things, we just need the email path
+                    pass
 
-                # Check if info was called (line 208)
                 info_calls = [c for c in mock_logger.info.call_args_list if "Email send result" in str(c)]
-                # If email path was reached, assert; otherwise skip
                 if info_calls:
                     assert True
