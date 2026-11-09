@@ -107,7 +107,7 @@ class TestInternalFails:
     async def test_continues(self, dispatcher):
         db = _mdb([_emp(), _ctr(), _usr()])
         with patch(MOD + ".generate_salary_payslip", return_value=b"pdf"):
-            with patch(MOD + ".create_notification", side_effect=RuntimeError("fail")):
+            with patch(MOD + ".create_notification", side_effect=RuntimeError("fail"), new=MagicMock(side_effect=RuntimeError("fail"))):
                 with patch(MOD + ".email_service") as es:
                     es.send_email = AsyncMock()
                     with patch(MOD + ".telegram_service") as ts:
