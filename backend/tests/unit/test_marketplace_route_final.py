@@ -279,20 +279,24 @@ class TestListMarketplaceRequestsFilters:
         exec_result.scalars.return_value.all.return_value = [req]
         count_result = MagicMock()
         count_result.count.return_value = 2
-        # First execute returns vehicle categories for my_category_ids
-        cat_result = MagicMock()
-        cat_result.distinct.return_value.all.return_value = [(3,), (5,)]
-        call_count = [0]
-        def execute_se(stmt):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                return cat_result  # vehicle categories
-            if call_count[0] == 2:
-                return exec_result  # requests
-            return count_result  # offers count
-        mock_db.execute = MagicMock(side_effect=execute_se)
-        # db.query().filter().count() for offers_count
-        mock_db.query.return_value.filter.return_value.count.return_value = 2
+        # db.query is used for:
+        # 1. Vehicle.category_id query -> .filter().distinct().all() -> [(3,), (5,)]
+        # 2. MarketplaceOffer count -> .filter().count() -> 2
+        # Use side_effect to differentiate
+        query_call_count = [0]
+        def query_se(model):
+            query_call_count[0] += 1
+            mock_chain = MagicMock()
+            if query_call_count[0] == 1:
+                # Vehicle category query
+                mock_chain.filter.return_value.distinct.return_value.all.return_value = [(3,), (5,)]
+            else:
+                # MarketplaceOffer count query
+                mock_chain.filter.return_value.count.return_value = 2
+            return mock_chain
+        mock_db.query = MagicMock(side_effect=query_se)
+        # db.execute for requests list
+        mock_db.execute.return_value.scalars.return_value.all.return_value = [req]
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
             if "Category" in name: return category
@@ -413,20 +417,24 @@ class TestListMarketplaceRequestsMyCategories:
         exec_result.scalars.return_value.all.return_value = [req]
         count_result = MagicMock()
         count_result.count.return_value = 0
-        # First execute returns vehicle categories for my_category_ids
-        cat_result = MagicMock()
-        cat_result.distinct.return_value.all.return_value = [(3,), (5,)]
-        call_count = [0]
-        def execute_se(stmt):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                return cat_result  # vehicle categories
-            if call_count[0] == 2:
-                return exec_result  # requests
-            return count_result  # offers count
-        mock_db.execute = MagicMock(side_effect=execute_se)
-        # db.query().filter().count() for offers_count
-        mock_db.query.return_value.filter.return_value.count.return_value = 2
+        # db.query is used for:
+        # 1. Vehicle.category_id query -> .filter().distinct().all() -> [(3,), (5,)]
+        # 2. MarketplaceOffer count -> .filter().count() -> 2
+        # Use side_effect to differentiate
+        query_call_count = [0]
+        def query_se(model):
+            query_call_count[0] += 1
+            mock_chain = MagicMock()
+            if query_call_count[0] == 1:
+                # Vehicle category query
+                mock_chain.filter.return_value.distinct.return_value.all.return_value = [(3,), (5,)]
+            else:
+                # MarketplaceOffer count query
+                mock_chain.filter.return_value.count.return_value = 2
+            return mock_chain
+        mock_db.query = MagicMock(side_effect=query_se)
+        # db.execute for requests list
+        mock_db.execute.return_value.scalars.return_value.all.return_value = [req]
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
             if "Category" in name: return category
