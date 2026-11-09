@@ -79,7 +79,7 @@ class TestAutoPricingWarning:
         # pricing_service is imported at module level or used directly
         with patch("app.services.pricing_service.pricing_service") as ps:
             ps.calculate_estimate.side_effect = RuntimeError("pricing fail")
-            with patch("app.services.request_service.create_notification", new_callable=AsyncMock):
+            with patch("app.services.notification_service.create_notification", new_callable=AsyncMock):
                 with patch("app.services.max_messenger_service.max_messenger_service") as mm:
                     mm.notify_company_dispatchers = AsyncMock(side_effect=RuntimeError("max fail"))
                     try:
@@ -104,7 +104,7 @@ class TestBulkResponseWSExceptions:
         mock_db.get.side_effect = mg
         mock_db.execute.return_value.scalars.return_value.all.return_value = []
         # Both create_notification AND manager.send_to_user raise
-        with patch("app.services.request_service.create_notification",
+        with patch("app.services.notification_service.create_notification",
                    new_callable=AsyncMock, side_effect=RuntimeError("notify fail")):
             with patch("app.services.websocket_manager.manager") as mgr:
                 mgr.send_to_user = AsyncMock(side_effect=RuntimeError("WS fail"))
@@ -125,7 +125,7 @@ class TestBulkResponseWSExceptions:
             if n["c"] == 1: return request
             return assignment
         mock_db.get.side_effect = mg
-        with patch("app.services.request_service.create_notification",
+        with patch("app.services.notification_service.create_notification",
                    new_callable=AsyncMock, side_effect=RuntimeError("notify fail")):
             result = await service.reject_response(1, 1, "reason", 1, 1)
             assert "message" in result
@@ -151,7 +151,7 @@ class TestApproveResponseNotificationException:
             return None
         mock_db.get.side_effect = mg
         mock_db.execute.return_value.scalars.return_value.all.return_value = []
-        with patch("app.services.request_service.create_notification",
+        with patch("app.services.notification_service.create_notification",
                    new_callable=AsyncMock, side_effect=RuntimeError("notify fail")):
             result = await service.approve_response(1, 1, 1, 1)
             assert "message" in result
