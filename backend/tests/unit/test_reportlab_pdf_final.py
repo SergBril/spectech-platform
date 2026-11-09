@@ -106,46 +106,59 @@ class TestSystemPathsFallback:
 class TestFontFallbackPaths:
     """Cover lines 41-42, 46-66: font registration exception and system paths."""
 
-    def test_font_exception_path(self):
-        """Line 41-42: TTFont raises -> warning logged, FONT stays Helvetica."""
+    def test_font_exception_and_system_paths_via_reload(self):
+        """Force module reload with broken fonts to cover exception + system paths."""
         import importlib
+        import sys
         import app.services.reportlab_pdf_generator as mod
         # Save originals
         orig_regular = mod.FONT_REGULAR
         orig_bold = mod.FONT_BOLD
-        # Force re-execution of font loading with broken TTFont
-        with patch("app.services.reportlab_pdf_generator.pdfmetrics.registerFont", side_effect=Exception("broken font")):
-            # Reset to trigger re-load
-            mod.FONT_REGULAR = "Helvetica"
-            mod.FONT_BOLD = "Helvetica"
-            # Re-run the font loading block by reloading module
-            # But module-level code only runs once, so we test indirectly:
-            # Just verify that after exception, FONT_REGULAR stays Helvetica
-            pass
-        # Restore
-        mod.FONT_REGULAR = orig_regular
-        mod.FONT_BOLD = orig_bold
+        try:
+            # Remove from cache to force re-execution of module-level code
+            del sys.modules["app.services.reportlab_pdf_generator"]
+            # Mock TTFont to raise on first call (local fonts), then also on system paths
+            call_count = [0]
+            def mock_register(font):
+                call_count[0] += 1
+                raise Exception(f"font load fail #{call_count[0]}")
+            with patch("reportlab.pdfbase.pdfmetrics.registerFont", side_effect=mock_register):
+                fresh_mod = importlib.import_module("app.services.reportlab_pdf_generator")
+                # After all failures, FONT_REGULAR should stay Helvetica
+                assert fresh_mod.FONT_REGULAR == "Helvetica"
+                assert fresh_mod.FONT_BOLD == "Helvetica"
+        finally:
+            # Restore original module
+            if "app.services.reportlab_pdf_generator" in sys.modules:
+                restored = sys.modules["app.services.reportlab_pdf_generator"]
+                restored.FONT_REGULAR = orig_regular
+                restored.FONT_BOLD = orig_bold
 
-    def test_system_paths_no_fonts_found(self):
-        """Lines 46-66: system paths searched but none exist -> warning."""
-        # This code runs at import time. On Windows, _FONTS_DIR usually succeeds.
-        # We verify the code exists and module imported successfully.
-        import app.services.reportlab_pdf_generator as mod
-        assert mod.FONT_REGULAR in ("DejaVu", "Helvetica")
-        assert mod.FONT_BOLD in ("DejaVu-Bold", "Helvetica")
-
-    def test_system_paths_with_mock_existing(self):
-        """Lines 52-64: system path exists but registerFont fails -> continue."""
+    def test_system_paths_success_via_reload(self):
+        """Cover lines 53-62: system path found and registered successfully."""
+        import importlib
+        import sys
         import app.services.reportlab_pdf_generator as mod
         orig_regular = mod.FONT_REGULAR
         orig_bold = mod.FONT_BOLD
-        # Simulate: first priority (_FONTS_DIR) failed, system paths tried
-        with (
-            patch("app.services.reportlab_pdf_generator.Path.exists", return_value=True),
-            patch("app.services.reportlab_pdf_generator.pdfmetrics.registerFont", side_effect=Exception("fail")),
-        ):
-            # The for/else would run all paths, all fail, else branch logs warning
-            # We can't easily re-trigger module-level code, but we verify structure
-            pass
-        mod.FONT_REGULAR = orig_regular
-        mod.FONT_BOLD = orig_bold
+        try:
+            del sys.modules["app.services.reportlab_pdf_generator"]
+            # First registerFont call (local) fails, second (system) succeeds
+            call_count = [0]
+            def mock_register(font):
+                call_count[0] += 1
+                if call_count[0] <= 1:
+                    raise Exception("local fail")
+                # Success on system path
+            with (
+                patch("reportlab.pdfbase.pdfmetrics.registerFont", side_effect=mock_register),
+                patch("pathlib.Path.exists", return_value=True),
+            ):
+                fresh_mod = importlib.import_module("app.services.reportlab_pdf_generator")
+                assert fresh_mod.FONT_REGULAR == "DejaVu"
+                assert fresh_mod.FONT_BOLD == "DejaVu-Bold"
+        finally:
+            if "app.services.reportlab_pdf_generator" in sys.modules:
+                restored = sys.modules["app.services.reportlab_pdf_generator"]
+                restored.FONT_REGULAR = orig_regular
+                restored.FONT_BOLD = orig_bold
