@@ -38,7 +38,10 @@ class TestCreateOfferMaxNotification:
         mock_db.query.return_value.filter.return_value.first.return_value = None
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
-        mock_db.refresh = MagicMock()
+        def refresh_side_effect(obj):
+            if hasattr(obj, "id") and obj.id is None:
+                obj.id = 100
+        mock_db.refresh = MagicMock(side_effect=refresh_side_effect)
         data = SimpleNamespace(
             vehicle_id=10, offered_price=5000, price_type="hourly", commission_agreed=True,
             currency="RUB", estimated_arrival_minutes=None, distance_km=None, message=None,
@@ -69,7 +72,10 @@ class TestCreateOfferMaxNotification:
         mock_db.query.return_value.filter.return_value.first.return_value = None
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
-        mock_db.refresh = MagicMock()
+        def refresh_side_effect(obj):
+            if hasattr(obj, "id") and obj.id is None:
+                obj.id = 100
+        mock_db.refresh = MagicMock(side_effect=refresh_side_effect)
         data = SimpleNamespace(
             vehicle_id=10, offered_price=5000, price_type="hourly", commission_agreed=True,
             currency="RUB", estimated_arrival_minutes=None, distance_km=None, message=None,
@@ -148,7 +154,10 @@ class TestAcceptOfferRejectOthers:
             return None
         mock_db.get = MagicMock(side_effect=get_se)
         mock_db.commit = MagicMock()
-        mock_db.refresh = MagicMock()
+        def refresh_side_effect(obj):
+            if hasattr(obj, "id") and obj.id is None:
+                obj.id = 100
+        mock_db.refresh = MagicMock(side_effect=refresh_side_effect)
         result = svc.accept_offer(mock_db, company_id=7, offer_id=1, current_company_id=7, current_user=current_user)
         assert other_offer.status == "rejected"
         assert other_offer.rejection_reason == "Another offer was accepted"
