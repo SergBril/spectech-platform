@@ -8,56 +8,51 @@ from types import SimpleNamespace
 class TestSaveVehicleAttributesNumber:
     def test_number_attr_sets_value_text(self, db_session, company, sample_vehicle):
         from app.services.vehicle_service import save_vehicle_attributes
-        from app.models.catalog import EquipmentAttributeDefinition, EquipmentAttributeValue
+        from app.models.catalog import Category, EquipmentAttributeDefinition, EquipmentAttributeValue
 
-        # Need subcategory_id from vehicle
-        subcat_id = getattr(sample_vehicle, 'subcategory_id', None)
-        if not subcat_id:
-            # Create a definition directly and test the code path
-            attr_def = EquipmentAttributeDefinition(
-                name="Вес", slug="weight", data_type="number",
-                is_active=True, sort_order=1,
-            )
-            db_session.add(attr_def)
-            db_session.commit()
-            db_session.refresh(attr_def)
-            subcat_id = attr_def.subcategory_id
+        # Create a subcategory (Category with parent)
+        parent = Category(name="Землеройная", code="earth", level=0, company_id=company.id, is_active=True)
+        db_session.add(parent)
+        db_session.flush()
 
-        # Create or find an active definition with slug='weight' for this subcategory
-        existing = db_session.query(EquipmentAttributeDefinition).filter_by(
-            slug="weight", subcategory_id=subcat_id, is_active=True,
-        ).first()
-        if not existing:
-            attr_def = EquipmentAttributeDefinition(
-                name="Вес", slug="weight", data_type="number",
-                subcategory_id=subcat_id, is_active=True, sort_order=1,
-            )
-            db_session.add(attr_def)
-            db_session.commit()
+        subcat = Category(name="Экскаваторы", code="excavator", level=1, parent_id=parent.id, company_id=company.id, is_active=True)
+        db_session.add(subcat)
+        db_session.flush()
+
+        # Link vehicle to category
+        sample_vehicle.category_id = subcat.id
+        db_session.commit()
+
+        # Create attribute definition for this subcategory
+        attr_def = EquipmentAttributeDefinition(
+            name="Вес", slug="weight", data_type="number",
+            subcategory_id=subcat.id, is_active=True, sort_order=1,
+        )
+        db_session.add(attr_def)
+        db_session.commit()
 
         attrs = {"weight": "42.5"}
-        save_vehicle_attributes(db_session, sample_vehicle.id, attrs, subcat_id)
+        save_vehicle_attributes(db_session, sample_vehicle.id, attrs, subcat.id)
 
         val = db_session.query(EquipmentAttributeValue).filter_by(
             vehicle_id=sample_vehicle.id,
         ).first()
-        if val:
-            assert val.value_number == 42.5
-            assert val.value_text == "42.5"
+        assert val is not None
+        assert val.value_number == 42.5
+        assert val.value_text == "42.5"
 
 
-# === finance_service.py line 208: logger.info after email send ===
+# === finance_service.py line 208: already covered ===
 class TestCreateInvoiceEmailLog:
     def test_invoice_email_logs_success(self, db_session, company, sample_contractor, sample_user):
         from app.services.finance_service import create_invoice
 
-        # Set contact_email on contractor
         sample_contractor.contact_email = "client@test.com"
         db_session.commit()
 
         payload = SimpleNamespace(
             client_id=sample_contractor.id,
-            document_number="TEST-EMAIL-002",
+            document_number="TEST-EMAIL-003",
             items=[],
         )
 
