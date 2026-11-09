@@ -105,25 +105,23 @@ class TestGetPreShiftChecklistJsonParse:
         items = [{"key": "brakes", "label": "Тормоза", "required": True}]
         mock_config = MagicMock()
         mock_config.items_json = json.dumps(items)
-        mock_db.execute.return_value.scalar_one_or_none.return_value = mock_config
-        # Also need task lookup
         mock_task = MagicMock()
         mock_task.vehicle_id = 10
         mock_task.operator_id = 42
         mock_vehicle = MagicMock()
         mock_vehicle.category_id = 5
         mock_vehicle.company_id = 7
-        call_count = [0]
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
             if name == "ShiftTask": return mock_task
             if name == "Vehicle": return mock_vehicle
             return None
         mock_db.get = MagicMock(side_effect=get_se)
-        # execute calls: 1=config lookup
         config_result = MagicMock()
         config_result.scalar_one_or_none.return_value = mock_config
-        mock_db.execute.return_value = config_result
+        submitted_result = MagicMock()
+        submitted_result.scalar_one_or_none.return_value = None
+        mock_db.execute.side_effect = [submitted_result, config_result]
         result = get_pre_shift_checklist(mock_db, task_id=1, company_id=7)
         assert result["items"] == items
 
@@ -145,6 +143,8 @@ class TestGetPreShiftChecklistJsonParse:
         mock_db.get = MagicMock(side_effect=get_se)
         config_result = MagicMock()
         config_result.scalar_one_or_none.return_value = mock_config
-        mock_db.execute.return_value = config_result
+        submitted_result = MagicMock()
+        submitted_result.scalar_one_or_none.return_value = None
+        mock_db.execute.side_effect = [submitted_result, config_result]
         result = get_pre_shift_checklist(mock_db, task_id=1, company_id=7)
         assert result["items"] == []
