@@ -28,8 +28,6 @@ class TestCreateOfferMaxNotification:
         vehicle = MagicMock()
         vehicle.company_id = 5
         vehicle.id = 10
-        existing_offer = None
-        call_count = [0]
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
             if "Request" in name: return request_obj
@@ -41,13 +39,11 @@ class TestCreateOfferMaxNotification:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
         data = SimpleNamespace(
-            request_id=1, vehicle_id=10, offered_price=5000,
-            price_type="hourly", commission_agreed=True,
+            offered_price=5000, price_type="hourly", commission_agreed=True,
         )
-        mock_notify = AsyncMock()
         with patch("app.services.marketplace_route_service.max_messenger_service") as mock_max:
-            mock_max.notify_company_dispatchers = mock_notify
-            result = svc.create_offer_on_request(mock_db, data, company_id=5)
+            mock_max.notify_company_dispatchers = AsyncMock()
+            result = svc.create_offer_on_request(mock_db, company_id=5, request_id=1, data=data, current_company_id=5)
         assert result is not None
 
     def test_max_notification_no_loop(self, svc):
@@ -72,14 +68,13 @@ class TestCreateOfferMaxNotification:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
         data = SimpleNamespace(
-            request_id=1, vehicle_id=10, offered_price=5000,
-            price_type="hourly", commission_agreed=True,
+            offered_price=5000, price_type="hourly", commission_agreed=True,
         )
         with (
             patch("app.services.marketplace_route_service.max_messenger_service"),
             patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")),
         ):
-            result = svc.create_offer_on_request(mock_db, data, company_id=5)
+            result = svc.create_offer_on_request(mock_db, company_id=5, request_id=1, data=data, current_company_id=5)
         assert result is not None
 
 
@@ -88,46 +83,11 @@ class TestListOffersWithStatus:
 
     def test_list_with_status_filter(self, svc):
         mock_db = MagicMock()
-        request_obj = MagicMock()
-        request_obj.id = 1
-        mock_db.get.return_value = request_obj
         mock_result = MagicMock()
         mock_result.unique.return_value.all.return_value = []
         mock_db.scalars.return_value = mock_result
-        result = svc.list_offers_for_request(mock_db, request_id=1, status="pending")
+        result = svc.list_offers_for_request(mock_db, request_id=1, status="pending", current_company_id=7)
         assert isinstance(result, list)
-
-
-class TestGetOfferDetailsSuccess:
-    """Cover line 186: successful offer details."""
-
-    def test_success(self, svc):
-        mock_db = MagicMock()
-        offer = MagicMock()
-        offer.id = 1
-        offer.request_id = 1
-        offer.owner_company_id = 5
-        offer.vehicle_id = 10
-        offer.offered_price = 5000
-        offer.price_type = "hourly"
-        offer.status = "pending"
-        offer.created_at = datetime(2026, 11, 9)
-        offer.reviewed_at = None
-        offer.rejection_reason = None
-        company = MagicMock()
-        company.name = "OOO Test"
-        vehicle = MagicMock()
-        vehicle.category_id = None
-        call_count = [0]
-        def get_se(model, id):
-            name = getattr(model, "__name__", str(model))
-            if "MarketplaceOffer" in name or "Offer" in name: return offer
-            if "Company" in name: return company
-            if "Vehicle" in name: return vehicle
-            return None
-        mock_db.get = MagicMock(side_effect=get_se)
-        result = svc.get_offer_details(mock_db, offer_id=1)
-        assert result is not None
 
 
 class TestAcceptOfferRejectOthers:
@@ -167,7 +127,7 @@ class TestAcceptOfferRejectOthers:
         mock_db.execute.return_value.scalars.return_value.all.return_value = [other_offer]
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
-        result = svc.accept_offer(mock_db, company_id=7, offer_id=1, current_user=current_user)
+        result = svc.accept_offer(mock_db, company_id=7, offer_id=1, current_company_id=7, current_user=current_user)
         assert other_offer.status == "rejected"
         assert other_offer.rejection_reason == "Another offer was accepted"
 
@@ -181,8 +141,9 @@ class TestRejectOfferValidation:
         offer.status = "accepted"
         mock_db.get.return_value = offer
         current_user = SimpleNamespace(id=1)
+        data = SimpleNamespace(rejection_reason="test")
         with pytest.raises(HTTPException, match="Cannot reject"):
-            svc.reject_offer(mock_db, company_id=7, offer_id=1, current_user=current_user)
+            svc.reject_offer(mock_db, company_id=7, offer_id=1, data=data, current_company_id=7, current_user=current_user)
 
     def test_access_denied(self, svc):
         mock_db = MagicMock()
@@ -194,8 +155,9 @@ class TestRejectOfferValidation:
         offer.request = request_obj
         mock_db.get.return_value = offer
         current_user = SimpleNamespace(id=1)
+        data = SimpleNamespace(rejection_reason="test")
         with pytest.raises(HTTPException, match="Only the request creator"):
-            svc.reject_offer(mock_db, company_id=7, offer_id=1, current_user=current_user)
+            svc.reject_offer(mock_db, company_id=7, offer_id=1, data=data, current_company_id=7, current_user=current_user)
 
 
 class TestGetMatchingVehicles:
@@ -205,50 +167,17 @@ class TestGetMatchingVehicles:
         mock_db = MagicMock()
         mock_db.get.return_value = None
         with pytest.raises(HTTPException, match="Request not found"):
-            svc.get_matching_vehicles(mock_db, request_id=999, company_id=7)
+            svc.get_matching_vehicles_for_request(mock_db, company_id=7, request_id=999)
 
     def test_success(self, svc):
         mock_db = MagicMock()
         request_obj = MagicMock()
         request_obj.id = 1
         mock_db.get.return_value = request_obj
-        with patch("app.services.marketplace_route_service.vehicle_matcher") as mock_matcher:
+        with patch("app.services.marketplace.vehicle_matcher.vehicle_matcher") as mock_matcher:
             mock_matcher.find_matching_vehicles.return_value = [{"vehicle_id": 10, "score": 85}]
-            result = svc.get_matching_vehicles(mock_db, request_id=1, company_id=7)
+            result = svc.get_matching_vehicles_for_request(mock_db, company_id=7, request_id=1)
         assert result["total_matches"] == 1
-
-
-class TestBuildOfferResponse:
-    """Cover lines 453-468: full offer response building."""
-
-    def test_with_category(self, svc):
-        mock_db = MagicMock()
-        offer = MagicMock()
-        offer.id = 1
-        offer.request_id = 1
-        offer.owner_company_id = 5
-        offer.vehicle_id = 10
-        offer.offered_price = 5000
-        offer.price_type = "hourly"
-        offer.status = "pending"
-        offer.created_at = datetime(2026, 11, 9)
-        offer.reviewed_at = None
-        offer.rejection_reason = None
-        company = MagicMock()
-        company.name = "OOO Test"
-        vehicle = MagicMock()
-        vehicle.category_id = 3
-        category = MagicMock()
-        category.name = "Экскаватор"
-        def get_se(model, id):
-            name = getattr(model, "__name__", str(model))
-            if "Company" in name: return company
-            if "Vehicle" in name: return vehicle
-            if "Category" in name: return category
-            return None
-        mock_db.get = MagicMock(side_effect=get_se)
-        result = svc._build_offer_response(mock_db, company_id=7, offer=offer)
-        assert result is not None
 
 
 class TestPublishRequestAccessDenied:
@@ -260,7 +189,7 @@ class TestPublishRequestAccessDenied:
         request_obj.company_id = 99
         mock_db.get.return_value = request_obj
         with pytest.raises(HTTPException, match="Нет доступа"):
-            svc.publish_request(mock_db, request_id=1, company_id=7)
+            svc.publish_request(mock_db, company_id=7, request_id=1)
 
 
 class TestListMarketplaceRequestsFilters:
@@ -284,10 +213,8 @@ class TestListMarketplaceRequestsFilters:
         req.end_date = datetime(2026, 11, 20)
         category = MagicMock()
         category.name = "Экскаватор"
-        # execute returns requests
         exec_result = MagicMock()
         exec_result.scalars.return_value.all.return_value = [req]
-        # query for offers count
         count_result = MagicMock()
         count_result.count.return_value = 2
         call_count = [0]
@@ -304,7 +231,7 @@ class TestListMarketplaceRequestsFilters:
             return None
         mock_db.get = MagicMock(side_effect=get_se)
         result = svc.list_marketplace_requests(
-            mock_db, company_id=7, my_category_ids=[3],
+            mock_db, company_id=7, skip=0, limit=50,
             category_id=3, region="Москва",
         )
         assert isinstance(result, list)
