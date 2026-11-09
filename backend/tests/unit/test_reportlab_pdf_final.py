@@ -146,14 +146,20 @@ class TestFontFallbackPaths:
         orig_bold = mod.FONT_BOLD
         try:
             del sys.modules["app.services.reportlab_pdf_generator"]
-            def mock_exists(self):
-                s = str(self)
+            # On Windows, POSIX paths never exist. Mock Path.exists globally.
+            original_exists = Path.exists
+            @staticmethod
+            def fake_exists(path_obj):
+                s = str(path_obj)
                 if "/usr/share/fonts" in s or "/app/fonts" in s:
                     return True
-                return False
+                # Local fonts dir -> False so we fall through to system paths
+                if "fonts" in s and ("DejaVuSans" in s or "DejaVu" in s):
+                    return False
+                return original_exists(path_obj)
             mock_ttfont = MagicMock()
             with (
-                patch.object(Path, "exists", mock_exists),
+                patch.object(Path, "exists", fake_exists),
                 patch.object(ttfonts_mod, "TTFont", mock_ttfont),
                 patch.object(pdfmetrics_mod, "registerFont"),
             ):
