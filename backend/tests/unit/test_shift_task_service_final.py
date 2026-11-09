@@ -67,8 +67,11 @@ class TestUpdateCommitException:
     @pytest.mark.asyncio
     async def test_commit_exception_swallowed(self):
         mock_db, task = _make_update_mocks()
+        # commit raises inside try block -> caught by except Exception: pass
         mock_db.commit.side_effect = RuntimeError("db error")
+        # ShiftAuditLog constructor needs to work
         with (
+            patch("app.services.shift_task_service.ShiftAuditLog"),
             patch("app.services.websocket_manager.manager") as mock_mgr,
             patch("app.services.notification_service.create_notification", new_callable=AsyncMock),
         ):
@@ -161,6 +164,7 @@ class TestAutoAssignJsonException:
         profile.employee_contractor_id = 42
         profile.is_active = True
         profile.vehicle_category_id = 5
+        profile.license_category = "C"
 
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
@@ -168,14 +172,16 @@ class TestAutoAssignJsonException:
             if name == "Vehicle": return vehicle
             return None
         mock_db.get = MagicMock(side_effect=get_se)
-        # execute calls: rules, drivers, busy check
+        # execute: 1=rules, 2=drivers, 3=busy check, 4=score/kpi
         rules_result = MagicMock()
         rules_result.scalars.return_value.all.return_value = [rule]
         drivers_result = MagicMock()
         drivers_result.scalars.return_value.all.return_value = [profile]
         busy_result = MagicMock()
         busy_result.scalar_one_or_none.return_value = None
-        mock_db.execute.side_effect = [rules_result, drivers_result, busy_result]
+        score_result = MagicMock()
+        score_result.scalar.return_value = 0
+        mock_db.execute.side_effect = [rules_result, drivers_result, busy_result, score_result]
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
         result = auto_assign_driver(mock_db, task_id=1, company_id=7)
@@ -199,10 +205,12 @@ class TestAutoAssignBusyDriver:
         busy_profile.employee_contractor_id = 42
         busy_profile.is_active = True
         busy_profile.vehicle_category_id = 5
+        busy_profile.license_category = "C"
         free_profile = MagicMock()
         free_profile.employee_contractor_id = 43
         free_profile.is_active = True
         free_profile.vehicle_category_id = 5
+        free_profile.license_category = "C"
 
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
@@ -214,15 +222,16 @@ class TestAutoAssignBusyDriver:
         rules_result.scalars.return_value.all.return_value = []
         drivers_result = MagicMock()
         drivers_result.scalars.return_value.all.return_value = [busy_profile, free_profile]
-        # First busy check: busy_profile is busy; second: free_profile is free
-        busy_result = MagicMock()
-        busy_result.scalar_one_or_none.return_value = MagicMock()  # busy
-        free_result = MagicMock()
-        free_result.scalar_one_or_none.return_value = None  # free
-        mock_db.execute.side_effect = [rules_result, drivers_result, busy_result, free_result]
+        # execute order: rules, drivers, busy(busy_profile)=busy, busy(free_profile)=free, score(free)
+        busy_hit = MagicMock()
+        busy_hit.scalar_one_or_none.return_value = MagicMock()
+        free_hit = MagicMock()
+        free_hit.scalar_one_or_none.return_value = None
+        score_result = MagicMock()
+        score_result.scalar.return_value = 0
+        mock_db.execute.side_effect = [rules_result, drivers_result, busy_hit, free_hit, score_result]
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
         result = auto_assign_driver(mock_db, task_id=1, company_id=7)
         assert result["assigned"] is True
-        # Should assign free_profile (43), not busy_profile (42)
         assert task.operator_id == 43
