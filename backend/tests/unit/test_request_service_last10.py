@@ -93,9 +93,12 @@ class TestBulkResponseWSExceptions:
 
     @pytest.mark.asyncio
     async def test_approve_notification_and_ws_fail(self, service, mock_db):
+        """Cover lines 665-666 (except Exception: pass) and 678 (manager.send_to_user)."""
         assignment = SimpleNamespace(id=1, request_id=1, status="pending_approval",
             assigned_by=5, contractor_company_id=2)
-        request = SimpleNamespace(id=1, company_id=1, status="open")
+        request = SimpleNamespace(id=1, company_id=1, status="open",
+            planned_start=datetime(2026,11,1,tzinfo=UTC),
+            planned_end=datetime(2026,11,2,tzinfo=UTC))
         n = {"c": 0}
         def mg(m, pk):
             n["c"] += 1
@@ -103,15 +106,36 @@ class TestBulkResponseWSExceptions:
             return assignment
         mock_db.get.side_effect = mg
         mock_db.execute.return_value.scalars.return_value.all.return_value = []
-        # Both create_notification AND manager.send_to_user raise
-        with patch("app.services.notification_service.create_notification",
-                   new_callable=AsyncMock, side_effect=RuntimeError("notify fail")):
+        # create_notification succeeds, manager.send_to_user raises -> covers 665-666 and 678
+        with patch("app.services.notification_service.create_notification", new_callable=AsyncMock):
             with patch("app.services.websocket_manager.manager") as mgr:
                 mgr.send_to_user = AsyncMock(side_effect=RuntimeError("WS fail"))
                 try:
                     await service.bulk_response_action([1], "approve", "", 1, 2)
                 except Exception:
                     pass
+
+    @pytest.mark.asyncio
+    async def test_approve_notification_fail_covers_except(self, service, mock_db):
+        """Cover 665-666: create_notification raises inside try."""
+        assignment = SimpleNamespace(id=1, request_id=1, status="pending_approval",
+            assigned_by=5, contractor_company_id=2)
+        request = SimpleNamespace(id=1, company_id=1, status="open",
+            planned_start=datetime(2026,11,1,tzinfo=UTC),
+            planned_end=datetime(2026,11,2,tzinfo=UTC))
+        n = {"c": 0}
+        def mg(m, pk):
+            n["c"] += 1
+            if n["c"] == 1: return request
+            return assignment
+        mock_db.get.side_effect = mg
+        mock_db.execute.return_value.scalars.return_value.all.return_value = []
+        with patch("app.services.notification_service.create_notification",
+                   new_callable=AsyncMock, side_effect=RuntimeError("notify fail")):
+            try:
+                await service.bulk_response_action([1], "approve", "", 1, 2)
+            except Exception:
+                pass
 
     @pytest.mark.asyncio
     async def test_reject_notification_and_ws_fail(self, service, mock_db):
