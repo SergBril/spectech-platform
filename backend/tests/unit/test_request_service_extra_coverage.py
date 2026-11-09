@@ -126,7 +126,9 @@ class TestAssignVehicleErrors:
             marketplace_commission_agreed=False,
         )
         self._setup_assign_mocks(mock_db, req, vehicle)
-        with patch("app.services.notification_service.create_notification", new_callable=AsyncMock):
+        # create_notification raises -> covers except Exception: pass (lines 91-92)
+        with patch("app.services.notification_service.create_notification",
+                   new_callable=AsyncMock, side_effect=RuntimeError("notify fail")):
             with pytest.raises(RequestServiceError) as exc_info:
                 await service.assign_vehicle(1, 5, None, 1, 1)
             assert exc_info.value.status_code == 403
@@ -147,7 +149,8 @@ class TestAssignVehicleErrors:
             marketplace_commission_agreed=False,
         )
         self._setup_assign_mocks(mock_db, req, vehicle)
-        mock_db.add.side_effect = RuntimeError("DB crash")
+        # db.commit raises -> triggers except Exception at line 233
+        mock_db.commit.side_effect = RuntimeError("DB crash on commit")
         with pytest.raises(RequestServiceError) as exc_info:
             await service.assign_vehicle(1, 5, None, 1, 1)
         assert exc_info.value.status_code == 500
