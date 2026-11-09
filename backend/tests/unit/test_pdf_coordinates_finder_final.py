@@ -84,10 +84,15 @@ class TestMainBlock:
         script = (
             "import sys\n"
             "sys.argv = ['x', '/fake/path.pdf']\n"
-            "from unittest.mock import patch\n"
-            "with patch('app.services.pdf_coordinates_finder.create_coordinate_finder_pdf') as m:\n"
-            "    exec(open('app/services/pdf_coordinates_finder.py', encoding='utf-8').read())\n"
-            "    m.assert_called_once_with('/fake/path.pdf')\n"
+            "from unittest.mock import patch, MagicMock\n"
+            "mock_fn = MagicMock()\n"
+            "with patch.dict('builtins.__dict__', {}):\n"
+            "    pass\n"
+            "# Patch at module level before exec\n"
+            "import app.services.pdf_coordinates_finder as mod\n"
+            "mod.create_coordinate_finder_pdf = mock_fn\n"
+            "exec(open('app/services/pdf_coordinates_finder.py', encoding='utf-8').read())\n"
+            "mock_fn.assert_called_once_with('/fake/path.pdf')\n"
         )
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir='.') as f:
             f.write(script)
