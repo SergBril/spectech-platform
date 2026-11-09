@@ -212,3 +212,47 @@ class TestGetWeasyprintCached:
         result = _get_weasyprint()
         assert result is pdf_mod._weasyprint
         pdf_mod._weasyprint = None
+
+
+
+class TestGetWeasyprintSuccess:
+    """Cover line 20: _weasyprint = HTML on first successful import."""
+
+    def test_first_import_caches(self):
+        pdf_mod._weasyprint = None
+        mock_html = MagicMock(name="WeasyHTML")
+        with patch.dict("sys.modules", {"weasyprint": MagicMock(HTML=mock_html)}):
+            result = _get_weasyprint()
+        assert result is mock_html
+        assert pdf_mod._weasyprint is mock_html
+        # Cleanup
+        pdf_mod._weasyprint = None
+
+
+class TestGenerateUpdPdf:
+    """Cover line 177: fill_upd_pdf delegation."""
+
+    def test_delegates_to_fill_upd_pdf(self):
+        from app.services.pdf_generator import generate_upd_pdf
+        act = SimpleNamespace(id=1)
+        company = SimpleNamespace()
+        client = SimpleNamespace()
+        request = SimpleNamespace()
+        with patch("app.services.pdf_generator.fill_upd_pdf", return_value=b"%PDF-UPD") as mock_fill:
+            result = generate_upd_pdf(act, company, client, request)
+        assert result == b"%PDF-UPD"
+        mock_fill.assert_called_once_with(act, company, client, request)
+
+
+class TestGenerateTorg12Pdf:
+    """Cover line 184: fill_torg12_pdf delegation."""
+
+    def test_delegates_to_fill_torg12_pdf(self):
+        from app.services.pdf_generator import generate_torg12_pdf
+        act = SimpleNamespace(id=1)
+        company = SimpleNamespace()
+        client = SimpleNamespace()
+        with patch("app.services.pdf_generator.fill_torg12_pdf", return_value=b"%PDF-TORG") as mock_fill:
+            result = generate_torg12_pdf(act, company, client, driver_name="Ivanov", vehicle_plate="A123BC")
+        assert result == b"%PDF-TORG"
+        mock_fill.assert_called_once_with(act, company, client, None, "Ivanov", "A123BC")
