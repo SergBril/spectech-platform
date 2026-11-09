@@ -446,3 +446,80 @@ class TestListMarketplaceRequestsMyCategories:
             category_id=None, region=None,
         )
         assert isinstance(result, list)
+
+
+
+class TestCreateOfferMaxNotificationWithLoop:
+    """Cover line 116: create_task inside running event loop."""
+
+    @pytest.mark.asyncio
+    async def test_create_task_called(self, svc):
+        mock_db = MagicMock()
+        request_obj = SimpleNamespace(id=1, status="new", company_id=7, work_type="earthworks")
+        vehicle = SimpleNamespace(
+            company_id=5, id=10, marketplace_commission_agreed=True,
+            category_id=None, name="Test Vehicle",
+        )
+        company = SimpleNamespace(name="OOO Test")
+        category = SimpleNamespace(name="Test Category")
+        def get_se(model, id):
+            name = getattr(model, "__name__", str(model))
+            if "Request" in name: return request_obj
+            if "Vehicle" in name or "vehicle" in str(model).lower(): return vehicle
+            if "Company" in name: return company
+            if "Category" in name: return category
+            if id == 10: return vehicle
+            return None
+        mock_db.get = MagicMock(side_effect=get_se)
+        mock_db.execute.return_value.scalar_one_or_none.return_value = None
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        mock_db.add = MagicMock()
+        mock_db.commit = MagicMock()
+        def refresh_side_effect(obj):
+            if hasattr(obj, "id") and obj.id is None:
+                obj.id = 100
+        mock_db.refresh = MagicMock(side_effect=refresh_side_effect)
+        data = SimpleNamespace(
+            vehicle_id=10, offered_price=5000, price_type="hourly", commission_agreed=True,
+            currency="RUB", estimated_arrival_minutes=None, distance_km=None, message=None,
+        )
+        with (
+            patch("app.services.max_messenger_service.max_messenger_service") as mock_max,
+            patch("app.services.max_messenger_service.notification_templates") as mock_templates,
+        ):
+            mock_max.notify_company_dispatchers = AsyncMock()
+            mock_templates.offer_received.return_value = ("Title", "Body")
+            result = svc.create_offer_on_request(mock_db, company_id=5, request_id=1, data=data, current_company_id=5)
+        assert result is not None
+
+
+class TestRejectOfferNestedAccessDenied:
+    """Cover lines 309-310: both conditions true for nested access check."""
+
+    def test_created_by_different_and_company_different(self, svc):
+        mock_db = MagicMock()
+        offer = MagicMock()
+        offer.status = "pending"
+        request_obj = MagicMock()
+        # created_by != current_user.id (99 != 1) -> enters outer if
+        # company_id != current_company_id (88 != 7) -> enters inner if -> raises
+        request_obj.created_by = 99
+        request_obj.company_id = 88
+        offer.request = request_obj
+        mock_db.get.return_value = offer
+        current_user = SimpleNamespace(id=1)
+        data = SimpleNamespace(rejection_reason="no")
+        with pytest.raises(HTTPException, match="creator"):
+            svc.reject_offer(mock_db, company_id=7, offer_id=1, data=data, current_company_id=7, current_user=current_user)
+
+
+class TestPublishRequestForbidden:
+    """Cover line 556: publish_request raises 403."""
+
+    def test_company_mismatch(self, svc):
+        mock_db = MagicMock()
+        request_obj = SimpleNamespace(company_id=99)
+        mock_db.get.return_value = request_obj
+        with pytest.raises(HTTPException) as exc_info:
+            svc.publish_request(mock_db, company_id=7, request_id=1)
+        assert exc_info.value.status_code == 403
