@@ -127,7 +127,7 @@ class TestAssignVehicleErrors:
         )
         self._setup_assign_mocks(mock_db, req, vehicle)
         # create_notification raises -> covers except Exception: pass (lines 91-92)
-        with patch("app.services.notification_service.create_notification",
+        with patch("app.services.request_service.create_notification",
                    new_callable=AsyncMock, side_effect=RuntimeError("notify fail")):
             with pytest.raises(RequestServiceError) as exc_info:
                 await service.assign_vehicle(1, 5, None, 1, 1)
@@ -149,8 +149,12 @@ class TestAssignVehicleErrors:
             marketplace_commission_agreed=False,
         )
         self._setup_assign_mocks(mock_db, req, vehicle)
-        # db.commit raises -> triggers except Exception at line 233
-        mock_db.commit.side_effect = RuntimeError("DB crash on commit")
+        # db.commit raises RuntimeError (not IntegrityError) -> triggers except Exception at line 234-239
+        # Must NOT be IntegrityError (caught separately at line 226)
+        original_commit = mock_db.commit
+        def failing_commit():
+            raise RuntimeError("DB crash on commit")
+        mock_db.commit.side_effect = failing_commit
         with pytest.raises(RequestServiceError) as exc_info:
             await service.assign_vehicle(1, 5, None, 1, 1)
         assert exc_info.value.status_code == 500
