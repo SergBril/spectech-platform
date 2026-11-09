@@ -22,7 +22,7 @@ class TestCreateOfferMaxNotification:
         mock_db = MagicMock()
         request_obj = MagicMock()
         request_obj.id = 1
-        request_obj.status = "published"
+        request_obj.status = "new"
         request_obj.company_id = 7
         request_obj.work_type = "earthworks"
         vehicle = MagicMock()
@@ -51,7 +51,7 @@ class TestCreateOfferMaxNotification:
         mock_db = MagicMock()
         request_obj = MagicMock()
         request_obj.id = 1
-        request_obj.status = "published"
+        request_obj.status = "new"
         request_obj.company_id = 7
         request_obj.work_type = "earthworks"
         vehicle = MagicMock()
@@ -109,7 +109,7 @@ class TestAcceptOfferRejectOthers:
         request_obj = MagicMock()
         request_obj.created_by = 1
         request_obj.company_id = 7
-        request_obj.status = "published"
+        request_obj.status = "new"
         offer.request = request_obj
         other_offer = MagicMock()
         other_offer.status = "pending"
@@ -221,7 +221,7 @@ class TestListMarketplaceRequestsFilters:
         req.client_rate = 5000
         req.rate_type = "hourly"
         req.estimated_amount = 40000
-        req.priority = 1
+        req.priority = "normal"
         req.published_at = datetime(2026, 11, 9)
         category = MagicMock()
         category.name = "Экскаватор"
