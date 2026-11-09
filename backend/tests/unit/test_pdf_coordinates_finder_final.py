@@ -86,7 +86,7 @@ class TestMainBlock:
             "sys.argv = ['x', '/fake/path.pdf']\n"
             "from unittest.mock import patch\n"
             "with patch('app.services.pdf_coordinates_finder.create_coordinate_finder_pdf') as m:\n"
-            "    exec(open('app/services/pdf_coordinates_finder.py').read())\n"
+            "    exec(open('app/services/pdf_coordinates_finder.py', encoding='utf-8').read())\n"
             "    m.assert_called_once_with('/fake/path.pdf')\n"
         )
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir='.') as f:
@@ -102,7 +102,7 @@ class TestMainBlock:
         script = (
             "import sys\n"
             "sys.argv = ['x']\n"
-            "exec(open('app/services/pdf_coordinates_finder.py').read())\n"
+            "exec(open('app/services/pdf_coordinates_finder.py', encoding='utf-8').read())\n"
         )
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir='.') as f:
             f.write(script)
