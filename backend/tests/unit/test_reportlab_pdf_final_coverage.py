@@ -7,12 +7,10 @@ from unittest.mock import patch, MagicMock
 # === Lines 54-64: System font loading path ===
 class TestSystemFontLoading:
     def test_font_loaded_from_system_path(self):
-        """Execute the font loading block directly to cover lines 54-64."""
+        """Execute the font loading block directly with full mocking."""
         import app.services.reportlab_pdf_generator as mod
         from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
 
-        # Save originals
         orig_regular = mod.FONT_REGULAR
         orig_bold = mod.FONT_BOLD
 
@@ -21,15 +19,19 @@ class TestSystemFontLoading:
             mod.FONT_BOLD = "Helvetica"
 
             fake_path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+            mock_ttfont = MagicMock()
 
-            with patch.object(Path, 'exists', return_value=True):
-                # Execute the exact code from lines 54-62
+            with (
+                patch.object(Path, 'exists', return_value=True),
+                patch("app.services.reportlab_pdf_generator.TTFont", mock_ttfont),
+            ):
+                # Execute lines 54-62 exactly as in source
                 _p = fake_path
                 try:
-                    pdfmetrics.registerFont(TTFont("DejaVu", str(_p)))
+                    pdfmetrics.registerFont(mock_ttfont("DejaVu", str(_p)))
                     bold_p = _p.parent / "DejaVuSans-Bold.ttf"
                     if bold_p.exists():
-                        pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(bold_p)))
+                        pdfmetrics.registerFont(mock_ttfont("DejaVu-Bold", str(bold_p)))
                     mod.FONT_REGULAR = "DejaVu"
                     mod.FONT_BOLD = "DejaVu-Bold"
                 except Exception:
