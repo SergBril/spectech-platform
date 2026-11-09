@@ -1,4 +1,5 @@
 ﻿"""Полные тесты для reportlab_pdf_generator.py — покрытие всех оставшихся строк."""
+import sys
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -7,40 +8,38 @@ from unittest.mock import patch, MagicMock
 # === Lines 54-64: System font loading path ===
 class TestSystemFontLoading:
     def test_font_loaded_from_system_path(self):
-        """Execute the font loading block directly with full mocking."""
-        import app.services.reportlab_pdf_generator as mod
-        from reportlab.pdfbase import pdfmetrics
+        """Delete module from cache and re-import with mocked paths."""
+        mock_ttfont = MagicMock()
+        mock_pm = MagicMock()
 
-        orig_regular = mod.FONT_REGULAR
-        orig_bold = mod.FONT_BOLD
+        def fake_exists(path_self):
+            s = str(path_self)
+            if "DejaVu" in s or "dejavu" in s:
+                return True
+            return False
+
+        # Remove module and all its submodules from cache
+        mods_to_remove = [k for k in sys.modules if k.startswith("app.services.reportlab_pdf_generator")]
+        saved = {k: sys.modules.pop(k) for k in mods_to_remove}
 
         try:
-            mod.FONT_REGULAR = "Helvetica"
-            mod.FONT_BOLD = "Helvetica"
-
-            fake_path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
-            mock_ttfont = MagicMock()
-
             with (
-                patch.object(Path, 'exists', return_value=True),
-                patch("app.services.reportlab_pdf_generator.TTFont", mock_ttfont),
+                patch.object(Path, 'exists', side_effect=fake_exists),
+                patch.dict("sys.modules", {
+                    "reportlab.pdfbase.ttfonts": MagicMock(TTFont=mock_ttfont),
+                    "reportlab.pdfbase.pdfmetrics": mock_pm,
+                    "reportlab.pdfbase": MagicMock(),
+                    "reportlab": MagicMock(),
+                }),
             ):
-                # Execute lines 54-62 exactly as in source
-                _p = fake_path
-                try:
-                    pdfmetrics.registerFont(mock_ttfont("DejaVu", str(_p)))
-                    bold_p = _p.parent / "DejaVuSans-Bold.ttf"
-                    if bold_p.exists():
-                        pdfmetrics.registerFont(mock_ttfont("DejaVu-Bold", str(bold_p)))
-                    mod.FONT_REGULAR = "DejaVu"
-                    mod.FONT_BOLD = "DejaVu-Bold"
-                except Exception:
-                    pass
-
-            assert mod.FONT_REGULAR == "DejaVu"
+                import app.services.reportlab_pdf_generator as mod
+                assert mod.FONT_REGULAR == "DejaVu"
         finally:
-            mod.FONT_REGULAR = orig_regular
-            mod.FONT_BOLD = orig_bold
+            # Restore original modules
+            for k in list(sys.modules.keys()):
+                if k.startswith("app.services.reportlab_pdf_generator"):
+                    del sys.modules[k]
+            sys.modules.update(saved)
 
 
 # === Line 141: feminine form for thousands with t >= 20 ===
