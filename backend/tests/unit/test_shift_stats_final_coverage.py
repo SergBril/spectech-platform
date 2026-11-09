@@ -13,8 +13,7 @@ def svc():
 
 # === Lines 196, 953: driver without user (emp.user_id is None) ===
 class TestDriverKpiNoUserRealDb:
-    def test_driver_without_user(self, svc, db_session, company):
-        # Create contractor + employee WITHOUT user_id linked to company
+    def test_export_driver_kpi_no_user(self, svc, db_session, company):
         c = Contractor(name="Driver NoUser", type="employee", company_id=company.id)
         db_session.add(c)
         db_session.flush()
@@ -46,7 +45,8 @@ class TestDriverKpiNoUserRealDb:
             db_session, company_id=company.id,
             date_from="2026-11-01", date_to="2026-11-30",
         )
-        assert isinstance(result, list)
+        assert isinstance(result, dict)
+        assert "drivers" in result
 
 
 # === Line 311: vehicle_id filter in fuel consumption ===
