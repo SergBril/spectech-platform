@@ -123,7 +123,7 @@ class ShiftStatsService:
 
         from fastapi.responses import StreamingResponse
 
-        from app.models.contractor import DriverProfile, Employee
+        from app.models.contractor import Contractor as _Ctr, DriverProfile, Employee
 
         try:
             import openpyxl
@@ -142,7 +142,8 @@ class ShiftStatsService:
                     Employee,
                     DriverProfile.employee_contractor_id == Employee.contractor_id,
                 )
-                .where(getattr(Employee, "company_id", None) == company_id)
+                .join(_Ctr, Employee.contractor_id == _Ctr.id)
+                .where(_Ctr.company_id == company_id)
             )
             .scalars()
             .all()
@@ -909,7 +910,7 @@ class ShiftStatsService:
         """KPI водителей: часы работы, количество смен, утилизация, рейтинг."""
         from datetime import date as date_type
 
-        from app.models.contractor import DriverProfile, Employee
+        from app.models.contractor import Contractor as _Ctr, DriverProfile, Employee
 
         d_from = date_type.fromisoformat(date_from)
         d_to = date_type.fromisoformat(date_to)
@@ -922,7 +923,8 @@ class ShiftStatsService:
                     Employee,
                     DriverProfile.employee_contractor_id == Employee.contractor_id,
                 )
-                .where(getattr(Employee, "company_id", None) == company_id)
+                .join(_Ctr, Employee.contractor_id == _Ctr.id)
+                .where(_Ctr.company_id == company_id)
             )
             .scalars()
             .all()
