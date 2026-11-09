@@ -279,12 +279,17 @@ class TestListMarketplaceRequestsFilters:
         exec_result.scalars.return_value.all.return_value = [req]
         count_result = MagicMock()
         count_result.count.return_value = 2
+        # First execute returns vehicle categories for my_category_ids
+        cat_result = MagicMock()
+        cat_result.distinct.return_value.all.return_value = [(3,), (5,)]
         call_count = [0]
         def execute_se(stmt):
             call_count[0] += 1
             if call_count[0] == 1:
-                return exec_result
-            return count_result
+                return cat_result  # vehicle categories
+            if call_count[0] == 2:
+                return exec_result  # requests
+            return count_result  # offers count
         mock_db.execute = MagicMock(side_effect=execute_se)
         mock_db.query.return_value.filter.return_value = count_result
         def get_se(model, id):
@@ -340,10 +345,11 @@ class TestRejectOfferAccessDeniedNested:
         request_obj.created_by = 99
         request_obj.company_id = 99
         offer.request = request_obj
+        # reject_offer uses db.get(MarketplaceOffer, offer_id) at line ~293
         mock_db.get.return_value = offer
         current_user = SimpleNamespace(id=1)
         data = SimpleNamespace(rejection_reason="test")
-        with pytest.raises(HTTPException):
+        with pytest.raises(HTTPException, match="reject"):
             svc.reject_offer(mock_db, company_id=7, offer_id=1, data=data, current_company_id=7, current_user=current_user)
 
 
@@ -406,12 +412,17 @@ class TestListMarketplaceRequestsMyCategories:
         exec_result.scalars.return_value.all.return_value = [req]
         count_result = MagicMock()
         count_result.count.return_value = 0
+        # First execute returns vehicle categories for my_category_ids
+        cat_result = MagicMock()
+        cat_result.distinct.return_value.all.return_value = [(3,), (5,)]
         call_count = [0]
         def execute_se(stmt):
             call_count[0] += 1
             if call_count[0] == 1:
-                return exec_result
-            return count_result
+                return cat_result  # vehicle categories
+            if call_count[0] == 2:
+                return exec_result  # requests
+            return count_result  # offers count
         mock_db.execute = MagicMock(side_effect=execute_se)
         mock_db.query.return_value.filter.return_value = count_result
         def get_se(model, id):
