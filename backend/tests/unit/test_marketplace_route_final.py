@@ -106,8 +106,15 @@ class TestAcceptOfferRejectOthers:
         offer.offered_price = 5000
         offer.price_type = "hourly"
         offer.created_at = datetime(2026, 11, 9)
+        offer.updated_at = datetime(2026, 11, 9)
         offer.reviewed_at = None
         offer.rejection_reason = None
+        offer.currency = "RUB"
+        offer.estimated_arrival_minutes = None
+        offer.distance_km = None
+        offer.message = None
+        offer.operator_id = None
+        offer.reviewed_by_id = None
         request_obj = MagicMock()
         request_obj.created_by = 1
         request_obj.company_id = 7

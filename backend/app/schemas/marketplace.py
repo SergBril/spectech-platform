@@ -1,5 +1,6 @@
 """Схемы для маркетплейса."""
 
+from datetime import datetime
 from pydantic import BaseModel
 
 
@@ -31,7 +32,7 @@ class OfferRead(BaseModel):
     message: str | None = None
     status: str | None = None
     reviewed_by_id: int | None = None
-    reviewed_at: object | None = None
+    reviewed_at: "datetime | None" = None
     rejection_reason: str | None = None
-    created_at: object | None = None
-    updated_at: object | None = None
+    created_at: "datetime | None" = None
+    updated_at: "datetime | None" = None
