@@ -2,7 +2,7 @@
 import pytest
 from datetime import date, datetime
 from app.services.shift_stats_service import ShiftStatsService
-from app.models import Request, Employee, Contractor, DriverProfile
+from app.models import Request, Employee, Contractor, DriverProfile, User
 from app.models.shift import ShiftTask, ShiftFuelEntry
 
 
@@ -14,6 +14,7 @@ def svc():
 # === Lines 196, 953: driver without user (emp.user_id is None) ===
 class TestDriverKpiNoUserRealDb:
     def test_driver_without_user(self, svc, db_session, company):
+        # Create contractor + employee WITHOUT user_id linked to company
         c = Contractor(name="Driver NoUser", type="employee", company_id=company.id)
         db_session.add(c)
         db_session.flush()
@@ -29,6 +30,23 @@ class TestDriverKpiNoUserRealDb:
             date_from="2026-11-01", date_to="2026-11-30",
         )
         assert result is not None
+
+    def test_get_driver_kpi_no_user(self, svc, db_session, company):
+        c = Contractor(name="Driver NoUser2", type="employee", company_id=company.id)
+        db_session.add(c)
+        db_session.flush()
+        emp = Employee(contractor_id=c.id, position="Operator")
+        db_session.add(emp)
+        db_session.flush()
+        dp = DriverProfile(employee_contractor_id=c.id)
+        db_session.add(dp)
+        db_session.commit()
+
+        result = svc.get_driver_kpi(
+            db_session, company_id=company.id,
+            date_from="2026-11-01", date_to="2026-11-30",
+        )
+        assert isinstance(result, list)
 
 
 # === Line 311: vehicle_id filter in fuel consumption ===
@@ -65,7 +83,6 @@ class TestExportPnlImportError:
 # === Lines 557, 561: Utilization color coding ===
 class TestUtilizationExcelColorCodingRealDb:
     def test_high_utilization(self, svc, db_session, company, sample_vehicle):
-        # Create request + many shift tasks for high utilization
         req = Request(
             company_id=company.id, status="assigned",
             planned_start=datetime(2026, 11, 1, 8, 0),
