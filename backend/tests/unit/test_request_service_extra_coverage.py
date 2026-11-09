@@ -99,8 +99,6 @@ class TestAssignVehicleErrors:
     async def test_marketplace_commission_denied(self, service, mock_db):
         """Lines 91-92: marketplace + no commission -> 403."""
         from app.services.request_service import RequestServiceError
-        from app.models.dispatch import Request as ReqModel
-        from app.models.catalog import Vehicle as VehModel
         req = SimpleNamespace(
             id=1, company_id=1, status="new",
             vehicle_category_id=1, assigned_vehicle_id=None,
@@ -126,8 +124,6 @@ class TestAssignVehicleErrors:
     async def test_unexpected_error_rollback(self, service, mock_db):
         """Lines 232-239: unexpected error -> rollback + 500."""
         from app.services.request_service import RequestServiceError
-        from app.models.dispatch import Request as ReqModel
-        from app.models.catalog import Vehicle as VehModel
         req = SimpleNamespace(
             id=1, company_id=1, status="new",
             vehicle_category_id=1, assigned_vehicle_id=None,
@@ -140,16 +136,15 @@ class TestAssignVehicleErrors:
             marketplace_commission_agreed=False,
         )
         def mock_get(model, pk):
-            if model == ReqModel or pk == 1: return req
-            if model == VehModel or pk == 5: return vehicle
-            return MagicMock(name="mock_obj")
+            mn = getattr(model, '__name__', '')
+            if mn == 'Request' and pk == 1: return req
+            if mn == 'Vehicle' and pk == 5: return vehicle
+            return SimpleNamespace(name=f"mock_{pk}", id=pk, company_id=1)
         mock_db.get.side_effect = mock_get
-        # scalar for overlap check returns None
         mock_db.scalar.return_value = None
-        # query().filter().first() for idempotency returns None
-        mock_query = MagicMock()
-        mock_query.filter.return_value.first.return_value = None
-        mock_db.query.return_value = mock_query
+        mock_q = MagicMock()
+        mock_q.filter.return_value.first.return_value = None
+        mock_db.query.return_value = mock_q
         mock_db.add.side_effect = RuntimeError("DB crash")
         with pytest.raises(RequestServiceError) as exc_info:
             await service.assign_vehicle(1, 5, None, 1, 1)
