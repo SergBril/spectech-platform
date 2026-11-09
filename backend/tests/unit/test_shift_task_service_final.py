@@ -154,6 +154,7 @@ class TestAutoAssignJsonException:
         vehicle = MagicMock()
         vehicle.company_id = 7
         vehicle.category_id = 5
+        vehicle.category = "C"
         rule = MagicMock()
         rule.config_json = "invalid{{{"
         rule.rule_type = "blacklist"
