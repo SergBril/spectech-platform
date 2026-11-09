@@ -69,7 +69,7 @@ class TestAllChannelsSuccess:
     async def test_all_sent(self, dispatcher):
         db = _mdb([_emp(), _ctr(), _usr()])
         with patch(MOD + ".generate_salary_payslip", return_value=b"pdf"):
-            with patch(MOD + ".create_notification"):
+            with patch(MOD + ".create_notification", new=MagicMock()):
                 with patch(MOD + ".email_service") as es:
                     es.send_email = AsyncMock()
                     with patch(MOD + ".telegram_service") as ts:
@@ -93,7 +93,7 @@ class TestPdfFails:
     async def test_tg_text_fallback(self, dispatcher):
         db = _mdb([_emp(), _ctr(), _usr()])
         with patch(MOD + ".generate_salary_payslip", side_effect=RuntimeError("fail")):
-            with patch(MOD + ".create_notification"):
+            with patch(MOD + ".create_notification", new=MagicMock()):
                 with patch(MOD + ".telegram_service") as ts:
                     ts.send_message = AsyncMock()
                     r = await dispatcher.notify_employee(db, _rec())
@@ -123,7 +123,7 @@ class TestEmailFails:
     async def test_fail(self, dispatcher):
         db = _mdb([_emp(), _ctr(), _usr()])
         with patch(MOD + ".generate_salary_payslip", return_value=b"pdf"):
-            with patch(MOD + ".create_notification"):
+            with patch(MOD + ".create_notification", new=MagicMock()):
                 with patch(MOD + ".email_service") as es:
                     es.send_email = AsyncMock(side_effect=RuntimeError("SMTP fail"))
                     with patch(MOD + ".telegram_service") as ts:
@@ -138,7 +138,7 @@ class TestTelegramDocFails:
     async def test_fail(self, dispatcher):
         db = _mdb([_emp(), _ctr(), _usr()])
         with patch(MOD + ".generate_salary_payslip", return_value=b"pdf"):
-            with patch(MOD + ".create_notification"):
+            with patch(MOD + ".create_notification", new=MagicMock()):
                 with patch(MOD + ".email_service") as es:
                     es.send_email = AsyncMock()
                     with patch(MOD + ".telegram_service") as ts:
@@ -152,7 +152,7 @@ class TestTelegramTextFallback:
     async def test_success(self, dispatcher):
         db = _mdb([_emp(), _ctr(contact_email=None), _usr(email=None)])
         with patch(MOD + ".generate_salary_payslip", side_effect=RuntimeError("no pdf")):
-            with patch(MOD + ".create_notification"):
+            with patch(MOD + ".create_notification", new=MagicMock()):
                 with patch(MOD + ".telegram_service") as ts:
                     ts.send_message = AsyncMock()
                     r = await dispatcher.notify_employee(db, _rec())
@@ -163,7 +163,7 @@ class TestTelegramTextFallback:
     async def test_fail(self, dispatcher):
         db = _mdb([_emp(), _ctr(), _usr()])
         with patch(MOD + ".generate_salary_payslip", side_effect=RuntimeError("no pdf")):
-            with patch(MOD + ".create_notification"):
+            with patch(MOD + ".create_notification", new=MagicMock()):
                 with patch(MOD + ".telegram_service") as ts:
                     ts.send_message = AsyncMock(side_effect=RuntimeError("TG text fail"))
                     r = await dispatcher.notify_employee(db, _rec())
