@@ -34,7 +34,6 @@ class TestCreateOfferMaxNotification:
             if "Vehicle" in name or "vehicle" in str(model).lower(): return vehicle
             if "Company" in name: return company
             if "Category" in name: return category
-            # Fallback: if id matches vehicle id, return vehicle
             if id == 10: return vehicle
             return None
         company = MagicMock()
