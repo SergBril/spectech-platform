@@ -12,19 +12,15 @@ class TestSystemFontLoading:
         mock_ttfont = MagicMock()
         mock_pm = MagicMock()
 
-        def fake_exists(path_self):
-            s = str(path_self)
-            if "DejaVu" in s or "dejavu" in s:
-                return True
-            return False
+        # Use lambda to avoid self argument issues
+        fake_exists = lambda self: "DejaVu" in str(self) or "dejavu" in str(self).lower()
 
-        # Remove module and all its submodules from cache
         mods_to_remove = [k for k in sys.modules if k.startswith("app.services.reportlab_pdf_generator")]
         saved = {k: sys.modules.pop(k) for k in mods_to_remove}
 
         try:
             with (
-                patch.object(Path, 'exists', side_effect=fake_exists),
+                patch.object(Path, 'exists', fake_exists),
                 patch.dict("sys.modules", {
                     "reportlab.pdfbase.ttfonts": MagicMock(TTFont=mock_ttfont),
                     "reportlab.pdfbase.pdfmetrics": mock_pm,
@@ -35,7 +31,6 @@ class TestSystemFontLoading:
                 import app.services.reportlab_pdf_generator as mod
                 assert mod.FONT_REGULAR == "DejaVu"
         finally:
-            # Restore original modules
             for k in list(sys.modules.keys()):
                 if k.startswith("app.services.reportlab_pdf_generator"):
                     del sys.modules[k]
