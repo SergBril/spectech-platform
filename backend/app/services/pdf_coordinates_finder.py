@@ -10,7 +10,7 @@ import sys
 import tempfile
 import webbrowser
 
-import fitz  # PyMuPDF
+import pymupdf as fitz
 
 
 def create_coordinate_finder_pdf(source_pdf_path: str):

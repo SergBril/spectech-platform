@@ -74,3 +74,23 @@ class TestCreateCoordinateFinderPdf:
                 with patch("app.services.pdf_coordinates_finder.webbrowser.open"):
                     result = create_coordinate_finder_pdf("/fake/source.pdf")
         assert result == "/tmp/zero.pdf"
+
+
+
+class TestMainBlock:
+    def test_main_with_args(self):
+        """Cover if __name__ == '__main__' with valid args."""
+        import runpy
+        from unittest.mock import patch
+        with patch("app.services.pdf_coordinates_finder.create_coordinate_finder_pdf") as mock_fn:
+            with patch("sys.argv", ["pdf_coordinates_finder.py", "/fake/path.pdf"]):
+                runpy.run_module("app.services.pdf_coordinates_finder", run_name="__main__")
+            mock_fn.assert_called_once_with("/fake/path.pdf")
+
+    def test_main_no_args(self):
+        """Cover sys.exit(1) when no args provided."""
+        import runpy
+        with patch("sys.argv", ["pdf_coordinates_finder.py"]):
+            with pytest.raises(SystemExit) as exc_info:
+                runpy.run_module("app.services.pdf_coordinates_finder", run_name="__main__")
+            assert exc_info.value.code == 1
