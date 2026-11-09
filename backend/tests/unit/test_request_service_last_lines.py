@@ -22,11 +22,10 @@ def service(mock_db):
     return RequestService(mock_db)
 
 
-# === Line 233: re-raise RequestServiceError on IntegrityError ===
+# === Line 233: re-raise RequestServiceError (not IntegrityError) ===
 class TestAssignVehicleReraise:
     @pytest.mark.asyncio
-    async def test_reraise_on_integrity_error(self, service, mock_db):
-        from sqlalchemy.exc import IntegrityError
+    async def test_reraise_request_service_error(self, service, mock_db):
         from app.services.request_service import RequestServiceError
 
         req = SimpleNamespace(
@@ -44,7 +43,9 @@ class TestAssignVehicleReraise:
         mock_query_chain = MagicMock()
         mock_query_chain.filter.return_value.first.return_value = None
         mock_db.query.return_value = mock_query_chain
-        mock_db.commit.side_effect = IntegrityError("duplicate", None, None)
+
+        # Make commit raise RequestServiceError directly -> line 232 catches -> line 233 re-raises
+        mock_db.commit.side_effect = RequestServiceError(409, "test conflict")
 
         with patch("app.services.request_service.create_notification", new_callable=AsyncMock):
             with pytest.raises(RequestServiceError) as exc_info:
