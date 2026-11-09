@@ -291,7 +291,8 @@ class TestListMarketplaceRequestsFilters:
                 return exec_result  # requests
             return count_result  # offers count
         mock_db.execute = MagicMock(side_effect=execute_se)
-        mock_db.query.return_value.filter.return_value = count_result
+        # db.query().filter().count() for offers_count
+        mock_db.query.return_value.filter.return_value.count.return_value = 2
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
             if "Category" in name: return category
@@ -424,7 +425,8 @@ class TestListMarketplaceRequestsMyCategories:
                 return exec_result  # requests
             return count_result  # offers count
         mock_db.execute = MagicMock(side_effect=execute_se)
-        mock_db.query.return_value.filter.return_value = count_result
+        # db.query().filter().count() for offers_count
+        mock_db.query.return_value.filter.return_value.count.return_value = 2
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
             if "Category" in name: return category
