@@ -159,7 +159,7 @@ class FuelCardService:
             vehicle = db.execute(
                 select(Vehicle).where(
                     Vehicle.company_id == company_id,
-                    Vehicle.plate_number == txn.get("vehicle_plate", ""),
+                    Vehicle.psm_number == txn.get("vehicle_plate", ""),
                 )
             ).scalar_one_or_none()
 
