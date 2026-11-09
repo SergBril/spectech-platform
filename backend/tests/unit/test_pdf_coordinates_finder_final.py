@@ -80,27 +80,33 @@ class TestCreateCoordinateFinderPdf:
 class TestMainBlock:
     def test_main_with_args(self):
         """Cover if __name__ == '__main__' with valid args."""
-        import subprocess
-        import sys
-        result = subprocess.run(
-            [sys.executable, "-c",
-             "import sys; sys.argv = ['x', '/fake/path.pdf']; "
-             "from unittest.mock import patch; "
-             "with patch('app.services.pdf_coordinates_finder.create_coordinate_finder_pdf') as m: "
-             "    exec(open('app/services/pdf_coordinates_finder.py').read()); "
-             "    m.assert_called_once_with('/fake/path.pdf')"],
-            capture_output=True, text=True, cwd=r"C:\Users\osavi\spectech-platform\backend"
+        import subprocess, sys, tempfile, os
+        script = (
+            "import sys\n"
+            "sys.argv = ['x', '/fake/path.pdf']\n"
+            "from unittest.mock import patch\n"
+            "with patch('app.services.pdf_coordinates_finder.create_coordinate_finder_pdf') as m:\n"
+            "    exec(open('app/services/pdf_coordinates_finder.py').read())\n"
+            "    m.assert_called_once_with('/fake/path.pdf')\n"
         )
-        assert result.returncode == 0, f"stdout={result.stdout} stderr={result.stderr}"
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir='.') as f:
+            f.write(script)
+            f.flush()
+            result = subprocess.run([sys.executable, f.name], capture_output=True, text=True)
+        os.unlink(f.name)
+        assert result.returncode == 0, f"stderr={result.stderr}"
 
     def test_main_no_args(self):
         """Cover sys.exit(1) when no args provided."""
-        import subprocess
-        import sys
-        result = subprocess.run(
-            [sys.executable, "-c",
-             "import sys; sys.argv = ['x']; "
-             "exec(open('app/services/pdf_coordinates_finder.py').read())"],
-            capture_output=True, text=True, cwd=r"C:\Users\osavi\spectech-platform\backend"
+        import subprocess, sys, tempfile, os
+        script = (
+            "import sys\n"
+            "sys.argv = ['x']\n"
+            "exec(open('app/services/pdf_coordinates_finder.py').read())\n"
         )
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir='.') as f:
+            f.write(script)
+            f.flush()
+            result = subprocess.run([sys.executable, f.name], capture_output=True, text=True)
+        os.unlink(f.name)
         assert result.returncode == 1
