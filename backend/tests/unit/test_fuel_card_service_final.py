@@ -90,6 +90,28 @@ class TestFetchTransactions:
             assert r[0]["fuel_type"] == "ai95"
 
     @pytest.mark.asyncio
+    async def test_lukoil_with_cards(self):
+        with patch("app.core.config.settings") as s:
+            s.FUEL_CARD_API_KEY = "key"
+            s.FUEL_CARD_PROVIDER = "lukoil"
+            s.FUEL_CARD_BASE_URL = "https://api.lukoil.test"
+            from app.services.fuel_card_service import FuelCardService
+            svc = FuelCardService()
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = {"data": []}
+            mock_resp.raise_for_status = MagicMock()
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_resp)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            with patch("httpx.AsyncClient", return_value=mock_client):
+                r = await svc.fetch_transactions("2026-02-01", "2026-02-28", ["1111", "2222"])
+            assert r == []
+            # Verify cards were passed in payload
+            call_kwargs = mock_client.post.call_args
+            assert call_kwargs.kwargs["json"]["cards"] == ["1111", "2222"]
+
+    @pytest.mark.asyncio
     async def test_unknown_provider(self):
         with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = "key"
