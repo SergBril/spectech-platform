@@ -35,6 +35,7 @@ class TestCreateOfferMaxNotification:
             return None
         mock_db.get = MagicMock(side_effect=get_se)
         mock_db.execute.return_value.scalar_one_or_none.return_value = None
+        mock_db.query.return_value.filter.return_value.first.return_value = None
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
@@ -64,6 +65,7 @@ class TestCreateOfferMaxNotification:
             return None
         mock_db.get = MagicMock(side_effect=get_se)
         mock_db.execute.return_value.scalar_one_or_none.return_value = None
+        mock_db.query.return_value.filter.return_value.first.return_value = None
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()

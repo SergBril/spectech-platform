@@ -11,7 +11,7 @@ from app.models.catalog import Vehicle
 from app.models.company import Company
 from app.models.dispatch import Request, RequestStatus
 from app.models.marketplace import MarketplaceOffer
-from app.schemas.marketplace import PublishRequestResponse
+from app.schemas.marketplace import OfferRead, PublishRequestResponse
 from app.schemas.request import MarketplaceRequestRead
 
 logger = logging.getLogger("spectech.marketplace")
