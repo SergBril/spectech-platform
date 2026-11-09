@@ -139,6 +139,8 @@ class TestFontFallbackPaths:
         """Cover lines 53-62: system path found and registered successfully."""
         import importlib
         import sys
+        import reportlab.pdfbase.ttfonts as ttfonts_mod
+        import reportlab.pdfbase.pdfmetrics as pdfmetrics_mod
         import app.services.reportlab_pdf_generator as mod
         orig_regular = mod.FONT_REGULAR
         orig_bold = mod.FONT_BOLD
@@ -152,8 +154,8 @@ class TestFontFallbackPaths:
             mock_ttfont = MagicMock()
             with (
                 patch.object(Path, "exists", mock_exists),
-                patch("app.services.reportlab_pdf_generator.TTFont", mock_ttfont),
-                patch("app.services.reportlab_pdf_generator.pdfmetrics.registerFont"),
+                patch.object(ttfonts_mod, "TTFont", mock_ttfont),
+                patch.object(pdfmetrics_mod, "registerFont"),
             ):
                 fresh_mod = importlib.import_module("app.services.reportlab_pdf_generator")
                 assert fresh_mod.FONT_REGULAR == "DejaVu"
