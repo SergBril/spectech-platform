@@ -41,7 +41,7 @@ class TestCreateOfferMaxNotification:
         data = SimpleNamespace(
             offered_price=5000, price_type="hourly", commission_agreed=True,
         )
-        with patch("app.services.marketplace_route_service.max_messenger_service") as mock_max:
+        with patch("app.services.max_messenger_service.max_messenger_service") as mock_max:
             mock_max.notify_company_dispatchers = AsyncMock()
             result = svc.create_offer_on_request(mock_db, company_id=5, request_id=1, data=data, current_company_id=5)
         assert result is not None
@@ -71,7 +71,7 @@ class TestCreateOfferMaxNotification:
             offered_price=5000, price_type="hourly", commission_agreed=True,
         )
         with (
-            patch("app.services.marketplace_route_service.max_messenger_service"),
+            patch("app.services.max_messenger_service.max_messenger_service"),
             patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")),
         ):
             result = svc.create_offer_on_request(mock_db, company_id=5, request_id=1, data=data, current_company_id=5)
@@ -109,6 +109,8 @@ class TestAcceptOfferRejectOthers:
         request_obj = MagicMock()
         request_obj.created_by = 1
         request_obj.company_id = 7
+        request_obj.status = "published"
+        offer.request = request_obj
         other_offer = MagicMock()
         other_offer.status = "pending"
         current_user = SimpleNamespace(id=1)
@@ -116,15 +118,17 @@ class TestAcceptOfferRejectOthers:
         company.name = "OOO Test"
         vehicle = MagicMock()
         vehicle.category_id = None
+        # db.query().options().filter().first() -> offer
+        mock_db.query.return_value.options.return_value.filter.return_value.first.return_value = offer
+        # db.execute for other offers
+        mock_db.execute.return_value.scalars.return_value.all.return_value = [other_offer]
+        # db.get for company/vehicle in _build_offer_response
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
-            if "MarketplaceOffer" in name or "Offer" in name: return offer
-            if "Request" in name: return request_obj
             if "Company" in name: return company
             if "Vehicle" in name: return vehicle
             return None
         mock_db.get = MagicMock(side_effect=get_se)
-        mock_db.execute.return_value.scalars.return_value.all.return_value = [other_offer]
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
         result = svc.accept_offer(mock_db, company_id=7, offer_id=1, current_company_id=7, current_user=current_user)
@@ -156,7 +160,7 @@ class TestRejectOfferValidation:
         mock_db.get.return_value = offer
         current_user = SimpleNamespace(id=1)
         data = SimpleNamespace(rejection_reason="test")
-        with pytest.raises(HTTPException, match="Only the request creator"):
+        with pytest.raises(HTTPException, match="reject"):
             svc.reject_offer(mock_db, company_id=7, offer_id=1, data=data, current_company_id=7, current_user=current_user)
 
 
@@ -211,6 +215,14 @@ class TestListMarketplaceRequestsFilters:
         req.price_type = "fixed"
         req.start_date = datetime(2026, 11, 10)
         req.end_date = datetime(2026, 11, 20)
+        req.planned_start = datetime(2026, 11, 10)
+        req.planned_end = datetime(2026, 11, 20)
+        req.shift_duration_hours = 8
+        req.client_rate = 5000
+        req.rate_type = "hourly"
+        req.estimated_amount = 40000
+        req.priority = 1
+        req.published_at = datetime(2026, 11, 9)
         category = MagicMock()
         category.name = "Экскаватор"
         exec_result = MagicMock()
