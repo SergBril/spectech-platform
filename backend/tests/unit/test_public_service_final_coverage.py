@@ -1,4 +1,4 @@
-﻿"""Точечные тесты для public_service.py — покрытие оставшихся строк."""
+﻿"""Точечные тесты для public_service.py — покрытие оставшихся 7 строк."""
 import pytest
 from datetime import datetime
 from types import SimpleNamespace
@@ -38,7 +38,6 @@ class TestGetVehicleAvailabilityException:
 
     def test_internal_error(self, svc):
         mock_db = MagicMock()
-        # marketplace_service is imported inside the method
         with patch("app.services.marketplace_service.marketplace_service") as mock_mkt:
             mock_mkt.get_vehicle_details.return_value = SimpleNamespace(id=1, name="Test")
             mock_mkt.get_availability_calendar.side_effect = RuntimeError("boom")
@@ -49,20 +48,21 @@ class TestGetVehicleAvailabilityException:
 class TestCreateRequestFromListingValueError:
     """Line 454: ValueError handler."""
 
-    def test_value_error(self, svc):
+    def test_value_error_from_marketplace(self, svc):
         mock_db = MagicMock()
-        vehicle = SimpleNamespace(id=1, company_id=1, status="active", category_id=1)
-        mock_db.get.return_value = vehicle
         data = SimpleNamespace(
             work_type="earthworks", object_address="Moscow",
-            planned_start=datetime(2026, 12, 1), planned_end=datetime(2026, 12, 5),
-            vehicle_category_id=1, description="Test",
+            planned_start="2026-12-01T00:00:00", planned_end="2026-12-05T00:00:00",
+            contact_name="Test", contact_phone="+79990000000", contact_email="test@test.com",
+            comment="Test",
         )
-        # create_request_from_listing calls RequestService internally
-        # Patch at the point of use inside the method
-        with patch("app.services.public_service.RequestService") as MockRS:
-            MockRS.return_value.create_request.side_effect = ValueError("bad input")
-            with pytest.raises(HTTPException, match="bad input"):
+        with patch("app.services.marketplace_service.marketplace_service") as mock_mkt:
+            mock_mkt.get_vehicle_details.return_value = SimpleNamespace(
+                id=1, name="Test", company_id=1,
+            )
+            # Make marketplace_service.create_request_from_listing raise ValueError
+            mock_mkt.create_request_from_listing.side_effect = ValueError("bad value")
+            with pytest.raises(HTTPException, match="bad value"):
                 svc.create_request_from_listing(mock_db, vehicle_id=1, data=data, company_id=1)
 
 
@@ -71,8 +71,8 @@ class TestGetPublicCompanyReviewsException:
 
     def test_internal_error(self, svc):
         mock_db = MagicMock()
-        # get_public_company_reviews uses db.execute inside try
-        mock_db.execute.side_effect = RuntimeError("reviews boom")
+        # get_public_company_reviews uses db.query().join().filter().all()
+        mock_db.query.side_effect = RuntimeError("reviews boom")
         with pytest.raises(HTTPException, match="Internal error"):
             svc.get_public_company_reviews(mock_db, limit=10, company_id=1)
 
@@ -82,7 +82,6 @@ class TestListPublicCategoriesException:
 
     def test_internal_error(self, svc):
         mock_db = MagicMock()
-        # list_public_categories uses db.scalars(stmt) inside try
         mock_db.scalars.side_effect = RuntimeError("cat boom")
         with pytest.raises(HTTPException, match="Internal error"):
             svc.list_public_categories(mock_db, company_id=1)
