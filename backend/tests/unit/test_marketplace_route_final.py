@@ -25,9 +25,10 @@ class TestCreateOfferMaxNotification:
         request_obj.status = "new"
         request_obj.company_id = 7
         request_obj.work_type = "earthworks"
-        vehicle = MagicMock()
-        vehicle.company_id = 5
-        vehicle.id = 10
+        vehicle = SimpleNamespace(
+            company_id=5, id=10, marketplace_commission_agreed=True,
+            category_id=None, name="Test Vehicle",
+        )
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
             if "Request" in name: return request_obj
@@ -66,9 +67,10 @@ class TestCreateOfferMaxNotification:
         request_obj.status = "new"
         request_obj.company_id = 7
         request_obj.work_type = "earthworks"
-        vehicle = MagicMock()
-        vehicle.company_id = 5
-        vehicle.id = 10
+        vehicle = SimpleNamespace(
+            company_id=5, id=10, marketplace_commission_agreed=True,
+            category_id=None, name="Test Vehicle",
+        )
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
             if "Request" in name: return request_obj
