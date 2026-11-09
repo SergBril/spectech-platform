@@ -49,15 +49,19 @@ class TestUtilizationExcelColorCoding:
         task1 = SimpleNamespace(vehicle_id=1, operator_id=1, shift_date=date(2026, 11, 1), planned_start=now, planned_end=end)
         task2 = SimpleNamespace(vehicle_id=2, operator_id=2, shift_date=date(2026, 11, 1), planned_start=now, planned_end=end)
 
-        # db.query(Vehicle).filter().all() returns vehicles
-        mock_filter = MagicMock()
-        mock_filter.all.return_value = [v1, v2]
-        mock_db.query.return_value.filter.return_value = mock_filter
+        # Both vehicles and tasks use db.execute().scalars().all()
+        # First call -> vehicles, second call -> tasks
+        mock_scalars_vehicles = MagicMock()
+        mock_scalars_vehicles.all.return_value = [v1, v2]
+        mock_scalars_tasks = MagicMock()
+        mock_scalars_tasks.all.return_value = [task1, task2]
 
-        # db.execute(select(...)).scalars().all() returns tasks
-        mock_scalars = MagicMock()
-        mock_scalars.all.return_value = [task1, task2]
-        mock_db.execute.return_value.scalars.return_value = mock_scalars
+        mock_exec_vehicles = MagicMock()
+        mock_exec_vehicles.scalars.return_value = mock_scalars_vehicles
+        mock_exec_tasks = MagicMock()
+        mock_exec_tasks.scalars.return_value = mock_scalars_tasks
+
+        mock_db.execute.side_effect = [mock_exec_vehicles, mock_exec_tasks]
 
         result = svc.export_utilization_excel(mock_db, company_id=1, date_from="2026-11-01", date_to="2026-11-30")
         assert result is not None
