@@ -105,7 +105,7 @@ class TestAlertEngineChecks:
             threshold=500.0,
             is_active=True,
         )
-        result = _check_engine_hours(db_session, point, rule)
+        result = _check_engine_hours(db_session, point, rule, 1)
         assert result is None
 
     def test_check_idle_no_prev(self, db_session, sample_vehicle):
@@ -130,7 +130,7 @@ class TestAlertEngineChecks:
             threshold=30.0,
             is_active=True,
         )
-        result = _check_idle(db_session, point, rule)
+        result = _check_idle(db_session, point, rule, 1)
         assert result is None
 
     def test_seed_default_rules(self, db_session):

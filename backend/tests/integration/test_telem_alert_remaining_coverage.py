@@ -76,7 +76,7 @@ class TestAlertEngineRemaining:
             threshold=90.0,
             is_active=True,
         )
-        result = _check_speed(db_session, point, rule)
+        result = _check_speed(db_session, point, rule, 1)
         assert result is None  # Below threshold
 
     def test_check_fuel_no_prev(self, db_session, sample_vehicle):
@@ -101,5 +101,5 @@ class TestAlertEngineRemaining:
             threshold=10.0,
             is_active=True,
         )
-        result = _check_fuel(db_session, point, rule)
+        result = _check_fuel(db_session, point, rule, 1)
         assert result is None  # No previous point to compare
