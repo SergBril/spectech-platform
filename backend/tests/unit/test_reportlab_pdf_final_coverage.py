@@ -1,5 +1,6 @@
 ﻿"""Полные тесты для reportlab_pdf_generator.py — покрытие всех оставшихся строк."""
 import sys
+import importlib
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -8,33 +9,39 @@ from unittest.mock import patch, MagicMock
 # === Lines 54-64: System font loading path ===
 class TestSystemFontLoading:
     def test_font_loaded_from_system_path(self):
-        """Delete module from cache and re-import with mocked paths."""
-        mock_ttfont = MagicMock()
-        mock_pm = MagicMock()
+        """Reload module with mocked Path.exists and TTFont to cover lines 54-64."""
+        import app.services.reportlab_pdf_generator as mod
+        from reportlab.pdfbase import pdfmetrics
 
-        # Use lambda to avoid self argument issues
-        fake_exists = lambda self: "DejaVu" in str(self) or "dejavu" in str(self).lower()
-
-        mods_to_remove = [k for k in sys.modules if k.startswith("app.services.reportlab_pdf_generator")]
-        saved = {k: sys.modules.pop(k) for k in mods_to_remove}
+        # Save state
+        orig_regular = mod.FONT_REGULAR
+        orig_bold = mod.FONT_BOLD
+        orig_ttfont = None
 
         try:
+            # Reset to force system path check
+            mod.FONT_REGULAR = "Helvetica"
+            mod.FONT_BOLD = "Helvetica"
+
+            fake_exists = lambda self: "DejaVu" in str(self) or "dejavu" in str(self).lower()
+            mock_ttfont = MagicMock()
+
+            # Patch TTFont at the point where it's imported in the module
             with (
                 patch.object(Path, 'exists', fake_exists),
-                patch.dict("sys.modules", {
-                    "reportlab.pdfbase.ttfonts": MagicMock(TTFont=mock_ttfont),
-                    "reportlab.pdfbase.pdfmetrics": mock_pm,
-                    "reportlab.pdfbase": MagicMock(),
-                    "reportlab": MagicMock(),
-                }),
+                patch.object(mod, 'TTFont', mock_ttfont) if hasattr(mod, 'TTFont') else patch("app.services.reportlab_pdf_generator.TTFont", mock_ttfont),
             ):
-                import app.services.reportlab_pdf_generator as mod
-                assert mod.FONT_REGULAR == "DejaVu"
+                importlib.reload(mod)
+
+            assert mod.FONT_REGULAR == "DejaVu"
         finally:
-            for k in list(sys.modules.keys()):
-                if k.startswith("app.services.reportlab_pdf_generator"):
-                    del sys.modules[k]
-            sys.modules.update(saved)
+            # Restore
+            try:
+                mod.FONT_REGULAR = orig_regular
+                mod.FONT_BOLD = orig_bold
+                importlib.reload(mod)
+            except Exception:
+                pass
 
 
 # === Line 141: feminine form for thousands with t >= 20 ===
