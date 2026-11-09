@@ -10,7 +10,6 @@ class TestSaveVehicleAttributesNumber:
         from app.services.vehicle_service import save_vehicle_attributes
         from app.models.catalog import Category, EquipmentAttributeDefinition, EquipmentAttributeValue
 
-        # Create a subcategory (Category with parent)
         parent = Category(name="Землеройная", code="earth", level=0, company_id=company.id, is_active=True)
         db_session.add(parent)
         db_session.flush()
@@ -19,11 +18,9 @@ class TestSaveVehicleAttributesNumber:
         db_session.add(subcat)
         db_session.flush()
 
-        # Link vehicle to category
         sample_vehicle.category_id = subcat.id
         db_session.commit()
 
-        # Create attribute definition for this subcategory
         attr_def = EquipmentAttributeDefinition(
             name="Вес", slug="weight", data_type="number",
             subcategory_id=subcat.id, is_active=True, sort_order=1,
@@ -31,8 +28,9 @@ class TestSaveVehicleAttributesNumber:
         db_session.add(attr_def)
         db_session.commit()
 
+        # Correct arg order: (db, vehicle_id, subcategory_id, attributes)
         attrs = {"weight": "42.5"}
-        save_vehicle_attributes(db_session, sample_vehicle.id, attrs, subcat.id)
+        save_vehicle_attributes(db_session, sample_vehicle.id, subcat.id, attrs)
 
         val = db_session.query(EquipmentAttributeValue).filter_by(
             vehicle_id=sample_vehicle.id,
@@ -52,7 +50,7 @@ class TestCreateInvoiceEmailLog:
 
         payload = SimpleNamespace(
             client_id=sample_contractor.id,
-            document_number="TEST-EMAIL-003",
+            document_number="TEST-EMAIL-004",
             items=[],
         )
 
