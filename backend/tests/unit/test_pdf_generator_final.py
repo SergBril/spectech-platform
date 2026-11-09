@@ -50,7 +50,7 @@ class TestGenerateActPdfSuccess:
         mock_template, mock_html_cls = _mock_template_and_html()
         with (
             patch.object(pdf_mod.env, "get_template", return_value=mock_template),
-            patch("weasyprint.HTML", mock_html_cls),
+            patch.object(pdf_mod, "_get_weasyprint", return_value=mock_html_cls),
         ):
             result = generate_act_pdf(act, request)
         assert result == b"%PDF-fake-bytes"
@@ -64,7 +64,7 @@ class TestGenerateInvoicePdfSuccess:
         mock_template, mock_html_cls = _mock_template_and_html()
         with (
             patch.object(pdf_mod.env, "get_template", return_value=mock_template),
-            patch("weasyprint.HTML", mock_html_cls),
+            patch.object(pdf_mod, "_get_weasyprint", return_value=mock_html_cls),
         ):
             result = generate_invoice_pdf(invoice)
         assert result == b"%PDF-fake-bytes"
@@ -83,7 +83,7 @@ class TestGenerateInvoiceFacturePdf:
         mock_template, mock_html_cls = _mock_template_and_html()
         with (
             patch.object(pdf_mod.env, "get_template", return_value=mock_template),
-            patch("weasyprint.HTML", mock_html_cls),
+            patch.object(pdf_mod, "_get_weasyprint", return_value=mock_html_cls),
         ):
             result = generate_invoice_facture_pdf(act, request, contractor)
         assert result == b"%PDF-fake-bytes"
@@ -101,7 +101,7 @@ class TestGenerateInvoiceFacturePdf:
         mock_template, mock_html_cls = _mock_template_and_html()
         with (
             patch.object(pdf_mod.env, "get_template", return_value=mock_template),
-            patch("weasyprint.HTML", mock_html_cls),
+            patch.object(pdf_mod, "_get_weasyprint", return_value=mock_html_cls),
         ):
             result = generate_invoice_facture_pdf(act, request)
         assert result == b"%PDF-fake-bytes"
@@ -117,7 +117,7 @@ class TestGenerateInvoiceFacturePdf:
         mock_template, mock_html_cls = _mock_template_and_html()
         with (
             patch.object(pdf_mod.env, "get_template", return_value=mock_template),
-            patch("weasyprint.HTML", mock_html_cls),
+            patch.object(pdf_mod, "_get_weasyprint", return_value=mock_html_cls),
         ):
             result = generate_invoice_facture_pdf(act, request)
         assert result == b"%PDF-fake-bytes"

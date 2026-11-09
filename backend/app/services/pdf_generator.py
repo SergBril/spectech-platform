@@ -51,7 +51,7 @@ def generate_act_pdf(act, request, contractor=None) -> bytes:
             contractor=contractor,
         )
 
-        pdf_bytes = HTML(string=html_content).write_pdf()
+        pdf_bytes = _get_weasyprint()(string=html_content).write_pdf()
 
         logger.info(
             f"✅ PDF generated for act {act.document_number}: {len(pdf_bytes)} bytes"
@@ -195,7 +195,7 @@ def generate_invoice_pdf(invoice, contractor=None) -> bytes:
             contractor=contractor,
         )
 
-        pdf_bytes = HTML(string=html_content).write_pdf()
+        pdf_bytes = _get_weasyprint()(string=html_content).write_pdf()
 
         logger.info(
             f"✅ Invoice PDF generated: {invoice.document_number}: {len(pdf_bytes)} bytes"
@@ -241,7 +241,7 @@ def generate_invoice_facture_pdf(act, request, contractor=None) -> bytes:
             total_without_vat=total_without_vat,
         )
 
-        pdf_bytes = HTML(string=html_content).write_pdf()
+        pdf_bytes = _get_weasyprint()(string=html_content).write_pdf()
 
         logger.info(
             f"✅ Invoice facture PDF generated for act {act.document_number}: {len(pdf_bytes)} bytes"
