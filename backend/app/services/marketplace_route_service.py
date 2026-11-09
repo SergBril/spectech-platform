@@ -447,7 +447,7 @@ class MarketplaceRouteService:
             "marketplace_mode": "owner_dispatcher",
         }
 
-    def _build_offer_response(self, db: Session, company_id: int, offer):
+    def _build_offer_response(self, offer, db: Session):
         """Построение полного ответа для отклика."""
         # Получить связанные объекты
         owner_company = (

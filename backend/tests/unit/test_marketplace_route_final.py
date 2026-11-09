@@ -39,7 +39,7 @@ class TestCreateOfferMaxNotification:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
         data = SimpleNamespace(
-            offered_price=5000, price_type="hourly", commission_agreed=True,
+            vehicle_id=10, offered_price=5000, price_type="hourly", commission_agreed=True,
         )
         with patch("app.services.max_messenger_service.max_messenger_service") as mock_max:
             mock_max.notify_company_dispatchers = AsyncMock()
@@ -68,7 +68,7 @@ class TestCreateOfferMaxNotification:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
         data = SimpleNamespace(
-            offered_price=5000, price_type="hourly", commission_agreed=True,
+            vehicle_id=10, offered_price=5000, price_type="hourly", commission_agreed=True,
         )
         with (
             patch("app.services.max_messenger_service.max_messenger_service"),
