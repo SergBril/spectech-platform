@@ -23,11 +23,11 @@ class TestBuildItemsWithItems:
         assert result[0]["description"] == "Работа"
 
 
-class TestActPdfWithItems:
+class TestUpdReportlabWithItems:
     """Cover lines 332-334: recalculate totals from items."""
 
-    def test_act_with_items_recalculates(self):
-        from app.services.reportlab_pdf_generator import generate_act_pdf
+    def test_upd_with_items_recalculates(self):
+        from app.services.reportlab_pdf_generator import generate_upd_reportlab
         act = SimpleNamespace(
             document_number="ACT-001", act_date="2026-11-09",
             total_amount=240, vat_amount=40, vat_rate=20,
@@ -39,7 +39,7 @@ class TestActPdfWithItems:
             {"description": "Item1", "unit": "шт", "quantity": 1, "unit_price": 100, "subtotal": 100, "vat_amount": 20, "total": 120},
             {"description": "Item2", "unit": "шт", "quantity": 1, "unit_price": 100, "subtotal": 100, "vat_amount": 20, "total": 120},
         ]
-        result = generate_act_pdf(act, company, client, items=items)
+        result = generate_upd_reportlab(act, company, client, items=items)
         assert isinstance(result, bytes)
         assert len(result) > 100
 
@@ -48,7 +48,7 @@ class TestTorg12PdfWithItems:
     """Cover lines 642-644: recalculate totals from items in torg12."""
 
     def test_torg12_with_items_recalculates(self):
-        from app.services.reportlab_pdf_generator import generate_torg12_pdf
+        from app.services.reportlab_pdf_generator import generate_torg12_reportlab
         act = SimpleNamespace(
             document_number="ACT-002", act_date="2026-11-09",
             total_amount=240, vat_amount=40, vat_rate=20,
@@ -59,7 +59,7 @@ class TestTorg12PdfWithItems:
             {"description": "Item1", "unit": "шт", "quantity": 2, "unit_price": 50, "subtotal": 100, "vat_amount": 20, "total": 120},
             {"description": "Item2", "unit": "шт", "quantity": 1, "unit_price": 100, "subtotal": 100, "vat_amount": 20, "total": 120},
         ]
-        result = generate_torg12_pdf(act, company, client, items=items)
+        result = generate_torg12_reportlab(act, company, client, items=items)
         assert isinstance(result, bytes)
         assert len(result) > 100
 
@@ -69,15 +69,13 @@ class TestNumberedCanvasMultiPage:
 
     def test_multi_page_header(self):
         from app.services.reportlab_pdf_generator import _NumberedCanvas
-        # Create a mock canvas that simulates page 2
         canvas = MagicMock(spec=_NumberedCanvas)
         canvas._pageNumber = 2
         canvas._doc_title = "Test Doc"
-        # Call onLaterPages directly on the class with our mock
-        _NumberedCanvas.onLaterPages(canvas)
+        _NumberedCanvas._draw_decorations(canvas, total=3)
         canvas.drawString.assert_called()
-        call_args = canvas.drawString.call_args
-        assert "продолжение" in call_args[0][2]
+        calls = [str(c) for c in canvas.drawString.call_args_list]
+        assert any("продолжение" in c for c in calls)
 
 
 class TestFontRegistrationException:
