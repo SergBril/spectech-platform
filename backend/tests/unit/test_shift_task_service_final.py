@@ -48,8 +48,8 @@ class TestUpdatePlannedStartEnd:
     async def test_planned_start_and_end(self):
         mock_db, task = _make_update_mocks()
         with (
-            patch("app.services.shift_task_service.manager") as mock_mgr,
-            patch("app.services.shift_task_service.create_notification", new_callable=AsyncMock),
+            patch("app.services.websocket_manager.manager") as mock_mgr,
+            patch("app.services.notification_service.create_notification", new_callable=AsyncMock),
         ):
             mock_mgr.broadcast_to_company = AsyncMock()
             result = await update_shift_task(
@@ -69,8 +69,8 @@ class TestUpdateCommitException:
         mock_db, task = _make_update_mocks()
         mock_db.commit.side_effect = RuntimeError("db error")
         with (
-            patch("app.services.shift_task_service.manager") as mock_mgr,
-            patch("app.services.shift_task_service.create_notification", new_callable=AsyncMock),
+            patch("app.services.websocket_manager.manager") as mock_mgr,
+            patch("app.services.notification_service.create_notification", new_callable=AsyncMock),
         ):
             mock_mgr.broadcast_to_company = AsyncMock()
             result = await update_shift_task(
@@ -91,8 +91,8 @@ class TestUpdateDriverNotification:
         emp.user_id = 99
         mock_db, task = _make_update_mocks(profile=profile, emp=emp)
         with (
-            patch("app.services.shift_task_service.manager") as mock_mgr,
-            patch("app.services.shift_task_service.create_notification", new_callable=AsyncMock) as mock_notify,
+            patch("app.services.websocket_manager.manager") as mock_mgr,
+            patch("app.services.notification_service.create_notification", new_callable=AsyncMock) as mock_notify,
         ):
             mock_mgr.broadcast_to_company = AsyncMock()
             result = await update_shift_task(
@@ -111,8 +111,8 @@ class TestUpdateDriverNotification:
         emp.user_id = 99
         mock_db, task = _make_update_mocks(profile=profile, emp=emp)
         with (
-            patch("app.services.shift_task_service.manager") as mock_mgr,
-            patch("app.services.shift_task_service.create_notification", new_callable=AsyncMock, side_effect=RuntimeError("notify fail")),
+            patch("app.services.websocket_manager.manager") as mock_mgr,
+            patch("app.services.notification_service.create_notification", new_callable=AsyncMock, side_effect=RuntimeError("notify fail")),
         ):
             mock_mgr.broadcast_to_company = AsyncMock()
             result = await update_shift_task(
@@ -129,8 +129,8 @@ class TestUpdateWSBroadcastException:
     async def test_ws_exception_swallowed(self):
         mock_db, task = _make_update_mocks()
         with (
-            patch("app.services.shift_task_service.manager") as mock_mgr,
-            patch("app.services.shift_task_service.create_notification", new_callable=AsyncMock),
+            patch("app.services.websocket_manager.manager") as mock_mgr,
+            patch("app.services.notification_service.create_notification", new_callable=AsyncMock),
         ):
             mock_mgr.broadcast_to_company = AsyncMock(side_effect=RuntimeError("ws down"))
             result = await update_shift_task(
