@@ -77,6 +77,39 @@ class TestGenerateSalaryPayslip:
             assert isinstance(pdf, bytes)
 
 
+class TestFontRegistrationPaths:
+    """Cover module-level except/else blocks (lines 29-32)."""
+
+    def test_font_registration_exception(self):
+        """Simulate TTFont raising exception during registration."""
+        import importlib
+        from unittest.mock import patch, MagicMock
+        with patch("app.services.salary_pdf.pdfmetrics.registerFont", side_effect=RuntimeError("font error")):
+            with patch("app.services.salary_pdf._REGULAR_FONT") as rf:
+                with patch("app.services.salary_pdf._BOLD_FONT") as bf:
+                    rf.exists.return_value = True
+                    bf.exists.return_value = True
+                    import app.services.salary_pdf as mod
+                    importlib.reload(mod)
+                    assert mod._FONT_REGISTERED is False
+        # Restore
+        importlib.reload(mod)
+
+    def test_font_files_not_found(self):
+        """Simulate font files not existing."""
+        import importlib
+        from unittest.mock import patch
+        with patch("app.services.salary_pdf._REGULAR_FONT") as rf:
+            with patch("app.services.salary_pdf._BOLD_FONT") as bf:
+                rf.exists.return_value = False
+                bf.exists.return_value = False
+                import app.services.salary_pdf as mod
+                importlib.reload(mod)
+                assert mod._FONT_REGISTERED is False
+        # Restore
+        importlib.reload(mod)
+
+
 class TestFontFallback:
     def test_get_font_no_registered(self):
         import app.services.salary_pdf as mod
