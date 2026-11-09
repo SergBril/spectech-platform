@@ -121,23 +121,23 @@ class TestCheckSpeed:
     def test_speed_none(self, mock_db):
         point = _point(speed=None)
         rule = _rule(RULE_SPEED, threshold=90.0)
-        assert _check_speed(mock_db, point, rule) is None
+        assert _check_speed(mock_db, point, rule, 1) is None
 
     def test_threshold_none(self, mock_db):
         point = _point(speed=100.0)
         rule = _rule(RULE_SPEED, threshold=None)
-        assert _check_speed(mock_db, point, rule) is None
+        assert _check_speed(mock_db, point, rule, 1) is None
 
     def test_speed_below_threshold(self, mock_db):
         point = _point(speed=50.0)
         rule = _rule(RULE_SPEED, threshold=90.0)
-        assert _check_speed(mock_db, point, rule) is None
+        assert _check_speed(mock_db, point, rule, 1) is None
 
     def test_speed_above_threshold(self, mock_db):
         point = _point(speed=120.0)
         rule = _rule(RULE_SPEED, threshold=90.0)
         mock_db.scalar.return_value = None  # no existing alert
-        alert = _check_speed(mock_db, point, rule)
+        alert = _check_speed(mock_db, point, rule, 1)
         assert alert is not None
 
 
@@ -147,27 +147,27 @@ class TestCheckFuel:
     def test_fuel_none(self, mock_db):
         point = _point(fuel_level=None)
         rule = _rule(RULE_FUEL, threshold=10.0)
-        assert _check_fuel(mock_db, point, rule) is None
+        assert _check_fuel(mock_db, point, rule, 1) is None
 
     def test_no_prev_point(self, mock_db):
         point = _point(fuel_level=60.0)
         rule = _rule(RULE_FUEL, threshold=10.0)
         mock_db.scalar.return_value = None
-        assert _check_fuel(mock_db, point, rule) is None
+        assert _check_fuel(mock_db, point, rule, 1) is None
 
     def test_drop_below_threshold(self, mock_db):
         point = _point(fuel_level=75.0)
         prev = SimpleNamespace(fuel_level=80.0)
         rule = _rule(RULE_FUEL, threshold=10.0)
         mock_db.scalar.return_value = prev
-        assert _check_fuel(mock_db, point, rule) is None
+        assert _check_fuel(mock_db, point, rule, 1) is None
 
     def test_drop_above_threshold(self, mock_db):
         point = _point(fuel_level=60.0)
         prev = SimpleNamespace(fuel_level=80.0)
         rule = _rule(RULE_FUEL, threshold=10.0)
         mock_db.scalar.side_effect = [prev, None]  # prev, then no existing alert
-        alert = _check_fuel(mock_db, point, rule)
+        alert = _check_fuel(mock_db, point, rule, 1)
         assert alert is not None
 
 
@@ -177,27 +177,27 @@ class TestCheckEngineHours:
     def test_engine_hours_none(self, mock_db):
         point = _point(engine_hours=None)
         rule = _rule(RULE_ENGINE, threshold=10.0)
-        assert _check_engine_hours(mock_db, point, rule) is None
+        assert _check_engine_hours(mock_db, point, rule, 1) is None
 
     def test_no_first_point_today(self, mock_db):
         point = _point(engine_hours=15.0)
         rule = _rule(RULE_ENGINE, threshold=10.0)
         mock_db.scalar.return_value = None
-        assert _check_engine_hours(mock_db, point, rule) is None
+        assert _check_engine_hours(mock_db, point, rule, 1) is None
 
     def test_hours_below_threshold(self, mock_db):
         point = _point(engine_hours=10.0)
         first = SimpleNamespace(engine_hours=5.0)
         rule = _rule(RULE_ENGINE, threshold=10.0)
         mock_db.scalar.return_value = first
-        assert _check_engine_hours(mock_db, point, rule) is None
+        assert _check_engine_hours(mock_db, point, rule, 1) is None
 
     def test_hours_above_threshold(self, mock_db):
         point = _point(engine_hours=20.0)
         first = SimpleNamespace(engine_hours=5.0)
         rule = _rule(RULE_ENGINE, threshold=10.0)
         mock_db.scalar.side_effect = [first, None]
-        alert = _check_engine_hours(mock_db, point, rule)
+        alert = _check_engine_hours(mock_db, point, rule, 1)
         assert alert is not None
 
 
@@ -207,23 +207,23 @@ class TestCheckIdle:
     def test_threshold_none(self, mock_db):
         point = _point()
         rule = _rule(RULE_IDLE, threshold=None)
-        assert _check_idle(mock_db, point, rule) is None
+        assert _check_idle(mock_db, point, rule, 1) is None
 
     def test_engine_off(self, mock_db):
         point = _point(engine_on=False)
         rule = _rule(RULE_IDLE, threshold=60.0)
-        assert _check_idle(mock_db, point, rule) is None
+        assert _check_idle(mock_db, point, rule, 1) is None
 
     def test_speed_above_1(self, mock_db):
         point = _point(speed=5.0, engine_on=True)
         rule = _rule(RULE_IDLE, threshold=60.0)
-        assert _check_idle(mock_db, point, rule) is None
+        assert _check_idle(mock_db, point, rule, 1) is None
 
     def test_no_idle_start(self, mock_db):
         point = _point(speed=0.0, engine_on=True)
         rule = _rule(RULE_IDLE, threshold=60.0)
         mock_db.scalar.return_value = None
-        assert _check_idle(mock_db, point, rule) is None
+        assert _check_idle(mock_db, point, rule, 1) is None
 
     def test_idle_below_threshold(self, mock_db):
         point = _point(speed=0.0, engine_on=True,
@@ -231,7 +231,7 @@ class TestCheckIdle:
         idle_start = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)  # 30 min
         rule = _rule(RULE_IDLE, threshold=60.0)
         mock_db.scalar.return_value = idle_start
-        assert _check_idle(mock_db, point, rule) is None
+        assert _check_idle(mock_db, point, rule, 1) is None
 
     def test_idle_above_threshold(self, mock_db):
         point = _point(speed=0.0, engine_on=True,
@@ -239,7 +239,7 @@ class TestCheckIdle:
         idle_start = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)  # 120 min
         rule = _rule(RULE_IDLE, threshold=60.0)
         mock_db.scalar.side_effect = [idle_start, None]
-        alert = _check_idle(mock_db, point, rule)
+        alert = _check_idle(mock_db, point, rule, 1)
         assert alert is not None
 
 
