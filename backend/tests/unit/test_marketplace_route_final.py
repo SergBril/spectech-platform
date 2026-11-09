@@ -54,8 +54,12 @@ class TestCreateOfferMaxNotification:
             vehicle_id=10, offered_price=5000, price_type="hourly", commission_agreed=True,
             currency="RUB", estimated_arrival_minutes=None, distance_km=None, message=None,
         )
-        with patch("app.services.max_messenger_service.max_messenger_service") as mock_max:
+        with (
+            patch("app.services.max_messenger_service.max_messenger_service") as mock_max,
+            patch("app.services.max_messenger_service.notification_templates") as mock_templates,
+        ):
             mock_max.notify_company_dispatchers = AsyncMock()
+            mock_templates.offer_received.return_value = ("Title", "Body")
             result = svc.create_offer_on_request(mock_db, company_id=5, request_id=1, data=data, current_company_id=5)
         assert result is not None
 
@@ -99,8 +103,10 @@ class TestCreateOfferMaxNotification:
         )
         with (
             patch("app.services.max_messenger_service.max_messenger_service"),
+            patch("app.services.max_messenger_service.notification_templates") as mock_templates,
             patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")),
         ):
+            mock_templates.offer_received.return_value = ("Title", "Body")
             result = svc.create_offer_on_request(mock_db, company_id=5, request_id=1, data=data, current_company_id=5)
         assert result is not None
 
