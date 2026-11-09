@@ -297,3 +297,130 @@ class TestListMarketplaceRequestsFilters:
             category_id=3, region="Москва",
         )
         assert isinstance(result, list)
+
+
+
+class TestGetOfferDetailsSuccessPath:
+    """Cover line 186: successful get_offer_details."""
+
+    def test_success(self, svc):
+        mock_db = MagicMock()
+        offer = SimpleNamespace(
+            id=1, request_id=1, owner_company_id=5, vehicle_id=10,
+            offered_price=5000, price_type="hourly", status="pending",
+            created_at=datetime(2026, 11, 9), updated_at=datetime(2026, 11, 9),
+            reviewed_at=None, rejection_reason=None, currency="RUB",
+            estimated_arrival_minutes=None, distance_km=None, message=None,
+            operator_id=None, reviewed_by_id=None,
+        )
+        company = SimpleNamespace(name="OOO Test")
+        vehicle = SimpleNamespace(name="Test Vehicle", category_id=3)
+        category = SimpleNamespace(name="Экскаватор")
+        def get_se(model, id):
+            name = getattr(model, "__name__", str(model))
+            if "MarketplaceOffer" in name or "Offer" in name: return offer
+            if "Company" in name: return company
+            if "Vehicle" in name: return vehicle
+            if "Category" in name: return category
+            return None
+        mock_db.get = MagicMock(side_effect=get_se)
+        result = svc.get_offer_details(mock_db, offer_id=1)
+        assert result is not None
+
+
+class TestRejectOfferAccessDeniedNested:
+    """Cover lines 309-310: nested access check in reject_offer."""
+
+    def test_access_denied_different_company(self, svc):
+        mock_db = MagicMock()
+        offer = MagicMock()
+        offer.status = "pending"
+        request_obj = MagicMock()
+        request_obj.created_by = 99
+        request_obj.company_id = 99
+        offer.request = request_obj
+        mock_db.get.return_value = offer
+        current_user = SimpleNamespace(id=1)
+        data = SimpleNamespace(rejection_reason="test")
+        with pytest.raises(HTTPException):
+            svc.reject_offer(mock_db, company_id=7, offer_id=1, data=data, current_company_id=7, current_user=current_user)
+
+
+class TestBuildOfferResponseWithCategory:
+    """Cover lines 461-466: category lookup in _build_offer_response."""
+
+    def test_with_category(self, svc):
+        mock_db = MagicMock()
+        offer = SimpleNamespace(
+            id=1, request_id=1, owner_company_id=5, vehicle_id=10,
+            offered_price=5000, price_type="hourly", status="pending",
+            created_at=datetime(2026, 11, 9), updated_at=datetime(2026, 11, 9),
+            reviewed_at=None, rejection_reason=None, currency="RUB",
+            estimated_arrival_minutes=None, distance_km=None, message=None,
+            operator_id=None, reviewed_by_id=None,
+        )
+        company = SimpleNamespace(name="OOO Test")
+        vehicle = SimpleNamespace(name="Test Vehicle", category_id=3)
+        category = SimpleNamespace(name="Экскаватор")
+        def get_se(model, id):
+            name = getattr(model, "__name__", str(model))
+            if "Company" in name: return company
+            if "Vehicle" in name: return vehicle
+            if "Category" in name: return category
+            return None
+        mock_db.get = MagicMock(side_effect=get_se)
+        result = svc._build_offer_response(offer, mock_db)
+        assert result.vehicle_category_name == "Экскаватор"
+
+
+class TestPublishRequestAccessDeniedLine:
+    """Cover line 556: publish_request access denied."""
+
+    def test_wrong_company(self, svc):
+        mock_db = MagicMock()
+        request_obj = MagicMock()
+        request_obj.company_id = 99
+        mock_db.get.return_value = request_obj
+        with pytest.raises(HTTPException):
+            svc.publish_request(mock_db, company_id=7, request_id=1)
+
+
+class TestListMarketplaceRequestsMyCategories:
+    """Cover line 629: my_category_ids filter."""
+
+    def test_with_my_categories(self, svc):
+        mock_db = MagicMock()
+        req = SimpleNamespace(
+            id=1, work_type="earthworks", object_address="Moscow",
+            region="Москва", vehicle_category_id=3, status="published",
+            created_at=datetime(2026, 11, 9), is_published=True,
+            description="Test", price_budget=10000, price_type="fixed",
+            start_date=datetime(2026, 11, 10), end_date=datetime(2026, 11, 20),
+            planned_start=datetime(2026, 11, 10), planned_end=datetime(2026, 11, 20),
+            shift_duration_hours=8, client_rate=5000, rate_type="hourly",
+            estimated_amount=40000, priority="normal", published_at=datetime(2026, 11, 9),
+        )
+        category = SimpleNamespace(name="Экскаватор")
+        exec_result = MagicMock()
+        exec_result.scalars.return_value.all.return_value = [req]
+        count_result = MagicMock()
+        count_result.count.return_value = 0
+        call_count = [0]
+        def execute_se(stmt):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return exec_result
+            return count_result
+        mock_db.execute = MagicMock(side_effect=execute_se)
+        mock_db.query.return_value.filter.return_value = count_result
+        def get_se(model, id):
+            name = getattr(model, "__name__", str(model))
+            if "Category" in name: return category
+            return None
+        mock_db.get = MagicMock(side_effect=get_se)
+        # Call without category_id/region to hit my_category_ids filter
+        result = svc.list_marketplace_requests(
+            mock_db, company_id=7, skip=0, limit=50,
+            category_id=None, region=None,
+        )
+        assert isinstance(result, list)
