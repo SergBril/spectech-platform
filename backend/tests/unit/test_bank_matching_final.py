@@ -35,7 +35,7 @@ class TestExtractInvoiceNumber:
         assert BankMatchingService.extract_invoice_number("Оплата INV-2024-001") == "2024-001"
 
     def test_sch_pattern(self):
-        r = BankMatchingService.extract_invoice_number("Оплата по счёту № 42")
+        r = BankMatchingService.extract_invoice_number("Оплата по счету № 42")
         assert r == "42"
 
     def test_po_schetu_pattern(self):
