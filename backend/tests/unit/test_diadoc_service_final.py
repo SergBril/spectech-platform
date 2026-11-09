@@ -102,7 +102,7 @@ class TestSignForDiadoc:
     async def test_success(self):
         svc = _svc(enabled=True)
         mock_result = {"signature": "base64sig", "status": "ok", "provider": "cryptopro"}
-        with patch(f"{MOD}.digital_signature_service") as dss:
+        with patch("app.services.digital_signature_service.digital_signature_service") as dss:
             dss.sign_document = AsyncMock(return_value=mock_result)
             sig = await svc._sign_for_diadoc(b"doc-bytes")
         assert sig == "base64sig"
@@ -111,7 +111,7 @@ class TestSignForDiadoc:
     async def test_signing_error(self):
         svc = _svc(enabled=True)
         mock_result = {"status": "error", "error": "KEP expired"}
-        with patch(f"{MOD}.digital_signature_service") as dss:
+        with patch("app.services.digital_signature_service.digital_signature_service") as dss:
             dss.sign_document = AsyncMock(return_value=mock_result)
             sig = await svc._sign_for_diadoc(b"doc-bytes")
         assert sig == ""
@@ -119,7 +119,7 @@ class TestSignForDiadoc:
     @pytest.mark.asyncio
     async def test_exception(self):
         svc = _svc(enabled=True)
-        with patch(f"{MOD}.digital_signature_service") as dss:
+        with patch("app.services.digital_signature_service.digital_signature_service") as dss:
             dss.sign_document = AsyncMock(side_effect=RuntimeError("KEP down"))
             sig = await svc._sign_for_diadoc(b"doc-bytes")
         assert sig == ""
