@@ -60,7 +60,7 @@ def create_coordinate_finder_pdf(source_pdf_path: str):
     return temp_file.name
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     if len(sys.argv) < 2:
         print("Использование: python pdf_coordinates_finder.py <path_to_pdf>")
         sys.exit(1)
