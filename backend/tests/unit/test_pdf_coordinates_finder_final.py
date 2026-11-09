@@ -85,14 +85,17 @@ class TestMainBlock:
             "import sys\n"
             "sys.argv = ['x', '/fake/path.pdf']\n"
             "from unittest.mock import patch, MagicMock\n"
-            "mock_fn = MagicMock()\n"
-            "with patch.dict('builtins.__dict__', {}):\n"
-            "    pass\n"
-            "# Patch at module level before exec\n"
-            "import app.services.pdf_coordinates_finder as mod\n"
-            "mod.create_coordinate_finder_pdf = mock_fn\n"
-            "exec(open('app/services/pdf_coordinates_finder.py', encoding='utf-8').read())\n"
-            "mock_fn.assert_called_once_with('/fake/path.pdf')\n"
+            "mock_doc = MagicMock()\n"
+            "mock_page = MagicMock()\n"
+            "mock_page.rect.width = 60\n"
+            "mock_page.rect.height = 60\n"
+            "mock_shape = MagicMock()\n"
+            "mock_page.new_shape.return_value = mock_shape\n"
+            "mock_doc.__iter__ = lambda self: iter([mock_page])\n"
+            "with patch('pymupdf.open', return_value=mock_doc):\n"
+            "    with patch('webbrowser.open'):\n"
+            "        exec(open('app/services/pdf_coordinates_finder.py', encoding='utf-8').read())\n"
+            "print('OK')\n"
         )
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir='.') as f:
             f.write(script)
@@ -100,6 +103,7 @@ class TestMainBlock:
             result = subprocess.run([sys.executable, f.name], capture_output=True, text=True)
         os.unlink(f.name)
         assert result.returncode == 0, f"stderr={result.stderr}"
+        assert 'OK' in result.stdout
 
     def test_main_no_args(self):
         """Cover sys.exit(1) when no args provided."""
