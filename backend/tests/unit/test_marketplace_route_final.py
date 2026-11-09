@@ -512,13 +512,13 @@ class TestRejectOfferNestedAccessDenied:
             svc.reject_offer(mock_db, company_id=7, offer_id=1, data=data, current_company_id=7, current_user=current_user)
 
 
-class TestPublishRequestForbidden:
-    """Cover line 556: publish_request raises 403."""
+class TestUnpublishRequestForbidden:
+    """Cover line 556: unpublish_request raises 403."""
 
     def test_company_mismatch(self, svc):
         mock_db = MagicMock()
         request_obj = SimpleNamespace(company_id=99)
         mock_db.get.return_value = request_obj
         with pytest.raises(HTTPException) as exc_info:
-            svc.publish_request(mock_db, company_id=7, request_id=1)
+            svc.unpublish_request(mock_db, company_id=7, request_id=1)
         assert exc_info.value.status_code == 403
