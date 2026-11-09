@@ -99,7 +99,7 @@ print('OK')
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir='.', encoding='utf-8') as f:
             f.write(script)
             f.flush()
-            result = subprocess.run([sys.executable, f.name], capture_output=True, text=True)
+            result = subprocess.run([sys.executable, f.name], capture_output=True, text=True, encoding='utf-8')
         os.unlink(f.name)
         assert result.returncode == 0, f"stdout={result.stdout} stderr={result.stderr}"
         assert 'OK' in result.stdout
@@ -115,6 +115,6 @@ print('OK')
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir='.') as f:
             f.write(script)
             f.flush()
-            result = subprocess.run([sys.executable, f.name], capture_output=True, text=True)
+            result = subprocess.run([sys.executable, f.name], capture_output=True, text=True, encoding='utf-8')
         os.unlink(f.name)
         assert result.returncode == 1
