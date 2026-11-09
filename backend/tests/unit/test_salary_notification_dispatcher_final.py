@@ -44,13 +44,13 @@ def _emp(**kw):
 def _ctr(**kw):
     d = dict(id=10, name="Ivanov I.I.", contact_email="ivan@test.com")
     d.update(kw)
-    return SimpleNamespace(**kw)
+    return SimpleNamespace(**d)
 
 
 def _usr(**kw):
     d = dict(id=5, email="user@test.com", telegram_id="123456")
     d.update(kw)
-    return SimpleNamespace(**kw)
+    return SimpleNamespace(**d)
 
 
 MOD = "app.services.salary_notification_dispatcher"
