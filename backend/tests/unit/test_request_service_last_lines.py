@@ -41,7 +41,16 @@ class TestAssignVehicleReraise:
         )
         mock_db.get.side_effect = lambda m, i: req if i == 1 else vehicle
 
-        # Make commit raise IntegrityError -> caught -> RequestServiceError(409) -> line 233 re-raise
+        # Overlap query returns empty (no overlap) -> skip line 122
+        # Existing assignment query also returns empty
+        mock_query_result = MagicMock()
+        mock_query_result.filter.return_value.filter.return_value.first.return_value = None
+        mock_query_result.filter.return_value.filter.return_value.all.return_value = []
+        mock_query_result.filter.return_value.first.return_value = None
+        mock_query_result.filter.return_value.all.return_value = []
+        mock_db.query.return_value = mock_query_result
+
+        # Make commit raise IntegrityError -> line 233 re-raise
         mock_db.commit.side_effect = IntegrityError("duplicate", None, None)
 
         with patch("app.services.request_service.create_notification", new_callable=AsyncMock):
@@ -75,8 +84,8 @@ class TestBulkResponseApproveWsFail:
         mock_db.get.side_effect = mock_get
         mock_db.execute.return_value.scalars.return_value.all.return_value = [other_assignment]
 
-        with patch("app.services.request_service.create_notification", new_callable=AsyncMock):
-            with patch("app.services.request_service.manager") as mock_mgr:
+        with patch("app.services.notification_service.create_notification", new_callable=AsyncMock):
+            with patch("app.services.websocket_manager.manager") as mock_mgr:
                 # WS send raises exception -> lines 665-666 catch and pass
                 mock_mgr.send_to_user = AsyncMock(side_effect=Exception("WS down"))
                 result = await service.bulk_response_action([1], "approve", "", 1, 1)
@@ -95,12 +104,11 @@ class TestBulkResponseRejectWs:
 
         mock_db.get.side_effect = lambda m, i: assignment if i == 1 else req
 
-        with patch("app.services.request_service.create_notification", new_callable=AsyncMock):
-            with patch("app.services.request_service.manager") as mock_mgr:
+        with patch("app.services.notification_service.create_notification", new_callable=AsyncMock):
+            with patch("app.services.websocket_manager.manager") as mock_mgr:
                 mock_mgr.send_to_user = AsyncMock(return_value=None)
                 result = await service.bulk_response_action(
                     [1], "reject", "Not suitable", 1, 1,
                 )
                 assert result["processed"] == 1
-                # Line 678: send_to_user called for reject
                 mock_mgr.send_to_user.assert_called()
