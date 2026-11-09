@@ -95,6 +95,21 @@ class TestListRequestsEnrichment:
 class TestAssignVehicleErrors:
     """Cover exception paths in assign_vehicle (lines 91-92, 232-239)."""
 
+    def _setup_assign_mocks(self, mock_db, req, vehicle):
+        """Setup all mocks needed for assign_vehicle."""
+        def mock_get(model, pk):
+            mn = getattr(model, '__name__', '')
+            if mn == 'Request' and pk == 1:
+                return req
+            if mn == 'Vehicle' and pk == 5:
+                return vehicle
+            return SimpleNamespace(name=f"mock_{pk}", id=pk, company_id=1)
+        mock_db.get.side_effect = mock_get
+        mock_db.scalar.return_value = None
+        mq = MagicMock()
+        mq.filter.return_value.first.return_value = None
+        mock_db.query.return_value = mq
+
     @pytest.mark.asyncio
     async def test_marketplace_commission_denied(self, service, mock_db):
         """Lines 91-92: marketplace + no commission -> 403."""
@@ -107,14 +122,10 @@ class TestAssignVehicleErrors:
             planned_end=datetime(2026, 11, 2, tzinfo=UTC),
         )
         vehicle = SimpleNamespace(
-            id=5, name="Truck", company_id=2, status="free",
+            id=5, name="Truck", company_id=1, status="free",
             marketplace_commission_agreed=False,
         )
-        def mock_get(model, pk):
-            if model == ReqModel or pk == 1: return req
-            if model == VehModel or pk == 5: return vehicle
-            return MagicMock(name="mock_obj")
-        mock_db.get.side_effect = mock_get
+        self._setup_assign_mocks(mock_db, req, vehicle)
         with patch("app.services.notification_service.create_notification", new_callable=AsyncMock):
             with pytest.raises(RequestServiceError) as exc_info:
                 await service.assign_vehicle(1, 5, None, 1, 1)
@@ -132,24 +143,16 @@ class TestAssignVehicleErrors:
             planned_end=datetime(2026, 11, 2, tzinfo=UTC),
         )
         vehicle = SimpleNamespace(
-            id=5, name="Truck", company_id=2, status="free",
+            id=5, name="Truck", company_id=1, status="free",
             marketplace_commission_agreed=False,
         )
-        def mock_get(model, pk):
-            mn = getattr(model, '__name__', '')
-            if mn == 'Request' and pk == 1: return req
-            if mn == 'Vehicle' and pk == 5: return vehicle
-            return SimpleNamespace(name=f"mock_{pk}", id=pk, company_id=1)
-        mock_db.get.side_effect = mock_get
-        mock_db.scalar.return_value = None
-        mock_q = MagicMock()
-        mock_q.filter.return_value.first.return_value = None
-        mock_db.query.return_value = mock_q
+        self._setup_assign_mocks(mock_db, req, vehicle)
         mock_db.add.side_effect = RuntimeError("DB crash")
         with pytest.raises(RequestServiceError) as exc_info:
             await service.assign_vehicle(1, 5, None, 1, 1)
         assert exc_info.value.status_code == 500
         mock_db.rollback.assert_called()
+
 
 
 class TestCreateRequestAutoPricing:
