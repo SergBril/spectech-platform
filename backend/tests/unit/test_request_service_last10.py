@@ -77,7 +77,7 @@ class TestAutoPricingWarning:
         mock_db.add.side_effect = lambda o: None
         mock_db.scalars.return_value.first.return_value = SimpleNamespace(id=1, name="Cat")
         # pricing_service is imported at module level or used directly
-        with patch("app.services.request_service.pricing_service") as ps:
+        with patch("app.services.pricing_service.pricing_service") as ps:
             ps.calculate_estimate.side_effect = RuntimeError("pricing fail")
             with patch("app.services.request_service.create_notification", new_callable=AsyncMock):
                 with patch("app.services.max_messenger_service.max_messenger_service") as mm:
