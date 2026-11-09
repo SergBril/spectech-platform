@@ -39,7 +39,7 @@ class TestGenerateActPdfSuccess:
         request = SimpleNamespace()
         mock_html = MagicMock()
         mock_html.write_pdf.return_value = b"%PDF-fake-act"
-        with patch.object(pdf_mod, "HTML", return_value=mock_html):
+        with patch("weasyprint.HTML", return_value=mock_html):
             result = generate_act_pdf(act, request)
         assert result == b"%PDF-fake-act"
 
@@ -51,7 +51,7 @@ class TestGenerateInvoicePdfSuccess:
         invoice = SimpleNamespace(id=1, document_number="INV-001")
         mock_html = MagicMock()
         mock_html.write_pdf.return_value = b"%PDF-fake-inv"
-        with patch.object(pdf_mod, "HTML", return_value=mock_html):
+        with patch("weasyprint.HTML", return_value=mock_html):
             result = generate_invoice_pdf(invoice)
         assert result == b"%PDF-fake-inv"
 
@@ -68,7 +68,7 @@ class TestGenerateInvoiceFacturePdf:
         contractor = SimpleNamespace(name="OOO Test")
         mock_html = MagicMock()
         mock_html.write_pdf.return_value = b"%PDF-fake-facture"
-        with patch.object(pdf_mod, "HTML", return_value=mock_html):
+        with patch("weasyprint.HTML", return_value=mock_html):
             result = generate_invoice_facture_pdf(act, request, contractor)
         assert result == b"%PDF-fake-facture"
         # Verify template was called with correct params
@@ -83,7 +83,7 @@ class TestGenerateInvoiceFacturePdf:
         request = SimpleNamespace()
         mock_html = MagicMock()
         mock_html.write_pdf.return_value = b"%PDF-no-date"
-        with patch.object(pdf_mod, "HTML", return_value=mock_html):
+        with patch("weasyprint.HTML", return_value=mock_html):
             result = generate_invoice_facture_pdf(act, request)
         assert result == b"%PDF-no-date"
 
@@ -95,6 +95,6 @@ class TestGenerateInvoiceFacturePdf:
         request = SimpleNamespace()
         mock_html = MagicMock()
         mock_html.write_pdf.return_value = b"%PDF-sf"
-        with patch.object(pdf_mod, "HTML", return_value=mock_html):
+        with patch("weasyprint.HTML", return_value=mock_html):
             result = generate_invoice_facture_pdf(act, request)
         assert result == b"%PDF-sf"
