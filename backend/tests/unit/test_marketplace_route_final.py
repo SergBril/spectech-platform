@@ -501,12 +501,11 @@ class TestRejectOfferNestedAccessDenied:
         offer = MagicMock()
         offer.status = "pending"
         request_obj = MagicMock()
-        # created_by != current_user.id (99 != 1) -> enters outer if
-        # company_id != current_company_id (88 != 7) -> enters inner if -> raises
         request_obj.created_by = 99
         request_obj.company_id = 88
         offer.request = request_obj
-        mock_db.get.return_value = offer
+        # reject_offer uses db.query().options().filter().first()
+        mock_db.query.return_value.options.return_value.filter.return_value.first.return_value = offer
         current_user = SimpleNamespace(id=1)
         data = SimpleNamespace(rejection_reason="no")
         with pytest.raises(HTTPException, match="creator"):
