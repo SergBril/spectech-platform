@@ -80,17 +80,27 @@ class TestCreateCoordinateFinderPdf:
 class TestMainBlock:
     def test_main_with_args(self):
         """Cover if __name__ == '__main__' with valid args."""
-        import runpy
-        from unittest.mock import patch
-        with patch("app.services.pdf_coordinates_finder.create_coordinate_finder_pdf") as mock_fn:
-            with patch("sys.argv", ["pdf_coordinates_finder.py", "/fake/path.pdf"]):
-                runpy.run_module("app.services.pdf_coordinates_finder", run_name="__main__")
-            mock_fn.assert_called_once_with("/fake/path.pdf")
+        import subprocess
+        import sys
+        result = subprocess.run(
+            [sys.executable, "-c",
+             "import sys; sys.argv = ['x', '/fake/path.pdf']; "
+             "from unittest.mock import patch; "
+             "with patch('app.services.pdf_coordinates_finder.create_coordinate_finder_pdf') as m: "
+             "    exec(open('app/services/pdf_coordinates_finder.py').read()); "
+             "    m.assert_called_once_with('/fake/path.pdf')"],
+            capture_output=True, text=True, cwd=r"C:\Users\osavi\spectech-platform\backend"
+        )
+        assert result.returncode == 0, f"stdout={result.stdout} stderr={result.stderr}"
 
     def test_main_no_args(self):
         """Cover sys.exit(1) when no args provided."""
-        import runpy
-        with patch("sys.argv", ["pdf_coordinates_finder.py"]):
-            with pytest.raises(SystemExit) as exc_info:
-                runpy.run_module("app.services.pdf_coordinates_finder", run_name="__main__")
-            assert exc_info.value.code == 1
+        import subprocess
+        import sys
+        result = subprocess.run(
+            [sys.executable, "-c",
+             "import sys; sys.argv = ['x']; "
+             "exec(open('app/services/pdf_coordinates_finder.py').read())"],
+            capture_output=True, text=True, cwd=r"C:\Users\osavi\spectech-platform\backend"
+        )
+        assert result.returncode == 1
