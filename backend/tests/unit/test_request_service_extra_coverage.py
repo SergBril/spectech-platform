@@ -119,7 +119,7 @@ class TestAssignVehicleErrors:
         mock_db.get.side_effect = mock_get
         with patch("app.services.notification_service.create_notification", new_callable=AsyncMock):
             with pytest.raises(RequestServiceError) as exc_info:
-                await service.assign_vehicle(1, 1, 5, 1, 1)
+                await service.assign_vehicle(1, 5, None, 1, 1)
             assert exc_info.value.status_code == 403
 
     @pytest.mark.asyncio
@@ -152,7 +152,7 @@ class TestAssignVehicleErrors:
         mock_db.query.return_value = mock_query
         mock_db.add.side_effect = RuntimeError("DB crash")
         with pytest.raises(RequestServiceError) as exc_info:
-            await service.assign_vehicle(1, 1, 5, 1, 1)
+            await service.assign_vehicle(1, 5, None, 1, 1)
         assert exc_info.value.status_code == 500
         mock_db.rollback.assert_called()
 
