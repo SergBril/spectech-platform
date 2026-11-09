@@ -31,17 +31,29 @@ class TestGetWeasyprintException:
         _reset_weasyprint()
 
 
+def _mock_template_and_html():
+    """Mock both Jinja2 template and WeasyPrint HTML to avoid real rendering."""
+    mock_template = MagicMock()
+    mock_template.render.return_value = "<html><body>test</body></html>"
+    mock_html_instance = MagicMock()
+    mock_html_instance.write_pdf.return_value = b"%PDF-fake-bytes"
+    mock_html_cls = MagicMock(return_value=mock_html_instance)
+    return mock_template, mock_html_cls
+
+
 class TestGenerateActPdfSuccess:
     """Cover lines 56-59: success logger + return."""
 
     def test_success_returns_bytes(self):
         act = SimpleNamespace(id=1, document_number="ACT-001")
         request = SimpleNamespace()
-        mock_html = MagicMock()
-        mock_html.write_pdf.return_value = b"%PDF-fake-act"
-        with patch("weasyprint.HTML", return_value=mock_html):
+        mock_template, mock_html_cls = _mock_template_and_html()
+        with (
+            patch.object(pdf_mod.env, "get_template", return_value=mock_template),
+            patch("weasyprint.HTML", mock_html_cls),
+        ):
             result = generate_act_pdf(act, request)
-        assert result == b"%PDF-fake-act"
+        assert result == b"%PDF-fake-bytes"
 
 
 class TestGenerateInvoicePdfSuccess:
@@ -49,11 +61,13 @@ class TestGenerateInvoicePdfSuccess:
 
     def test_success_returns_bytes(self):
         invoice = SimpleNamespace(id=1, document_number="INV-001")
-        mock_html = MagicMock()
-        mock_html.write_pdf.return_value = b"%PDF-fake-inv"
-        with patch("weasyprint.HTML", return_value=mock_html):
+        mock_template, mock_html_cls = _mock_template_and_html()
+        with (
+            patch.object(pdf_mod.env, "get_template", return_value=mock_template),
+            patch("weasyprint.HTML", mock_html_cls),
+        ):
             result = generate_invoice_pdf(invoice)
-        assert result == b"%PDF-fake-inv"
+        assert result == b"%PDF-fake-bytes"
 
 
 class TestGenerateInvoiceFacturePdf:
@@ -61,40 +75,51 @@ class TestGenerateInvoiceFacturePdf:
 
     def test_success_with_vat(self):
         act = SimpleNamespace(
-            total_amount="12000.00", vat_amount="2000.00", vat_rate=20,
+            id=1, total_amount="12000.00", vat_amount="2000.00", vat_rate=20,
             document_number="ACT-2026-001", act_date=date(2026, 11, 1),
         )
         request = SimpleNamespace()
         contractor = SimpleNamespace(name="OOO Test")
-        mock_html = MagicMock()
-        mock_html.write_pdf.return_value = b"%PDF-fake-facture"
-        with patch("weasyprint.HTML", return_value=mock_html):
+        mock_template, mock_html_cls = _mock_template_and_html()
+        with (
+            patch.object(pdf_mod.env, "get_template", return_value=mock_template),
+            patch("weasyprint.HTML", mock_html_cls),
+        ):
             result = generate_invoice_facture_pdf(act, request, contractor)
-        assert result == b"%PDF-fake-facture"
-        # Verify template was called with correct params
-        call_kwargs = mock_html.write_pdf.call_args
-        assert call_kwargs is not None
+        assert result == b"%PDF-fake-bytes"
+        # Verify template.render was called with facture params
+        render_kwargs = mock_template.render.call_args.kwargs
+        assert render_kwargs["facture_number"] == "SF-2026-001"
+        assert render_kwargs["total_without_vat"] == Decimal("10000.00")
 
     def test_no_act_date_uses_today(self):
         act = SimpleNamespace(
-            total_amount="1000.00", vat_amount="0", vat_rate=0,
+            id=2, total_amount="1000.00", vat_amount="0", vat_rate=0,
             document_number="ACT-X", act_date=None,
         )
         request = SimpleNamespace()
-        mock_html = MagicMock()
-        mock_html.write_pdf.return_value = b"%PDF-no-date"
-        with patch("weasyprint.HTML", return_value=mock_html):
+        mock_template, mock_html_cls = _mock_template_and_html()
+        with (
+            patch.object(pdf_mod.env, "get_template", return_value=mock_template),
+            patch("weasyprint.HTML", mock_html_cls),
+        ):
             result = generate_invoice_facture_pdf(act, request)
-        assert result == b"%PDF-no-date"
+        assert result == b"%PDF-fake-bytes"
+        render_kwargs = mock_template.render.call_args.kwargs
+        assert render_kwargs["facture_date"] == date.today()
 
     def test_facture_number_replacement(self):
         act = SimpleNamespace(
-            total_amount="5000.00", vat_amount="1000.00", vat_rate=20,
+            id=3, total_amount="5000.00", vat_amount="1000.00", vat_rate=20,
             document_number="ACT-2026-100", act_date=date(2026, 11, 9),
         )
         request = SimpleNamespace()
-        mock_html = MagicMock()
-        mock_html.write_pdf.return_value = b"%PDF-sf"
-        with patch("weasyprint.HTML", return_value=mock_html):
+        mock_template, mock_html_cls = _mock_template_and_html()
+        with (
+            patch.object(pdf_mod.env, "get_template", return_value=mock_template),
+            patch("weasyprint.HTML", mock_html_cls),
+        ):
             result = generate_invoice_facture_pdf(act, request)
-        assert result == b"%PDF-sf"
+        assert result == b"%PDF-fake-bytes"
+        render_kwargs = mock_template.render.call_args.kwargs
+        assert render_kwargs["facture_number"] == "SF-2026-100"
