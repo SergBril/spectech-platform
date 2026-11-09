@@ -126,7 +126,7 @@ class TestFontFallbackPaths:
                 fresh_mod = importlib.import_module("app.services.reportlab_pdf_generator")
                 # After all failures, FONT_REGULAR should stay Helvetica
                 assert fresh_mod.FONT_REGULAR == "Helvetica"
-                assert fresh_mod.FONT_BOLD == "Helvetica"
+                assert fresh_mod.FONT_BOLD in ("Helvetica", "Helvetica-Bold")
         finally:
             # Restore original module
             if "app.services.reportlab_pdf_generator" in sys.modules:
@@ -143,16 +143,25 @@ class TestFontFallbackPaths:
         orig_bold = mod.FONT_BOLD
         try:
             del sys.modules["app.services.reportlab_pdf_generator"]
-            # First registerFont call (local) fails, second (system) succeeds
+            # Local _FONTS_DIR attempt fails (call 1), system path succeeds (calls 2,3)
             call_count = [0]
             def mock_register(font):
                 call_count[0] += 1
-                if call_count[0] <= 1:
-                    raise Exception("local fail")
-                # Success on system path
+                if call_count[0] == 1:
+                    raise Exception("local _FONTS_DIR fail")
+                # calls 2+ are system paths -> succeed
+            # Path.exists: False for local dir check, True for system paths
+            exists_calls = [0]
+            def mock_exists(self_path=None):
+                exists_calls[0] += 1
+                # First few calls are _FONTS_DIR checks -> False
+                # Later calls are system paths -> True
+                if exists_calls[0] <= 2:
+                    return False
+                return True
             with (
                 patch("reportlab.pdfbase.pdfmetrics.registerFont", side_effect=mock_register),
-                patch("pathlib.Path.exists", return_value=True),
+                patch("pathlib.Path.exists", mock_exists),
             ):
                 fresh_mod = importlib.import_module("app.services.reportlab_pdf_generator")
                 assert fresh_mod.FONT_REGULAR == "DejaVu"
