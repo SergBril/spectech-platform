@@ -24,10 +24,15 @@ class TestCreateDowntimeShiftNotFound:
     """Cover line 99: ShiftTask not found."""
 
     def test_shift_not_found(self):
+        from app.models.downtime import DowntimeCause
         mock_db = MagicMock()
         mock_db.get.return_value = None
         with pytest.raises(ValueError, match="ShiftTask 999 not found"):
-            DowntimeService.create_downtime(mock_db, shift_task_id=999, fault_party="operator", reason="test")
+            DowntimeService.create_downtime(
+                mock_db, shift_task_id=999, vehicle_id=1,
+                started_at=datetime.now(UTC), ended_at=None,
+                cause_category=DowntimeCause.technical,
+            )
 
 
 class TestEndDowntime:
