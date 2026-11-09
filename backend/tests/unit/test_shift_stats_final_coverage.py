@@ -1,6 +1,6 @@
 ﻿"""Точечные тесты для shift_stats_service.py — покрытие оставшихся строк."""
 import pytest
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from fastapi import HTTPException
@@ -18,12 +18,9 @@ class TestDriverKpiNoUser:
     def test_driver_without_user(self, svc):
         mock_db = MagicMock()
         profile = SimpleNamespace(employee_contractor_id=42)
-        # db.query().filter().all() returns profiles
         mock_db.query.return_value.filter.return_value.all.return_value = [profile]
-        # db.get(Employee, 42) returns emp with user_id=None
         emp = SimpleNamespace(user_id=None)
         mock_db.get.side_effect = lambda model, id_: emp
-        # tasks list empty
         mock_db.execute.return_value.fetchall.return_value = []
         result = svc.export_driver_kpi_excel(mock_db, company_id=1, date_from="2026-11-01", date_to="2026-11-30")
         assert result is not None
@@ -40,24 +37,27 @@ class TestFuelConsumptionWithVehicleId:
         assert result is not None
 
 
-# === Lines 387-388: ImportError openpyxl (already covered) ===
-
-
 # === Lines 557, 561: Utilization color coding ===
 class TestUtilizationExcelColorCoding:
     def test_high_and_medium_utilization(self, svc):
         mock_db = MagicMock()
-        # Need vehicles with tasks that produce util_pct >= 80 and >= 50
         v1 = SimpleNamespace(id=1, name="Excavator")
         v2 = SimpleNamespace(id=2, name="Crane")
-        mock_db.query.return_value.filter.return_value.all.return_value = [v1, v2]
         
         now = datetime(2026, 11, 15, 8, 0)
         end = datetime(2026, 11, 15, 18, 0)
-        # Tasks for v1 (high util) and v2 (medium util)
         task1 = SimpleNamespace(vehicle_id=1, operator_id=1, shift_date=date(2026, 11, 1), planned_start=now, planned_end=end)
         task2 = SimpleNamespace(vehicle_id=2, operator_id=2, shift_date=date(2026, 11, 1), planned_start=now, planned_end=end)
-        mock_db.execute.return_value.fetchall.return_value = [task1, task2]
+        
+        # db.query(Vehicle).filter().all() -> vehicles
+        # db.execute().scalars().all() -> tasks (via select())
+        mock_query = MagicMock()
+        mock_query.filter.return_value.all.return_value = [v1, v2]
+        mock_db.query.return_value = mock_query
+        
+        mock_exec = MagicMock()
+        mock_exec.scalars.return_value.all.return_value = [task1, task2]
+        mock_db.execute.return_value = mock_exec
         
         result = svc.export_utilization_excel(mock_db, company_id=1, date_from="2026-11-01", date_to="2026-11-30")
         assert result is not None
@@ -93,7 +93,6 @@ class TestCostPerHourNoDriver:
 class TestFuelAnomalyDetection:
     def test_anomalies_detected(self, svc):
         mock_db = MagicMock()
-        # entries: (entry_obj, shift_date, vehicle_name, vehicle_id)
         entries = [
             (SimpleNamespace(quantity_liters=10.0), date(2026, 11, 1), "Excavator", 1),
             (SimpleNamespace(quantity_liters=12.0), date(2026, 11, 2), "Excavator", 1),
