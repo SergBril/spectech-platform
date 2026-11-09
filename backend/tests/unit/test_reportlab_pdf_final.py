@@ -148,15 +148,14 @@ class TestFontFallbackPaths:
             del sys.modules["app.services.reportlab_pdf_generator"]
             # On Windows, POSIX paths never exist. Mock Path.exists globally.
             original_exists = Path.exists
-            @staticmethod
-            def fake_exists(path_obj):
-                s = str(path_obj)
+            def fake_exists(self_path):
+                s = str(self_path)
                 if "/usr/share/fonts" in s or "/app/fonts" in s:
                     return True
                 # Local fonts dir -> False so we fall through to system paths
                 if "fonts" in s and ("DejaVuSans" in s or "DejaVu" in s):
                     return False
-                return original_exists(path_obj)
+                return original_exists(self_path)
             mock_ttfont = MagicMock()
             with (
                 patch.object(Path, "exists", fake_exists),
