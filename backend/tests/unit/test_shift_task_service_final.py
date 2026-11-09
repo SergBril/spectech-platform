@@ -170,16 +170,16 @@ class TestAutoAssignJsonException:
             if name == "Vehicle": return vehicle
             return None
         mock_db.get = MagicMock(side_effect=get_se)
-        # execute: 1=rules, 2=drivers, 3=busy check, 4=week_shifts
-        rules_result = MagicMock()
-        rules_result.scalars.return_value.all.return_value = [rule]
+        # execute: 1=drivers(168), 2=rules(180), 3=busy check, 4=week_shifts
         drivers_result = MagicMock()
         drivers_result.scalars.return_value.all.return_value = [profile]
+        rules_result = MagicMock()
+        rules_result.scalars.return_value.all.return_value = [rule]
         busy_result = MagicMock()
         busy_result.scalar_one_or_none.return_value = None
         week_result = MagicMock()
         week_result.scalar.return_value = 0
-        mock_db.execute.side_effect = [rules_result, drivers_result, busy_result, week_result]
+        mock_db.execute.side_effect = [drivers_result, rules_result, busy_result, week_result]
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
         result = auto_assign_driver(mock_db, task_id=1, company_id=7)
@@ -218,18 +218,18 @@ class TestAutoAssignBusyDriver:
             if name == "Vehicle": return vehicle
             return None
         mock_db.get = MagicMock(side_effect=get_se)
-        rules_result = MagicMock()
-        rules_result.scalars.return_value.all.return_value = []
         drivers_result = MagicMock()
         drivers_result.scalars.return_value.all.return_value = [busy_profile, free_profile]
-        # execute order: rules, drivers, busy(busy)=hit, busy(free)=none, week_shifts(free)
+        rules_result = MagicMock()
+        rules_result.scalars.return_value.all.return_value = []
+        # execute order: drivers(168), rules(180), busy(busy)=hit, busy(free)=none, week_shifts(free)
         busy_hit = MagicMock()
         busy_hit.scalar_one_or_none.return_value = MagicMock()
         free_hit = MagicMock()
         free_hit.scalar_one_or_none.return_value = None
         week_result = MagicMock()
         week_result.scalar.return_value = 0
-        mock_db.execute.side_effect = [rules_result, drivers_result, busy_hit, free_hit, week_result]
+        mock_db.execute.side_effect = [drivers_result, rules_result, busy_hit, free_hit, week_result]
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
         result = auto_assign_driver(mock_db, task_id=1, company_id=7)
