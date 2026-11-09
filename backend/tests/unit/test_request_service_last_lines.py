@@ -1,7 +1,6 @@
 ﻿"""Точечные тесты для request_service.py: 233, 665-666, 678."""
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
-from types import SimpleNamespace
 
 
 # === Line 233: re-raise RequestServiceError in assign_vehicle ===
@@ -10,11 +9,10 @@ class TestAssignVehicleReraise:
     async def test_reraise_request_service_error(self, db_session, company):
         from app.services.request_service import RequestService, RequestServiceError
         from app.models.catalog import Vehicle
-        from app.models.request import Request
+        from app.models.dispatch import Request
 
         svc = RequestService(db_session)
 
-        # Create a request and vehicle
         req = Request(company_id=company.id, status="open")
         db_session.add(req)
         v = Vehicle(name="Test", company_id=company.id, status="free", id_type="internal", id_value="TEST-RERAISE")
@@ -23,13 +21,13 @@ class TestAssignVehicleReraise:
         db_session.refresh(req)
         db_session.refresh(v)
 
-        # First assign to create assignment
+        # First assign
         try:
             await svc.assign_vehicle(req.id, v.id, None, company.id, 1)
         except Exception:
             pass
 
-        # Second assign should trigger IntegrityError -> RequestServiceError(409) -> line 233 re-raise
+        # Second assign -> IntegrityError -> RequestServiceError(409) -> line 233
         with pytest.raises(RequestServiceError) as exc_info:
             await svc.assign_vehicle(req.id, v.id, None, company.id, 1)
         assert exc_info.value.status_code == 409
@@ -40,8 +38,7 @@ class TestBulkResponseApproveWsFail:
     @pytest.mark.asyncio
     async def test_approve_ws_exception_swallowed(self, db_session, company):
         from app.services.request_service import RequestService
-        from app.models.dispatch import RequestAssignment
-        from app.models.request import Request
+        from app.models.dispatch import RequestAssignment, Request
 
         svc = RequestService(db_session)
 
@@ -57,7 +54,6 @@ class TestBulkResponseApproveWsFail:
         db_session.commit()
         db_session.refresh(assignment)
 
-        # Make manager.send_to_user raise exception -> lines 665-666
         with patch("app.services.request_service.manager") as mock_mgr:
             mock_mgr.send_to_user = AsyncMock(side_effect=Exception("WS down"))
             with patch("app.services.request_service.create_notification", new_callable=AsyncMock):
@@ -76,8 +72,7 @@ class TestBulkResponseRejectWs:
     @pytest.mark.asyncio
     async def test_reject_ws_send(self, db_session, company):
         from app.services.request_service import RequestService
-        from app.models.dispatch import RequestAssignment
-        from app.models.request import Request
+        from app.models.dispatch import RequestAssignment, Request
 
         svc = RequestService(db_session)
 
