@@ -97,23 +97,17 @@ class TestFontRegistrationPaths:
         importlib.reload(mod)
 
     def test_font_files_not_found(self):
-        """Simulate font files not existing by patching Path.exists."""
+        """Simulate font files not existing by patching Path.exists globally."""
         import importlib
+        from pathlib import Path
         from unittest.mock import patch
         import app.services.salary_pdf as mod
-        orig_regular = mod._REGULAR_FONT
-        orig_bold = mod._BOLD_FONT
-        try:
-            mod._REGULAR_FONT = MagicMock()
-            mod._BOLD_FONT = MagicMock()
-            mod._REGULAR_FONT.exists.return_value = False
-            mod._BOLD_FONT.exists.return_value = False
+        # Make ALL Path.exists return False during reload
+        with patch.object(Path, "exists", return_value=False):
             importlib.reload(mod)
             assert mod._FONT_REGISTERED is False
-        finally:
-            mod._REGULAR_FONT = orig_regular
-            mod._BOLD_FONT = orig_bold
-            importlib.reload(mod)
+        # Restore
+        importlib.reload(mod)
 
 
 class TestFontFallback:
