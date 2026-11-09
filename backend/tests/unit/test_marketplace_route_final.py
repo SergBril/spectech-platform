@@ -130,10 +130,16 @@ class TestAcceptOfferRejectOthers:
         vehicle = MagicMock()
         vehicle.category_id = None
         vehicle.name = "Test Vehicle"
-        # db.query().options().filter().first() -> offer
-        mock_db.query.return_value.options.return_value.filter.return_value.first.return_value = offer
-        # db.execute for other offers
-        mock_db.execute.return_value.scalars.return_value.all.return_value = [other_offer]
+        vehicle.id = 10
+        # db.query().options().filter().first() -> offer (for initial lookup)
+        # db.query().filter().all() -> [other_offer] (for rejecting others)
+        filter_mock = MagicMock()
+        filter_mock.first.return_value = offer
+        filter_mock.all.return_value = [other_offer]
+        options_mock = MagicMock()
+        options_mock.filter.return_value = filter_mock
+        mock_db.query.return_value.options.return_value = options_mock
+        mock_db.query.return_value.filter.return_value = filter_mock
         # db.get for company/vehicle in _build_offer_response
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
