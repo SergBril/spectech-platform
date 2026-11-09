@@ -67,11 +67,9 @@ class TestUpdateCommitException:
     @pytest.mark.asyncio
     async def test_commit_exception_swallowed(self):
         mock_db, task = _make_update_mocks()
-        # commit raises inside try block -> caught by except Exception: pass
-        mock_db.commit.side_effect = RuntimeError("db error")
-        # ShiftAuditLog constructor needs to work
+        # First commit (line 86) succeeds, second commit (line 108, inside try) fails
+        mock_db.commit.side_effect = [None, RuntimeError("db error")]
         with (
-            patch("app.models.shift.ShiftAuditLog"),
             patch("app.services.websocket_manager.manager") as mock_mgr,
             patch("app.services.notification_service.create_notification", new_callable=AsyncMock),
         ):
@@ -211,6 +209,8 @@ class TestAutoAssignBusyDriver:
         free_profile.is_active = True
         free_profile.vehicle_category_id = 5
         free_profile.license_category = "C"
+        # vehicle needs category for score calculation
+        vehicle.category = "C"
 
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
