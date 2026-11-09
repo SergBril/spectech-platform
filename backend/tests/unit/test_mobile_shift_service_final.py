@@ -117,11 +117,13 @@ class TestGetPreShiftChecklistJsonParse:
             if name == "Vehicle": return mock_vehicle
             return None
         mock_db.get = MagicMock(side_effect=get_se)
-        config_result = MagicMock()
-        config_result.scalar_one_or_none.return_value = mock_config
-        submitted_result = MagicMock()
-        submitted_result.scalar_one_or_none.return_value = None
-        mock_db.execute.side_effect = [submitted_result, config_result]
+        # execute calls: 1=category config, 2=default config (skipped since #1 found), 3=existing check
+        # Actually: if category config found, default is skipped. So: 1=category config, 2=existing
+        cat_config_result = MagicMock()
+        cat_config_result.scalar_one_or_none.return_value = mock_config
+        existing_result = MagicMock()
+        existing_result.scalar_one_or_none.return_value = None
+        mock_db.execute.side_effect = [cat_config_result, existing_result]
         result = get_pre_shift_checklist(mock_db, task_id=1, company_id=7)
         assert result["items"] == items
 
@@ -141,10 +143,11 @@ class TestGetPreShiftChecklistJsonParse:
             if name == "Vehicle": return mock_vehicle
             return None
         mock_db.get = MagicMock(side_effect=get_se)
-        config_result = MagicMock()
-        config_result.scalar_one_or_none.return_value = mock_config
-        submitted_result = MagicMock()
-        submitted_result.scalar_one_or_none.return_value = None
-        mock_db.execute.side_effect = [submitted_result, config_result]
+        # category config found -> skip default config -> check existing
+        cat_config_result = MagicMock()
+        cat_config_result.scalar_one_or_none.return_value = mock_config
+        existing_result = MagicMock()
+        existing_result.scalar_one_or_none.return_value = None
+        mock_db.execute.side_effect = [cat_config_result, existing_result]
         result = get_pre_shift_checklist(mock_db, task_id=1, company_id=7)
         assert result["items"] == []
