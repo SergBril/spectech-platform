@@ -81,28 +81,27 @@ class TestMainBlock:
     def test_main_with_args(self):
         """Cover if __name__ == '__main__' with valid args."""
         import subprocess, sys, tempfile, os
-        script = (
-            "import sys\n"
-            "sys.argv = ['x', '/fake/path.pdf']\n"
-            "from unittest.mock import patch, MagicMock\n"
-            "mock_doc = MagicMock()\n"
-            "mock_page = MagicMock()\n"
-            "mock_page.rect.width = 60\n"
-            "mock_page.rect.height = 60\n"
-            "mock_shape = MagicMock()\n"
-            "mock_page.new_shape.return_value = mock_shape\n"
-            "mock_doc.__iter__ = lambda self: iter([mock_page])\n"
-            "with patch('pymupdf.open', return_value=mock_doc):\n"
-            "    with patch('webbrowser.open'):\n"
-            "        exec(open('app/services/pdf_coordinates_finder.py', encoding='utf-8').read())\n"
-            "print('OK')\n"
-        )
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir='.') as f:
+        script = """import sys
+sys.argv = ['x', '/fake/path.pdf']
+from unittest.mock import patch, MagicMock
+mock_doc = MagicMock()
+mock_page = MagicMock()
+mock_page.rect.width = 60
+mock_page.rect.height = 60
+mock_shape = MagicMock()
+mock_page.new_shape.return_value = mock_shape
+type(mock_doc).__iter__ = lambda self: iter([mock_page])
+with patch('pymupdf.open', return_value=mock_doc):
+    with patch('webbrowser.open'):
+        exec(open('app/services/pdf_coordinates_finder.py', encoding='utf-8').read())
+print('OK')
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir='.', encoding='utf-8') as f:
             f.write(script)
             f.flush()
             result = subprocess.run([sys.executable, f.name], capture_output=True, text=True)
         os.unlink(f.name)
-        assert result.returncode == 0, f"stderr={result.stderr}"
+        assert result.returncode == 0, f"stdout={result.stdout} stderr={result.stderr}"
         assert 'OK' in result.stdout
 
     def test_main_no_args(self):
