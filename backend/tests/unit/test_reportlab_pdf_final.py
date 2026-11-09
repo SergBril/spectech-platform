@@ -2,6 +2,7 @@
 
 from io import BytesIO
 from types import SimpleNamespace
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -138,30 +139,24 @@ class TestFontFallbackPaths:
         """Cover lines 53-62: system path found and registered successfully."""
         import importlib
         import sys
+        from pathlib import PurePosixPath, PureWindowsPath
         import app.services.reportlab_pdf_generator as mod
         orig_regular = mod.FONT_REGULAR
         orig_bold = mod.FONT_BOLD
         try:
             del sys.modules["app.services.reportlab_pdf_generator"]
-            # Local _FONTS_DIR attempt fails (call 1), system path succeeds (calls 2,3)
-            call_count = [0]
-            def mock_register(font):
-                call_count[0] += 1
-                if call_count[0] == 1:
-                    raise Exception("local _FONTS_DIR fail")
-                # calls 2+ are system paths -> succeed
-            # Path.exists: False for local dir check, True for system paths
-            exists_calls = [0]
-            def mock_exists(self_path=None):
-                exists_calls[0] += 1
-                # First few calls are _FONTS_DIR checks -> False
-                # Later calls are system paths -> True
-                if exists_calls[0] <= 2:
-                    return False
-                return True
+            # Mock Path.exists: local fonts don't exist, system paths do
+            original_exists = Path.exists
+            def mock_exists(self):
+                s = str(self)
+                # System paths -> True
+                if "/usr/share/fonts" in s or "/app/fonts" in s:
+                    return True
+                # Local fonts dir -> False
+                return False
             with (
-                patch("reportlab.pdfbase.pdfmetrics.registerFont", side_effect=mock_register),
-                patch("pathlib.Path.exists", mock_exists),
+                patch.object(Path, "exists", mock_exists),
+                patch("reportlab.pdfbase.pdfmetrics.registerFont"),
             ):
                 fresh_mod = importlib.import_module("app.services.reportlab_pdf_generator")
                 assert fresh_mod.FONT_REGULAR == "DejaVu"
