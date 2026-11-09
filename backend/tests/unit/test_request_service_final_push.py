@@ -176,7 +176,9 @@ class TestApproveRejectValidations:
     @pytest.mark.asyncio
     async def test_approve_other_responses_rejected(self, service, mock_db):
         """Line 742: other pending responses get rejected."""
-        req = SimpleNamespace(id=1, company_id=1)
+        req = SimpleNamespace(id=1, company_id=1,
+            planned_start=datetime(2026,11,1,tzinfo=UTC),
+            planned_end=datetime(2026,11,2,tzinfo=UTC))
         asn = SimpleNamespace(id=1, request_id=1, status="pending_approval",
             vehicle_id=5, assigned_by=5)
         other = SimpleNamespace(id=2, request_id=1, status="pending_approval")
