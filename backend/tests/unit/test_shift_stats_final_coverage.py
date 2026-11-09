@@ -1,9 +1,9 @@
 ﻿"""Integration тесты для shift_stats_service.py — покрытие через real DB."""
 import pytest
-from datetime import date, datetime, timedelta
-from decimal import Decimal
-
+from datetime import date, datetime
 from app.services.shift_stats_service import ShiftStatsService
+from app.models import Request, Employee, Contractor, DriverProfile
+from app.models.shift import ShiftTask, ShiftFuelEntry
 
 
 @pytest.fixture
@@ -14,15 +14,14 @@ def svc():
 # === Lines 196, 953: driver without user (emp.user_id is None) ===
 class TestDriverKpiNoUserRealDb:
     def test_driver_without_user(self, svc, db_session, company):
-        from app.models.contractor import Contractor
-        from app.models.employee import Employee
-
-        # Create contractor + employee WITHOUT user_id
         c = Contractor(name="Driver NoUser", type="employee", company_id=company.id)
         db_session.add(c)
         db_session.flush()
-        emp = Employee(contractor_id=c.id, position="Operator", company_id=company.id)
+        emp = Employee(contractor_id=c.id, position="Operator")
         db_session.add(emp)
+        db_session.flush()
+        dp = DriverProfile(employee_contractor_id=c.id)
+        db_session.add(dp)
         db_session.commit()
 
         result = svc.export_driver_kpi_excel(
@@ -63,20 +62,24 @@ class TestExportPnlImportError:
                 )
 
 
-# === Lines 557, 561: Utilization color coding with real vehicles+tasks ===
+# === Lines 557, 561: Utilization color coding ===
 class TestUtilizationExcelColorCodingRealDb:
-    def test_high_and_medium_utilization(self, svc, db_session, company, sample_vehicle):
-        from app.models.shift import ShiftTask
+    def test_high_utilization(self, svc, db_session, company, sample_vehicle):
+        # Create request + many shift tasks for high utilization
+        req = Request(
+            company_id=company.id, status="assigned",
+            planned_start=datetime(2026, 11, 1, 8, 0),
+            planned_end=datetime(2026, 11, 30, 18, 0),
+            assigned_vehicle_id=sample_vehicle.id,
+        )
+        db_session.add(req)
+        db_session.flush()
 
-        # Create tasks for the vehicle across many days to get high utilization
         for day in range(1, 25):
             t = ShiftTask(
-                vehicle_id=sample_vehicle.id,
-                company_id=company.id,
-                shift_date=date(2026, 11, day),
-                planned_start=datetime(2026, 11, day, 8, 0),
-                planned_end=datetime(2026, 11, day, 18, 0),
-                status="completed",
+                request_id=req.id, vehicle_id=sample_vehicle.id,
+                company_id=company.id, shift_date=date(2026, 11, day),
+                shift_number=1, status="completed",
             )
             db_session.add(t)
         db_session.commit()
@@ -91,20 +94,24 @@ class TestUtilizationExcelColorCodingRealDb:
 # === Lines 707-708: Fuel aggregation in daily trend ===
 class TestFuelDashboardDailyTrendRealDb:
     def test_fuel_in_daily_data(self, svc, db_session, company, sample_vehicle):
-        from app.models.shift import ShiftTask, ShiftFuelEntry
-
-        t = ShiftTask(
-            vehicle_id=sample_vehicle.id,
-            company_id=company.id,
-            shift_date=date(2026, 11, 5),
+        req = Request(
+            company_id=company.id, status="assigned",
             planned_start=datetime(2026, 11, 5, 8, 0),
             planned_end=datetime(2026, 11, 5, 18, 0),
-            status="completed",
+            assigned_vehicle_id=sample_vehicle.id,
+        )
+        db_session.add(req)
+        db_session.flush()
+
+        t = ShiftTask(
+            request_id=req.id, vehicle_id=sample_vehicle.id,
+            company_id=company.id, shift_date=date(2026, 11, 5),
+            shift_number=1, status="completed",
         )
         db_session.add(t)
         db_session.flush()
 
-        fe = ShiftFuelEntry(shift_task_id=t.id, quantity_liters=50.0, fuel_type="diesel")
+        fe = ShiftFuelEntry(shift_task_id=t.id, vehicle_id=sample_vehicle.id, quantity_liters=50.0, fuel_type="diesel")
         db_session.add(fe)
         db_session.commit()
 
@@ -118,16 +125,19 @@ class TestFuelDashboardDailyTrendRealDb:
 # === Line 846: cost_per_hour task without driver ===
 class TestCostPerHourNoDriverRealDb:
     def test_task_without_driver(self, svc, db_session, company, sample_vehicle):
-        from app.models.shift import ShiftTask
-
-        t = ShiftTask(
-            vehicle_id=sample_vehicle.id,
-            company_id=company.id,
-            shift_date=date(2026, 11, 5),
+        req = Request(
+            company_id=company.id, status="assigned",
             planned_start=datetime(2026, 11, 5, 8, 0),
             planned_end=datetime(2026, 11, 5, 18, 0),
-            status="completed",
-            operator_id=None,
+            assigned_vehicle_id=sample_vehicle.id,
+        )
+        db_session.add(req)
+        db_session.flush()
+
+        t = ShiftTask(
+            request_id=req.id, vehicle_id=sample_vehicle.id,
+            company_id=company.id, shift_date=date(2026, 11, 5),
+            shift_number=1, status="completed", operator_id=None,
         )
         db_session.add(t)
         db_session.commit()
@@ -142,21 +152,24 @@ class TestCostPerHourNoDriverRealDb:
 # === Lines 1137-1144: Anomaly detection with >=3 fuel entries ===
 class TestFuelAnomalyDetectionRealDb:
     def test_anomalies_detected(self, svc, db_session, company, sample_vehicle):
-        from app.models.shift import ShiftTask, ShiftFuelEntry
+        req = Request(
+            company_id=company.id, status="assigned",
+            planned_start=datetime(2026, 11, 1, 8, 0),
+            planned_end=datetime(2026, 11, 4, 18, 0),
+            assigned_vehicle_id=sample_vehicle.id,
+        )
+        db_session.add(req)
+        db_session.flush()
 
-        # Create 4 tasks with fuel entries, one anomalous
         for day, liters in [(1, 10.0), (2, 12.0), (3, 11.0), (4, 100.0)]:
             t = ShiftTask(
-                vehicle_id=sample_vehicle.id,
-                company_id=company.id,
-                shift_date=date(2026, 11, day),
-                planned_start=datetime(2026, 11, day, 8, 0),
-                planned_end=datetime(2026, 11, day, 18, 0),
-                status="completed",
+                request_id=req.id, vehicle_id=sample_vehicle.id,
+                company_id=company.id, shift_date=date(2026, 11, day),
+                shift_number=1, status="completed",
             )
             db_session.add(t)
             db_session.flush()
-            fe = ShiftFuelEntry(shift_task_id=t.id, quantity_liters=liters, fuel_type="diesel")
+            fe = ShiftFuelEntry(shift_task_id=t.id, vehicle_id=sample_vehicle.id, quantity_liters=liters, fuel_type="diesel")
             db_session.add(fe)
         db_session.commit()
 
