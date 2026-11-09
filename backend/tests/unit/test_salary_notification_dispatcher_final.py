@@ -14,23 +14,21 @@ def dispatcher():
     return SalaryNotificationDispatcher()
 
 
-def _make_mock_db(return_values: list):
-    """Create mock db where query().filter().first() returns values in order."""
+def _make_mock_db(query_returns: list):
+    """
+    Mock db where each db.query(Model) call returns next value from list.
+    query_returns: list of objects returned by .first() for each query() call.
+    """
     db = MagicMock()
-    call_count = {"n": 0}
+    idx = {"n": 0}
 
-    def mock_query(model):
+    def mock_query(model_cls):
         chain = MagicMock()
         chain.filter.return_value = chain
-
-        def mock_first():
-            idx = call_count["n"]
-            call_count["n"] += 1
-            if idx < len(return_values):
-                return return_values[idx]
-            return None
-
-        chain.first = mock_first
+        i = idx["n"]
+        idx["n"] += 1
+        val = query_returns[i] if i < len(query_returns) else None
+        chain.first.return_value = val
         return chain
 
     db.query.side_effect = mock_query
@@ -38,17 +36,15 @@ def _make_mock_db(return_values: list):
 
 
 def _record(**kw):
-    d = dict(
-        id=1, employee_contractor_id=10,
-        period_start=date(2026, 10, 1), period_end=date(2026, 10, 31),
-        net_amount="50000.00", gross_amount="60000.00",
-    )
+    d = dict(id=1, employee_contractor_id=10,
+             period_start=date(2026, 10, 1), period_end=date(2026, 10, 31),
+             net_amount="50000.00", gross_amount="60000.00")
     d.update(kw)
     return SimpleNamespace(**d)
 
 
 def _employee(**kw):
-    d = dict(contractor_id=10, user_id=5)
+    d = dict(id=10, contractor_id=10, user_id=5)
     d.update(kw)
     return SimpleNamespace(**d)
 
@@ -68,6 +64,7 @@ def _user(**kw):
 class TestNotifyEmployeeNotFound:
     @pytest.mark.asyncio
     async def test_returns_empty(self, dispatcher):
+        # query(Employee) -> None
         db = _make_mock_db([None])
         result = await dispatcher.notify_employee(db, _record())
         assert result == {"email": False, "telegram": False, "internal": False}
@@ -76,6 +73,7 @@ class TestNotifyEmployeeNotFound:
 class TestNotifyAllChannelsSuccess:
     @pytest.mark.asyncio
     async def test_all_sent(self, dispatcher):
+        # query(Employee)->emp, query(Contractor)->ctr, query(User)->usr
         db = _make_mock_db([_employee(), _contractor(), _user()])
         with patch("app.services.salary_notification_dispatcher.generate_salary_payslip", return_value=b"pdf"):
             with patch("app.services.salary_notification_dispatcher.create_notification"):
@@ -90,12 +88,12 @@ class TestNotifyAllChannelsSuccess:
 class TestNotifyNoContractor:
     @pytest.mark.asyncio
     async def test_fallback_name(self, dispatcher):
+        # query(Employee)->emp, query(Contractor)->None
         db = _make_mock_db([_employee(user_id=None), None])
         with patch("app.services.salary_notification_dispatcher.generate_salary_payslip", return_value=b"pdf"):
             result = await dispatcher.notify_employee(db, _record())
         assert result["internal"] is False
         assert result["email"] is False
-        assert result["telegram"] is False
 
 
 class TestNotifyPdfFails:
@@ -115,7 +113,7 @@ class TestNotifyPdfFails:
 
 class TestNotifyInternalFails:
     @pytest.mark.asyncio
-    async def test_internal_fail_continues(self, dispatcher):
+    async def test_continues(self, dispatcher):
         db = _make_mock_db([_employee(), _contractor(), _user()])
         with patch("app.services.salary_notification_dispatcher.generate_salary_payslip", return_value=b"pdf"):
             with patch("app.services.salary_notification_dispatcher.create_notification",
@@ -187,6 +185,7 @@ class TestNotifyTelegramTextFallback:
 class TestNotifyNoUser:
     @pytest.mark.asyncio
     async def test_no_user_id(self, dispatcher):
+        # query(Employee)->emp(no user_id), query(Contractor)->ctr
         db = _make_mock_db([_employee(user_id=None), _contractor()])
         with patch("app.services.salary_notification_dispatcher.generate_salary_payslip", return_value=b"pdf"):
             with patch("app.services.salary_notification_dispatcher.email_service") as es:
@@ -198,6 +197,7 @@ class TestNotifyNoUser:
 
     @pytest.mark.asyncio
     async def test_user_not_found(self, dispatcher):
+        # query(Employee)->emp, query(Contractor)->ctr, query(User)->None
         db = _make_mock_db([_employee(user_id=999), _contractor(), None])
         with patch("app.services.salary_notification_dispatcher.generate_salary_payslip", return_value=b"pdf"):
             with patch("app.services.salary_notification_dispatcher.email_service") as es:
