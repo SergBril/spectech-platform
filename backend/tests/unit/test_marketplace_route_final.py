@@ -32,7 +32,15 @@ class TestCreateOfferMaxNotification:
             name = getattr(model, "__name__", str(model))
             if "Request" in name: return request_obj
             if "Vehicle" in name or "vehicle" in str(model).lower(): return vehicle
+            if "Company" in name: return company
+            if "Category" in name: return category
+            # Fallback: if id matches vehicle id, return vehicle
+            if id == 10: return vehicle
             return None
+        company = MagicMock()
+        company.name = "OOO Test"
+        category = MagicMock()
+        category.name = "Test Category"
         mock_db.get = MagicMock(side_effect=get_se)
         mock_db.execute.return_value.scalar_one_or_none.return_value = None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -66,7 +74,15 @@ class TestCreateOfferMaxNotification:
             name = getattr(model, "__name__", str(model))
             if "Request" in name: return request_obj
             if "Vehicle" in name or "vehicle" in str(model).lower(): return vehicle
+            if "Company" in name: return company
+            if "Category" in name: return category
+            # Fallback: if id matches vehicle id, return vehicle
+            if id == 10: return vehicle
             return None
+        company = MagicMock()
+        company.name = "OOO Test"
+        category = MagicMock()
+        category.name = "Test Category"
         mock_db.get = MagicMock(side_effect=get_se)
         mock_db.execute.return_value.scalar_one_or_none.return_value = None
         mock_db.query.return_value.filter.return_value.first.return_value = None
