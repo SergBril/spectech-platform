@@ -316,9 +316,10 @@ class TestGetOfferDetailsSuccessPath:
         company = SimpleNamespace(name="OOO Test")
         vehicle = SimpleNamespace(name="Test Vehicle", category_id=3)
         category = SimpleNamespace(name="Экскаватор")
+        # get_offer_details uses db.query().options().filter().first()
+        mock_db.query.return_value.options.return_value.filter.return_value.first.return_value = offer
         def get_se(model, id):
             name = getattr(model, "__name__", str(model))
-            if "MarketplaceOffer" in name or "Offer" in name: return offer
             if "Company" in name: return company
             if "Vehicle" in name: return vehicle
             if "Category" in name: return category
