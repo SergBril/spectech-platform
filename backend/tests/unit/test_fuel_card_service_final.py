@@ -8,7 +8,7 @@ import pytest
 
 class TestInit:
     def test_enabled_with_key(self):
-        with patch("app.services.fuel_card_service.settings") as s:
+        with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = "test-key"
             s.FUEL_CARD_PROVIDER = "gazpromneft"
             from app.services.fuel_card_service import FuelCardService
@@ -17,7 +17,7 @@ class TestInit:
             assert svc.provider == "gazpromneft"
 
     def test_disabled_without_key(self):
-        with patch("app.services.fuel_card_service.settings") as s:
+        with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = ""
             s.FUEL_CARD_PROVIDER = "custom"
             from app.services.fuel_card_service import FuelCardService
@@ -28,7 +28,7 @@ class TestInit:
 class TestFetchTransactions:
     @pytest.mark.asyncio
     async def test_disabled_returns_empty(self):
-        with patch("app.services.fuel_card_service.settings") as s:
+        with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = ""
             s.FUEL_CARD_PROVIDER = "custom"
             from app.services.fuel_card_service import FuelCardService
@@ -38,7 +38,7 @@ class TestFetchTransactions:
 
     @pytest.mark.asyncio
     async def test_gazpromneft_success(self):
-        with patch("app.services.fuel_card_service.settings") as s:
+        with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = "key"
             s.FUEL_CARD_PROVIDER = "gazpromneft"
             s.FUEL_CARD_BASE_URL = "https://api.test.com"
@@ -65,7 +65,7 @@ class TestFetchTransactions:
 
     @pytest.mark.asyncio
     async def test_lukoil_success(self):
-        with patch("app.services.fuel_card_service.settings") as s:
+        with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = "key"
             s.FUEL_CARD_PROVIDER = "lukoil"
             s.FUEL_CARD_BASE_URL = "https://api.lukoil.test"
@@ -91,7 +91,7 @@ class TestFetchTransactions:
 
     @pytest.mark.asyncio
     async def test_unknown_provider(self):
-        with patch("app.services.fuel_card_service.settings") as s:
+        with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = "key"
             s.FUEL_CARD_PROVIDER = "unknown"
             s.FUEL_CARD_BASE_URL = "https://test.com"
@@ -106,7 +106,7 @@ class TestFetchTransactions:
 
     @pytest.mark.asyncio
     async def test_api_error(self):
-        with patch("app.services.fuel_card_service.settings") as s:
+        with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = "key"
             s.FUEL_CARD_PROVIDER = "gazpromneft"
             s.FUEL_CARD_BASE_URL = "https://test.com"
@@ -122,7 +122,7 @@ class TestFetchTransactions:
 
     @pytest.mark.asyncio
     async def test_gazpromneft_list_response(self):
-        with patch("app.services.fuel_card_service.settings") as s:
+        with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = "key"
             s.FUEL_CARD_PROVIDER = "gazpromneft"
             s.FUEL_CARD_BASE_URL = "https://test.com"
@@ -149,7 +149,7 @@ class TestFetchTransactions:
 class TestSyncToShiftEntries:
     @pytest.mark.asyncio
     async def test_sync_success(self):
-        with patch("app.services.fuel_card_service.settings") as s:
+        with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = "key"
             s.FUEL_CARD_PROVIDER = "gazpromneft"
             from app.services.fuel_card_service import FuelCardService
@@ -168,7 +168,7 @@ class TestSyncToShiftEntries:
 
     @pytest.mark.asyncio
     async def test_skip_no_vehicle(self):
-        with patch("app.services.fuel_card_service.settings") as s:
+        with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = "key"
             s.FUEL_CARD_PROVIDER = "gazpromneft"
             from app.services.fuel_card_service import FuelCardService
@@ -183,7 +183,7 @@ class TestSyncToShiftEntries:
 
     @pytest.mark.asyncio
     async def test_skip_no_shift(self):
-        with patch("app.services.fuel_card_service.settings") as s:
+        with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = "key"
             s.FUEL_CARD_PROVIDER = "gazpromneft"
             from app.services.fuel_card_service import FuelCardService
@@ -202,7 +202,7 @@ class TestSyncToShiftEntries:
 
     @pytest.mark.asyncio
     async def test_skip_duplicate(self):
-        with patch("app.services.fuel_card_service.settings") as s:
+        with patch("app.core.config.settings") as s:
             s.FUEL_CARD_API_KEY = "key"
             s.FUEL_CARD_PROVIDER = "gazpromneft"
             from app.services.fuel_card_service import FuelCardService
