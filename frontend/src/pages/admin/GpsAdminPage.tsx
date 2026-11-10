@@ -39,7 +39,7 @@ export default function GpsAdminPage() {
   const fetchData = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       const [vehRes, statsRes] = await Promise.all([
         fetch(`${API_BASE}/gps/providers/vehicles`, { headers }),

@@ -190,7 +190,7 @@ export const EmailLogsPage: React.FC = () => {
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-                          {formatDateTime(log.sent_at)}
+                          {formatDateTime(log.sent_at ?? null)}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm">
                           {log.invoice_id && (
@@ -242,7 +242,7 @@ export const EmailLogsPage: React.FC = () => {
                       {viewingLog.to_name && ` (${viewingLog.to_name})`}
                     </div>
                     <div>
-                      <strong>Отправлено:</strong> {formatDateTime(viewingLog.sent_at)}
+                      <strong>Отправлено:</strong> {formatDateTime(viewingLog.sent_at ?? null)}
                     </div>
                     <div>
                       <strong>Статус:</strong>{' '}
