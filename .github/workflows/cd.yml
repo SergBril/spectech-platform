@@ -2,9 +2,8 @@ name: CD
 
 on:
   push:
-    branches: [main, master]
-    tags:
-      - 'v*'
+    branches: [main]
+    tags: ['v*']
 
 env:
   REGISTRY: ghcr.io
@@ -12,20 +11,17 @@ env:
 
 jobs:
   build-and-push:
-    name: Build and Push Docker Image
+    name: Build & Push Docker Images
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -39,13 +35,12 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push backend
+      - name: Build & push backend
         uses: docker/build-push-action@v5
         with:
           context: ./backend
@@ -56,7 +51,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push frontend
+      - name: Build & push frontend
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -67,7 +62,30 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Image digest
-        run: |
-          echo "Backend image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend"
-          echo "Frontend image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend"
+  trivy-scan:
+    name: Trivy Image Scan
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+
+    strategy:
+      matrix:
+        component: [backend, frontend]
+
+    steps:
+      - uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component }}:latest
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
