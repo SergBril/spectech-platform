@@ -13,30 +13,34 @@ spec:
   minReplicas: 2
   maxReplicas: 10
   metrics:
-  # CPU-based scaling
+  # Primary: CPU-based scaling
   - type: Resource
     resource:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 50
-  # Memory-based scaling
+        averageUtilization: 60
+  # Secondary: Memory-based scaling
   - type: Resource
     resource:
       name: memory
       target:
         type: Utilization
-        averageUtilization: 70
+        averageUtilization: 75
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 300
       policies:
       - type: Pods
         value: 1
-        periodSeconds: 60
+        periodSeconds: 120
     scaleUp:
-      stabilizationWindowSeconds: 0
+      stabilizationWindowSeconds: 30
       policies:
       - type: Pods
         value: 2
         periodSeconds: 60
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      selectPolicy: Max

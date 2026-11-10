@@ -1,27 +1,18 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: backend-hpa-custom
+  name: frontend-hpa
   namespace: spectech
   labels:
-    app: backend
+    app: frontend
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: backend
+    name: frontend
   minReplicas: 2
-  maxReplicas: 10
+  maxReplicas: 6
   metrics:
-  # Custom metric: HTTP requests per second
-  - type: Pods
-    pods:
-      metric:
-        name: http_requests_per_second
-      target:
-        type: AverageValue
-        averageValue: "10"
-  # Fallback: CPU-based scaling
   - type: Resource
     resource:
       name: cpu
@@ -34,9 +25,9 @@ spec:
       policies:
       - type: Pods
         value: 1
-        periodSeconds: 60
+        periodSeconds: 120
     scaleUp:
-      stabilizationWindowSeconds: 60
+      stabilizationWindowSeconds: 30
       policies:
       - type: Pods
         value: 2
