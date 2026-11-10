@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_user_company_ids
 from app.core.db import get_db
+from app.core.sync_cache import cache_get, cache_set
 from app.models.auth import User
 from app.models.dispatch import Request
 from app.models.finance import DocumentStatus, Invoice
@@ -23,6 +24,11 @@ def get_revenue_chart(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Данные для линейного графика доходов по месяцам."""
+    cache_key = f"analytics:revenue:{months}:{date_from}:{date_to}:{','.join(map(str, sorted(company_ids)))}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     if date_from:
         start_date = datetime.fromisoformat(date_from)
     else:
@@ -56,6 +62,7 @@ def get_revenue_chart(
             }
         )
 
+    cache_set(cache_key, data, ttl=300)
     return data
 
 
@@ -68,6 +75,11 @@ def get_status_chart(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Данные для круговой диаграммы статусов счетов."""
+    cache_key = f"analytics:status:{date_from}:{date_to}:{','.join(map(str, sorted(company_ids)))}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     stmt = select(
         Invoice.status,
         func.count(Invoice.id).label("count"),
@@ -102,6 +114,7 @@ def get_status_chart(
             }
         )
 
+    cache_set(cache_key, data, ttl=300)
     return data
 
 
@@ -115,6 +128,11 @@ def get_top_requests(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Топ-5 заявок по сумме связанных счетов."""
+    cache_key = f"analytics:top_req:{limit}:{date_from}:{date_to}:{','.join(map(str, sorted(company_ids)))}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     stmt = (
         select(
             Request.id,
@@ -148,6 +166,7 @@ def get_top_requests(
             }
         )
 
+    cache_set(cache_key, data, ttl=300)
     return data
 
 
@@ -159,6 +178,11 @@ def get_sparkline(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Тренд доходов за последние N дней (sparkline)."""
+    cache_key = f"analytics:sparkline:{days}:{','.join(map(str, sorted(company_ids)))}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     now = datetime.now()
     start_date = now - timedelta(days=days)
 
@@ -190,3 +214,4 @@ def get_sparkline(
         current += timedelta(days=1)
 
     return data
+    cache_set(cache_key, data, ttl=120)
