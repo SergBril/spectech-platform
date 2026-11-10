@@ -189,6 +189,33 @@ services:
       - monitoring
       - backend
 
+  # ═══════════════════════════════════════════════════════════
+  # Database Backup (daily at 02:00, 30-day retention)
+  # ═══════════════════════════════════════════════════════════
+  db-backup:
+    image: postgres:16-alpine
+    container_name: spectech-db-backup
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: postgres
+    volumes:
+      - ./backend/scripts/backup_db.sh:/backup.sh:ro
+      - db_backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        chmod +x /backup.sh
+        echo "0 2 * * * /backup.sh 30 >> /var/log/backup.log 2>&1" > /etc/crontabs/root
+        crond -f -l 2
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+    networks:
+      - database
+
 volumes:
   postgres_data:
   redis_data:
@@ -198,6 +225,7 @@ volumes:
   nginx_logs:
   prometheus_data:
   grafana_data:
+  db_backups:
 
 networks:
   frontend:
