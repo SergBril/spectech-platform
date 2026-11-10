@@ -19,7 +19,7 @@ def _get_redis():
 
         from app.core.config import settings
 
-        url = getattr(settings, "redis_url", "redis://localhost:6379/0")
+        url = settings.redis_connection_url
         _redis_client = redis.from_url(
             url, decode_responses=True, socket_connect_timeout=2
         )

@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     TESTING: bool = False
 
     # Database
-    database_url: str = "postgresql+psycopg://spectech:spectech_dev_password@localhost:5470/spectech?sslmode=disable"
+    database_url: str = (
+        "postgresql+psycopg://spectech:spectech_dev_password@localhost:5470/spectech?sslmode=disable"
+    )
 
     # Diadoc (EDO)
     DIADOC_API_KEY: str = ""
@@ -24,15 +26,21 @@ class Settings(BaseSettings):
     DIADOC_USE_SANDBOX: bool = True
 
     # Redis settings
+    redis_url: str = Field(default="", alias="REDIS_URL")
     redis_host: str = "redis"
     redis_port_number: int = Field(default=6379, alias="REDIS_PORT_NUMBER")
     redis_db: int = 0
     redis_password: str = ""
 
     @property
-    def redis_url(self) -> str:
+    def redis_connection_url(self) -> str:
         """URL для подключения к Redis."""
-        return f"redis://{self.redis_host}:{self.redis_port_number}/{self.redis_db}"
+        if self.redis_url:
+            return self.redis_url
+        pwd = f":{self.redis_password}@" if self.redis_password else ""
+        return (
+            f"redis://{pwd}{self.redis_host}:{self.redis_port_number}/{self.redis_db}"
+        )
 
     # JWT Settings
     jwt_secret_key: str = Field(

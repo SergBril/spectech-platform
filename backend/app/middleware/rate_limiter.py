@@ -69,7 +69,7 @@ class RedisRateLimiter:
 
             from app.core.config import settings
 
-            url = getattr(settings, "REDIS_URL", "redis://localhost:6379/0")
+            url = settings.redis_connection_url
             r = aioredis.from_url(
                 url, encoding="utf-8", decode_responses=True, socket_connect_timeout=2
             )

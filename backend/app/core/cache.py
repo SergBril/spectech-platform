@@ -19,7 +19,7 @@ async def _get_redis():
 
         from app.core.config import settings
 
-        url = getattr(settings, "redis_url", "redis://localhost:6379/0")
+        url = settings.redis_connection_url
         _redis_pool = aioredis.from_url(
             url, encoding="utf-8", decode_responses=True, socket_connect_timeout=2
         )
