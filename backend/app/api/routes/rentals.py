@@ -20,7 +20,7 @@ from app.schemas.rental import (
 from app.services.rental_service import rental_service
 
 logger = logging.getLogger("spectech.rental_routes")
-router = APIRouter(prefix="/rentals", tags=["рџ“‹ Rentals (РђСЂРµРЅРґР°)"])
+router = APIRouter(prefix="/rentals", tags=["rentals"])
 
 
 @router.post(
