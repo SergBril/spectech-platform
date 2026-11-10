@@ -121,13 +121,23 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ DB cleanup error: {e}")
 
-    # Close Redis
+    # Close Redis (async)
     try:
         from app.core.redis import redis_client
 
         if redis_client:
             redis_client.close()
             logger.info("✅ Redis connection closed")
+    except Exception:
+        pass
+
+    # Close sync Redis cache
+    try:
+        from app.core.sync_cache import _redis_client as sync_redis
+
+        if sync_redis:
+            sync_redis.close()
+            logger.info("✅ Sync Redis cache closed")
     except Exception:
         pass
 

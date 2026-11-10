@@ -93,5 +93,8 @@ USER spectech
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/system/health || exit 1
 
+# Graceful shutdown: send SIGTERM for FastAPI lifespan cleanup
+STOPSIGNAL SIGTERM
+
 # Start application
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
