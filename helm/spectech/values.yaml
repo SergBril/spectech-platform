@@ -125,8 +125,8 @@ ingress:
 credentials:
   postgres:
     user: spectech
-    password: Sp3ctech_Pr0d_2026_Secure_X9fK  # pragma: allowlist secret
+    password: CHANGE_ME_IN_PRODUCTION  # pragma: allowlist secret
     database: spectech
   minio:
     rootUser: spectech
-    rootPassword: Sp3ctech_Mini0_2026  # pragma: allowlist secret
+    rootPassword: CHANGE_ME_IN_PRODUCTION  # pragma: allowlist secret
