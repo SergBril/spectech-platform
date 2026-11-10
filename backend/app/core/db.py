@@ -1,6 +1,7 @@
+import logging
+
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
-import logging
 
 from app.core.config import settings
 
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
-    pool_recycle=1800,       # 30 min — well below PG default idle_in_transaction_session_timeout
+    pool_recycle=1800,  # 30 min — well below PG default idle_in_transaction_session_timeout
     pool_size=10,
     max_overflow=20,
     pool_timeout=30,

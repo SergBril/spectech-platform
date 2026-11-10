@@ -2,7 +2,6 @@
 
 import json
 import logging
-from functools import wraps
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -17,6 +16,7 @@ async def _get_redis():
         return _redis_pool
     try:
         import redis.asyncio as aioredis
+
         from app.core.config import settings
 
         url = getattr(settings, "redis_url", "redis://localhost:6379/0")
@@ -40,9 +40,11 @@ async def cache_get(key: str) -> Any | None:
         raw = await r.get(key)
         if raw is not None:
             from app.core.metrics import record_cache_hit
+
             record_cache_hit("redis")
             return json.loads(raw)
         from app.core.metrics import record_cache_miss
+
         record_cache_miss("redis")
         return None
     except Exception:

@@ -84,9 +84,7 @@ def list_my_companies(
     from app.models.user_company import UserCompany
 
     if current_user.is_superuser:
-        stmt = (
-            select(Company).where(Company.is_active == True).order_by(Company.name)
-        )  # noqa: E711
+        stmt = select(Company).where(Company.is_active == True).order_by(Company.name)  # noqa: E711
     else:
         # Получаем company_id из user_companies
         uc_stmt = select(UserCompany.company_id).where(

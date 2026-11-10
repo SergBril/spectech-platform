@@ -148,8 +148,8 @@ class FuelCardService:
         self, db: Session, company_id: int, transactions: list[dict]
     ) -> dict:
         """Синхронизировать транзакции с записями расхода топлива по сменам."""
-        from app.models.shift import ShiftFuelEntry, ShiftTask
         from app.models.catalog import Vehicle
+        from app.models.shift import ShiftFuelEntry, ShiftTask
 
         synced = 0
         skipped = 0

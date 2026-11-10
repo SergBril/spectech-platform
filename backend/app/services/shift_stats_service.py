@@ -1,4 +1,4 @@
-﻿"""Сервис статистики смен и аналитики."""
+"""Сервис статистики смен и аналитики."""
 
 import logging
 
@@ -123,7 +123,8 @@ class ShiftStatsService:
 
         from fastapi.responses import StreamingResponse
 
-        from app.models.contractor import Contractor as _Ctr, DriverProfile, Employee
+        from app.models.contractor import Contractor as _Ctr
+        from app.models.contractor import DriverProfile, Employee
 
         try:
             import openpyxl
@@ -255,7 +256,9 @@ class ShiftStatsService:
             fill = (
                 green_fill
                 if rating >= 70
-                else yellow_fill if rating >= 40 else red_fill
+                else yellow_fill
+                if rating >= 40
+                else red_fill
             )
             ws.cell(row=row_idx, column=3).fill = fill
 
@@ -433,15 +436,15 @@ class ShiftStatsService:
             ws.cell(
                 row=row_idx, column=6, value=v["amortization_cost"]
             ).number_format = "#,##0"
-            ws.cell(row=row_idx, column=7, value=v["total_expenses"]).number_format = (
-                "#,##0"
-            )
+            ws.cell(
+                row=row_idx, column=7, value=v["total_expenses"]
+            ).number_format = "#,##0"
             margin_cell = ws.cell(row=row_idx, column=8, value=v["margin"])
             margin_cell.number_format = "#,##0"
             margin_cell.font = green_font if v["margin"] >= 0 else red_font
-            ws.cell(row=row_idx, column=9, value=v["margin_pct"]).number_format = (
-                '0.0"%"'
-            )
+            ws.cell(
+                row=row_idx, column=9, value=v["margin_pct"]
+            ).number_format = '0.0"%"'
 
         for col_cells in ws.columns:
             max_len = max(len(str(cell.value or "")) for cell in col_cells)
@@ -910,7 +913,8 @@ class ShiftStatsService:
         """KPI водителей: часы работы, количество смен, утилизация, рейтинг."""
         from datetime import date as date_type
 
-        from app.models.contractor import Contractor as _Ctr, DriverProfile, Employee
+        from app.models.contractor import Contractor as _Ctr
+        from app.models.contractor import DriverProfile, Employee
 
         d_from = date_type.fromisoformat(date_from)
         d_to = date_type.fromisoformat(date_to)

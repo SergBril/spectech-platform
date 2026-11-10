@@ -16,9 +16,7 @@ class Settings(BaseSettings):
     TESTING: bool = False
 
     # Database
-    database_url: str = (
-        "postgresql+psycopg://spectech:spectech_dev_password@localhost:5470/spectech?sslmode=disable"
-    )
+    database_url: str = "postgresql+psycopg://spectech:spectech_dev_password@localhost:5470/spectech?sslmode=disable"
 
     # Diadoc (EDO)
     DIADOC_API_KEY: str = ""

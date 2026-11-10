@@ -193,9 +193,9 @@ def export_finance_dashboard_excel(
     red_font = Font(color="9C0006", bold=True)
 
     # Summary section
-    ws.cell(row=1, column=1, value=f"Финансовый отчёт за {report['year']} год").font = (
-        Font(bold=True, size=14)
-    )
+    ws.cell(
+        row=1, column=1, value=f"Финансовый отчёт за {report['year']} год"
+    ).font = Font(bold=True, size=14)
     summary = report["summary"]
     ws.cell(row=3, column=1, value="Выручка").font = Font(bold=True)
     ws.cell(row=3, column=2, value=summary["total_revenue"]).number_format = "#,##0"
@@ -229,12 +229,12 @@ def export_finance_dashboard_excel(
         ws.cell(row=row_idx, column=2, value=m["revenue"]).number_format = "#,##0"
         ws.cell(row=row_idx, column=3, value=m["fuel_cost"]).number_format = "#,##0"
         ws.cell(row=row_idx, column=4, value=m["wage_cost"]).number_format = "#,##0"
-        ws.cell(row=row_idx, column=5, value=m["amortization_cost"]).number_format = (
-            "#,##0"
-        )
-        ws.cell(row=row_idx, column=6, value=m["total_expenses"]).number_format = (
-            "#,##0"
-        )
+        ws.cell(
+            row=row_idx, column=5, value=m["amortization_cost"]
+        ).number_format = "#,##0"
+        ws.cell(
+            row=row_idx, column=6, value=m["total_expenses"]
+        ).number_format = "#,##0"
         margin_cell = ws.cell(row=row_idx, column=7, value=m["margin"])
         margin_cell.number_format = "#,##0"
         margin_cell.font = green_font if m["margin"] >= 0 else red_font

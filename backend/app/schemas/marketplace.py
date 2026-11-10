@@ -1,6 +1,7 @@
 """Схемы для маркетплейса."""
 
 from datetime import datetime
+
 from pydantic import BaseModel
 
 

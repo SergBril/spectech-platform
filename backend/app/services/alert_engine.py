@@ -74,7 +74,9 @@ def process_point_with_rules(
     return created_alerts
 
 
-def _check_speed(db: Session, point: GpsPoint, rule: AlertRule, company_id: int) -> Alert | None:
+def _check_speed(
+    db: Session, point: GpsPoint, rule: AlertRule, company_id: int
+) -> Alert | None:
     """Проверка превышения скорости."""
     if point.speed is None or rule.threshold is None:
         return None
@@ -94,7 +96,9 @@ def _check_speed(db: Session, point: GpsPoint, rule: AlertRule, company_id: int)
     return None
 
 
-def _check_fuel(db: Session, point: GpsPoint, rule: AlertRule, company_id: int) -> Alert | None:
+def _check_fuel(
+    db: Session, point: GpsPoint, rule: AlertRule, company_id: int
+) -> Alert | None:
     """Проверка резкого падения уровня топлива."""
     if point.fuel_level is None or rule.threshold is None:
         return None
@@ -133,7 +137,9 @@ def _check_fuel(db: Session, point: GpsPoint, rule: AlertRule, company_id: int) 
     return None
 
 
-def _check_engine_hours(db: Session, point: GpsPoint, rule: AlertRule, company_id: int) -> Alert | None:
+def _check_engine_hours(
+    db: Session, point: GpsPoint, rule: AlertRule, company_id: int
+) -> Alert | None:
     """Проверка превышения суточных моточасов."""
     if point.engine_hours is None or rule.threshold is None:
         return None
@@ -170,7 +176,9 @@ def _check_engine_hours(db: Session, point: GpsPoint, rule: AlertRule, company_i
     return None
 
 
-def _check_idle(db: Session, point: GpsPoint, rule: AlertRule, company_id: int) -> Alert | None:
+def _check_idle(
+    db: Session, point: GpsPoint, rule: AlertRule, company_id: int
+) -> Alert | None:
     """Проверка длительного простоя с включённым двигателем."""
     if rule.threshold is None:
         return None

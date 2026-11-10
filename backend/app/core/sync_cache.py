@@ -16,10 +16,13 @@ def _get_redis():
         return _redis_client
     try:
         import redis
+
         from app.core.config import settings
 
         url = getattr(settings, "redis_url", "redis://localhost:6379/0")
-        _redis_client = redis.from_url(url, decode_responses=True, socket_connect_timeout=2)
+        _redis_client = redis.from_url(
+            url, decode_responses=True, socket_connect_timeout=2
+        )
         _redis_client.ping()
         logger.info("Sync Redis cache connected")
         return _redis_client
@@ -37,9 +40,11 @@ def cache_get(key: str) -> Any | None:
         raw = r.get(key)
         if raw is not None:
             from app.core.metrics import record_cache_hit
+
             record_cache_hit("redis")
             return json.loads(raw)
         from app.core.metrics import record_cache_miss
+
         record_cache_miss("redis")
         return None
     except Exception:

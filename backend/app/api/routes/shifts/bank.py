@@ -123,9 +123,7 @@ def auto_match_payments(
                     act, "document_number", None
                 ) or f"ACT-{act.id}".replace("-", "") in payment.purpose.replace(
                     "-", ""
-                ).replace(
-                    " ", ""
-                )
+                ).replace(" ", "")
 
             if amount_match and (
                 inn_match or purpose_match or not act.counterparty_inn
@@ -445,9 +443,9 @@ def export_transactions_excel(
 
     last_row = len(txns) + 2
     ws.cell(row=last_row, column=1, value="ИТОГО").font = Font(bold=True)
-    ws.cell(row=last_row, column=5, value=round(total_amount, 2)).number_format = (
-        "#,##0"
-    )
+    ws.cell(
+        row=last_row, column=5, value=round(total_amount, 2)
+    ).number_format = "#,##0"
     ws.cell(row=last_row, column=5).font = Font(bold=True)
 
     for col_cells in ws.columns:
