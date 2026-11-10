@@ -3,34 +3,37 @@ set -e
 
 echo "Starting SpectechPlatform backend..."
 
-# Function to safely apply migrations
 apply_migrations() {
     echo "Applying database migrations..."
 
-    # Check if tables already exist in database
-    TABLES_COUNT=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE';" 2>/dev/null | tr -d ' ' || echo "0")
-
-    if [ "$TABLES_COUNT" -gt 0 ]; then
-        echo "Database already has $TABLES_COUNT tables, stamping as head..."
-        alembic stamp head 2>/dev/null || true
-        echo "Database stamped successfully"
+    if alembic upgrade head 2>&1; then
+        echo "Migrations applied successfully"
     else
-        echo "Empty database, applying all migrations..."
-        alembic upgrade head
-        echo "All migrations applied"
+        echo "alembic upgrade head failed, attempting recovery..."
+
+        HAS_ALEMBIC_VERSION=$(psql "$DATABASE_URL" -t -c \
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'alembic_version';" \
+            2>/dev/null | tr -d ' ' || echo "0")
+
+        if [ "$HAS_ALEMBIC_VERSION" = "0" ]; then
+            echo "No alembic_version table found, stamping as head..."
+            alembic stamp head
+            echo "Database stamped as head"
+        else
+            echo "Migration failed with existing alembic_version. Manual intervention required."
+            echo "Current revision:"
+            alembic current 2>&1 || true
+            echo "Pending revisions:"
+            alembic history -r current:head 2>&1 || true
+            exit 1
+        fi
     fi
 }
 
-# Apply migrations only in production
 if [ "$ENVIRONMENT" != "testing" ]; then
-    apply_migrations || {
-        echo "Migrations failed or already applied, continuing..."
-    }
+    apply_migrations
 fi
 
-# Start the application
-# Graceful shutdown: forward SIGTERM/SIGINT to uvicorn
-# Use single worker in development for clean Ctrl+C; multi-worker in production
 WORKERS=${UVICORN_WORKERS:-4}
 GRACEFUL_TIMEOUT=${UVICORN_GRACEFUL_TIMEOUT:-30}
 
