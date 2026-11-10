@@ -1,10 +1,11 @@
+﻿import os
 """
-Seed скрипт для тестирования детектора сливов топлива.
+Seed СЃРєСЂРёРїС‚ РґР»СЏ С‚РµСЃС‚РёСЂРѕРІР°РЅРёСЏ РґРµС‚РµРєС‚РѕСЂР° СЃР»РёРІРѕРІ С‚РѕРїР»РёРІР°.
 
-Симулирует сценарий слива:
-1. Техника стоит на месте (speed=0)
-2. Двигатель выключен (engine_on=False)
-3. Уровень топлива падает на 15 литров за 5 минут
+РЎРёРјСѓР»РёСЂСѓРµС‚ СЃС†РµРЅР°СЂРёР№ СЃР»РёРІР°:
+1. РўРµС…РЅРёРєР° СЃС‚РѕРёС‚ РЅР° РјРµСЃС‚Рµ (speed=0)
+2. Р”РІРёРіР°С‚РµР»СЊ РІС‹РєР»СЋС‡РµРЅ (engine_on=False)
+3. РЈСЂРѕРІРµРЅСЊ С‚РѕРїР»РёРІР° РїР°РґР°РµС‚ РЅР° 15 Р»РёС‚СЂРѕРІ Р·Р° 5 РјРёРЅСѓС‚
 """
 
 import sys
@@ -20,15 +21,15 @@ API_BASE = "http://127.0.0.1:8000/api/v1/telematics"
 
 def generate_theft_scenario(vehicle_id: int = 1) -> list[dict]:
     """
-    Генерирует серию GPS точек, симулирующих слив топлива.
+    Р“РµРЅРµСЂРёСЂСѓРµС‚ СЃРµСЂРёСЋ GPS С‚РѕС‡РµРє, СЃРёРјСѓР»РёСЂСѓСЋС‰РёС… СЃР»РёРІ С‚РѕРїР»РёРІР°.
 
-    Сценарий:
-    - Минута 0: уровень 150л, двигатель выключен
-    - Минута 1: уровень 148л (потеря 2л — нормально)
-    - Минута 2: уровень 145л (потеря 3л — подозрительно)
-    - Минута 3: уровень 140л (потеря 5л — очень подозрительно)
-    - Минута 4: уровень 135л (потеря 5л — явно слив!)
-    - Итого: падение 15л за 5 минут
+    РЎС†РµРЅР°СЂРёР№:
+    - РњРёРЅСѓС‚Р° 0: СѓСЂРѕРІРµРЅСЊ 150Р», РґРІРёРіР°С‚РµР»СЊ РІС‹РєР»СЋС‡РµРЅ
+    - РњРёРЅСѓС‚Р° 1: СѓСЂРѕРІРµРЅСЊ 148Р» (РїРѕС‚РµСЂСЏ 2Р» вЂ” РЅРѕСЂРјР°Р»СЊРЅРѕ)
+    - РњРёРЅСѓС‚Р° 2: СѓСЂРѕРІРµРЅСЊ 145Р» (РїРѕС‚РµСЂСЏ 3Р» вЂ” РїРѕРґРѕР·СЂРёС‚РµР»СЊРЅРѕ)
+    - РњРёРЅСѓС‚Р° 3: СѓСЂРѕРІРµРЅСЊ 140Р» (РїРѕС‚РµСЂСЏ 5Р» вЂ” РѕС‡РµРЅСЊ РїРѕРґРѕР·СЂРёС‚РµР»СЊРЅРѕ)
+    - РњРёРЅСѓС‚Р° 4: СѓСЂРѕРІРµРЅСЊ 135Р» (РїРѕС‚РµСЂСЏ 5Р» вЂ” СЏРІРЅРѕ СЃР»РёРІ!)
+    - РС‚РѕРіРѕ: РїР°РґРµРЅРёРµ 15Р» Р·Р° 5 РјРёРЅСѓС‚
     """
     base_time = datetime.now(UTC) - timedelta(minutes=5)
     base_lat = 55.7558
@@ -84,7 +85,7 @@ def generate_theft_scenario(vehicle_id: int = 1) -> list[dict]:
 
 
 def send_gps_point(point: dict, token: str) -> dict:
-    """Отправляет GPS точку в endpoint."""
+    """РћС‚РїСЂР°РІР»СЏРµС‚ GPS С‚РѕС‡РєСѓ РІ endpoint."""
     response = httpx.post(
         f"{API_BASE}/gps/single",
         json=point,
@@ -95,7 +96,7 @@ def send_gps_point(point: dict, token: str) -> dict:
 
 
 def detect_theft(vehicle_id: int, token: str) -> dict:
-    """Запускает детектор сливов."""
+    """Р—Р°РїСѓСЃРєР°РµС‚ РґРµС‚РµРєС‚РѕСЂ СЃР»РёРІРѕРІ."""
     response = httpx.post(
         f"{API_BASE}/fuel/detect-theft?vehicle_id={vehicle_id}",
         headers={"Authorization": f"Bearer {token}"},
@@ -105,56 +106,58 @@ def detect_theft(vehicle_id: int, token: str) -> dict:
 
 
 def main():
-    print("🚀 Запуск seed скрипта для детектора сливов...")
+    print("рџљЂ Р—Р°РїСѓСЃРє seed СЃРєСЂРёРїС‚Р° РґР»СЏ РґРµС‚РµРєС‚РѕСЂР° СЃР»РёРІРѕРІ...")
     print(f"API Base: {API_BASE}")
 
-    # Получаем токен (в production используйте настоящий JWT)
-    token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJhZG1pbkBzcGVjdGVjaC5kZXYiLCJleHAiOjE3OTA2Nzk1ODMsImlhdCI6MTc5MDU5MzE4M30.g5FYZUJ0MVF40MPvFK2JS04-M86_It4nFukO9jDMaVY"
+    # РџРѕР»СѓС‡Р°РµРј С‚РѕРєРµРЅ (РІ production РёСЃРїРѕР»СЊР·СѓР№С‚Рµ РЅР°СЃС‚РѕСЏС‰РёР№ JWT)
+    token = os.environ.get("SEED_AUTH_TOKEN", "REPLACE_WITH_REAL_TOKEN")
 
     vehicle_id = 1
 
-    # Генерируем сценарий слива
+    # Р“РµРЅРµСЂРёСЂСѓРµРј СЃС†РµРЅР°СЂРёР№ СЃР»РёРІР°
     theft_points = generate_theft_scenario(vehicle_id)
 
-    print(f"\n📍 Отправка {len(theft_points)} GPS точек (симуляция слива)...")
+    print(f"\nрџ“Ќ РћС‚РїСЂР°РІРєР° {len(theft_points)} GPS С‚РѕС‡РµРє (СЃРёРјСѓР»СЏС†РёСЏ СЃР»РёРІР°)...")
     for i, point in enumerate(theft_points):
         print(
-            f"\n[{i+1}/{len(theft_points)}] fuel_level={point['fuel_level']}л, speed={point['speed']} км/ч"
+            f"\n[{i+1}/{len(theft_points)}] fuel_level={point['fuel_level']}Р», speed={point['speed']} РєРј/С‡"
         )
         try:
             response = send_gps_point(point, token)
             if response.get("status") == "ok":
-                print("  ✅ GPS точка сохранена")
+                print("  вњ… GPS С‚РѕС‡РєР° СЃРѕС…СЂР°РЅРµРЅР°")
             else:
-                print(f"  ❌ Ошибка: {response}")
+                print(f"  вќЊ РћС€РёР±РєР°: {response}")
         except Exception as e:
-            print(f"  ❌ Exception: {e}")
+            print(f"  вќЊ Exception: {e}")
 
-    print("\n🔍 Запуск детектора сливов...")
+    print("\nрџ”Ќ Р—Р°РїСѓСЃРє РґРµС‚РµРєС‚РѕСЂР° СЃР»РёРІРѕРІ...")
     try:
         result = detect_theft(vehicle_id, token)
-        print("\n📊 Результат детекции:")
-        print(f"  Проверено техники: {result.get('checked_vehicles')}")
-        print(f"  Обнаружено сливов: {result.get('thefts_detected')}")
+        print("\nрџ“Љ Р РµР·СѓР»СЊС‚Р°С‚ РґРµС‚РµРєС†РёРё:")
+        print(f"  РџСЂРѕРІРµСЂРµРЅРѕ С‚РµС…РЅРёРєРё: {result.get('checked_vehicles')}")
+        print(f"  РћР±РЅР°СЂСѓР¶РµРЅРѕ СЃР»РёРІРѕРІ: {result.get('thefts_detected')}")
 
         if result.get("thefts_detected", 0) > 0:
-            print("\n🚨 ОБНАРУЖЕН СЛИВ:")
+            print("\nрџљЁ РћР‘РќРђР РЈР–Р•Рќ РЎР›РР’:")
             for theft in result.get("thefts", []):
                 print(f"  ID: {theft['id']}")
-                print(f"  Объём: {theft['volume_liters']}л")
-                print(f"  До: {theft['fuel_before']}л → После: {theft['fuel_after']}л")
-                print(f"  Время: {theft['occurred_at']}")
+                print(f"  РћР±СЉС‘Рј: {theft['volume_liters']}Р»")
+                print(f"  Р”Рѕ: {theft['fuel_before']}Р» в†’ РџРѕСЃР»Рµ: {theft['fuel_after']}Р»")
+                print(f"  Р’СЂРµРјСЏ: {theft['occurred_at']}")
                 print(
-                    f"  Место: ({theft['location']['latitude']}, {theft['location']['longitude']})"
+                    f"  РњРµСЃС‚Рѕ: ({theft['location']['latitude']}, {theft['location']['longitude']})"
                 )
         else:
             print(
-                "\n✅ Сливов не обнаружено (возможно, падение < 10л или техника двигалась)"
+                "\nвњ… РЎР»РёРІРѕРІ РЅРµ РѕР±РЅР°СЂСѓР¶РµРЅРѕ (РІРѕР·РјРѕР¶РЅРѕ, РїР°РґРµРЅРёРµ < 10Р» РёР»Рё С‚РµС…РЅРёРєР° РґРІРёРіР°Р»Р°СЃСЊ)"
             )
 
     except Exception as e:
-        print(f"❌ Ошибка детекции: {e}")
+        print(f"вќЊ РћС€РёР±РєР° РґРµС‚РµРєС†РёРё: {e}")
 
 
 if __name__ == "__main__":
     main()
+
+
