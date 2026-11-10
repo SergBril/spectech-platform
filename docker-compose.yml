@@ -190,6 +190,32 @@ services:
       - monitoring
       - backend
 
+
+  # ═══════════════════════════════════════════════════════════
+  # GlitchTip — Self-hosted Sentry-compatible error tracking
+  # ═══════════════════════════════════════════════════════════
+  glitchtip:
+    image: glitchtip/glitchtip:latest
+    container_name: spectech-glitchtip
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/glitchtip
+      REDIS_URL: redis://redis:6379/2
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:-change-me-in-production}
+      PORT: "8000"
+      DEFAULT_FROM_EMAIL: noreply@spectehpro.ru
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-localhost:8080}
+      ENABLE_OPEN_USER_REGISTRATION: "false"
+    ports:
+      - "8080:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: always
+    networks:
+      - database
+
   # ═══════════════════════════════════════════════════════════
   # Database Backup (daily at 02:00, 30-day retention)
   # ═══════════════════════════════════════════════════════════
