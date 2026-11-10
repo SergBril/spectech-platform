@@ -33,7 +33,7 @@ from app.services.chat_service import send_chat_message
 from app.services.websocket_manager import manager
 
 logger = logging.getLogger("spectech.chat")
-router = APIRouter(prefix="/chat", tags=["Chat"])
+router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 # ============================================================

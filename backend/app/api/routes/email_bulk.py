@@ -17,7 +17,7 @@ from app.services.email_service import email_service
 
 logger = logging.getLogger("spectech.email_bulk")
 
-router = APIRouter(prefix="/email-bulk", tags=["📧 Email Bulk Send"])
+router = APIRouter(prefix="/email-bulk", tags=["email"])
 
 
 @router.post(

@@ -11,7 +11,7 @@ from app.models.auth import User
 from app.models.finance import Act
 
 logger = logging.getLogger("spectech.acts")
-router = APIRouter(prefix="/acts", tags=["📄 Acts"])
+router = APIRouter(prefix="/acts", tags=["acts"])
 
 
 @router.get("/{act_id}/pdf")

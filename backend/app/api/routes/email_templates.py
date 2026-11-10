@@ -18,7 +18,7 @@ from app.schemas.email import (
 
 logger = logging.getLogger("spectech.email_templates")
 
-router = APIRouter(prefix="/email-templates", tags=["📧 Email Templates"])
+router = APIRouter(prefix="/email-templates", tags=["email"])
 
 
 @router.get(

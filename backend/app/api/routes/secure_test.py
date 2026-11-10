@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from app.api.deps import get_current_user, require_permission
 from app.models.auth import User
 
-router = APIRouter(prefix="/secure-test", tags=["🔒 Secure Test (RBAC)"])
+router = APIRouter(prefix="/secure-test", tags=["rbac"])
 
 
 @router.get("/public")

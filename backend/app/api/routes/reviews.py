@@ -24,7 +24,7 @@ from app.services.reviews_service import reviews_service
 
 logger = logging.getLogger("spectech.reviews_api")
 
-router = APIRouter(tags=["⭐ Reviews (Отзывы и рейтинги)"])
+router = APIRouter(tags=["reviews"])
 
 
 # === Pydantic схемы ===

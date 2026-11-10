@@ -22,7 +22,7 @@ router = APIRouter()
 
 logger = logging.getLogger("spectech.public")
 
-router = APIRouter(prefix="/public", tags=["🌐 Public (Маркетплейс)"])
+router = APIRouter(prefix="/public", tags=["marketplace"])
 
 
 # === Схемы ===

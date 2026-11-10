@@ -6,7 +6,7 @@ from app.api.deps import get_current_user
 from app.core.constants import TAX_SYSTEM_CHOICES, VAT_RATE_CHOICES
 from app.models.auth import User
 
-router = APIRouter(prefix="/tax", tags=["📊 Tax & VAT (НДС)"])
+router = APIRouter(prefix="/tax", tags=["tax"])
 
 
 @router.get("/systems")

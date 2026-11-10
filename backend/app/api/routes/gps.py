@@ -16,7 +16,7 @@ from app.models.telematics import GpsPoint
 
 logger = logging.getLogger("spectech.gps")
 
-router = APIRouter(tags=["📡 GPS"])
+router = APIRouter(tags=["gps"])
 
 
 # ─── Schemas ────────────────────────────────────────────────────────────────────

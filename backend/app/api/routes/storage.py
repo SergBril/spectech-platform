@@ -4,7 +4,7 @@ from app.api.deps import get_current_user
 from app.models.auth import User
 from app.services.storage_service import storage_service
 
-router = APIRouter(prefix="/storage", tags=["Storage"])
+router = APIRouter(prefix="/storage", tags=["storage"])
 
 
 @router.post("/upload")

@@ -12,7 +12,7 @@ from app.schemas.auth import UserRead
 from app.services.rbac_service import get_user_permissions
 
 # 🆕 ВАЖНО: добавляем prefix="/me", чтобы все endpoint'ы начинались с /me
-router = APIRouter(prefix="/me", tags=["👤 Current User"])
+router = APIRouter(prefix="/me", tags=["me"])
 
 
 @router.get("", response_model=UserRead)

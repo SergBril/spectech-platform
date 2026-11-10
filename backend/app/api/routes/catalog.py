@@ -19,7 +19,7 @@ from app.schemas.catalog import (
     SubcategoryRead,
 )
 
-router = APIRouter(prefix="/catalog", tags=["🚜 Equipment Catalog"])
+router = APIRouter(prefix="/catalog", tags=["catalog"])
 
 
 @router.get(

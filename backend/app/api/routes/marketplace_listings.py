@@ -22,7 +22,7 @@ logger = logging.getLogger("spectech.marketplace_listings")
 
 router = APIRouter(
     prefix="/marketplace/listings",
-    tags=["🛒 Marketplace (Управление объявлениями)"],
+    tags=["marketplace"],
 )
 
 

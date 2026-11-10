@@ -321,12 +321,28 @@ def custom_openapi():
         {"url": "https://api.spectech.pro", "description": "Production server"},
     ]
     openapi_schema["tags"] = [
+        {"name": "acts", "description": "Акты выполненных работ"},
+        {"name": "addresses", "description": "Адреса и география"},
         {"name": "auth", "description": "Аутентификация и авторизация"},
-        {"name": "catalog", "description": "Каталог транспорта"},
-        {"name": "telematics", "description": "GPS трекинг и телематика"},
-        {"name": "finance", "description": "Финансовые операции"},
+        {"name": "benchmark", "description": "Производительность"},
+        {"name": "catalog", "description": "Каталог транспорта и оборудования"},
+        {"name": "chat", "description": "Чат и сообщения"},
         {"name": "dispatch", "description": "Заявки и смены"},
+        {"name": "edo", "description": "ЭДО (Diadoc)"},
+        {"name": "email", "description": "Email рассылки и шаблоны"},
+        {"name": "finance", "description": "Финансовые операции"},
+        {"name": "gps", "description": "GPS данные и геолокация"},
+        {"name": "maintenance", "description": "ТО и ремонты"},
+        {"name": "marketplace", "description": "Маркетплейс (публичные объявления)"},
+        {"name": "me", "description": "Текущий пользователь"},
+        {"name": "rbac", "description": "Роли и права доступа"},
+        {"name": "rentals", "description": "Аренда техники"},
+        {"name": "reviews", "description": "Отзывы и рейтинги"},
+        {"name": "storage", "description": "Хранилище файлов"},
         {"name": "system", "description": "Системные endpoints"},
+        {"name": "tax", "description": "НДС и налоги"},
+        {"name": "telematics", "description": "GPS трекинг и телематика"},
+        {"name": "vehicles", "description": "Управление спецтехникой"},
     ]
     app.openapi_schema = openapi_schema
     return app.openapi_schema

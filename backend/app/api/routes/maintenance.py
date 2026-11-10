@@ -35,7 +35,7 @@ from app.schemas.maintenance import (
 from app.services.auth_service import decode_access_token
 from app.services.maintenance_service import maintenance_service
 
-router = APIRouter(prefix="/maintenance", tags=["🔧 Maintenance (ТО и Ремонты)"])
+router = APIRouter(prefix="/maintenance", tags=["maintenance"])
 
 
 def _generate_order_number(db: Session) -> str:

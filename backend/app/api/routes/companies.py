@@ -177,7 +177,7 @@ async def dadata_suggest(
 # === EDO Settings ===
 
 
-@router.get("/edo-settings", summary="EDO settings", tags=["EDO"])
+@router.get("/edo-settings", summary="EDO settings", tags=["edo"])
 def get_edo_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -203,7 +203,7 @@ def get_edo_settings(
     }
 
 
-@router.put("/edo-settings", summary="Update EDO settings", tags=["EDO"])
+@router.put("/edo-settings", summary="Update EDO settings", tags=["edo"])
 def update_edo_settings(
     operator: str | None = Body(default=None),
     diadoc_api_key: str | None = Body(default=None),

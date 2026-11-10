@@ -29,7 +29,7 @@ from app.schemas.vehicles import (
     VehicleUpdate,
 )
 
-router = APIRouter(prefix="/vehicles", tags=["🚜 Vehicles (Спецтехника)"])
+router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 
 def _enrich_vehicle(vehicle: Vehicle, db: Session = None) -> dict:
@@ -208,7 +208,7 @@ def _log_driver_assignment(
         db.add(new_log)
 
 
-@router.get("/drivers", tags=["🚜 Vehicles (Спецтехника)"])
+@router.get("/drivers", tags=["vehicles"])
 def list_drivers(
     limit: int = Query(500, ge=1, le=1000),
     vehicle_id: int | None = Query(

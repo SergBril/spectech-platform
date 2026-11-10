@@ -12,7 +12,7 @@ from app.models.auth import User
 
 logger = logging.getLogger("spectech.edo")
 
-router = APIRouter(prefix="/edo", tags=["📡 ЭДО (Diadoc)"])
+router = APIRouter(prefix="/edo", tags=["edo"])
 
 
 @router.post("/send-act/{act_id}")
