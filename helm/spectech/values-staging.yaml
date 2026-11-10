@@ -1,0 +1,78 @@
+# Staging environment values
+# Deploy: helm upgrade --install spectech-staging ./helm/spectech -f helm/spectech/values-staging.yaml -n staging
+
+global:
+  imagePullPolicy: Always
+
+backend:
+  replicaCount: 1
+  image:
+    tag: main-latest
+  env:
+    ENVIRONMENT: "staging"
+    DEBUG: "false"
+    LOG_LEVEL: "DEBUG"
+    UVICORN_WORKERS: "1"
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+frontend:
+  replicaCount: 1
+  image:
+    tag: main-latest
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+
+postgres:
+  storage: 2Gi
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+redis:
+  resources:
+    requests:
+      memory: "32Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "250m"
+
+minio:
+  storage: 5Gi
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+ingress:
+  host: staging.spectehpro.ru
+  tls:
+    enabled: true
+    secretName: spectech-staging-tls
+
+credentials:
+  postgres:
+    user: spectech_staging
+    password: CHANGE_ME_STAGING_PASSWORD
+    database: spectech_staging
+  minio:
+    rootUser: spectech_staging
+    rootPassword: CHANGE_ME_STAGING_MINIO

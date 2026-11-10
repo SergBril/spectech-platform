@@ -1,0 +1,68 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy to Staging
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=staging-latest
+            type=sha,prefix=staging-
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}-backend
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}-frontend
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to staging (Helm)
+        if: vars.STAGING_CLUSTER_ENABLED == 'true'
+        run: |
+          echo "Staging images built and pushed."
+          echo "Deploy with: helm upgrade --install spectech-staging ./helm/spectech \\"
+          echo "  -f helm/spectech/values-staging.yaml \\"
+          echo "  --set backend.image.tag=staging-${{ github.sha }} \\"
+          echo "  --set frontend.image.tag=staging-${{ github.sha }} \\"
+          echo "  -n staging --create-namespace"
