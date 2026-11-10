@@ -16,43 +16,8 @@ import { lazy, Suspense } from 'react';
 const FinancialCharts = lazy(() => import('../components/FinancialCharts'));
 import { financeApi as financeApiV2, type FinanceDashboardV2 } from '../api/finance';
 import EmptyState from '../components/EmptyState';
+import { INVOICE_STATUS_LABELS, ACT_STATUS_LABELS, PAYOUT_STATUS_LABELS, formatDate, formatMoney } from './financeConstants';
 import apiClient from '../api/client';
-
-const INVOICE_STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
-  sent: { label: 'Отправлен', color: 'bg-blue-100 text-blue-800' },
-  paid: { label: 'Оплачен', color: 'bg-green-100 text-green-800' },
-  partially_paid: { label: 'Частично', color: 'bg-yellow-100 text-yellow-800' },
-  overdue: { label: 'Просрочен', color: 'bg-orange-100 text-orange-800' },
-  cancelled: { label: 'Отменён', color: 'bg-red-100 text-red-800' },
-};
-
-const ACT_STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
-  sent: { label: 'Отправлен', color: 'bg-blue-100 text-blue-800' },
-  paid: { label: 'Подписан', color: 'bg-green-100 text-green-800' },
-  overdue: { label: 'Просрочен', color: 'bg-orange-100 text-orange-800' },
-  cancelled: { label: 'Отменён', color: 'bg-red-100 text-red-800' },
-};
-
-const PAYOUT_STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
-  sent: { label: 'Одобрен', color: 'bg-blue-100 text-blue-800' },
-  paid: { label: 'Выплачен', color: 'bg-green-100 text-green-800' },
-  overdue: { label: 'Просрочен', color: 'bg-orange-100 text-orange-800' },
-  cancelled: { label: 'Отклонён', color: 'bg-red-100 text-red-800' },
-};
-
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('ru-RU');
-};
-
-const formatMoney = (v: string | number | null | undefined) => {
-  if (v === null || v === undefined || v === '') return '—';
-  const num = typeof v === 'string' ? parseFloat(v) : v;
-  return `${num.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`;
-};
 
 export const FinancePage: React.FC = () => {
   const { user, logout, hasPermission } = useAuth();
