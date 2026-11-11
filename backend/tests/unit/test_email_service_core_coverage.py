@@ -114,12 +114,16 @@ class TestRenderTemplate:
         with open(tpl_path, "w") as f:
             f.write("<html>{{ frontend_url }}</html>")
         service.jinja_env.loader.searchpath = [tmpdir]
-        with patch(
-            "app.services.email_service.premailer_transform",
-            side_effect=lambda html: html,
+        with (
+            patch("app.services.email_service.settings") as mock_s,
+            patch(
+                "app.services.email_service.premailer_transform",
+                side_effect=lambda html: html,
+            ),
         ):
+            mock_s.FRONTEND_URL = "http://localhost:3000"
             result = service._render_template("url_test.html", {})
-        assert "localhost" in result  # FRONTEND_URL from real settings
+        assert "localhost" in result
         os.unlink(tpl_path)
         os.rmdir(tmpdir)
 

@@ -30,7 +30,7 @@ async def suggest_addresses(request: AddressSuggestRequest) -> dict[str, Any]:
     Используется для обхода CORS ограничений браузера.
     """
     if not settings.DADATA_API_KEY:
-        raise HTTPException(status_code=500, detail="DaData API key is not configured")
+        raise HTTPException(status_code=503, detail="DaData API key is not configured")
 
     if len(request.query) < 3:
         return {"suggestions": []}
