@@ -1,4 +1,4 @@
-"""Модуль checklist_configs для shifts router."""
+﻿"""Модуль checklist_configs для shifts router."""
 
 from fastapi import (
     APIRouter,
@@ -16,6 +16,7 @@ from app.models.auth import User
 router = APIRouter()
 
 
+@router.get("/checklist-configs")
 def list_checklist_configs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -48,6 +49,7 @@ def list_checklist_configs(
     ]
 
 
+@router.post("/checklist-configs")
 def create_checklist_config(
     name: str = Body(...),
     vehicle_category_id: int | None = Body(default=None),
@@ -75,6 +77,7 @@ def create_checklist_config(
     return {"id": config.id, "message": "Конфигурация создана"}
 
 
+@router.delete("/checklist-configs/{config_id}")
 def delete_checklist_config(
     config_id: int,
     db: Session = Depends(get_db),
