@@ -33,6 +33,16 @@ const MarketplacePage: React.FC = () => {
   const [filterCrossCategory, setFilterCrossCategory] = useState(false);
   const [filterRegion, setFilterRegion] = useState<string>('all');
 
+  // Surplus request modal
+  const [showSurplusModal, setShowSurplusModal] = useState(false);
+  const [surplusVehicles, setSurplusVehicles] = useState<any[]>([]);
+  const [surplusForm, setSurplusForm] = useState({
+    vehicle_id: '', work_type: '', object_address: '', region: 'moscow',
+    planned_start: '', planned_end: '', offered_price: '', price_type: 'per_shift',
+    shift_duration_hours: '8', dispatcher_commission_pct: '10', comment: '',
+  });
+  const [surplusLoading, setSurplusLoading] = useState(false);
+
   // Regions with Moscow/Moscow Oblast at top for better UX
   const REGIONS = [
     'Москва',
@@ -78,6 +88,42 @@ const MarketplacePage: React.FC = () => {
     return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
+  const openSurplusModal = async () => {
+    try {
+      const res = await apiClient.get('/vehicles', { params: { limit: 200 } });
+      const list = Array.isArray(res.data) ? res.data : res.data?.items || [];
+      setSurplusVehicles(list);
+      if (list.length > 0 && !surplusForm.vehicle_id) {
+        setSurplusForm(prev => ({ ...prev, vehicle_id: String(list[0].id) }));
+      }
+      setShowSurplusModal(true);
+    } catch (err) { alert('Ошибка загрузки техники'); }
+  };
+
+  const submitSurplus = async () => {
+    if (!surplusForm.vehicle_id || !surplusForm.work_type || !surplusForm.offered_price || !surplusForm.planned_start || !surplusForm.planned_end) {
+      alert('Заполните обязательные поля: техника, тип работ, цена, даты'); return;
+    }
+    setSurplusLoading(true);
+    try {
+      const res = await apiClient.post('/marketplace/surplus-requests', {
+        vehicle_id: Number(surplusForm.vehicle_id), work_type: surplusForm.work_type,
+        object_address: surplusForm.object_address || undefined, region: surplusForm.region || undefined,
+        planned_start: new Date(surplusForm.planned_start).toISOString(),
+        planned_end: new Date(surplusForm.planned_end).toISOString(),
+        offered_price: Number(surplusForm.offered_price), price_type: surplusForm.price_type,
+        shift_duration_hours: surplusForm.shift_duration_hours ? Number(surplusForm.shift_duration_hours) : undefined,
+        dispatcher_commission_pct: Number(surplusForm.dispatcher_commission_pct),
+        comment: surplusForm.comment || undefined,
+      });
+      alert('✅ Заявка #' + res.data.id + ' создана! Комиссия: ' + res.data.dispatcher_commission_pct + '% диспетчеру, ' + (100 - res.data.dispatcher_commission_pct) + '% вам');
+      setShowSurplusModal(false);
+      setSurplusForm({ vehicle_id: '', work_type: '', object_address: '', region: 'moscow', planned_start: '', planned_end: '', offered_price: '', price_type: 'per_shift', shift_duration_hours: '8', dispatcher_commission_pct: '10', comment: '' });
+      setPage(0);
+    } catch (err: any) { alert('❌ ' + (err.response?.data?.detail || 'Ошибка')); }
+    finally { setSurplusLoading(false); }
+  };
+
   const handleRespond = async (req: MarketplaceRequest) => {
     setSelectedRequest(req);
     setRespondingId(req.id);
@@ -85,8 +131,8 @@ const MarketplacePage: React.FC = () => {
       const res = await apiClient.get('/vehicles', { params: { limit: 50 } });
       const vehicles = Array.isArray(res.data) ? res.data : res.data?.items || [];
       // Filter only marketplace-agreed vehicles matching category
-      const eligible = vehicles.filter((v: any) => 
-        v.marketplace_commission_agreed && 
+      const eligible = vehicles.filter((v: any) =>
+        v.marketplace_commission_agreed &&
         (!req.vehicle_category_id || v.category_id === req.vehicle_category_id)
       );
       setMyVehicles(eligible);
@@ -230,7 +276,7 @@ const MarketplacePage: React.FC = () => {
                     </div>
                   )}
 
-                  <button 
+                  <button
                     onClick={(e) => { e.stopPropagation(); handleRespond(req); }}
                     disabled={respondingId === req.id}
                     className="w-full mt-2 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
@@ -274,20 +320,20 @@ const MarketplacePage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Выберите технику для отклика:
               </label>
-              
+
               {myVehicles.length === 0 ? (
                 <div className="text-center py-8 bg-yellow-50 rounded-lg">
                   <p className="text-yellow-800 font-medium">⚠️ Нет подходящей техники</p>
                   <p className="text-sm text-yellow-600 mt-1">
-                    Убедитесь, что у вас есть техника категории «{selectedRequest.vehicle_category_name}» 
+                    Убедитесь, что у вас есть техника категории «{selectedRequest.vehicle_category_name}»
                     с согласием на комиссию маркетплейса.
                   </p>
                 </div>
               ) : (
                 myVehicles.map((v: any) => (
                   <label key={v.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                    selectedVehicleId === v.id 
-                      ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' 
+                    selectedVehicleId === v.id
+                      ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
                       : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
                   }`}>
                     <input type="radio" name="responseVehicle" value={v.id}
