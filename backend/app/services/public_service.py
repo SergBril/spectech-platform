@@ -1,4 +1,4 @@
-"""Сервис публичных API эндпоинтов."""
+﻿"""Сервис публичных API эндпоинтов."""
 
 import logging
 from decimal import Decimal
@@ -669,6 +669,7 @@ class PublicService:
                     "client_rate": float(req.client_rate) if req.client_rate else None,
                     "rate_type": req.rate_type,
                     "marketplace_mode": getattr(req, "marketplace_mode", "client"),
+                    "is_surplus": "[Surplus]" in (getattr(req, "comment", "") or ""),
                     "payment_terms_days": payment_days,
                     "is_extended_payment": is_extended,
                     "requirements": getattr(req, "requirements", None),

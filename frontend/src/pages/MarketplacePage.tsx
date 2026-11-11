@@ -35,6 +35,7 @@ const MarketplacePage: React.FC = () => {
 
   // Surplus request modal
   const [showSurplusModal, setShowSurplusModal] = useState(false);
+  const [surplusOnly, setSurplusOnly] = useState(false);
   const [surplusVehicles, setSurplusVehicles] = useState<any[]>([]);
   const [surplusForm, setSurplusForm] = useState({
     vehicle_id: '', work_type: '', object_address: '', region: 'moscow',
@@ -229,7 +230,7 @@ const MarketplacePage: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {requests.map((req) => (
+            {requests.filter((r: any) => !surplusOnly || r.is_surplus).map((req) => (
               <div key={req.id} className="bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden">
                 {/* Payment warning banner */}
                 {req.is_extended_payment && (
@@ -253,7 +254,8 @@ const MarketplacePage: React.FC = () => {
                       </span>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-semibold text-gray-900">
-                          {req.vehicle_category_name || 'Техника'} — {req.work_type || 'Работы'}
+                          {(req as any).is_surplus && <span className="inline-block px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded-full mr-2">🔄 Избыточная</span>}
+                  {req.vehicle_category_name || 'Техника'} — {req.work_type || 'Работы'}
                         </h3>
                       </div>
                     </div>

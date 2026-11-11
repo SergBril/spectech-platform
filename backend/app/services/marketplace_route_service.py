@@ -1,4 +1,4 @@
-"""Сервис маркетплейс API эндпоинтов."""
+﻿"""Сервис маркетплейс API эндпоинтов."""
 
 import logging
 from datetime import UTC, datetime
@@ -677,6 +677,8 @@ class MarketplaceRouteService:
                     vehicle_category_name=cat_name,
                     offers_count=offers_count,
                     published_at=req.published_at,
+                    marketplace_mode=getattr(req, "marketplace_mode", None),
+                    is_surplus="[Surplus]" in (getattr(req, "comment", "") or ""),
                 )
             )
 
