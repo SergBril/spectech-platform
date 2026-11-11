@@ -1,4 +1,4 @@
-"""Сервис управления ролями и правами доступа (RBAC)."""
+﻿"""Сервис управления ролями и правами доступа (RBAC)."""
 
 import logging
 from enum import Enum
@@ -144,6 +144,9 @@ class RBACMiddleware:
 
     @staticmethod
     def check(user: User, permission: str) -> bool:
+        # Superusers bypass all permission checks
+        if getattr(user, "is_superuser", False):
+            return True
         role = getattr(user, "role", "viewer")
         if not has_permission(role, permission):
             logger.warning(
