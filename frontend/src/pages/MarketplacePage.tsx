@@ -200,6 +200,20 @@ const MarketplacePage: React.FC = () => {
               📥 Экспорт Excel
             </button>
             <button
+              onClick={() => setSurplusOnly(prev => !prev)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                surplusOnly ? 'bg-orange-600 text-white shadow-md' : 'bg-white text-gray-700 border hover:bg-orange-50'
+              }`}
+            >
+              🔄 {surplusOnly ? 'Все заявки' : 'Избыточные'}
+            </button>
+            <button
+              onClick={() => openSurplusModal()}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium flex items-center gap-2"
+            >
+              ➕ Избыточная заявка
+            </button>
+            <button
               onClick={() => { setFilterCrossCategory(!filterCrossCategory); setPage(0); }}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                 filterCrossCategory ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
