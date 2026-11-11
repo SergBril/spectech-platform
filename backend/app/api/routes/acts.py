@@ -1,4 +1,4 @@
-"""Роутер для актов выполненных работ (PDF, УПД, ТОРГ-12, счёт-фактура)."""
+﻿"""Роутер для актов выполненных работ (PDF, УПД, ТОРГ-12, счёт-фактура)."""
 
 import logging
 
@@ -11,7 +11,7 @@ from app.models.auth import User
 from app.models.finance import Act
 
 logger = logging.getLogger("spectech.acts")
-router = APIRouter(prefix="/acts", tags=["acts"])
+router = APIRouter(tags=["acts"])
 
 
 @router.get("/{act_id}/pdf")
