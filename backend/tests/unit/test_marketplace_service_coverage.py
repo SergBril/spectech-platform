@@ -26,7 +26,7 @@ class TestPublishVehicle:
         vehicle.shift_rate = None
         vehicle.name = "KAMAZ"
         mock_db.get.return_value = vehicle
-        result = MarketplaceService.publish_vehicle(
+        MarketplaceService.publish_vehicle(
             mock_db,
             vehicle_id=1,
             company_id=7,
@@ -94,7 +94,7 @@ class TestPublishVehicle:
         vehicle.name = "KAMAZ"
         mock_db.get.return_value = vehicle
         # No new rate passed, but vehicle already has hourly_rate
-        result = MarketplaceService.publish_vehicle(mock_db, vehicle_id=1, company_id=7)
+        MarketplaceService.publish_vehicle(mock_db, vehicle_id=1, company_id=7)
         assert vehicle.is_available_for_rent is True
 
     def test_with_all_params(self, mock_db):
@@ -107,7 +107,7 @@ class TestPublishVehicle:
         vehicle.shift_rate = None
         vehicle.name = "KAMAZ"
         mock_db.get.return_value = vehicle
-        result = MarketplaceService.publish_vehicle(
+        MarketplaceService.publish_vehicle(
             mock_db,
             vehicle_id=1,
             company_id=7,
@@ -134,9 +134,7 @@ class TestUnpublishVehicle:
         vehicle.company_id = 7
         vehicle.is_available_for_rent = True
         mock_db.get.return_value = vehicle
-        result = MarketplaceService.unpublish_vehicle(
-            mock_db, vehicle_id=1, company_id=7
-        )
+        MarketplaceService.unpublish_vehicle(mock_db, vehicle_id=1, company_id=7)
         assert vehicle.is_available_for_rent is False
         mock_db.commit.assert_called()
 
@@ -168,7 +166,7 @@ class TestUpdateListing:
         vehicle.is_available_for_rent = True
         vehicle.name = "KAMAZ"
         mock_db.get.return_value = vehicle
-        result = MarketplaceService.update_listing(
+        MarketplaceService.update_listing(
             mock_db,
             vehicle_id=1,
             company_id=7,
@@ -307,7 +305,7 @@ class TestCreateRequestFromListing:
         mock_scalars = MagicMock()
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
-        result = MarketplaceService.create_request_from_listing(
+        MarketplaceService.create_request_from_listing(
             mock_db,
             vehicle_id=1,
             client_contractor_id=5,
@@ -566,10 +564,21 @@ class TestCreateRequestNotifyBranches:
         mock_scalars.all.return_value = []
         mock_db.scalars.return_value = mock_scalars
 
-        # Mock the event loop so create_task works
+        # Mock the event loop and notification to avoid unawaited coroutine
         mock_loop = MagicMock()
-        with patch("asyncio.get_running_loop", return_value=mock_loop):
-            result = MarketplaceService.create_request_from_listing(
+
+        async def _noop_notify(*a, **kw):
+            pass
+
+        with (
+            patch("asyncio.get_running_loop", return_value=mock_loop),
+            patch.object(
+                MarketplaceService,
+                "_notify_owner_new_request",
+                side_effect=_noop_notify,
+            ),
+        ):
+            MarketplaceService.create_request_from_listing(
                 mock_db,
                 vehicle_id=1,
                 client_contractor_id=5,
@@ -604,7 +613,7 @@ class TestCreateRequestNotifyBranches:
             "asyncio.get_running_loop",
             side_effect=RuntimeError("no running event loop"),
         ):
-            result = MarketplaceService.create_request_from_listing(
+            MarketplaceService.create_request_from_listing(
                 mock_db,
                 vehicle_id=1,
                 client_contractor_id=5,
@@ -636,7 +645,7 @@ class TestCreateRequestNotifyBranches:
 
         # Make get_running_loop raise a non-RuntimeError exception
         with patch("asyncio.get_running_loop", side_effect=OSError("unexpected")):
-            result = MarketplaceService.create_request_from_listing(
+            MarketplaceService.create_request_from_listing(
                 mock_db,
                 vehicle_id=1,
                 client_contractor_id=5,

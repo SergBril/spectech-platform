@@ -1,7 +1,7 @@
 """Tests for dispute_service - full coverage."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -87,7 +87,7 @@ class TestOpenDispute:
         # Mock notification imports to avoid side effects
         with patch("app.services.dispute_service.asyncio", create=True) as mock_asyncio:
             mock_asyncio.get_running_loop.side_effect = RuntimeError("no loop")
-            result = open_dispute(
+            open_dispute(
                 mock_db,
                 shift_report_id=1,
                 dispute_type="hours",
@@ -112,7 +112,7 @@ class TestOpenDispute:
             patch("asyncio.get_running_loop", return_value=mock_loop),
             patch("app.services.dispute_service.notification_dispatcher", create=True),
         ):
-            result = open_dispute(
+            open_dispute(
                 mock_db,
                 shift_report_id=1,
                 dispute_type="hours",
@@ -138,7 +138,7 @@ class TestEscalateDispute:
         mock_db.get.return_value = dispute
 
         with patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
-            result = escalate_dispute(mock_db, dispute_id=1, escalated_by=1)
+            escalate_dispute(mock_db, dispute_id=1, escalated_by=1)
         assert dispute.status == DisputeStatus.escalated_to_manager
 
     def test_manager_to_ceo(self, mock_db):
@@ -149,7 +149,7 @@ class TestEscalateDispute:
         mock_db.get.return_value = dispute
 
         with patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
-            result = escalate_dispute(mock_db, dispute_id=1, escalated_by=1)
+            escalate_dispute(mock_db, dispute_id=1, escalated_by=1)
         assert dispute.status == DisputeStatus.escalated_to_ceo
 
     def test_cannot_escalate_resolved(self, mock_db):
@@ -196,7 +196,7 @@ class TestResolveDispute:
         sr = MagicMock()
         mock_db.get.side_effect = [dispute, sr]
 
-        result = resolve_dispute(
+        resolve_dispute(
             mock_db,
             dispute_id=1,
             resolved_by=1,
@@ -219,7 +219,7 @@ class TestResolveDispute:
         sr = MagicMock()
         mock_db.get.side_effect = [dispute, sr]
 
-        result = resolve_dispute(mock_db, dispute_id=1, resolved_by=1, resolution={})
+        resolve_dispute(mock_db, dispute_id=1, resolved_by=1, resolution={})
         assert dispute.sla_breached == True
 
     def test_no_shift_report(self, mock_db):
@@ -232,7 +232,7 @@ class TestResolveDispute:
             shift_report_id=999,
         )
         mock_db.get.side_effect = [dispute, None]
-        result = resolve_dispute(mock_db, dispute_id=1, resolved_by=1, resolution={})
+        resolve_dispute(mock_db, dispute_id=1, resolved_by=1, resolution={})
         assert dispute.status == DisputeStatus.resolved
 
 
@@ -322,7 +322,11 @@ class TestDisputeFinalBranches:
                 "app.services.dispute_service.notification_dispatcher", create=True
             ) as mock_nd,
         ):
-            mock_nd.notify_dispute_opened = AsyncMock()
+
+            async def _noop_notify(*a, **kw):
+                pass
+
+            mock_nd.notify_dispute_opened = _noop_notify
             result = open_dispute(
                 mock_db,
                 shift_report_id=1,
@@ -346,7 +350,7 @@ class TestDisputeFinalBranches:
         sr = MagicMock()
         mock_db.get.side_effect = [dispute, sr]
 
-        result = resolve_dispute(mock_db, dispute_id=1, resolved_by=1, resolution={})
+        resolve_dispute(mock_db, dispute_id=1, resolved_by=1, resolution={})
         assert dispute.resolution_time_minutes == 0
 
     def test_resolve_with_all_finals(self, mock_db):
@@ -363,7 +367,7 @@ class TestDisputeFinalBranches:
         sr = MagicMock()
         mock_db.get.side_effect = [dispute, sr]
 
-        result = resolve_dispute(
+        resolve_dispute(
             mock_db,
             dispute_id=1,
             resolved_by=1,
