@@ -201,6 +201,7 @@ async def max_webhook(request: Request, db: Session = Depends(get_db)):
             return {"ok": True}
 
 
+@router.get("/max/bind-link", summary="🔗 Ссылка привязки MAX")
 def get_max_bind_link(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -220,6 +221,7 @@ def get_max_bind_link(
     return {"link": link, "bot_username": bot_username}
 
 
+@router.get("/max/bind-status", summary="📊 Статус привязки MAX")
 def get_max_bind_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -231,6 +233,7 @@ def get_max_bind_status(
     }
 
 
+@router.post("/profile/unbind-max", summary="❌ Отвязать MAX")
 def unbind_max(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -244,6 +247,7 @@ def unbind_max(
     return {"message": "MAX отвязан"}
 
 
+@router.post("/max/test-webhook", summary="🧪 Тест MAX webhook")
 async def test_max_webhook(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

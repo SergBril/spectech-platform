@@ -500,6 +500,7 @@ def update_my_profile(
 # === Notification Templates ===
 
 
+@router.get("/profile/notification-settings", summary="⚙️ Настройки уведомлений")
 def get_notification_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -533,6 +534,9 @@ def get_notification_settings(
     }
 
 
+@router.put(
+    "/profile/notification-settings", summary="💾 Сохранить настройки уведомлений"
+)
 def update_notification_settings(
     notify_role_change_max: bool | None = Body(default=None),
     notify_role_change_email: bool | None = Body(default=None),
