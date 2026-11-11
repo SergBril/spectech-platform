@@ -128,15 +128,32 @@ const MarketplacePage: React.FC = () => {
     setSelectedRequest(req);
     setRespondingId(req.id);
     try {
-      const res = await apiClient.get('/vehicles', { params: { limit: 50 } });
-      const vehicles = Array.isArray(res.data) ? res.data : res.data?.items || [];
-      // Filter only marketplace-agreed vehicles matching category
-      const eligible = vehicles.filter((v: any) =>
-        v.marketplace_commission_agreed &&
-        (!req.vehicle_category_id || v.category_id === req.vehicle_category_id)
-      );
-      setMyVehicles(eligible);
-      setSelectedVehicleId(eligible.length === 1 ? eligible[0].id : null);
+      // Use matching-vehicles API for smart scoring
+      let vehicles: any[] = [];
+      if (req.vehicle_category_id) {
+        try {
+          const matchRes = await apiClient.get(`/marketplace/requests/${req.id}/matching-vehicles`);
+          const matched = Array.isArray(matchRes.data) ? matchRes.data : matchRes.data?.vehicles || [];
+          vehicles = matched.map((m: any) => ({
+            id: m.vehicle_id, name: m.vehicle_name, category_id: m.category_id,
+            hourly_rate: m.hourly_rate, shift_rate: m.shift_rate,
+            marketplace_commission_agreed: m.marketplace_commission_agreed,
+            marketplace_commission_rate: m.marketplace_commission_rate,
+            match_score: m.match_score, matched_attributes: m.matched_attributes || [],
+            missing_attributes: m.missing_attributes || [], is_cross_suggestion: m.is_cross_suggestion || false,
+          }));
+        } catch (matchErr) { console.warn('Matching API failed, fallback', matchErr); }
+      }
+      if (vehicles.length === 0) {
+        const res = await apiClient.get('/vehicles', { params: { limit: 50 } });
+        const all = Array.isArray(res.data) ? res.data : res.data?.items || [];
+        vehicles = all.filter((v: any) =>
+          v.marketplace_commission_agreed && (!req.vehicle_category_id || v.category_id === req.vehicle_category_id)
+        ).map((v: any) => ({ ...v, match_score: null, matched_attributes: [], missing_attributes: [], is_cross_suggestion: false }));
+      }
+      vehicles.sort((a: any, b: any) => (b.match_score ?? -1) - (a.match_score ?? -1));
+      setMyVehicles(vehicles);
+      setSelectedVehicleId(vehicles.length === 1 ? vehicles[0].id : null);
       setShowVehicleModal(true);
     } catch (err) {
       console.error('Failed to load vehicles:', err);
@@ -145,6 +162,7 @@ const MarketplacePage: React.FC = () => {
       setRespondingId(null);
     }
   };
+
 
   const submitResponse = async () => {
     if (!selectedRequest || !selectedVehicleId) return;
