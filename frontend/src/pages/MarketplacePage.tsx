@@ -44,19 +44,22 @@ const MarketplacePage: React.FC = () => {
   });
   const [surplusLoading, setSurplusLoading] = useState(false);
 
-  // Regions with Moscow/Moscow Oblast at top for better UX
-  const REGIONS = [
-    'Москва',
-    'Московская область',
-    'Санкт-Петербург',
-    'Ленинградская область',
-    'Краснодарский край',
-    'Свердловская область',
-    'Новосибирская область',
-    'Татарстан',
-    'Нижегородская область',
-    'Челябинская область',
-  ];
+  // Regions loaded from API (Moscow/Moscow Oblast prioritized via is_priority)
+  const [regions, setRegions] = useState<string[]>([]);
+  useEffect(() => {
+    apiClient.get('/requests/pricing/presets').then(res => {
+      const items = res.data?.regions || [];
+      // Priority regions first, then alphabetical
+      const sorted = [...items].sort((a: any, b: any) => {
+        if (a.is_priority && !b.is_priority) return -1;
+        if (!a.is_priority && b.is_priority) return 1;
+        return a.name.localeCompare(b.name, 'ru');
+      });
+      setRegions(sorted.map((r: any) => r.name));
+    }).catch(() => {
+      setRegions(['Москва', 'Московская область']); // fallback
+    });
+  }, []);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(0);
   const pageSize = 12;
