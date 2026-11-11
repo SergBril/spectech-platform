@@ -8,7 +8,7 @@ const DispatcherDashboard: React.FC = () => {
   const [filterDriver, setFilterDriver] = useState<number | ''>('');
 
   useEffect(() => {
-    apiClient.get('/shifts/dashboard/daily-summary', { params: { ...(filterCategory ? { vehicle_category_id: filterCategory } : {}), ...(filterDriver ? { driver_id: filterDriver } : {}) } })
+    apiClient.get('/shifts/daily-summary', { params: { ...(filterCategory ? { vehicle_category_id: filterCategory } : {}), ...(filterDriver ? { driver_id: filterDriver } : {}) } })
       .then(res => setSummary(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));

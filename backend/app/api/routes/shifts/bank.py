@@ -123,7 +123,9 @@ def auto_match_payments(
                     act, "document_number", None
                 ) or f"ACT-{act.id}".replace("-", "") in payment.purpose.replace(
                     "-", ""
-                ).replace(" ", "")
+                ).replace(
+                    " ", ""
+                )
 
             if amount_match and (
                 inn_match or purpose_match or not act.counterparty_inn
@@ -145,6 +147,7 @@ def auto_match_payments(
     return {"matched": matched, "partial": partial, "total_payments": len(payments)}
 
 
+@router.get("/stats/receivables", summary="📊 Дебиторская задолженность")
 def get_receivables_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -152,6 +155,8 @@ def get_receivables_dashboard(
 ):
     """Дашборд дебиторской задолженности: просроченные акты, ageing buckets."""
     from datetime import date as date_type
+
+    from app.models.finance import Invoice
 
     today = date_type.today()
 
@@ -166,13 +171,34 @@ def get_receivables_dashboard(
         .all()
     )
 
-    total_outstanding = 0
-    overdue_amount = 0
-    buckets = {"current": 0, "1_30": 0, "31_60": 0, "61_90": 0, "90_plus": 0}
+    # Build paid_amount map from invoices linked via request_id
+    act_request_ids = [a.request_id for a in acts if a.request_id]
+    paid_map: dict[int, float] = {}
+    if act_request_ids:
+        invoices = (
+            db.execute(
+                select(Invoice).where(
+                    Invoice.request_id.in_(act_request_ids),
+                    Invoice.company_id == company_id,
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for inv in invoices:
+            if inv.request_id:
+                paid_map[inv.request_id] = paid_map.get(inv.request_id, 0) + float(
+                    inv.paid_amount or 0
+                )
+
+    total_outstanding = 0.0
+    overdue_amount = 0.0
+    buckets = {"current": 0.0, "1_30": 0.0, "31_60": 0.0, "61_90": 0.0, "90_plus": 0.0}
     overdue_acts = []
 
     for act in acts:
-        outstanding = (act.total_amount or 0) - (act.paid_amount or 0)
+        paid = paid_map.get(act.request_id, 0) if act.request_id else 0
+        outstanding = float(act.total_amount or 0) - paid
         if outstanding <= 0:
             continue
 
@@ -185,11 +211,10 @@ def get_receivables_dashboard(
             overdue_acts.append(
                 {
                     "id": act.id,
-                    "act_number": getattr(act, "document_number", None)
-                    or f"ACT-{act.id}",
+                    "act_number": act.document_number or f"ACT-{act.id}",
                     "act_date": str(act.act_date),
                     "vehicle_name": vehicle.name if vehicle else "",
-                    "counterparty": act.counterparty_name or act.driver_name or "",
+                    "counterparty": "",
                     "outstanding": round(outstanding, 2),
                     "days_overdue": days_since - 30,
                     "status": act.status,
@@ -443,9 +468,9 @@ def export_transactions_excel(
 
     last_row = len(txns) + 2
     ws.cell(row=last_row, column=1, value="ИТОГО").font = Font(bold=True)
-    ws.cell(
-        row=last_row, column=5, value=round(total_amount, 2)
-    ).number_format = "#,##0"
+    ws.cell(row=last_row, column=5, value=round(total_amount, 2)).number_format = (
+        "#,##0"
+    )
     ws.cell(row=last_row, column=5).font = Font(bold=True)
 
     for col_cells in ws.columns:
