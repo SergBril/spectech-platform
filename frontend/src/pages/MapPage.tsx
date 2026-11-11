@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
@@ -89,6 +89,7 @@ export const MapPage: React.FC = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [engineHoursHistory, setEngineHoursHistory] = useState<any[]>([]);
   const [syncLogs, setSyncLogs] = useState<any[]>([]);
+  const [gpsStats, setGpsStats] = useState<any>(null);
 
   // WebSocket real-time positions
   const { subscribe, connected } = useWebSocket();
@@ -842,6 +843,31 @@ export const MapPage: React.FC = () => {
         {/* Map */}
         <div className="flex-1 relative">
           <div ref={mapRef} className="w-full h-full" />
+          {/* GPS Health Widget */}
+          {gpsStats && (
+            <div style={{
+              position: 'absolute', top: '10px', left: '60px', zIndex: 1000,
+              background: 'rgba(255,255,255,0.95)', borderRadius: '8px', padding: '8px 12px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)', fontSize: '11px', lineHeight: '1.5',
+              maxWidth: '220px',
+            }}>
+              <div style={{ fontWeight: 700, color: '#1e3a5f', marginBottom: '2px' }}>📡 GPS Синхронизация</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                <span>Техники с данными:</span>
+                <span style={{ fontWeight: 600 }}>{gpsStats.vehicles_with_data ?? '—'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                <span>Всего точек:</span>
+                <span style={{ fontWeight: 600 }}>{gpsStats.total_points?.toLocaleString('ru-RU') ?? '—'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                <span>Последние данные:</span>
+                <span style={{ fontWeight: 600, color: gpsStats.latest_recorded_at && (Date.now() - new Date(gpsStats.latest_recorded_at).getTime()) > 3600000 ? '#ef4444' : '#10b981' }}>
+                  {gpsStats.latest_recorded_at ? new Date(gpsStats.latest_recorded_at).toLocaleTimeString('ru-RU') : '—'}
+                </span>
+              </div>
+            </div>
+          )}
           <MapLegend />
           {trackLoading && (
             <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow text-sm">
