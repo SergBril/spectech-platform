@@ -36,6 +36,60 @@ async def auto_escalate_disputes_task() -> None:
         db.close()
 
 
+# Only ONE uvicorn worker may run the scheduler. With --workers 4 every
+# worker used to start its own AsyncIOScheduler, so all 14 jobs ran 4x:
+# duplicate notifications, duplicate payment matching, 4x load on Mapix /
+# Diadoc / bank APIs, and duplicate GPS rows.
+_SCHEDULER_LOCK_KEY = 7283401
+_scheduler_lock_conn = None
+
+
+def _acquire_scheduler_lock() -> bool:
+    """Try to become the scheduler leader (session-level advisory lock).
+
+    The lock is released automatically if this worker dies, so a respawned
+    worker takes over. Held on a dedicated connection for the process life.
+    """
+    global _scheduler_lock_conn
+    from sqlalchemy import text
+
+    from app.core.db import engine
+
+    try:
+        conn = engine.connect().execution_options(isolation_level="AUTOCOMMIT")
+        acquired = conn.execute(
+            text("SELECT pg_try_advisory_lock(:k)"), {"k": _SCHEDULER_LOCK_KEY}
+        ).scalar()
+        if acquired:
+            _scheduler_lock_conn = conn
+            return True
+        conn.close()
+        return False
+    except Exception as e:
+        logger.warning("Scheduler leader lock check failed: %s", e)
+        return False
+
+
+def _release_scheduler_lock() -> None:
+    global _scheduler_lock_conn
+    if _scheduler_lock_conn is None:
+        return
+    from sqlalchemy import text
+
+    try:
+        _scheduler_lock_conn.execute(
+            text("SELECT pg_advisory_unlock(:k)"), {"k": _SCHEDULER_LOCK_KEY}
+        )
+    except Exception:
+        pass
+    finally:
+        try:
+            _scheduler_lock_conn.close()
+        except Exception:
+            pass
+        _scheduler_lock_conn = None
+
+
 def start_scheduler() -> None:
     """Запускает планировщик фоновых задач."""
     if not settings.SCHEDULER_ENABLED:
@@ -44,6 +98,13 @@ def start_scheduler() -> None:
 
     if scheduler.running:
         logger.warning("Scheduler is already running")
+        return
+
+    # In tests keep the old behaviour (no real Postgres lock available).
+    if not settings.TESTING and not _acquire_scheduler_lock():
+        logger.info(
+            "\U0001f507 Scheduler skipped: another worker holds the leader lock"
+        )
         return
 
     # Задача 1: Автоэскалация просроченных споров
@@ -851,6 +912,8 @@ def stop_scheduler() -> None:
             logger.debug("Scheduler was not running")
     except Exception as e:
         logger.warning("Error stopping scheduler: %s", e)
+    finally:
+        _release_scheduler_lock()
 
 
 def get_scheduler_status() -> dict:
