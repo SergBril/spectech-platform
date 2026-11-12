@@ -245,20 +245,35 @@ class TestUploadBytesWithMetadata:
 
 
 class TestGetS3Client:
-    """Cover _get_s3_client (line 28)."""
+    """Cover _get_s3_client: must use configured creds, never hardcoded ones."""
 
     def test_returns_boto3_client(self):
-        from app.services.storage_service import _get_s3_client
+        from app.services import storage_service
 
-        with patch("app.services.storage_service.boto3") as mock_boto3:
+        with (
+            patch.object(storage_service, "boto3") as mock_boto3,
+            patch.object(storage_service, "MINIO_ENDPOINT", "minio-test:9000"),
+            patch.object(storage_service, "MINIO_ACCESS_KEY", "test-access"),
+            patch.object(storage_service, "MINIO_SECRET_KEY", "test-secret"),
+            patch.object(storage_service, "MINIO_USE_SSL", False),
+        ):
             mock_client = MagicMock()
             mock_boto3.client.return_value = mock_client
-            result = _get_s3_client()
+            result = storage_service._get_s3_client()
         assert result == mock_client
         mock_boto3.client.assert_called_once_with(
             "s3",
-            endpoint_url="http://localhost:9000",
-            aws_access_key_id="minioadmin",
-            aws_secret_access_key="minioadmin",
+            endpoint_url="http://minio-test:9000",
+            aws_access_key_id="test-access",
+            aws_secret_access_key="test-secret",
             region_name="ru-central1",
         )
+
+    def test_creds_come_from_settings_not_hardcoded(self):
+        """Regression: creds/bucket must be wired to settings (was 'minioadmin')."""
+        from app.core.config import settings
+        from app.services import storage_service
+
+        assert storage_service.MINIO_ACCESS_KEY == settings.MINIO_ROOT_USER
+        assert storage_service.MINIO_SECRET_KEY == settings.MINIO_ROOT_PASSWORD
+        assert storage_service.MINIO_BUCKET == settings.MINIO_BUCKET

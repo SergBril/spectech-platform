@@ -148,3 +148,8 @@ k8s/**/*-secret*
 *.token
 *_token.json
 seeds/*.json
+
+# Security audit artifacts
+_audit/
+backend/.env.email.sh
+gitleaks.json

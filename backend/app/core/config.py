@@ -1,6 +1,6 @@
 """Конфигурация приложения через pydantic-settings."""
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -91,8 +91,14 @@ class Settings(BaseSettings):
 
     # MinIO (S3) Storage Settings
     MINIO_ENDPOINT: str = "http://localhost:9000"
-    MINIO_ROOT_USER: str = "minioadmin"
-    MINIO_ROOT_PASSWORD: str = "minioadmin"
+    MINIO_ROOT_USER: str = Field(
+        default="minioadmin",
+        validation_alias=AliasChoices("MINIO_ROOT_USER", "MINIO_ACCESS_KEY"),
+    )
+    MINIO_ROOT_PASSWORD: str = Field(
+        default="minioadmin",
+        validation_alias=AliasChoices("MINIO_ROOT_PASSWORD", "MINIO_SECRET_KEY"),
+    )
     MINIO_BUCKET: str = "spectech-docs"
 
     # Sentry

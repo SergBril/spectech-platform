@@ -14,13 +14,17 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger("spectech.storage")
 
 # Конфигурация (в production — через переменные окружения)
-MINIO_ENDPOINT_RAW = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
+from app.core.config import settings
+
+MINIO_ENDPOINT_RAW = settings.MINIO_ENDPOINT or os.environ.get(
+    "MINIO_ENDPOINT", "localhost:9000"
+)
 # Strip protocol prefix to prevent double http://http:/...
 MINIO_ENDPOINT = MINIO_ENDPOINT_RAW.replace("https://", "").replace("http://", "")
-MINIO_ACCESS_KEY = "minioadmin"
-MINIO_SECRET_KEY = "minioadmin"
-MINIO_BUCKET = "spectech-docs"
-MINIO_USE_SSL = False
+MINIO_ACCESS_KEY = settings.MINIO_ROOT_USER
+MINIO_SECRET_KEY = settings.MINIO_ROOT_PASSWORD
+MINIO_BUCKET = settings.MINIO_BUCKET
+MINIO_USE_SSL = os.environ.get("MINIO_USE_SSL", "false").lower() == "true"
 
 
 def _get_s3_client():

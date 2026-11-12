@@ -1,0 +1,8 @@
+﻿title = "Spectech gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "detect-secrets baseline stores SHA1 hashes of secrets, not secrets themselves"
+paths = ['''\.secrets\.baseline$''']
