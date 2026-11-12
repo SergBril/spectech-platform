@@ -22,11 +22,15 @@ from app.core.db import Base
 
 
 class ShiftTaskStatus(str, Enum):
+    planned = "planned"
+    confirmed = "confirmed"
+    in_progress = "in_progress"
     draft = "draft"
     signed_by_operator = "signed_by_operator"
     checked = "checked"
     released = "released"
     completed = "completed"
+    cancelled = "cancelled"
 
 
 class ShiftReportStatus(str, Enum):

@@ -124,6 +124,7 @@ def get_pre_shift_checklist(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
+@router.post("/checklist/{task_id}/submit")
 async def submit_pre_shift_checklist(
     task_id: int,
     items: list[dict] = Body(...),
@@ -327,3 +328,89 @@ def register_device_token(
 
     db.commit()
     return {"message": "Device registered"}
+
+
+# === Aliases for frontend compatibility ===
+
+
+@router.get("/tasks/{task_id}/pre-shift-checklist")
+def get_pre_shift_checklist_alias(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Alias: GET checklist for frontend."""
+    return get_pre_shift_checklist(task_id, db, current_user, company_id)
+
+
+@router.post("/tasks/{task_id}/pre-shift-checklist")
+async def submit_pre_shift_checklist_alias(
+    task_id: int,
+    items: list[dict] = Body(...),
+    notes: str = Body(default=""),
+    photos: list[UploadFile] = File(default=[]),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Alias: POST checklist for frontend."""
+    return await submit_pre_shift_checklist(
+        task_id, items, notes, photos, db, current_user, company_id
+    )
+
+
+@router.post("/tasks/{task_id}/mobile-report")
+async def submit_mobile_report_alias(
+    task_id: int,
+    odometer_start: float | None = Body(default=None),
+    odometer_end: float | None = Body(default=None),
+    notes: str = Body(default=""),
+    photos: list[UploadFile] = File(default=[]),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Alias: POST mobile report for frontend."""
+    from app.services.mobile_shift_service import MobileShiftServiceError
+    from app.services.mobile_shift_service import (
+        submit_mobile_shift_report as svc_submit,
+    )
+
+    try:
+        return await svc_submit(
+            db=db,
+            task_id=task_id,
+            user_id=current_user.id,
+            odometer_start=odometer_start,
+            odometer_end=odometer_end,
+            notes=notes,
+            photo_files=photos,
+        )
+    except MobileShiftServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+
+@router.post("/tasks/{task_id}/fuel-entry")
+def add_fuel_entry_alias(
+    task_id: int,
+    fuel_type: str = Body(default="diesel"),
+    quantity_liters: float = Body(...),
+    odometer_reading: float | None = Body(default=None),
+    engine_hours: float | None = Body(default=None),
+    notes: str = Body(default=""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Alias: POST fuel entry for frontend."""
+    return add_shift_fuel_entry(
+        task_id,
+        fuel_type,
+        quantity_liters,
+        odometer_reading,
+        engine_hours,
+        notes,
+        db,
+        current_user,
+        company_id,
+    )

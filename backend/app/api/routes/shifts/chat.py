@@ -13,6 +13,7 @@ from app.models.shift import ShiftTask
 router = APIRouter()
 
 
+@router.get("/tasks/{task_id}/messages")
 def get_shift_messages(
     task_id: int,
     limit: int = Query(default=50),
@@ -70,6 +71,7 @@ def get_shift_messages(
     return result
 
 
+@router.post("/tasks/{task_id}/messages")
 async def send_shift_message(
     task_id: int,
     text: str = Body(...),
