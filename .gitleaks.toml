@@ -1,4 +1,4 @@
-﻿title = "Spectech gitleaks config"
+title = "Spectech gitleaks config"
 
 [extend]
 useDefault = true
