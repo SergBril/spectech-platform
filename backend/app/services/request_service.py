@@ -1081,7 +1081,111 @@ class RequestService:
             except Exception as e:
                 logger.warning(f"PDF generation failed for act #{act.id}: {e}")
 
+        # 8. Trigger review request notifications if rental exists
+        await self._notify_review_opportunity(request)
+
         return request
+
+    async def _notify_review_opportunity(self, request: Request) -> None:
+        """
+        Отправляет уведомления участникам сделки о возможности оставить отзыв.
+
+        Вызывается после завершения заявки. Проверяет наличие связанного
+        завершённого Rental и отправляет уведомления клиенту и собственнику.
+        """
+        from app.models.rental import Rental, RentalStatus
+        from app.services.notification_service import create_notification
+
+        # Check if request has associated rental
+        rental = self.db.query(Rental).filter(Rental.request_id == request.id).first()
+
+        if not rental:
+            logger.info(
+                "No rental found for request #%s, skipping review notifications",
+                request.id,
+            )
+            return
+
+        if rental.status != RentalStatus.COMPLETED:
+            logger.info(
+                "Rental #%s status is %s, not COMPLETED. Skipping review notifications",
+                rental.id,
+                rental.status.value,
+            )
+            return
+
+        # Get participants
+        client_contractor_id = rental.client_id
+        owner_contractor_id = request.assigned_owner_id
+
+        if not client_contractor_id:
+            logger.warning(
+                "Rental #%s has no client_id, cannot send review notifications",
+                rental.id,
+            )
+            return
+
+        # Notify client to review owner
+        try:
+            # Get user ID from contractor
+            from app.models.auth import User
+            from app.models.contractor import Contractor
+
+            client_contractor = self.db.get(Contractor, client_contractor_id)
+            if client_contractor:
+                # Find user associated with this contractor
+                client_user = (
+                    self.db.query(User)
+                    .filter(User.email == client_contractor.contact_email)
+                    .first()
+                )
+                if client_user:
+                    await create_notification(
+                        db=self.db,
+                        user_id=client_user.id,
+                        title="⭐ Оцените сотрудничество",
+                        body=(
+                            f"Сделка по заявке #{request.id} завершена. "
+                            "Оставьте отзыв о компании-исполнителе — это поможет другим заказчикам."
+                        ),
+                        channel="in_app",
+                    )
+                    logger.info(
+                        "Sent review request to client (user #%s) for rental #%s",
+                        client_user.id,
+                        rental.id,
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to notify client about review: {e}")
+
+        # Notify owner to review client
+        try:
+            if owner_contractor_id:
+                owner_contractor = self.db.get(Contractor, owner_contractor_id)
+                if owner_contractor:
+                    owner_user = (
+                        self.db.query(User)
+                        .filter(User.email == owner_contractor.contact_email)
+                        .first()
+                    )
+                    if owner_user:
+                        await create_notification(
+                            db=self.db,
+                            user_id=owner_user.id,
+                            title="⭐ Оцените клиента",
+                            body=(
+                                f"Сделка по заявке #{request.id} завершена. "
+                                "Оставьте отзыв о заказчике — это поможет другим исполнителям."
+                            ),
+                            channel="in_app",
+                        )
+                        logger.info(
+                            "Sent review request to owner (user #%s) for rental #%s",
+                            owner_user.id,
+                            rental.id,
+                        )
+        except Exception as e:
+            logger.warning(f"Failed to notify owner about review: {e}")
 
     async def update_request_patch(
         self,
