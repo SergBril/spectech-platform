@@ -1,511 +1,641 @@
-"""Tests for MapixAdapter GPS provider - async-correct."""
+﻿"""Unit tests for MapixAdapter GPS provider."""
 
-import json
+from contextlib import asynccontextmanager
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
 
-@pytest.fixture
-def adapter():
-    from app.services.gps_providers.mapix import MapixAdapter
-
-    return MapixAdapter(
-        {
-            "api_url": "https://test.mapix.su",
-            "login": "testuser",
-            "password": "testpass",
-            "object_ids": ["obj1", "obj2"],
-        }
-    )
+def make_httpx_response(status_code: int, text: str = "", json_data=None, cookies=None):
+    """Create mock httpx response."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.text = text
+    resp.json = Mock(return_value=json_data or {})
+    resp.cookies = cookies or {}
+    return resp
 
 
-def _make_async_client(cookies=None, post_response=None, get_response=None):
-    client = AsyncMock()
-    cookie_store = dict(cookies or {})
-    mock_cookies = MagicMock()
-    mock_cookies.items = lambda: list(cookie_store.items())
-    mock_cookies.set = MagicMock()
-    mock_cookies.__iter__ = lambda self: iter(cookie_store)
-    mock_cookies.__contains__ = lambda self, k: k in cookie_store
-    mock_cookies.__getitem__ = lambda self, k: cookie_store[k]
-    mock_cookies.keys = lambda: cookie_store.keys()
-    type(client).cookies = PropertyMock(return_value=mock_cookies)
-    if post_response is not None:
-        client.post.return_value = post_response
-    if get_response is not None:
-        client.get.return_value = get_response
-    return client
+@asynccontextmanager
+async def mock_client_cm(client):
+    yield client
 
 
-class TestEnsureSession:
-    @pytest.mark.asyncio
-    async def test_returns_cached_session(self, adapter):
-        adapter._session_valid = True
-        adapter._cookies = {"PHPSESSID": "abc123"}
-        client = _make_async_client({"PHPSESSID": "abc123"})
-        result = await adapter._ensure_session(client)
-        assert result is True
+class TestMapixAdapterInit:
+    """Cover mapix.py lines 30-55: __init__ configuration parsing."""
 
-    @pytest.mark.asyncio
-    async def test_missing_credentials(self, adapter):
-        adapter.login = None
-        adapter._session_valid = False
-        client = _make_async_client()
-        result = await adapter._ensure_session(client)
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_auth_success(self, adapter):
-        adapter._session_valid = False
-        resp = MagicMock()
-        resp.status_code = 200
-        client = _make_async_client({"PHPSESSID": "new_sess"}, post_response=resp)
-        result = await adapter._ensure_session(client)
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_auth_http_error(self, adapter):
-        adapter._session_valid = False
-        resp = MagicMock()
-        resp.status_code = 403
-        client = _make_async_client(post_response=resp)
-        result = await adapter._ensure_session(client)
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_auth_no_phpsessid(self, adapter):
-        adapter._session_valid = False
-        resp = MagicMock()
-        resp.status_code = 200
-        client = _make_async_client({}, post_response=resp)
-        result = await adapter._ensure_session(client)
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_auth_exception(self, adapter):
-        adapter._session_valid = False
-        client = AsyncMock()
-        client.post.side_effect = Exception("Connection error")
-        mock_cookies = MagicMock()
-        mock_cookies.items = lambda: []
-        mock_cookies.set = MagicMock()
-        type(client).cookies = PropertyMock(return_value=mock_cookies)
-        result = await adapter._ensure_session(client)
-        assert result is False
-
-
-class TestFetchObjectData:
-    @pytest.mark.asyncio
-    async def test_success(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.text = json.dumps({"success": True, "lat": 55.75, "long": 37.61})
-        client = _make_async_client(get_response=resp)
-        result = await adapter._fetch_object_data(client, "obj1")
-        assert result is not None
-
-    @pytest.mark.asyncio
-    async def test_http_error(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 500
-        client = _make_async_client(get_response=resp)
-        result = await adapter._fetch_object_data(client, "obj1")
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_empty_response(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.text = ""
-        client = _make_async_client(get_response=resp)
-        result = await adapter._fetch_object_data(client, "obj1")
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_invalid_json(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.text = "<html>not json</html>"
-        client = _make_async_client(get_response=resp)
-        result = await adapter._fetch_object_data(client, "obj1")
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_success_false(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.text = json.dumps({"success": False})
-        client = _make_async_client(get_response=resp)
-        result = await adapter._fetch_object_data(client, "obj1")
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_zero_coords(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.text = json.dumps({"success": True, "lat": 0, "long": 0})
-        client = _make_async_client(get_response=resp)
-        result = await adapter._fetch_object_data(client, "obj1")
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_request_exception(self, adapter):
-        client = AsyncMock()
-        client.get.side_effect = Exception("timeout")
-        mock_cookies = MagicMock()
-        mock_cookies.items = lambda: []
-        mock_cookies.set = MagicMock()
-        type(client).cookies = PropertyMock(return_value=mock_cookies)
-        result = await adapter._fetch_object_data(client, "obj1")
-        assert result is None
-
-
-class TestFetchPositionsFromMainPage:
-    @pytest.mark.asyncio
-    async def test_parse_html_with_objects(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.text = "<html><body>test</body></html>"
-        client = _make_async_client(post_response=resp)
-        result = await adapter._fetch_positions_from_main_page(client)
-        assert isinstance(result, list)
-
-    @pytest.mark.asyncio
-    async def test_empty_page(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.text = ""
-        client = _make_async_client(post_response=resp)
-        result = await adapter._fetch_positions_from_main_page(client)
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_http_error(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 500
-        client = _make_async_client(post_response=resp)
-        result = await adapter._fetch_positions_from_main_page(client)
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_request_exception(self, adapter):
-        client = AsyncMock()
-        client.get.side_effect = Exception("fail")
-        mock_cookies = MagicMock()
-        mock_cookies.items = lambda: []
-        mock_cookies.set = MagicMock()
-        type(client).cookies = PropertyMock(return_value=mock_cookies)
-        result = await adapter._fetch_positions_from_main_page(client)
-        assert result == []
-
-
-class TestGetLastPosition:
-    @pytest.mark.asyncio
-    async def test_session_fails(self, adapter):
-        with patch.object(adapter, "_ensure_session", return_value=False):
-            result = await adapter.get_last_position()
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_with_object_ids(self, adapter):
-        mock_point = MagicMock()
-        mock_point.lat = 55.75
-        with (
-            patch.object(adapter, "_ensure_session", return_value=True),
-            patch.object(adapter, "_fetch_object_data", return_value=mock_point),
-        ):
-            result = await adapter.get_last_position()
-        assert result is not None
-
-    @pytest.mark.asyncio
-    async def test_fallback_to_main_page(self, adapter):
-        mock_point = MagicMock()
-        with (
-            patch.object(adapter, "_ensure_session", return_value=True),
-            patch.object(adapter, "_fetch_object_data", return_value=None),
-            patch.object(
-                adapter, "_fetch_positions_from_main_page", return_value=[mock_point]
-            ),
-        ):
-            result = await adapter.get_last_position()
-        assert result is not None
-
-
-class TestGetTrack:
-    @pytest.mark.asyncio
-    async def test_session_fails(self, adapter):
-        with patch.object(adapter, "_ensure_session", return_value=False):
-            result = await adapter.get_track(
-                "obj1", datetime(2026, 11, 1), datetime(2026, 11, 2)
-            )
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_track_success(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.json.return_value = {
-            "success": True,
-            "data": [{"lat": 55.75, "lon": 37.61, "ts": 1700000000, "speed": 50}],
-        }
-        with (
-            patch.object(adapter, "_ensure_session", return_value=True),
-            patch("httpx.AsyncClient") as MockClient,
-        ):
-            instance = AsyncMock()
-            instance.get.return_value = resp
-            instance.__aenter__ = AsyncMock(return_value=instance)
-            instance.__aexit__ = AsyncMock(return_value=False)
-            MockClient.return_value = instance
-            result = await adapter.get_track(
-                "obj1", datetime(2026, 11, 1), datetime(2026, 11, 2)
-            )
-        assert isinstance(result, list)
-
-    @pytest.mark.asyncio
-    async def test_track_exception(self, adapter):
-        with (
-            patch.object(adapter, "_ensure_session", return_value=True),
-            patch("httpx.AsyncClient") as MockClient,
-        ):
-            instance = AsyncMock()
-            instance.get.side_effect = Exception("fail")
-            instance.__aenter__ = AsyncMock(return_value=instance)
-            instance.__aexit__ = AsyncMock(return_value=False)
-            MockClient.return_value = instance
-            result = await adapter.get_track(
-                "obj1", datetime(2026, 11, 1), datetime(2026, 11, 2)
-            )
-        assert result == []
-
-
-class TestTestConnection:
-    @pytest.mark.asyncio
-    async def test_connection_success(self, adapter):
-        with patch.object(adapter, "_ensure_session", return_value=True):
-            result = await adapter.test_connection()
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_connection_failure(self, adapter):
-        with patch.object(adapter, "_ensure_session", return_value=False):
-            result = await adapter.test_connection()
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_connection_exception(self, adapter):
-        with patch.object(adapter, "_ensure_session", side_effect=Exception("boom")):
-            result = await adapter.test_connection()
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_test_connection_with_db(self, adapter):
-        mock_db = MagicMock()
-        with patch.object(adapter, "_ensure_session", return_value=True):
-            result = await adapter.test_connection(db=mock_db, company_id=7)
-        assert result is True
-
-
-class TestGetAllPositionsSync:
-    def test_sync_wrapper(self, adapter):
-        with patch.object(
-            adapter, "get_all_positions", new_callable=AsyncMock, return_value=[]
-        ):
-            result = adapter.get_all_positions_sync()
-        assert isinstance(result, list)
-
-
-class TestInitAndImpl:
-    def test_init_logging(self):
+    def test_init_with_object_ids_list(self):
+        """Cover lines 36-39: object_ids from list."""
         from app.services.gps_providers.mapix import MapixAdapter
 
-        a = MapixAdapter(
-            {"api_url": "https://test.mapix.su", "login": "u", "password": "p"}
+        adapter = MapixAdapter(
+            config={
+                "login": "user",
+                "password": "pass",
+                "object_ids": ["obj1", "obj2", "obj3"],
+            }
         )
-        assert a.login == "u"
+        assert adapter.object_ids == ["obj1", "obj2", "obj3"]
+        assert adapter.login == "user"
+
+    def test_init_with_object_ids_string(self):
+        """Cover lines 40-41: object_ids from comma-separated string."""
+        from app.services.gps_providers.mapix import MapixAdapter
+
+        adapter = MapixAdapter(
+            config={
+                "login": "user",
+                "password": "pass",
+                "object_ids": "obj1, obj2, obj3",
+            }
+        )
+        assert adapter.object_ids == ["obj1", "obj2", "obj3"]
+
+    def test_init_empty_object_ids(self):
+        """Cover lines 42-43: empty object_ids."""
+        from app.services.gps_providers.mapix import MapixAdapter
+
+        adapter = MapixAdapter(config={"login": "user", "password": "pass"})
+        assert adapter.object_ids == []
+
+    def test_init_with_api_url(self):
+        """Cover line 34: custom api_url."""
+        from app.services.gps_providers.mapix import MapixAdapter
+
+        adapter = MapixAdapter(
+            config={
+                "api_url": "https://custom.mapix.su/",
+                "login": "user",
+                "password": "pass",
+            }
+        )
+        assert adapter.api_url == "https://custom.mapix.su"  # trailing slash removed
+
+
+class TestMapixAdapterEnsureSession:
+    """Cover mapix.py lines 57-101: _ensure_session authentication."""
+
+    @pytest.fixture
+    def adapter(self):
+        from app.services.gps_providers.mapix import MapixAdapter
+
+        return MapixAdapter(config={"login": "user", "password": "pass"})
 
     @pytest.mark.asyncio
-    async def test_get_last_position_impl(self, adapter):
-        mock_point = MagicMock()
-        with (
-            patch.object(adapter, "_ensure_session", return_value=True),
-            patch.object(adapter, "_fetch_object_data", return_value=mock_point),
+    async def test_ensure_session_cached(self, adapter):
+        """Cover lines 58-62: cached session reused."""
+        adapter._session_valid = True
+        adapter._cookies = MagicMock()
+        adapter._cookies.items = Mock(return_value=[("PHPSESSID", "session123")])
+
+        mock_client = MagicMock()
+
+        result = await adapter._ensure_session(mock_client)
+
+        assert result is True
+        assert mock_client.cookies.set.called
+
+    @pytest.mark.asyncio
+    async def test_ensure_session_no_credentials(self, adapter):
+        """Cover lines 64-66: missing login/password."""
+        adapter.login = ""
+        adapter.password = ""
+        mock_client = MagicMock()
+
+        result = await adapter._ensure_session(mock_client)
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_ensure_session_success(self, adapter):
+        """Cover lines 68-95: successful authentication."""
+        import httpx
+
+        mock_client = MagicMock()
+        # Use real httpx.Cookies so dict(client.cookies) works correctly
+        real_cookies = httpx.Cookies()
+        real_cookies.set("PHPSESSID", "session123", domain="mapix.su")
+        mock_client.cookies = real_cookies
+
+        # Make post response return the same cookies container
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_client.post = AsyncMock(return_value=mock_resp)
+
+        with patch(
+            "app.services.gps_providers.mapix.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            result = await adapter._ensure_session(mock_client)
+
+            assert result is True
+            assert adapter._session_valid is True
+            assert adapter._cookies is not None
+
+    @pytest.mark.asyncio
+    async def test_ensure_session_http_error(self, adapter):
+        """Cover lines 80-82: HTTP error response."""
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(return_value=make_httpx_response(401))
+
+        result = await adapter._ensure_session(mock_client)
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_ensure_session_no_phpsessid(self, adapter):
+        """Cover lines 85-90: missing PHPSESSID cookie."""
+        mock_client = MagicMock()
+        mock_cookies = MagicMock()
+        mock_cookies.items = Mock(return_value=[("other", "cookie")])
+        mock_cookies.__iter__ = Mock(return_value=iter([("other", "cookie")]))
+        mock_client.cookies = mock_cookies
+        mock_client.post = AsyncMock(
+            return_value=make_httpx_response(200, cookies=mock_cookies)
+        )
+
+        result = await adapter._ensure_session(mock_client)
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_ensure_session_exception(self, adapter):
+        """Cover lines 97-99: exception during auth."""
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(side_effect=Exception("Network error"))
+
+        result = await adapter._ensure_session(mock_client)
+
+        assert result is False
+
+
+class TestMapixAdapterFetchObjectData:
+    """Cover mapix.py lines 103-144: _fetch_object_data."""
+
+    @pytest.fixture
+    def adapter(self):
+        from app.services.gps_providers.mapix import MapixAdapter
+
+        return MapixAdapter(config={"login": "user", "password": "pass"})
+
+    @pytest.mark.asyncio
+    async def test_fetch_object_data_success(self, adapter):
+        """Cover lines 103-144: successful data fetch."""
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(
+            return_value=make_httpx_response(
+                200,
+                text='{"success": true, "lat": 55.75, "long": 37.61}',
+            )
+        )
+
+        result = await adapter._fetch_object_data(mock_client, "obj123")
+
+        assert result is not None
+        assert result.latitude == 55.75
+        assert result.longitude == 37.61
+        assert result.raw_data["object_id"] == "obj123"
+
+    @pytest.mark.asyncio
+    async def test_fetch_object_data_request_failed(self, adapter):
+        """Cover lines 109-113: request exception."""
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(side_effect=Exception("Network error"))
+
+        result = await adapter._fetch_object_data(mock_client, "obj123")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_fetch_object_data_http_error(self, adapter):
+        """Cover lines 115-120: non-200 HTTP status."""
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=make_httpx_response(404))
+
+        result = await adapter._fetch_object_data(mock_client, "obj123")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_fetch_object_data_empty_response(self, adapter):
+        """Cover lines 122-123: empty text response."""
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=make_httpx_response(200, text=""))
+
+        result = await adapter._fetch_object_data(mock_client, "obj123")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_fetch_object_data_invalid_json(self, adapter):
+        """Cover lines 128-131: invalid JSON response."""
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(
+            return_value=make_httpx_response(200, text="<html>error</html>")
+        )
+
+        result = await adapter._fetch_object_data(mock_client, "obj123")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_fetch_object_data_success_false(self, adapter):
+        """Cover lines 133-136: success=false in response."""
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(
+            return_value=make_httpx_response(
+                200,
+                text='{"success": false}',
+            )
+        )
+
+        result = await adapter._fetch_object_data(mock_client, "obj123")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_fetch_object_data_zero_coords(self, adapter):
+        """Cover lines 143-144: lat=0 and lon=0 returns None."""
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(
+            return_value=make_httpx_response(
+                200,
+                text='{"success": true, "lat": 0, "long": 0}',
+            )
+        )
+
+        result = await adapter._fetch_object_data(mock_client, "obj123")
+
+        assert result is None
+
+
+class TestMapixAdapterFetchPositionsFromMainPage:
+    """Cover mapix.py lines 154-208: _fetch_positions_from_main_page."""
+
+    @pytest.fixture
+    def adapter(self):
+        from app.services.gps_providers.mapix import MapixAdapter
+
+        return MapixAdapter(config={"login": "user", "password": "pass"})
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_from_main_page_success(self, adapter):
+        """Cover lines 154-208: successful HTML parsing."""
+        mock_client = MagicMock()
+        html_content = """
+        <html>
+        <script>
+        var objects = [
+            {ObjectId:"123", Number:"ABC123", X:"37.61", Y:"55.75", Unixdt:"1700000000"},
+            {ObjectId:"456", Number:"XYZ789", X:"37.62", Y:"55.76", Unixdt:"1700000001"}
+        ];
+        </script>
+        </html>
+        """
+        mock_client.get = AsyncMock(
+            return_value=make_httpx_response(200, text=html_content)
+        )
+
+        result = await adapter._fetch_positions_from_main_page(mock_client)
+
+        assert len(result) == 2
+        assert result[0].latitude == 55.75
+        assert result[0].longitude == 37.61
+        assert result[0].raw_data["object_id"] == "123"
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_from_main_page_request_failed(self, adapter):
+        """Cover lines 160-163: request exception."""
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(side_effect=Exception("Network error"))
+
+        result = await adapter._fetch_positions_from_main_page(mock_client)
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_from_main_page_http_error(self, adapter):
+        """Cover lines 165-166: non-200 HTTP status."""
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=make_httpx_response(500))
+
+        result = await adapter._fetch_positions_from_main_page(mock_client)
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_from_main_page_no_matches(self, adapter):
+        """Cover lines 198-199: no positions found in HTML."""
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(
+            return_value=make_httpx_response(200, text="<html>no data</html>")
+        )
+
+        result = await adapter._fetch_positions_from_main_page(mock_client)
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_from_main_page_skip_zero_coords(self, adapter):
+        """Cover lines 189-190: zero coordinates skipped."""
+        mock_client = MagicMock()
+        html_content = """
+        {ObjectId:"123", Number:"ABC", X:"0", Y:"0", Unixdt:"1700000000"},
+        {ObjectId:"456", Number:"XYZ", X:"37.62", Y:"55.76", Unixdt:"1700000001"}
+        """
+        mock_client.get = AsyncMock(
+            return_value=make_httpx_response(200, text=html_content)
+        )
+
+        result = await adapter._fetch_positions_from_main_page(mock_client)
+
+        assert len(result) == 1
+        assert result[0].raw_data["object_id"] == "456"
+
+
+class TestMapixAdapterFetchPositions:
+    """Cover mapix.py lines 212-247: _fetch_positions main method."""
+
+    @pytest.fixture
+    def adapter(self):
+        from app.services.gps_providers.mapix import MapixAdapter
+
+        return MapixAdapter(
+            config={
+                "login": "user",
+                "password": "pass",
+                "object_ids": ["obj1", "obj2"],
+            }
+        )
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_with_object_ids_success(self, adapter):
+        """Cover lines 212-247: infodata API success."""
+        mock_client = MagicMock()
+
+        fake_point = Mock()
+
+        with patch(
+            "app.services.gps_providers.mapix.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter, "_ensure_session", new_callable=AsyncMock, return_value=True
+            ):
+                with patch.object(
+                    adapter,
+                    "_fetch_object_data",
+                    new_callable=AsyncMock,
+                    return_value=fake_point,
+                ):
+                    result = await adapter._fetch_positions()
+
+                    assert len(result) == 2
+                    assert result[0] == fake_point
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_session_failed(self, adapter):
+        """Cover lines 227-228: session auth failed."""
+        mock_client = MagicMock()
+
+        with patch(
+            "app.services.gps_providers.mapix.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter, "_ensure_session", new_callable=AsyncMock, return_value=False
+            ):
+                result = await adapter._fetch_positions()
+
+                assert result == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_infodata_failed_fallback(self, adapter):
+        """Cover lines 237-239: infodata failed, fallback to main page."""
+        mock_client = MagicMock()
+
+        fake_point = Mock()
+
+        with patch(
+            "app.services.gps_providers.mapix.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter, "_ensure_session", new_callable=AsyncMock, return_value=True
+            ):
+                with patch.object(
+                    adapter,
+                    "_fetch_object_data",
+                    new_callable=AsyncMock,
+                    return_value=None,
+                ):
+                    with patch.object(
+                        adapter,
+                        "_fetch_positions_from_main_page",
+                        new_callable=AsyncMock,
+                        return_value=[fake_point],
+                    ):
+                        result = await adapter._fetch_positions()
+
+                        assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_no_object_ids(self):
+        """Cover lines 229-230: no object_ids configured."""
+        from app.services.gps_providers.mapix import MapixAdapter
+
+        adapter = MapixAdapter(config={"login": "user", "password": "pass"})
+        mock_client = MagicMock()
+        fake_point = Mock()
+
+        with patch(
+            "app.services.gps_providers.mapix.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter, "_ensure_session", new_callable=AsyncMock, return_value=True
+            ):
+                with patch.object(
+                    adapter,
+                    "_fetch_positions_from_main_page",
+                    new_callable=AsyncMock,
+                    return_value=[fake_point],
+                ):
+                    result = await adapter._fetch_positions()
+
+                    assert len(result) == 1
+
+
+class TestMapixAdapterPublicMethods:
+    """Cover mapix.py lines 249-339: public methods."""
+
+    @pytest.fixture
+    def adapter(self):
+        from app.services.gps_providers.mapix import MapixAdapter
+
+        return MapixAdapter(config={"login": "user", "password": "pass"})
+
+    @pytest.mark.asyncio
+    async def test_get_last_position_impl_empty(self, adapter):
+        """Cover lines 262-264: empty positions returns None."""
+        with patch.object(
+            adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]
         ):
             result = await adapter._get_last_position_impl()
-        assert result is not None
+            assert result is None
 
     @pytest.mark.asyncio
-    async def test_test_connection_impl(self, adapter):
-        with patch.object(adapter, "_ensure_session", return_value=True):
-            result = await adapter._test_connection_impl()
-        assert result is True
-
-
-class TestFetchPositionsMainPageParsing:
-    @pytest.mark.asyncio
-    async def test_parse_html_with_real_pattern(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.text = 'var data = [{ObjectId:"18625", Number:"KAMAZ-001", X:"37.254", Y:"55.776", Unixdt:"1700000000"}]'
-        client = _make_async_client(get_response=resp)
-        result = await adapter._fetch_positions_from_main_page(client)
-        assert len(result) == 1
-        assert result[0].latitude == 55.776
-        assert result[0].longitude == 37.254
-
-    @pytest.mark.asyncio
-    async def test_skip_zero_coords_in_main_page(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.text = 'var data = [{ObjectId:"1", Number:"T1", X:"0", Y:"0", Unixdt:"1700000000"}]'
-        client = _make_async_client(get_response=resp)
-        result = await adapter._fetch_positions_from_main_page(client)
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_no_match_in_html(self, adapter):
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.text = "<html><body>No objects here</body></html>"
-        client = _make_async_client(get_response=resp)
-        result = await adapter._fetch_positions_from_main_page(client)
-        assert result == []
-
-
-class TestGetAllPositions:
-    @pytest.mark.asyncio
-    async def test_get_all_positions(self, adapter):
-        mock_point = MagicMock()
+    async def test_get_last_position_impl_with_positions(self, adapter):
+        """Cover lines 262-264: returns first position."""
+        fake_point = Mock()
         with patch.object(
             adapter,
             "_fetch_positions",
             new_callable=AsyncMock,
-            return_value=[mock_point],
+            return_value=[fake_point, Mock()],
+        ):
+            result = await adapter._get_last_position_impl()
+            assert result == fake_point
+
+    @pytest.mark.asyncio
+    async def test_get_all_positions(self, adapter):
+        """Cover lines 266-267: returns all positions."""
+        fake_points = [Mock(), Mock()]
+        with patch.object(
+            adapter,
+            "_fetch_positions",
+            new_callable=AsyncMock,
+            return_value=fake_points,
         ):
             result = await adapter.get_all_positions()
-        assert len(result) == 1
+            assert result == fake_points
 
-    def test_sync_wrapper_no_loop(self, adapter):
-        with (
-            patch.object(
-                adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]
-            ),
-            patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")),
-            patch("asyncio.run", return_value=[]),
+    def test_get_all_positions_sync(self, adapter):
+        """Cover lines 269-285: sync wrapper."""
+        fake_point = Mock()
+
+        async def fake_fetch():
+            return [fake_point]
+
+        with patch.object(
+            adapter, "_fetch_positions", new=AsyncMock(side_effect=fake_fetch)
         ):
             result = adapter.get_all_positions_sync()
-        assert isinstance(result, list)
-
-    def test_sync_wrapper_with_loop(self, adapter):
-        mock_loop = MagicMock()
-        mock_loop.is_running.return_value = True
-        with (
-            patch.object(
-                adapter, "_fetch_positions", new_callable=AsyncMock, return_value=[]
-            ),
-            patch("asyncio.get_running_loop", return_value=mock_loop),
-            patch("concurrent.futures.ThreadPoolExecutor") as MockExec,
-        ):
-            mock_future = MagicMock()
-            mock_future.result.return_value = []
-            mock_exec_instance = MagicMock()
-            mock_exec_instance.submit.return_value = mock_future
-            mock_exec_instance.__enter__ = MagicMock(return_value=mock_exec_instance)
-            mock_exec_instance.__exit__ = MagicMock(return_value=False)
-            MockExec.return_value = mock_exec_instance
-            result = adapter.get_all_positions_sync()
-        assert isinstance(result, list)
-
-
-class TestGetTrackReal:
-    @pytest.mark.asyncio
-    async def test_track_with_create_retry_client(self, adapter):
-        mock_point = MagicMock()
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-
-        with (
-            patch(
-                "app.services.gps_providers.mapix.create_retry_client",
-                return_value=mock_client,
-            ),
-            patch.object(adapter, "_ensure_session", return_value=True),
-            patch.object(
-                adapter,
-                "_fetch_positions_from_main_page",
-                new_callable=AsyncMock,
-                return_value=[mock_point],
-            ),
-        ):
-            result = await adapter.get_track(
-                datetime(2026, 11, 1), datetime(2026, 11, 2)
-            )
-        assert len(result) == 1
+            assert result == [fake_point]
 
     @pytest.mark.asyncio
-    async def test_track_session_fails_real(self, adapter):
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+    async def test_get_track_success(self, adapter):
+        """Cover lines 287-314: successful track fetch."""
+        fake_point = Mock()
+        mock_client = MagicMock()
 
-        with (
-            patch(
-                "app.services.gps_providers.mapix.create_retry_client",
-                return_value=mock_client,
-            ),
-            patch.object(adapter, "_ensure_session", return_value=False),
-        ):
-            result = await adapter.get_track(
-                datetime(2026, 11, 1), datetime(2026, 11, 2)
-            )
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_track_exception_real(self, adapter):
         with patch(
             "app.services.gps_providers.mapix.create_retry_client",
-            side_effect=Exception("client error"),
+            return_value=mock_client_cm(mock_client),
         ):
-            result = await adapter.get_track(
-                datetime(2026, 11, 1), datetime(2026, 11, 2)
-            )
-        assert result == []
+            with patch.object(
+                adapter, "_ensure_session", new_callable=AsyncMock, return_value=True
+            ):
+                with patch.object(
+                    adapter,
+                    "_fetch_positions_from_main_page",
+                    new_callable=AsyncMock,
+                    return_value=[fake_point, Mock()],
+                ):
+                    result = await adapter.get_track(
+                        date_from=datetime(2026, 1, 1),
+                        date_to=datetime(2026, 1, 2),
+                        limit=1,
+                    )
 
+                    assert len(result) == 1
 
-class TestInitLine42:
-    def test_object_ids_from_string(self):
-        from app.services.gps_providers.mapix import MapixAdapter
+    @pytest.mark.asyncio
+    async def test_get_track_session_failed(self, adapter):
+        """Cover lines 295-297: session auth failed."""
+        mock_client = MagicMock()
 
-        a = MapixAdapter(
-            {
-                "api_url": "https://test.mapix.su",
-                "login": "u",
-                "password": "p",
-                "object_ids": "id1, id2, id3",
-            }
-        )
-        assert a.object_ids == ["id1", "id2", "id3"]
+        with patch(
+            "app.services.gps_providers.mapix.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter, "_ensure_session", new_callable=AsyncMock, return_value=False
+            ):
+                result = await adapter.get_track(
+                    date_from=datetime(2026, 1, 1),
+                    date_to=datetime(2026, 1, 2),
+                )
 
-    def test_object_ids_empty(self):
-        from app.services.gps_providers.mapix import MapixAdapter
+                assert result == []
 
-        a = MapixAdapter(
-            {
-                "api_url": "https://test.mapix.su",
-                "login": "u",
-                "password": "p",
-                "object_ids": "",
-            }
-        )
-        assert a.object_ids == []
+    @pytest.mark.asyncio
+    async def test_get_track_exception(self, adapter):
+        """Cover lines 311-313: exception returns empty list."""
+        mock_client = MagicMock()
 
-    def test_object_ids_none(self):
-        from app.services.gps_providers.mapix import MapixAdapter
+        with patch(
+            "app.services.gps_providers.mapix.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter,
+                "_ensure_session",
+                new_callable=AsyncMock,
+                side_effect=Exception("Error"),
+            ):
+                result = await adapter.get_track(
+                    date_from=datetime(2026, 1, 1),
+                    date_to=datetime(2026, 1, 2),
+                )
 
-        a = MapixAdapter(
-            {"api_url": "https://test.mapix.su", "login": "u", "password": "p"}
-        )
-        assert a.object_ids == []
+                assert result == []
+
+    @pytest.mark.asyncio
+    async def test_test_connection_impl_success(self, adapter):
+        """Cover lines 326-339: successful connection test."""
+        mock_client = MagicMock()
+
+        with patch(
+            "app.services.gps_providers.mapix.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter, "_ensure_session", new_callable=AsyncMock, return_value=True
+            ):
+                result = await adapter._test_connection_impl()
+                assert result is True
+
+    @pytest.mark.asyncio
+    async def test_test_connection_impl_failed(self, adapter):
+        """Cover lines 326-339: failed connection test."""
+        mock_client = MagicMock()
+
+        with patch(
+            "app.services.gps_providers.mapix.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter, "_ensure_session", new_callable=AsyncMock, return_value=False
+            ):
+                result = await adapter._test_connection_impl()
+                assert result is False
+
+    @pytest.mark.asyncio
+    async def test_test_connection_impl_exception(self, adapter):
+        """Cover lines 336-338: exception returns False."""
+        mock_client = MagicMock()
+
+        with patch(
+            "app.services.gps_providers.mapix.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter,
+                "_ensure_session",
+                new_callable=AsyncMock,
+                side_effect=Exception("Error"),
+            ):
+                result = await adapter._test_connection_impl()
+                assert result is False
