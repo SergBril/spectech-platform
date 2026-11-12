@@ -161,8 +161,33 @@ def check_sla_breaches():
         for dispute in breached_disputes:
             dispute.sla_breached = True
 
-            # TODO: Отправить уведомления через notification_service
-            # notification_service.send_sla_breach_alert(dispute)
+            # Отправка уведомления о нарушении SLA
+            try:
+                import asyncio
+
+                from app.services.notification_dispatcher import notification_dispatcher
+
+                try:
+                    asyncio.get_running_loop()
+                    # In async context - run in thread
+                    import concurrent.futures
+
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        executor.submit(
+                            asyncio.run,
+                            notification_dispatcher.notify_dispute_escalated(
+                                dispute, db
+                            ),
+                        )
+                except RuntimeError:
+                    # No running loop - safe to use asyncio.run
+                    asyncio.run(
+                        notification_dispatcher.notify_dispute_escalated(dispute, db)
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to send SLA breach notification for dispute #{dispute.id}: {e}"
+                )
 
             logger.warning(
                 f"Dispute #{dispute.id} SLA breached: "

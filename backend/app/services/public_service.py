@@ -130,7 +130,28 @@ class PublicService:
             companies = db.scalars(stmt).all()
 
             result = []
+            # Рассчитываем рейтинг и количество сделок для каждой компании
+            from app.models.dispatch import Request
+            from app.services.reviews_service import ReviewsService
+
+            def get_company_metrics(company_id_: int) -> tuple[float, int]:
+                rating_data = ReviewsService.get_company_rating(db, company_id_)
+                avg_rating = float(rating_data.get("average_rating") or 0)
+
+                deals_count = (
+                    db.query(func.count(Request.id))
+                    .filter(
+                        Request.contractor_id == company_id_,
+                        Request.status == "completed",
+                    )
+                    .scalar()
+                    or 0
+                )
+
+                return round(avg_rating, 2) if avg_rating > 0 else 0.0, int(deals_count)
+
             for c in companies:
+                company_rating, company_deals = get_company_metrics(c.id)
                 vehicles_count = (
                     db.query(Vehicle).filter(Vehicle.company_id == c.id).count()
                 )
@@ -145,8 +166,8 @@ class PublicService:
                         city=getattr(c, "city", None),
                         phone=getattr(c, "phone", None),
                         website=getattr(c, "website", None),
-                        rating=4.5,  # TODO: реальный рейтинг из user_ratings
-                        total_deals=10,  # TODO: реальный подсчёт сделок
+                        rating=company_rating,
+                        total_deals=company_deals,
                         is_verified=bool(getattr(c, "is_verified", False)),
                         vehicles_count=vehicles_count,
                         created_at=c.created_at.isoformat() if c.created_at else None,
@@ -465,8 +486,6 @@ class PublicService:
             if not company or not company.is_active:
                 raise HTTPException(status_code=404, detail="Company not found")
 
-            # TODO: когда будет таблица Review - заменить на реальный подсчёт
-            # Сейчас возвращаем захардкоженные значения из PublicCompanyRead
             from sqlalchemy import func
 
             result = (
@@ -502,9 +521,6 @@ class PublicService:
             company = db.get(Company, company_id)
             if not company or not company.is_active:
                 raise HTTPException(status_code=404, detail="Company not found")
-
-            # TODO: когда будет таблица Review - заменить на реальные отзывы
-            # Сейчас возвращаем мок-данные для демонстрации
 
             reviews = (
                 db.query(Review)

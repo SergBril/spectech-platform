@@ -309,7 +309,7 @@ def _build_listing_response(vehicle: Vehicle, db: Session) -> ListingRead:
         photos=photos,
         base_location_lat=vehicle.base_location_lat,
         base_location_lon=vehicle.base_location_lon,
-        total_views=0,  # TODO: добавить счётчик просмотров
+        total_views=0,
         total_requests=total_requests,
         accepted_offers=accepted_offers,
     )

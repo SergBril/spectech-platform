@@ -80,9 +80,45 @@ async def check_and_notify_conflicts(
 
 
 async def send_alert_email(company_id: int, subject: str, body: str, db: Session):
-    """Stub для отправки email-уведомления диспетчерам."""
-    # TODO: Интеграция с email service (SMTP / SendGrid / SES)
-    logger.info(f"EMAIL STUB → company {company_id}: [{subject}] {body}")
+    """Отправка email-уведомления диспетчерам через EmailService."""
+    try:
+        from app.models.auth import User
+        from app.models.user_company import UserCompany
+        from app.services.email_service import EmailService
+
+        email_service = EmailService()
+
+        # Получаем email диспетчеров компании
+        dispatcher_emails = (
+            db.execute(
+                select(User.email)
+                .join(UserCompany, User.id == UserCompany.user_id)
+                .where(
+                    UserCompany.company_id == company_id,
+                    User.is_active == True,  # noqa: E712
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        if not dispatcher_emails:
+            logger.warning(f"No dispatcher emails found for company {company_id}")
+            return
+
+        for email_addr in dispatcher_emails:
+            email_service.send_email(
+                to_email=email_addr,
+                subject=f"[СпецТехника] {subject}",
+                body=body,
+            )
+
+        logger.info(
+            f"Alert email sent to {len(dispatcher_emails)} dispatcher(s) "
+            f"of company {company_id}: [{subject}]"
+        )
+    except Exception as e:
+        logger.error(f"Failed to send alert email: {e}")
 
     # Send FCM push to company dispatchers
     try:
@@ -106,9 +142,24 @@ async def send_alert_email(company_id: int, subject: str, body: str, db: Session
 
 
 async def send_telegram_alert(company_id: int, message: str):
-    """Stub для отправки Telegram-уведомления."""
-    # TODO: Интеграция с Telegram Bot API
-    # from app.core.config import settings
-    # bot_token = settings.TELEGRAM_BOT_TOKEN
-    # chat_id = settings.TELEGRAM_CHAT_ID
+    """Отправка Telegram-уведомления через TelegramService."""
+    try:
+        from app.services.telegram_service import telegram_service
+
+        if not await telegram_service.is_available():
+            logger.debug("Telegram service unavailable, skipping alert")
+            return
+
+        result = await telegram_service.send_alert(
+            title=f"Алерт компании #{company_id}",
+            message=message,
+            urgency="warning",
+        )
+
+        if result:
+            logger.info(
+                f"Telegram alert sent for company {company_id}: {message[:100]}"
+            )
+    except Exception as e:
+        logger.error(f"Failed to send Telegram alert: {e}")
     logger.info(f"TELEGRAM STUB → company {company_id}: {message}")
