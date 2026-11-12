@@ -1,6 +1,8 @@
 # Override для разработки — монтирует исходники для hot-reload
 services:
   backend:
+    ports:
+      - "8000:8000"
     volumes:
       - ./backend/app:/app/app
       - ./backend/tests:/app/tests
