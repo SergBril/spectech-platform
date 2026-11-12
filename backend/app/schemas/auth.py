@@ -79,8 +79,8 @@ class Token(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "access_token": "eyJhbGciOiJIUzI1NiIs...",
-                "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+                "access_token": "example-access-token",
+                "refresh_token": "example-refresh-token",
                 "token_type": "bearer",
             }
         }
@@ -97,8 +97,8 @@ class TokenResponse(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "access_token": "eyJhbGciOiJIUzI1NiIs...",
-                "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+                "access_token": "example-access-token",
+                "refresh_token": "example-refresh-token",
                 "token_type": "bearer",
             }
         }

@@ -6,3 +6,21 @@ useDefault = true
 [[allowlists]]
 description = "detect-secrets baseline stores SHA1 hashes of secrets, not secrets themselves"
 paths = ['''\.secrets\.baseline$''']
+
+[[allowlists]]
+description = "Expired dev JWTs in historical seed/test scripts; already removed from HEAD"
+commits = [
+  "5e277269ba8e0a2221f989117d825500056adaba",  # pragma: allowlist secret
+  "e781bb347dc851ba8bb9b077ece8b356d5505205",  # pragma: allowlist secret
+  "835f27ebfa3c5093a7245836753c573cc5519512",  # pragma: allowlist secret
+]
+paths = [
+  '''backend/scripts/seed_reconciliation\.py$''',
+  '''backend/scripts/seed_fuel_theft\.py$''',
+  '''test_chat_ws\.py$''',
+]
+
+[[allowlists]]
+description = "Truncated JWT strings used as OpenAPI examples; replaced in HEAD"
+commits = ["0d36d7c20451ead2f95c25a2ad1ff9ac74ae3a3e"]  # pragma: allowlist secret
+paths = ['''backend/app/schemas/auth\.py$''']
