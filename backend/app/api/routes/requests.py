@@ -511,6 +511,38 @@ async def get_matching_vehicles(
     }
 
 
+@router.post("/{request_id}/complete", response_model=RequestRead)
+async def complete_request(
+    request_id: int,
+    final_amount: float | None = Body(default=None, description="Итоговая сумма"),
+    comment: str | None = Body(default=None, description="Комментарий к завершению"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+    _: None = Depends(require_permission("requests", "update")),
+):
+    """
+    🎯 Завершить заявку.
+
+    Переводит заявку в статус 'completed' и автоматически создаёт акт выполненных работ.
+
+    Требует permission: requests:update
+    """
+    from app.services.request_service import RequestService, RequestServiceError
+
+    svc = RequestService(db)
+    try:
+        return await svc.complete_request(
+            request_id=request_id,
+            company_id=company_id,
+            user_id=current_user.id,
+            final_amount=final_amount,
+            comment=comment,
+        )
+    except RequestServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+
 @router.delete("/{request_id}", summary="🗑️ Удалить (отменить) заявку")
 async def delete_request(
     request_id: int,

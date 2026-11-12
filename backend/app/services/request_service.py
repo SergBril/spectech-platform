@@ -964,6 +964,125 @@ class RequestService:
         self.db.commit()
         return {"message": "Заявка обновлена", "id": request_id}
 
+    async def complete_request(
+        self,
+        request_id: int,
+        company_id: int,
+        user_id: int,
+        final_amount: float | None = None,
+        comment: str | None = None,
+    ) -> Request:
+        """
+        Завершить заявку: перевести в статус 'completed' и автоматически создать акт.
+
+        Логика:
+        1. Проверить что заявка в статусе assigned/confirmed/in_progress
+        2. Перевести в статус completed
+        3. Установить actual_end = now
+        4. Вычислить final_amount (или использовать переданный)
+        5. Автоматически создать Act из заявки
+        6. Автоматически сгенерировать PDF акта
+        """
+        from datetime import date, datetime
+        from decimal import Decimal
+
+        from app.models.dispatch import RequestStatus, RequestStatusLog
+        from app.models.finance import Act, DocumentStatus
+        from app.services.finance_service import (
+            generate_and_save_act_pdf,
+            generate_document_number,
+        )
+
+        request = self.db.get(Request, request_id)
+        if not request or request.company_id != company_id:
+            raise RequestServiceError(404, "Request not found")
+
+        allowed = (
+            RequestStatus.assigned,
+            RequestStatus.confirmed,
+            RequestStatus.in_progress,
+        )
+        if request.status not in allowed:
+            raise RequestServiceError(
+                409,
+                f"Cannot complete request with status '{request.status.value}'",
+            )
+
+        old_status = request.status
+        request.status = RequestStatus.completed
+        request.actual_end = datetime.utcnow()
+
+        if final_amount is not None:
+            request.final_amount = Decimal(str(final_amount))
+        elif request.estimated_amount:
+            request.final_amount = request.estimated_amount
+        elif request.client_rate and request.shift_duration_hours:
+            request.final_amount = request.client_rate * request.shift_duration_hours
+        else:
+            request.final_amount = Decimal("0")
+
+        self.db.add(
+            RequestStatusLog(
+                request_id=request.id,
+                from_status=(
+                    old_status.value
+                    if hasattr(old_status, "value")
+                    else str(old_status)
+                ),
+                to_status="completed",
+                changed_by_user_id=user_id,
+                comment=comment or f"Заявка завершена пользователем #{user_id}",
+            )
+        )
+        self.db.flush()
+
+        act = None
+        if request.final_amount and request.final_amount > 0:
+            subtotal = request.final_amount
+            vat_amount = (subtotal * Decimal("20") / Decimal("120")).quantize(
+                Decimal("0.01")
+            )
+
+            act = Act(
+                document_number=generate_document_number(self.db, "ACT"),
+                request_id=request.id,
+                client_id=request.client_id,
+                company_id=request.company_id,
+                total_amount=subtotal,
+                vat_amount=vat_amount,
+                vat_rate=Decimal("20"),
+                tax_system="OSNO",
+                is_vat_included=True,
+                act_date=date.today(),
+                status=DocumentStatus.draft,
+                comment=f"Автосоздан при завершении заявки #{request.id}",
+            )
+            self.db.add(act)
+            self.db.flush()
+            logger.info(
+                "Auto-created Act #%s for Request #%s: total=%s",
+                act.id,
+                request.id,
+                act.total_amount,
+            )
+
+        self.db.commit()
+        self.db.refresh(request)
+
+        if act:
+            try:
+                pdf_result = generate_and_save_act_pdf(act.id, self.db)
+                if pdf_result:
+                    logger.info(
+                        "PDF auto-generated for act #%s: %s",
+                        act.id,
+                        pdf_result.get("path"),
+                    )
+            except Exception as e:
+                logger.warning(f"PDF generation failed for act #{act.id}: {e}")
+
+        return request
+
     async def update_request_patch(
         self,
         request_id: int,
