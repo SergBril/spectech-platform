@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.db import SessionLocal
@@ -161,7 +162,7 @@ def sync_gps_positions() -> None:
                             ).scalars()
                         )
 
-                    new_points = 0
+                    rows_to_insert = []
                     for pos in vpositions:
                         if pos.latitude == 0 and pos.longitude == 0:
                             continue
@@ -170,28 +171,36 @@ def sync_gps_positions() -> None:
                         if pos.recorded_at in seen:
                             continue
                         seen.add(pos.recorded_at)
-
-                        db.add(
-                            GpsPoint(
-                                vehicle_id=vid,
-                                latitude=pos.latitude,
-                                longitude=pos.longitude,
-                                altitude=getattr(pos, "altitude", None),
-                                speed=pos.speed,
-                                heading=pos.heading,
-                                engine_on=pos.engine_on,
-                                fuel_level=getattr(pos, "fuel_level", None),
-                                engine_hours=getattr(pos, "engine_hours", None),
-                                signal_quality=getattr(pos, "signal_quality", None),
-                                recorded_at=pos.recorded_at,
-                                received_at=datetime.now(UTC),
-                                device_id=(
+                        rows_to_insert.append(
+                            {
+                                "vehicle_id": vid,
+                                "latitude": pos.latitude,
+                                "longitude": pos.longitude,
+                                "altitude": getattr(pos, "altitude", None),
+                                "speed": pos.speed,
+                                "heading": pos.heading,
+                                "engine_on": pos.engine_on,
+                                "fuel_level": getattr(pos, "fuel_level", None),
+                                "engine_hours": getattr(pos, "engine_hours", None),
+                                "signal_quality": getattr(pos, "signal_quality", None),
+                                "recorded_at": pos.recorded_at,
+                                "received_at": datetime.now(UTC),
+                                "device_id": (
                                     pos.raw_data.get("imei") if pos.raw_data else None
                                 ),
-                                raw_data=pos.raw_data,
-                            )
+                                "raw_data": pos.raw_data,
+                            }
                         )
-                        new_points += 1
+
+                    # ON CONFLICT makes duplicates impossible even if another
+                    # instance inserts the same (vehicle_id, recorded_at).
+                    new_points = 0
+                    if rows_to_insert:
+                        stmt = pg_insert(GpsPoint).values(rows_to_insert)
+                        stmt = stmt.on_conflict_do_nothing(
+                            index_elements=["vehicle_id", "recorded_at"]
+                        )
+                        new_points = db.execute(stmt).rowcount or 0
 
                     name = vname_by_id.get(vid, f"Vehicle #{vid}")
                     if new_points > 0:
