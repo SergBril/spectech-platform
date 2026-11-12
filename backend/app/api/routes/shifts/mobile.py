@@ -2,7 +2,7 @@
 
 from datetime import UTC
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,9 +20,9 @@ router = APIRouter()
 @router.post("/report/{task_id}")
 async def submit_mobile_shift_report(
     task_id: int,
-    odometer_start: float | None = Body(default=None),
-    odometer_end: float | None = Body(default=None),
-    notes: str = Body(default=""),
+    odometer_start: float | None = Form(default=None),
+    odometer_end: float | None = Form(default=None),
+    notes: str = Form(default=""),
     photos: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -363,9 +363,9 @@ async def submit_pre_shift_checklist_alias(
 @router.post("/tasks/{task_id}/mobile-report")
 async def submit_mobile_report_alias(
     task_id: int,
-    odometer_start: float | None = Body(default=None),
-    odometer_end: float | None = Body(default=None),
-    notes: str = Body(default=""),
+    odometer_start: float | None = Form(default=None),
+    odometer_end: float | None = Form(default=None),
+    notes: str = Form(default=""),
     photos: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

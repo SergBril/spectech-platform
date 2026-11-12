@@ -21,8 +21,8 @@ const DriverAppPage: React.FC = () => {
 
   const loadShifts = async () => {
     try {
-      const res = await apiClient.get('/drivers/my-shifts');
-      setShifts(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      const res = await apiClient.get('/driver/my-shifts');
+      const data = res.data; setShifts(Array.isArray(data) ? data : data?.shifts || data?.items || []);
     } catch {} finally { setLoading(false); }
   };
 
@@ -68,7 +68,7 @@ const DriverAppPage: React.FC = () => {
   const submitQrFuel = async () => {
     if (!qrModal || !qrInput.trim()) return;
     try {
-      const res = await apiClient.post('/shifts/fuel-cards/qr-scan', { qr_data: qrInput, shift_task_id: qrModal });
+      const res = await apiClient.post('/shifts/mobile/fuel/qr', { qr_data: qrInput, shift_task_id: qrModal });
       alert(res.data.message + (res.data.consumption_per_100km ? `\nРасход: ${res.data.consumption_per_100km} л/100км` : ''));
       setQrModal(null);
       setQrInput('');

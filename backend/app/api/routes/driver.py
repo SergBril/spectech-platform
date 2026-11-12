@@ -27,6 +27,16 @@ def _get_employee_contractor_id(db: Session, user_id: int) -> int:
     return employee.contractor_id
 
 
+def _get_vehicle_name(db: Session, vehicle_id: int | None) -> str | None:
+    """Get vehicle name by ID."""
+    if not vehicle_id:
+        return None
+    from app.models.catalog import Vehicle
+
+    vehicle = db.get(Vehicle, vehicle_id)
+    return vehicle.name if vehicle else None
+
+
 @router.get("/my-shifts")
 def get_my_shifts(
     status: str | None = None,
@@ -53,6 +63,17 @@ def get_my_shifts(
                 "shift_date": t.shift_date.isoformat(),
                 "status": t.status.value if hasattr(t.status, "value") else t.status,
                 "vehicle_id": getattr(t, "vehicle_id", None),
+                "vehicle_name": _get_vehicle_name(db, t.vehicle_id),
+                "planned_start": (
+                    t.planned_start.isoformat()
+                    if getattr(t, "planned_start", None)
+                    else None
+                ),
+                "planned_end": (
+                    t.planned_end.isoformat()
+                    if getattr(t, "planned_end", None)
+                    else None
+                ),
                 "address": getattr(t, "address", None),
                 "description": getattr(t, "description", None),
             }
