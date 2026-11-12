@@ -1,3 +1,5 @@
+# TEMPLATE ONLY - never use these values.
+# Generate real secrets: openssl rand -hex 32
 # =============================================================================
 # SpectechPlatform Environment Variables
 # =============================================================================
@@ -8,7 +10,7 @@
 # DATABASE (PostgreSQL)
 # =============================================================================
 POSTGRES_USER=spectech
-POSTGRES_PASSWORD=change-this-secure-password # pragma: allowlist secret
+POSTGRES_PASSWORD=changeme_postgres_password
 POSTGRES_DB=spectech
 
 # =============================================================================
@@ -20,14 +22,14 @@ POSTGRES_DB=spectech
 # MINIO (S3-совместимое хранилище)
 # =============================================================================
 MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=change-this-minio-password  # pragma: allowlist secret
+MINIO_ROOT_PASSWORD=changeme_minio_password
 
 # =============================================================================
 # JWT AUTHENTICATION
 # =============================================================================
 # ВАЖНО: Сгенерируйте безопасный секретный ключ для production!
 # Генерация: python -c "import secrets; print(secrets.token_urlsafe(64))"
-JWT_SECRET_KEY=change-this-to-secure-random-string-in-production  # pragma: allowlist secret
+JWT_SECRET_KEY=changeme_generate_with_openssl_rand_hex_32
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=30

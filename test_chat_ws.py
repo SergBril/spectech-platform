@@ -2,15 +2,40 @@
 
 import asyncio
 import json
+import os
+import urllib.request
+
 import websockets
+
+API_BASE = os.environ.get("API_BASE", "http://localhost:8000/api/v1")
+WS_BASE = os.environ.get("WS_BASE", "ws://localhost:8000")
+
+
+def _get_token() -> str:
+    """Fetch a fresh JWT via login. Never hardcode tokens in the repo."""
+    token = os.environ.get("TEST_TOKEN")
+    if token:
+        return token
+    password = os.environ.get("TEST_PASSWORD")
+    if not password:
+        raise SystemExit(
+            "Set TEST_PASSWORD (or TEST_TOKEN) env var before running this script."
+        )
+    email = os.environ.get("TEST_EMAIL", "admin@spectech.dev")
+    req = urllib.request.Request(
+        f"{API_BASE}/auth/login",
+        data=json.dumps({"email": email, "password": password}).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read())["access_token"]
 
 
 async def test_chat():
-    # Получите актуальный токен через /api/v1/auth/login
-    token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJhZG1pbkBzcGVjdGVjaC5kZXYiLCJleHAiOjE3OTAwNzA2NDcsImlhdCI6MTc4OTk4NDI0N30._QUyTr6yjcb4KHdju_XJNX95UvbTT97iBRvBw1WHoLA"
+    token = _get_token()
     chat_id = 1
 
-    uri = f"ws://localhost:8000/api/v1/chat/ws/{chat_id}?token={token}"
+    uri = f"{WS_BASE}/api/v1/chat/ws/{chat_id}?token={token}"
 
     async with websockets.connect(uri) as ws:
         print("✅ WebSocket connected!")
