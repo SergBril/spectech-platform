@@ -20,6 +20,14 @@ class Settings(BaseSettings):
         "postgresql+psycopg://spectech:spectech_dev_password@localhost:5470/spectech?sslmode=disable"
     )
 
+    # Connection pool PER uvicorn worker. Total = workers * (size + overflow).
+    # entrypoint.sh defaults to 4 workers, so 4 * (5 + 10) = 60, leaving
+    # headroom under Postgres max_connections=100 for psql / alembic /
+    # GlitchTip. The previous 10 + 20 allowed 4 * 30 = 120 > 100.
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_timeout: int = 30
+
     # Diadoc (EDO)
     DIADOC_API_KEY: str = ""
     DIADOC_BOX_ID: str = ""

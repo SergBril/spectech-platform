@@ -17,9 +17,9 @@ engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
     pool_recycle=1800,  # 30 min — well below PG default idle_in_transaction_session_timeout
-    pool_size=10,
-    max_overflow=20,
-    pool_timeout=30,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_timeout=settings.db_pool_timeout,
     connect_args=(
         {"sslmode": "disable"} if "postgresql" in settings.database_url else {}
     ),
