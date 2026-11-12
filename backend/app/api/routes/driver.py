@@ -56,30 +56,51 @@ def get_my_shifts(
         stmt = stmt.where(ShiftTask.status == status)
 
     tasks = db.scalars(stmt).all()
-    return {
-        "shifts": [
+
+    # Batch-load vehicles + assignments (avoids N+1)
+    from app.models.catalog import Vehicle
+    from app.models.dispatch import RequestAssignment
+
+    vids = {t.vehicle_id for t in tasks if t.vehicle_id}
+    vehicles = (
+        db.execute(select(Vehicle).where(Vehicle.id.in_(vids))).scalars().all()
+        if vids
+        else []
+    )
+    veh_by_id = {v.id: v for v in vehicles}
+
+    aids = {t.assignment_id for t in tasks if getattr(t, "assignment_id", None)}
+    assignments = (
+        db.execute(select(RequestAssignment).where(RequestAssignment.id.in_(aids)))
+        .scalars()
+        .all()
+        if aids
+        else []
+    )
+    asg_by_id = {a.id: a for a in assignments}
+
+    shifts = []
+    for t in tasks:
+        veh = veh_by_id.get(t.vehicle_id)
+        asg = asg_by_id.get(getattr(t, "assignment_id", None))
+        shifts.append(
             {
                 "id": t.id,
                 "shift_date": t.shift_date.isoformat(),
                 "status": t.status.value if hasattr(t.status, "value") else t.status,
-                "vehicle_id": getattr(t, "vehicle_id", None),
-                "vehicle_name": _get_vehicle_name(db, t.vehicle_id),
+                "vehicle_id": t.vehicle_id,
+                "vehicle_name": veh.name if veh else None,
                 "planned_start": (
-                    t.planned_start.isoformat()
-                    if getattr(t, "planned_start", None)
-                    else None
+                    asg.planned_start.isoformat() if asg and asg.planned_start else None
                 ),
                 "planned_end": (
-                    t.planned_end.isoformat()
-                    if getattr(t, "planned_end", None)
-                    else None
+                    asg.planned_end.isoformat() if asg and asg.planned_end else None
                 ),
                 "address": getattr(t, "address", None),
                 "description": getattr(t, "description", None),
             }
-            for t in tasks
-        ]
-    }
+        )
+    return {"shifts": shifts}
 
 
 @router.post("/shifts/{task_id}/start")

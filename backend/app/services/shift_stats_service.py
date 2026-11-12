@@ -17,6 +17,74 @@ from app.models.shift import (
 logger = logging.getLogger("spectech.shift_stats")
 
 
+def _load_hours_sources(db, tasks):
+    """Batch-load ShiftReports + RequestAssignments for tasks (avoids N+1)."""
+    from app.models.dispatch import RequestAssignment
+    from app.models.shift import ShiftReport
+
+    task_ids = [t.id for t in tasks if getattr(t, "id", None) is not None]
+    report_by_task = {}
+    if task_ids:
+        reports = (
+            db.execute(
+                select(ShiftReport).where(ShiftReport.shift_task_id.in_(task_ids))
+            )
+            .scalars()
+            .all()
+        )
+        for r in reports:
+            report_by_task.setdefault(r.shift_task_id, r)
+
+    assignment_ids = [
+        t.assignment_id for t in tasks if getattr(t, "assignment_id", None)
+    ]
+    assign_by_id = {}
+    if assignment_ids:
+        rows = (
+            db.execute(
+                select(RequestAssignment).where(
+                    RequestAssignment.id.in_(assignment_ids)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assign_by_id = {a.id: a for a in rows}
+
+    return report_by_task, assign_by_id
+
+
+def _task_hours(t, report_by_task, assign_by_id) -> float:
+    """Worked hours for one shift task.
+
+    Priority: final_moto_hours > operator_moto_hours > work_end-work_start
+    > assignment planned duration > task planned duration (projection).
+    """
+    r = report_by_task.get(getattr(t, "id", None))
+    if r is not None:
+        if getattr(r, "final_moto_hours", None):
+            return round(float(r.final_moto_hours), 2)
+        if getattr(r, "operator_moto_hours", None):
+            return round(float(r.operator_moto_hours), 2)
+        ws = getattr(r, "operator_work_start", None)
+        we = getattr(r, "operator_work_end", None)
+        if ws and we:
+            return round(max(0.0, (we - ws).total_seconds() / 3600), 2)
+
+    a = assign_by_id.get(getattr(t, "assignment_id", None))
+    ps = getattr(a, "planned_start", None)
+    pe = getattr(a, "planned_end", None)
+    if ps and pe:
+        return round(max(0.0, (pe - ps).total_seconds() / 3600), 2)
+
+    ps = getattr(t, "planned_start", None)
+    pe = getattr(t, "planned_end", None)
+    if ps and pe:
+        return round(max(0.0, (pe - ps).total_seconds() / 3600), 2)
+
+    return 0.0
+
+
 class ShiftStatsService:
     """Бизнес-логика статистики смен."""
 
@@ -188,6 +256,8 @@ class ShiftStatsService:
             cell.font = header_font
             cell.alignment = Alignment(horizontal="center")
 
+        rpt_by_task, asg_by_id = _load_hours_sources(db, tasks)
+
         kpi_rows = []
         for profile in drivers:
             emp = db.get(Employee, profile.employee_contractor_id)
@@ -203,18 +273,7 @@ class ShiftStatsService:
             util_pct = (
                 round((active_days / total_days) * 100, 1) if total_days > 0 else 0
             )
-            hours = sum(
-                max(
-                    0,
-                    (
-                        getattr(t, "planned_end", None)
-                        - getattr(t, "planned_start", None)
-                    ).total_seconds()
-                    / 3600,
-                )
-                for t in d_tasks
-                if getattr(t, "planned_start", None) and getattr(t, "planned_end", None)
-            )
+            hours = sum(_task_hours(t, rpt_by_task, asg_by_id) for t in d_tasks)
             completed = len([t for t in d_tasks if t.status == "completed"])
             comp_rate = round((completed / len(d_tasks)) * 100, 1) if d_tasks else 0
             rating = round(
@@ -256,9 +315,7 @@ class ShiftStatsService:
             fill = (
                 green_fill
                 if rating >= 70
-                else yellow_fill
-                if rating >= 40
-                else red_fill
+                else yellow_fill if rating >= 40 else red_fill
             )
             ws.cell(row=row_idx, column=3).fill = fill
 
@@ -436,15 +493,15 @@ class ShiftStatsService:
             ws.cell(
                 row=row_idx, column=6, value=v["amortization_cost"]
             ).number_format = "#,##0"
-            ws.cell(
-                row=row_idx, column=7, value=v["total_expenses"]
-            ).number_format = "#,##0"
+            ws.cell(row=row_idx, column=7, value=v["total_expenses"]).number_format = (
+                "#,##0"
+            )
             margin_cell = ws.cell(row=row_idx, column=8, value=v["margin"])
             margin_cell.number_format = "#,##0"
             margin_cell.font = green_font if v["margin"] >= 0 else red_font
-            ws.cell(
-                row=row_idx, column=9, value=v["margin_pct"]
-            ).number_format = '0.0"%"'
+            ws.cell(row=row_idx, column=9, value=v["margin_pct"]).number_format = (
+                '0.0"%"'
+            )
 
         for col_cells in ws.columns:
             max_len = max(len(str(cell.value or "")) for cell in col_cells)
@@ -947,6 +1004,8 @@ class ShiftStatsService:
             .all()
         )
 
+        rpt_by_task, asg_by_id = _load_hours_sources(db, tasks)
+
         kpi_list = []
         for profile in drivers:
             emp = db.get(Employee, profile.employee_contractor_id)
@@ -966,18 +1025,7 @@ class ShiftStatsService:
                 round((active_days / total_days) * 100, 1) if total_days > 0 else 0
             )
 
-            total_hours = sum(
-                max(
-                    0,
-                    (
-                        getattr(t, "planned_end", None)
-                        - getattr(t, "planned_start", None)
-                    ).total_seconds()
-                    / 3600,
-                )
-                for t in d_tasks
-                if getattr(t, "planned_start", None) and getattr(t, "planned_end", None)
-            )
+            total_hours = sum(_task_hours(t, rpt_by_task, asg_by_id) for t in d_tasks)
 
             completed = len([t for t in d_tasks if t.status == "completed"])
             completion_rate = (
