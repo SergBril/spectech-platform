@@ -419,3 +419,301 @@ class TestWialonAdapter:
         ):
             result = adapter.get_all_positions_sync()
             assert result == [fake_point]
+
+
+# --- WialonAdapter remaining methods ---
+
+
+class TestWialonAdapterRemaining:
+    """Cover wialon.py lines 131-296: _fetch_positions, get_track, test_connection."""
+
+    @pytest.fixture
+    def adapter(self):
+        from app.services.gps_providers.wialon import WialonAdapter
+
+        return WialonAdapter(
+            config={
+                "api_url": "https://hst-api.wialon.com/",
+                "login": "testuser",
+                "password": "testpass",
+            }
+        )
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_success(self, adapter):
+        """Cover lines 131-206: full _fetch_positions flow."""
+        mock_client = MagicMock()
+
+        # Two sequential _api_call responses: search_items then messages/load_last
+        search_response = {"items": [{"id": 1}, {"id": 2}]}
+        messages_response = {
+            "messages": [
+                {
+                    "uid": 1,
+                    "t": 1700000000,
+                    "pos": {"y": 55.75, "x": 37.61, "s": 100, "c": 90},
+                },
+                {
+                    "uid": 2,
+                    "t": 1700000001,
+                    "pos": {"y": 55.76, "x": 37.62, "s": 200, "c": 180},
+                },
+            ]
+        }
+
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter,
+                "_api_call",
+                new_callable=AsyncMock,
+                side_effect=[search_response, messages_response],
+            ):
+                result = await adapter._fetch_positions()
+
+                assert len(result) == 2
+                assert result[0].latitude == 55.75
+                assert result[0].longitude == 37.61
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_no_units(self, adapter):
+        """Cover lines 150-152: empty units list returns []."""
+        mock_client = MagicMock()
+
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter,
+                "_api_call",
+                new_callable=AsyncMock,
+                return_value={"items": []},
+            ):
+                result = await adapter._fetch_positions()
+                assert result == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_no_messages(self, adapter):
+        """Cover lines 169-171: empty messages returns []."""
+        mock_client = MagicMock()
+
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter,
+                "_api_call",
+                new_callable=AsyncMock,
+                side_effect=[{"items": [{"id": 1}]}, {"messages": []}],
+            ):
+                result = await adapter._fetch_positions()
+                assert result == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_skip_zero_coords(self, adapter):
+        """Cover lines 183-184: lat=0 and lon=0 skipped."""
+        mock_client = MagicMock()
+        messages_response = {
+            "messages": [
+                {"uid": 1, "t": 1700000000, "pos": {"y": 0, "x": 0}},  # skip
+                {"uid": 2, "t": 1700000001, "pos": {"y": 55.75, "x": 37.61}},  # keep
+            ]
+        }
+
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter,
+                "_api_call",
+                new_callable=AsyncMock,
+                side_effect=[{"items": [{"id": 1}, {"id": 2}]}, messages_response],
+            ):
+                result = await adapter._fetch_positions()
+                assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_fetch_positions_parse_exception_handled(self, adapter):
+        """Cover lines 201-202: parse exception logged but not raised."""
+        mock_client = MagicMock()
+        messages_response = {
+            "messages": [
+                {
+                    "uid": 1,
+                    "t": "invalid",
+                    "pos": {"y": 55.75, "x": 37.61},
+                },  # invalid timestamp
+            ]
+        }
+
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter,
+                "_api_call",
+                new_callable=AsyncMock,
+                side_effect=[{"items": [{"id": 1}]}, messages_response],
+            ):
+                # Should not raise, but return empty or partial result
+                result = await adapter._fetch_positions()
+                # Result may be empty due to parse error, but no exception
+                assert isinstance(result, list)
+
+    @pytest.mark.asyncio
+    async def test_get_track_success(self, adapter):
+        """Cover lines 208-277: get_track normal flow."""
+        mock_client = MagicMock()
+        messages_response = {
+            "messages": [
+                {
+                    "uid": 1,
+                    "t": 1700000000,
+                    "pos": {"y": 55.75, "x": 37.61, "s": 100, "c": 90},
+                },
+                {
+                    "uid": 2,
+                    "t": 1700000001,
+                    "pos": {"y": 55.76, "x": 37.62, "s": 200, "c": 180},
+                },
+            ]
+        }
+
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter,
+                "_api_call",
+                new_callable=AsyncMock,
+                side_effect=[{"items": [{"id": 1}]}, messages_response],
+            ):
+                result = await adapter.get_track(
+                    date_from=datetime(2026, 1, 1),
+                    date_to=datetime(2026, 1, 2),
+                    limit=10,
+                )
+
+                assert len(result) == 2
+                assert result[0].latitude == 55.75
+
+    @pytest.mark.asyncio
+    async def test_get_track_no_units(self, adapter):
+        """Cover lines 228-229: empty units returns []."""
+        mock_client = MagicMock()
+
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter,
+                "_api_call",
+                new_callable=AsyncMock,
+                return_value={"items": []},
+            ):
+                result = await adapter.get_track(
+                    date_from=datetime(2026, 1, 1),
+                    date_to=datetime(2026, 1, 2),
+                )
+                assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_track_respects_limit(self, adapter):
+        """Cover line 277: result sliced by limit."""
+        mock_client = MagicMock()
+        # Generate 5 messages
+        messages = [
+            {
+                "uid": i,
+                "t": 1700000000 + i,
+                "pos": {"y": 55.75 + i * 0.01, "x": 37.61 + i * 0.01},
+            }
+            for i in range(5)
+        ]
+        messages_response = {"messages": messages}
+
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter,
+                "_api_call",
+                new_callable=AsyncMock,
+                side_effect=[{"items": [{"id": 1}]}, messages_response],
+            ):
+                result = await adapter.get_track(
+                    date_from=datetime(2026, 1, 1),
+                    date_to=datetime(2026, 1, 2),
+                    limit=3,
+                )
+
+                assert len(result) == 3
+
+    @pytest.mark.asyncio
+    async def test_test_connection_with_db(self, adapter):
+        """Cover lines 279-287: test_connection with db delegates to _logged_call."""
+        mock_db = Mock()
+
+        with patch.object(
+            adapter, "_logged_call", new_callable=AsyncMock, return_value=True
+        ) as mock_logged:
+            result = await adapter.test_connection(db=mock_db, company_id=1)
+
+            assert result is True
+            mock_logged.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_test_connection_without_db(self, adapter):
+        """Cover line 288: test_connection without db calls _test_connection_impl."""
+        with patch.object(
+            adapter, "_test_connection_impl", new_callable=AsyncMock, return_value=True
+        ) as mock_impl:
+            result = await adapter.test_connection(db=None)
+
+            assert result is True
+            mock_impl.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_test_connection_impl_success(self, adapter):
+        """Cover lines 289-294: successful connection test."""
+        mock_client = MagicMock()
+
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter,
+                "_ensure_token",
+                new_callable=AsyncMock,
+                return_value="valid-token",
+            ):
+                result = await adapter._test_connection_impl()
+                assert result is True
+
+    @pytest.mark.asyncio
+    async def test_test_connection_impl_exception(self, adapter):
+        """Cover lines 295-296: exception returns False."""
+        mock_client = MagicMock()
+
+        with patch(
+            "app.services.gps_providers.wialon.create_retry_client",
+            return_value=mock_client_cm(mock_client),
+        ):
+            with patch.object(
+                adapter,
+                "_ensure_token",
+                new_callable=AsyncMock,
+                side_effect=Exception("Network error"),
+            ):
+                result = await adapter._test_connection_impl()
+                assert result is False
