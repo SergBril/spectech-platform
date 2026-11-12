@@ -1,7 +1,8 @@
 ﻿"""Unit tests for RequestService.complete_request."""
 
+from datetime import datetime
 from decimal import Decimal
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -17,6 +18,7 @@ class TestCompleteRequest:
         db.commit = Mock()
         db.refresh = Mock()
         db.get = Mock()
+        db.scalar = Mock(return_value=None)
         return db
 
     @pytest.fixture
@@ -25,186 +27,169 @@ class TestCompleteRequest:
 
         return RequestService(mock_db)
 
-    @pytest.mark.asyncio
-    async def test_complete_request_not_found(self, request_service, mock_db):
-        """Request not found raises 404."""
-        mock_db.get = Mock(return_value=None)
-
-        from app.services.request_service import RequestServiceError
-
-        with pytest.raises(RequestServiceError) as exc_info:
-            await request_service.complete_request(
-                request_id=999, company_id=1, user_id=1
-            )
-        assert exc_info.value.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_complete_request_wrong_company(self, request_service, mock_db):
-        """Request from another company raises 404."""
+    def _make_request(self, status, **kwargs):
         from app.models.dispatch import Request
 
-        request = Mock(spec=Request)
-        request.id = 1
-        request.company_id = 2  # Different company
-        mock_db.get = Mock(return_value=request)
-
-        from app.services.request_service import RequestServiceError
-
-        with pytest.raises(RequestServiceError) as exc_info:
-            await request_service.complete_request(
-                request_id=1, company_id=1, user_id=1
-            )
-        assert exc_info.value.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_complete_request_wrong_status(self, request_service, mock_db):
-        """Request in wrong status raises 409."""
-        from app.models.dispatch import Request, RequestStatus
-
-        request = Mock(spec=Request)
-        request.id = 1
-        request.company_id = 1
-        request.status = RequestStatus.new  # Not allowed
-        mock_db.get = Mock(return_value=request)
-
-        from app.services.request_service import RequestServiceError
-
-        with pytest.raises(RequestServiceError) as exc_info:
-            await request_service.complete_request(
-                request_id=1, company_id=1, user_id=1
-            )
-        assert exc_info.value.status_code == 409
+        req = Mock(spec=Request)
+        req.id = kwargs.get("id", 1)
+        req.company_id = kwargs.get("company_id", 1)
+        req.client_id = kwargs.get("client_id", 10)
+        req.status = status
+        req.estimated_amount = kwargs.get("estimated_amount")
+        req.client_rate = kwargs.get("client_rate")
+        req.shift_duration_hours = kwargs.get("shift_duration_hours")
+        req.final_amount = None
+        req.actual_end = None
+        return req
 
     @pytest.mark.asyncio
-    async def test_complete_request_with_explicit_amount(
-        self, request_service, mock_db
-    ):
-        """Complete request with explicitly provided final_amount."""
-        from app.models.dispatch import Request, RequestStatus
+    async def test_not_found(self, request_service, mock_db):
+        mock_db.get = Mock(return_value=None)
+        from app.services.request_service import RequestServiceError
 
-        request = Mock(spec=Request)
-        request.id = 1
-        request.company_id = 1
-        request.client_id = 10
-        request.status = RequestStatus.assigned
-        request.estimated_amount = None
-        request.client_rate = None
-        request.shift_duration_hours = None
+        with pytest.raises(RequestServiceError) as exc:
+            await request_service.complete_request(999, 1, 1)
+        assert exc.value.status_code == 404
 
-        mock_db.get = Mock(return_value=request)
+    @pytest.mark.asyncio
+    async def test_wrong_company(self, request_service, mock_db):
+        from app.models.dispatch import RequestStatus
 
-        # Mock Act creation
-        with patch(
-            "app.services.request_service.generate_document_number",
-            return_value="ACT-2026-0001",
-        ):
-            with patch(
-                "app.services.request_service.generate_and_save_act_pdf",
-                return_value=None,
-            ):
-                result = await request_service.complete_request(
-                    request_id=1,
-                    company_id=1,
-                    user_id=1,
-                    final_amount=50000.0,
-                    comment="Test completion",
-                )
+        req = self._make_request(RequestStatus.assigned, company_id=2)
+        mock_db.get = Mock(return_value=req)
+        from app.services.request_service import RequestServiceError
+
+        with pytest.raises(RequestServiceError) as exc:
+            await request_service.complete_request(1, 1, 1)
+        assert exc.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_wrong_status(self, request_service, mock_db):
+        from app.models.dispatch import RequestStatus
+
+        req = self._make_request(RequestStatus.new)
+        mock_db.get = Mock(return_value=req)
+        from app.services.request_service import RequestServiceError
+
+        with pytest.raises(RequestServiceError) as exc:
+            await request_service.complete_request(1, 1, 1)
+        assert exc.value.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_completed_status_blocked(self, request_service, mock_db):
+        """Cannot complete already completed request."""
+        from app.models.dispatch import RequestStatus
+
+        req = self._make_request(RequestStatus.completed)
+        mock_db.get = Mock(return_value=req)
+        from app.services.request_service import RequestServiceError
+
+        with pytest.raises(RequestServiceError) as exc:
+            await request_service.complete_request(1, 1, 1)
+        assert exc.value.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_explicit_amount(self, request_service, mock_db):
+        from app.models.dispatch import RequestStatus
+
+        req = self._make_request(RequestStatus.assigned)
+        mock_db.get = Mock(return_value=req)
+
+        result = await request_service.complete_request(1, 1, 1, final_amount=50000.0)
 
         assert result.status == RequestStatus.completed
         assert result.final_amount == Decimal("50000")
-        assert mock_db.add.called
         assert mock_db.commit.called
 
     @pytest.mark.asyncio
-    async def test_complete_request_with_estimated_amount(
-        self, request_service, mock_db
-    ):
-        """Complete request uses estimated_amount if no explicit amount."""
-        from app.models.dispatch import Request, RequestStatus
+    async def test_uses_estimated_amount(self, request_service, mock_db):
+        from app.models.dispatch import RequestStatus
 
-        request = Mock(spec=Request)
-        request.id = 1
-        request.company_id = 1
-        request.client_id = 10
-        request.status = RequestStatus.in_progress
-        request.estimated_amount = Decimal("75000")
-        request.client_rate = None
-        request.shift_duration_hours = None
+        req = self._make_request(
+            RequestStatus.in_progress,
+            estimated_amount=Decimal("75000"),
+        )
+        mock_db.get = Mock(return_value=req)
 
-        mock_db.get = Mock(return_value=request)
-
-        with patch(
-            "app.services.request_service.generate_document_number",
-            return_value="ACT-2026-0002",
-        ):
-            with patch(
-                "app.services.request_service.generate_and_save_act_pdf",
-                return_value=None,
-            ):
-                result = await request_service.complete_request(
-                    request_id=1, company_id=1, user_id=1
-                )
+        result = await request_service.complete_request(1, 1, 1)
 
         assert result.final_amount == Decimal("75000")
 
     @pytest.mark.asyncio
-    async def test_complete_request_calculated_from_rate(
-        self, request_service, mock_db
-    ):
-        """Complete request calculates final_amount from rate * hours."""
-        from app.models.dispatch import Request, RequestStatus
+    async def test_calculated_from_rate_and_hours(self, request_service, mock_db):
+        from app.models.dispatch import RequestStatus
 
-        request = Mock(spec=Request)
-        request.id = 1
-        request.company_id = 1
-        request.client_id = 10
-        request.status = RequestStatus.confirmed
-        request.estimated_amount = None
-        request.client_rate = Decimal("5000")
-        request.shift_duration_hours = Decimal("8")
+        req = self._make_request(
+            RequestStatus.confirmed,
+            client_rate=Decimal("5000"),
+            shift_duration_hours=Decimal("8"),
+        )
+        mock_db.get = Mock(return_value=req)
 
-        mock_db.get = Mock(return_value=request)
+        result = await request_service.complete_request(1, 1, 1)
 
-        with patch(
-            "app.services.request_service.generate_document_number",
-            return_value="ACT-2026-0003",
-        ):
-            with patch(
-                "app.services.request_service.generate_and_save_act_pdf",
-                return_value=None,
-            ):
-                result = await request_service.complete_request(
-                    request_id=1, company_id=1, user_id=1
-                )
-
-        assert result.final_amount == Decimal("40000")  # 5000 * 8
+        assert result.final_amount == Decimal("40000")
 
     @pytest.mark.asyncio
-    async def test_complete_request_no_act_if_zero_amount(
-        self, request_service, mock_db
-    ):
-        """No Act created if final_amount is zero."""
-        from app.models.dispatch import Request, RequestStatus
+    async def test_zero_amount_no_act(self, request_service, mock_db):
+        """No Act created when final_amount is zero."""
+        from app.models.dispatch import RequestStatus
 
-        request = Mock(spec=Request)
-        request.id = 1
-        request.company_id = 1
-        request.client_id = 10
-        request.status = RequestStatus.assigned
-        request.estimated_amount = None
-        request.client_rate = None
-        request.shift_duration_hours = None
+        req = self._make_request(RequestStatus.assigned)
+        mock_db.get = Mock(return_value=req)
 
-        mock_db.get = Mock(return_value=request)
-        mock_db.add = Mock()
+        result = await request_service.complete_request(1, 1, 1)
 
-        result = await request_service.complete_request(
-            request_id=1, company_id=1, user_id=1
-        )
-
-        # final_amount should be 0, no Act created
         assert result.final_amount == Decimal("0")
-        # Check that no Act was added (only RequestStatusLog)
-        added_objects = [call[0][0] for call in mock_db.add.call_args_list]
-        act_added = any("Act" in type(obj).__name__ for obj in added_objects)
-        assert not act_added
+        added = [call[0][0] for call in mock_db.add.call_args_list]
+        assert not any(type(obj).__name__ == "Act" for obj in added)
+
+    @pytest.mark.asyncio
+    async def test_positive_amount_creates_act(self, request_service, mock_db):
+        """Act is created when final_amount > 0."""
+        from app.models.dispatch import RequestStatus
+        from app.models.finance import Act
+
+        req = self._make_request(
+            RequestStatus.assigned,
+            estimated_amount=Decimal("10000"),
+        )
+        mock_db.get = Mock(return_value=req)
+
+        await request_service.complete_request(1, 1, 1)
+
+        added = [call[0][0] for call in mock_db.add.call_args_list]
+        acts = [obj for obj in added if isinstance(obj, Act)]
+        assert len(acts) == 1
+        assert acts[0].request_id == 1
+        assert acts[0].total_amount == Decimal("10000")
+
+    @pytest.mark.asyncio
+    async def test_status_log_created(self, request_service, mock_db):
+        """Status transition logged in RequestStatusLog."""
+        from app.models.dispatch import RequestStatus, RequestStatusLog
+
+        req = self._make_request(RequestStatus.assigned)
+        mock_db.get = Mock(return_value=req)
+
+        await request_service.complete_request(1, 1, 42, comment="done")
+
+        added = [call[0][0] for call in mock_db.add.call_args_list]
+        logs = [obj for obj in added if isinstance(obj, RequestStatusLog)]
+        assert len(logs) == 1
+        assert logs[0].to_status == "completed"
+        assert logs[0].changed_by_user_id == 42
+        assert logs[0].comment == "done"
+
+    @pytest.mark.asyncio
+    async def test_actual_end_set(self, request_service, mock_db):
+        """actual_end is set to current time."""
+        from app.models.dispatch import RequestStatus
+
+        req = self._make_request(RequestStatus.assigned)
+        mock_db.get = Mock(return_value=req)
+
+        result = await request_service.complete_request(1, 1, 1)
+
+        assert result.actual_end is not None
+        assert isinstance(result.actual_end, datetime)
