@@ -3,6 +3,7 @@
 import logging
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import SessionLocal
@@ -51,21 +52,31 @@ def sync_gps_positions() -> None:
                 if not positions:
                     continue
 
+                # Batch-load stored timestamps for this vehicle (no N+1)
+                stamps = [p.recorded_at for p in positions if p.recorded_at]
+                seen: set = set()
+                if stamps:
+                    seen = set(
+                        db.execute(
+                            select(GpsPoint.recorded_at).where(
+                                GpsPoint.vehicle_id == vehicle.id,
+                                GpsPoint.recorded_at.in_(stamps),
+                            )
+                        ).scalars()
+                    )
+
                 new_points = 0
                 for pos in positions:
                     if pos.latitude == 0 and pos.longitude == 0:
                         continue
 
-                    existing = (
-                        db.query(GpsPoint)
-                        .filter(
-                            GpsPoint.vehicle_id == vehicle.id,
-                            GpsPoint.recorded_at == pos.recorded_at,
-                        )
-                        .first()
-                    )
-                    if existing:
+                    # No provider timestamp -> skip. Inventing now() here
+                    # made every poll re-insert the same positions.
+                    if not pos.recorded_at:
                         continue
+                    if pos.recorded_at in seen:
+                        continue
+                    seen.add(pos.recorded_at)
 
                     point = GpsPoint(
                         vehicle_id=vehicle.id,
@@ -78,7 +89,7 @@ def sync_gps_positions() -> None:
                         fuel_level=getattr(pos, "fuel_level", None),
                         engine_hours=getattr(pos, "engine_hours", None),
                         signal_quality=getattr(pos, "signal_quality", None),
-                        recorded_at=pos.recorded_at or datetime.now(UTC),
+                        recorded_at=pos.recorded_at,
                         received_at=datetime.now(UTC),
                         device_id=pos.raw_data.get("imei") if pos.raw_data else None,
                         raw_data=pos.raw_data,

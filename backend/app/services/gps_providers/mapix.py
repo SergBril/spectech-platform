@@ -8,9 +8,11 @@ Anti-cache: добавлять ?_={unix_ts_ms} к URL
 
 import json
 import logging
+import re
 import time
 from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -21,6 +23,54 @@ from app.services.gps_providers.base import (
 )
 
 logger = logging.getLogger("spectech.gps.mapix")
+
+_TAG_RE = re.compile(r"<[^>]+>")
+_STATUS_MOVING = "\u0412 \u0434\u0432\u0438\u0436\u0435\u043d\u0438\u0438"
+_LBL_STATUS = "\u0421\u0442\u0430\u0442\u0443\u0441"
+_PROVIDER_TZ = ZoneInfo("Europe/Moscow")
+
+
+def _parse_infodata_html(html: str) -> dict:
+    """Extract GpsTime / speed / status from the infodata HTML blob.
+
+    Mapix exposes the position timestamp only inside the HTML `data` field,
+    e.g. "GpsTime: 2026.11.12 17:22" (provider-local MSK, minute precision).
+    Without parsing it every poll fell back to datetime.now(), so the
+    (vehicle_id, recorded_at) dedup never matched and identical positions
+    were re-inserted every minute.
+    """
+    if not html:
+        return {}
+    text = _TAG_RE.sub(" ", str(html)).replace("&nbsp;", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    out: dict = {}
+
+    m = re.search(r"GpsTime:\s*(\d{4}\.\d{2}\.\d{2}\s+\d{1,2}:\d{2}(?::\d{2})?)", text)
+    if m:
+        raw = m.group(1).strip()
+        fmt = "%Y.%m.%d %H:%M:%S" if raw.count(":") == 2 else "%Y.%m.%d %H:%M"
+        try:
+            naive = datetime.strptime(raw, fmt)
+        except ValueError:
+            naive = None
+        if naive is not None:
+            out["recorded_at"] = naive.replace(tzinfo=_PROVIDER_TZ).astimezone(UTC)
+            out["gps_time"] = raw
+
+    m = re.search(r"([\d.,]+)\s*km/h", text)
+    if m:
+        try:
+            out["speed"] = float(m.group(1).replace(",", "."))
+        except ValueError:
+            pass
+
+    m = re.search(_LBL_STATUS + r":\s*(.+?)\s*GpsTime:", text)
+    if m:
+        status = m.group(1).strip()
+        out["status_text"] = status
+        out["engine_on"] = status == _STATUS_MOVING
+
+    return out
 
 
 class MapixAdapter(GpsProviderAdapter):
@@ -141,14 +191,23 @@ class MapixAdapter(GpsProviderAdapter):
         if lat == 0 and lon == 0:
             return None
 
+        parsed = _parse_infodata_html(data.get("data") or "")
+        # Do not persist the raw HTML blob (~900 bytes per point)
+        slim = {k: v for k, v in data.items() if k != "data"}
+        slim["object_id"] = object_id
+        if parsed.get("gps_time"):
+            slim["gps_time"] = parsed["gps_time"]
+        if parsed.get("status_text"):
+            slim["status_text"] = parsed["status_text"]
+
         return GpsPointData(
             latitude=lat,
             longitude=lon,
-            speed=None,  # infodata не возвращает скорость напрямую
+            speed=parsed.get("speed"),
             heading=None,
-            engine_on=None,
-            recorded_at=None,  # Нет точного timestamp в infodata
-            raw_data={"object_id": object_id, **data},
+            engine_on=parsed.get("engine_on"),
+            recorded_at=parsed.get("recorded_at"),
+            raw_data=slim,
         )
 
     async def _fetch_positions_from_main_page(
