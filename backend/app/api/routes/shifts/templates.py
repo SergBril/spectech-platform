@@ -87,7 +87,7 @@ def create_shift_template(
 
     template = ShiftTemplate(
         vehicle_id=vehicle_id,
-        operator_id=driver_id,
+        driver_id=driver_id,
         weekday=weekday,
         start_time=time_type.fromisoformat(start_time),
         end_time=time_type.fromisoformat(end_time),

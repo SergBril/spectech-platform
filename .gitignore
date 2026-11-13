@@ -153,3 +153,6 @@ seeds/*.json
 _audit/
 backend/.env.email.sh
 gitleaks.json
+
+# agent scratch
+.qwen/

@@ -1,6 +1,7 @@
-"""Тесты driver_name в списке шаблонов смен (фикс F821 в shifts/templates.py).
+"""Тесты работы с водителем в шаблонах смен (shifts/templates.py).
 
-Цепочка имени: ShiftTemplate.driver_id -> DriverProfile -> Employee -> Contractor.name.
+driver_name в списке: цепочка ShiftTemplate.driver_id -> DriverProfile -> Employee -> Contractor.name.
+Создание шаблона: driver_id сохраняется в БД (фикс ShiftTemplate(operator_id=...) -> TypeError).
 """
 
 from datetime import time
@@ -86,3 +87,54 @@ class TestShiftTemplateDriverName:
         assert len(items) == 1
         assert items[0]["driver_id"] == driver.employee_contractor_id
         assert items[0]["driver_name"] == "Иванов Иван Иванович"
+
+
+class TestCreateShiftTemplateDriver:
+    def test_create_template_with_driver_persists_driver_id(
+        self,
+        client: TestClient,
+        auth_headers: dict,
+        db_session: Session,
+        sample_vehicle: Vehicle,
+        company,
+    ):
+        """Создание шаблона с водителем: 201 и driver_id сохранён в БД."""
+        contractor = Contractor(
+            name="Пётр Петрович Петров",
+            type="employee",
+            company_id=company.id,
+        )
+        db_session.add(contractor)
+        db_session.flush()
+
+        employee = Employee(
+            contractor_id=contractor.id,
+            position="Водитель",
+            role_in_system="driver",
+        )
+        db_session.add(employee)
+        db_session.flush()
+
+        driver = DriverProfile(employee_contractor_id=employee.contractor_id)
+        db_session.add(driver)
+        db_session.commit()
+
+        resp = client.post(
+            "/api/v1/shifts/templates",
+            json={
+                "vehicle_id": sample_vehicle.id,
+                "driver_id": driver.employee_contractor_id,
+                "weekday": 2,
+                "start_time": "08:00",
+                "end_time": "17:00",
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201, resp.text
+        template_id = resp.json()["id"]
+
+        # Факт из БД: перечитываем строку, а не верим коду ответа
+        db_session.expire_all()
+        tmpl = db_session.get(ShiftTemplate, template_id)
+        assert tmpl is not None
+        assert tmpl.driver_id == driver.employee_contractor_id

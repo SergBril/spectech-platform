@@ -36,24 +36,25 @@ class TestRequestAssignmentOverbooking:
         assert response.status_code == 201, response.text
         return response.json()
 
+    def _assign_vehicle(
+        self,
+        auth_client: TestClient,
+        request_id: int,
+        vehicle_id: int,
+        planned_start: str | None = None,
+        planned_end: str | None = None,
+    ) -> Response:
+        """Вспомогательный метод: назначает технику на заявку."""
+        payload: dict[str, Any] = {"vehicle_id": vehicle_id}
+        if planned_start:
+            payload["planned_start"] = planned_start
+        if planned_end:
+            payload["planned_end"] = planned_end
 
-def _assign_vehicle(
-    self,
-    auth_client: TestClient,
-    request_id: int,
-    vehicle_id: int,
-    planned_start: str | None = None,
-    planned_end: str | None = None,
-) -> Response:
-    """Вспомогательный метод: назначает технику на заявку."""
-    payload: dict[str, Any] = {"vehicle_id": vehicle_id}
-    if planned_start:
-        payload["planned_start"] = planned_start
-    if planned_end:
-        payload["planned_end"] = planned_end
-
-    response = auth_client.post(f"/api/v1/requests/{request_id}/assign", json=payload)
-    return response
+        response = auth_client.post(
+            f"/api/v1/requests/{request_id}/assign", json=payload
+        )
+        return response
 
     def test_assign_vehicle_success(
         self,
