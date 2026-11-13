@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.telematics import UploadedFile
@@ -152,10 +152,11 @@ def download_file(
     file_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Скачивает файл из хранилища."""
+    """Скачивает файл из хранилища (только своей компании)."""
     uploaded_file = db.get(UploadedFile, file_id)
-    if not uploaded_file:
+    if not uploaded_file or uploaded_file.company_id != company_id:
         raise HTTPException(status_code=404, detail="File not found")
 
     try:
@@ -177,10 +178,11 @@ def get_presigned_url(
     expires_in: int = Query(default=3600, ge=60, le=86400),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Возвращает временный подписанный URL."""
+    """Возвращает временный подписанный URL (только для файлов своей компании)."""
     uploaded_file = db.get(UploadedFile, file_id)
-    if not uploaded_file:
+    if not uploaded_file or uploaded_file.company_id != company_id:
         raise HTTPException(status_code=404, detail="File not found")
 
     url = storage_service.generate_presigned_url(
@@ -229,10 +231,11 @@ def delete_file(
     file_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Удаляет файл из хранилища и БД."""
+    """Удаляет файл из хранилища и БД (только своей компании)."""
     uploaded_file = db.get(UploadedFile, file_id)
-    if not uploaded_file:
+    if not uploaded_file or uploaded_file.company_id != company_id:
         raise HTTPException(status_code=404, detail="File not found")
 
     # Удаляем из хранилища

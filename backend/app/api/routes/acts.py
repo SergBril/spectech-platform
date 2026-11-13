@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.finance import Act
@@ -19,8 +19,9 @@ def download_act_pdf(
     act_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Скачать PDF акта."""
+    """Скачать PDF акта (только своей компании)."""
     import io
 
     from fastapi.responses import StreamingResponse
@@ -28,7 +29,7 @@ def download_act_pdf(
     from app.services.pdf_service import generate_act_pdf
 
     act = db.get(Act, act_id)
-    if not act:
+    if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
     try:
@@ -50,8 +51,9 @@ def download_invoice_facture_pdf(
     act_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Скачать PDF счёта-фактуры."""
+    """Скачать PDF счёта-фактуры (только своей компании)."""
     import io
 
     from fastapi.responses import StreamingResponse
@@ -59,7 +61,7 @@ def download_invoice_facture_pdf(
     from app.services.pdf_generator import generate_invoice_facture_pdf
 
     act = db.get(Act, act_id)
-    if not act:
+    if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
     try:
@@ -81,8 +83,9 @@ def download_upd_pdf(
     act_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Скачать PDF УПД."""
+    """Скачать PDF УПД (только своей компании)."""
     import io
 
     from fastapi.responses import StreamingResponse
@@ -90,7 +93,7 @@ def download_upd_pdf(
     from app.services.pdf_generator import generate_upd_pdf
 
     act = db.get(Act, act_id)
-    if not act:
+    if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
     try:
@@ -112,8 +115,9 @@ def download_torg12_pdf(
     act_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Скачать PDF ТОРГ-12."""
+    """Скачать PDF ТОРГ-12 (только своей компании)."""
     import io
 
     from fastapi.responses import StreamingResponse
@@ -121,7 +125,7 @@ def download_torg12_pdf(
     from app.services.pdf_generator import generate_torg12_pdf
 
     act = db.get(Act, act_id)
-    if not act:
+    if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
     try:

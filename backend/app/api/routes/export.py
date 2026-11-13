@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.dispatch import Request, RequestStatusLog
@@ -257,12 +257,13 @@ def export_request_report(
     request_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """PDF-отчёт по заявке со всеми связанными документами."""
+    """PDF-отчёт по заявке со всеми связанными документами (только своей компании)."""
     from fpdf import FPDF
 
     request = db.get(Request, request_id)
-    if not request:
+    if not request or request.company_id != company_id:
         raise HTTPException(status_code=404, detail="Request not found")
 
     # Загружаем связанные данные
