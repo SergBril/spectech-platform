@@ -8,9 +8,12 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
+from app.models.auth import User
 from app.models.catalog import Vehicle
 from app.models.telematics import GpsPoint
 
@@ -60,6 +63,22 @@ class VehicleGpsConfigResponse(BaseModel):
         from_attributes = True
 
 
+# ─── Access Control ─────────────────────────────────────────────────────────────
+
+
+def _check_vehicle_access(db: Session, vehicle_id: int, company_id: int) -> Vehicle:
+    """Проверяет, что техника принадлежит текущей компании (иначе 404)."""
+    vehicle = db.get(Vehicle, vehicle_id)
+    if not vehicle or vehicle.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    return vehicle
+
+
+def _company_vehicle_ids(company_id: int):
+    """Подзапрос id техники компании для фильтрации GPS-точек."""
+    return select(Vehicle.id).where(Vehicle.company_id == company_id)
+
+
 # ─── Manual Import ──────────────────────────────────────────────────────────────
 
 
@@ -67,8 +86,17 @@ class VehicleGpsConfigResponse(BaseModel):
 def import_gps_points(
     points: list[GpsPointImport],
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Ручной импорт GPS-точек (fallback когда Mapix API недоступен)."""
+    """Ручной импорт GPS-точек (fallback когда Mapix API недоступен).
+
+    Точки принимаются только для техники своей компании.
+    """
+    # Проверяем доступ ко всей технике из пакета до записи
+    for vehicle_id in {p.vehicle_id for p in points}:
+        _check_vehicle_access(db, vehicle_id, company_id)
+
     created = 0
     for p in points:
         existing = (
@@ -110,12 +138,17 @@ def list_gps_points(
     limit: int = Query(1000, ge=1, le=10000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Список GPS-точек с фильтрацией по технике и периоду."""
+    """Список GPS-точек своей компании с фильтрацией по технике и периоду."""
 
-    q = db.query(GpsPoint)
+    q = db.query(GpsPoint).filter(
+        GpsPoint.vehicle_id.in_(_company_vehicle_ids(company_id))
+    )
 
     if vehicle_id is not None:
+        _check_vehicle_access(db, vehicle_id, company_id)
         q = q.filter(GpsPoint.vehicle_id == vehicle_id)
     if date_from is not None:
         q = q.filter(GpsPoint.recorded_at >= date_from)
@@ -160,16 +193,21 @@ def list_gps_points(
 
 
 @router.get("/positions/latest")
-def get_latest_positions(db: Session = Depends(get_db)):
-    """Возвращает последнюю позицию каждой техники + последнее известное топливо."""
+def get_latest_positions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Последняя позиция каждой техники своей компании + последнее топливо."""
     from sqlalchemy import and_, func
 
-    # Подзапрос: максимальная recorded_at для каждого vehicle_id
+    # Подзапрос: максимальная recorded_at для каждого vehicle_id своей компании
     latest_subq = (
         db.query(
             GpsPoint.vehicle_id,
             func.max(GpsPoint.recorded_at).label("max_recorded_at"),
         )
+        .filter(GpsPoint.vehicle_id.in_(_company_vehicle_ids(company_id)))
         .group_by(GpsPoint.vehicle_id)
         .subquery()
     )
@@ -221,16 +259,37 @@ def get_latest_positions(db: Session = Depends(get_db)):
 
 
 @router.get("/points/stats")
-def gps_points_stats(db: Session = Depends(get_db)):
-    """Общая статистика по GPS-точкам."""
+def gps_points_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Общая статистика по GPS-точкам своей компании."""
     from sqlalchemy import func
 
-    total = db.query(func.count(GpsPoint.id)).scalar() or 0
-    vehicles_with_points = (
-        db.query(func.count(func.distinct(GpsPoint.vehicle_id))).scalar() or 0
+    company_ids = _company_vehicle_ids(company_id)
+    total = (
+        db.query(func.count(GpsPoint.id))
+        .filter(GpsPoint.vehicle_id.in_(company_ids))
+        .scalar()
+        or 0
     )
-    latest = db.query(func.max(GpsPoint.recorded_at)).scalar()
-    oldest = db.query(func.min(GpsPoint.recorded_at)).scalar()
+    vehicles_with_points = (
+        db.query(func.count(func.distinct(GpsPoint.vehicle_id)))
+        .filter(GpsPoint.vehicle_id.in_(company_ids))
+        .scalar()
+        or 0
+    )
+    latest = (
+        db.query(func.max(GpsPoint.recorded_at))
+        .filter(GpsPoint.vehicle_id.in_(company_ids))
+        .scalar()
+    )
+    oldest = (
+        db.query(func.min(GpsPoint.recorded_at))
+        .filter(GpsPoint.vehicle_id.in_(company_ids))
+        .scalar()
+    )
 
     return {
         "total_points": total,
@@ -247,11 +306,16 @@ def export_gps_points(
     date_to: datetime | None = Query(None),
     format: str = Query("csv", regex="^(csv|excel)$"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Экспорт GPS-точек в CSV или Excel."""
-    q = db.query(GpsPoint)
+    """Экспорт GPS-точек своей компании в CSV или Excel."""
+    q = db.query(GpsPoint).filter(
+        GpsPoint.vehicle_id.in_(_company_vehicle_ids(company_id))
+    )
 
     if vehicle_id is not None:
+        _check_vehicle_access(db, vehicle_id, company_id)
         q = q.filter(GpsPoint.vehicle_id == vehicle_id)
     if date_from is not None:
         q = q.filter(GpsPoint.recorded_at >= date_from)
@@ -348,13 +412,18 @@ def export_gps_points(
 
 
 @router.get("/providers/vehicles", response_model=list[VehicleGpsConfigResponse])
-def list_vehicles_with_gps(db: Session = Depends(get_db)):
-    """Список техники с GPS-провайдерами и статистикой точек."""
+def list_vehicles_with_gps(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Список техники своей компании с GPS-провайдерами и статистикой точек."""
     from sqlalchemy import func
 
     vehicles = (
         db.query(Vehicle)
         .filter(Vehicle.is_deleted == False)  # noqa: E711
+        .filter(Vehicle.company_id == company_id)
         .order_by(Vehicle.name)
         .all()
     )
@@ -391,12 +460,12 @@ def update_vehicle_gps_config(
     vehicle_id: int,
     payload: dict,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Обновление GPS-конфигурации техники."""
+    """Обновление GPS-конфигурации техники своей компании."""
 
-    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
-    if not vehicle:
-        raise HTTPException(status_code=404, detail="Vehicle not found")
+    vehicle = _check_vehicle_access(db, vehicle_id, company_id)
 
     # Ожидаем плоский JSON: {"gps_provider": "wialon", "gps_provider_config": {...}}
     if "gps_provider" in payload:
