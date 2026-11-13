@@ -1,4 +1,4 @@
-﻿"""Сервис публичных API эндпоинтов."""
+"""Сервис публичных API эндпоинтов."""
 
 import logging
 from decimal import Decimal
@@ -141,7 +141,7 @@ class PublicService:
                 deals_count = (
                     db.query(func.count(Request.id))
                     .filter(
-                        Request.contractor_id == company_id_,
+                        Request.company_id == company_id_,
                         Request.status == "completed",
                     )
                     .scalar()

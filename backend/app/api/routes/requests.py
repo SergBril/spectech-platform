@@ -13,7 +13,7 @@ from app.api.deps import (
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
-from app.models.dispatch import Request, RequestStatusLog
+from app.models.dispatch import Request, RequestStatus, RequestStatusLog
 from app.schemas.request import RequestAssign, RequestCreate, RequestRead, RequestUpdate
 from app.services.marketplace.vehicle_matcher import vehicle_matcher
 

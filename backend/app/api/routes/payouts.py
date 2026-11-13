@@ -16,6 +16,7 @@ from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
 from app.models.contractor import Contractor
+from app.models.dispatch import Request
 from app.models.finance import DocumentStatus, Payout
 from app.schemas.finance import PayoutCreate, PayoutRead, PayoutUpdate
 from app.services.finance_service import (

@@ -357,7 +357,7 @@ class ReviewsService:
             }
 
         total = len(reviews)
-        avg_rating = sum(r.rating for r in reviews) / total
+        avg_rating = sum(r.rating for r in reviews) / total if total else 0.0
 
         distribution = {"5": 0, "4": 0, "3": 0, "2": 0, "1": 0}
         for r in reviews:

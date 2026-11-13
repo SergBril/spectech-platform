@@ -27,6 +27,7 @@ from app.models.chat import (
     ChatParticipantRole,
     RequestChat,
 )
+from app.models.shift import ShiftTask
 from app.services import storage_service
 from app.services.auth_service import decode_access_token
 from app.services.chat_service import send_chat_message

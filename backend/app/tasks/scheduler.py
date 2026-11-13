@@ -169,6 +169,8 @@ def start_scheduler() -> None:
         today = date_type.today()
         with SessionLocal() as db:
             try:
+                from sqlalchemy import select
+
                 company_ids = (
                     db.execute(select(UserCompany.company_id).distinct())
                     .scalars()

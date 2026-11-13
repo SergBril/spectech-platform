@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+from decimal import Decimal
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from app.models.catalog import Vehicle
 
 
 class PublicVehicleRead(BaseModel):
