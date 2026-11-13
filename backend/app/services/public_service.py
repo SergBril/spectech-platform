@@ -847,7 +847,9 @@ class PublicService:
             "message": "Отклик успешно отправлен! Владелец заявки уведомлён.",
         }
 
-    def marketplace_payouts_report(self, db: Session, date_from, date_to):
+    def marketplace_payouts_report(
+        self, db: Session, date_from, date_to, company_id: int
+    ):
         """Экспорт отчёта по выплатам маркетплейса в Excel."""
         import io
         from datetime import date, datetime
@@ -865,7 +867,11 @@ class PublicService:
         stmt = (
             select(Payout)
             .join(DispatchRequest, Payout.request_id == DispatchRequest.id)
-            .where(DispatchRequest.source_channel == "marketplace")
+            .where(
+                DispatchRequest.source_channel == "marketplace",
+                DispatchRequest.company_id == company_id,
+            )
+            .where(Payout.company_id == company_id)
         )
 
         if date_from:
@@ -974,7 +980,7 @@ class PublicService:
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
-    def marketplace_stats(self, db: Session):
+    def marketplace_stats(self, db: Session, company_id: int):
         """Статистика маркетплейса для дашборда."""
         from sqlalchemy import func
 
@@ -982,7 +988,10 @@ class PublicService:
             db.execute(
                 select(func.count())
                 .select_from(DispatchRequest)
-                .where(DispatchRequest.source_channel == "marketplace")
+                .where(
+                    DispatchRequest.source_channel == "marketplace",
+                    DispatchRequest.company_id == company_id,
+                )
             ).scalar()
             or 0
         )
@@ -993,6 +1002,7 @@ class PublicService:
                 .select_from(DispatchRequest)
                 .where(
                     DispatchRequest.source_channel == "marketplace",
+                    DispatchRequest.company_id == company_id,
                     DispatchRequest.status.in_(["new", "processing", "has_responses"]),
                 )
             ).scalar()
@@ -1005,6 +1015,7 @@ class PublicService:
                 .select_from(DispatchRequest)
                 .where(
                     DispatchRequest.source_channel == "marketplace",
+                    DispatchRequest.company_id == company_id,
                     DispatchRequest.status == "assigned",
                 )
             ).scalar()
@@ -1018,6 +1029,7 @@ class PublicService:
                 .select_from(DispatchRequest)
                 .where(
                     DispatchRequest.source_channel == "marketplace",
+                    DispatchRequest.company_id == company_id,
                     DispatchRequest.marketplace_mode == "client",
                 )
             ).scalar()
@@ -1030,6 +1042,7 @@ class PublicService:
                 .select_from(DispatchRequest)
                 .where(
                     DispatchRequest.source_channel == "marketplace",
+                    DispatchRequest.company_id == company_id,
                     DispatchRequest.marketplace_mode == "owner_dispatcher",
                 )
             ).scalar()
@@ -1040,6 +1053,7 @@ class PublicService:
         avg_payment = db.execute(
             select(func.avg(DispatchRequest.payment_terms_days)).where(
                 DispatchRequest.source_channel == "marketplace",
+                DispatchRequest.company_id == company_id,
                 DispatchRequest.payment_terms_days.isnot(None),
             )
         ).scalar()
@@ -1047,7 +1061,15 @@ class PublicService:
         # Отклики
 
         total_responses = (
-            db.execute(select(func.count()).select_from(RequestAssignment)).scalar()
+            db.execute(
+                select(func.count())
+                .select_from(RequestAssignment)
+                .join(
+                    DispatchRequest,
+                    RequestAssignment.request_id == DispatchRequest.id,
+                )
+                .where(DispatchRequest.company_id == company_id)
+            ).scalar()
             or 0
         )
 
@@ -1055,7 +1077,14 @@ class PublicService:
             db.execute(
                 select(func.count())
                 .select_from(RequestAssignment)
-                .where(RequestAssignment.status == "pending_approval")
+                .join(
+                    DispatchRequest,
+                    RequestAssignment.request_id == DispatchRequest.id,
+                )
+                .where(
+                    RequestAssignment.status == "pending_approval",
+                    DispatchRequest.company_id == company_id,
+                )
             ).scalar()
             or 0
         )
@@ -1071,7 +1100,7 @@ class PublicService:
             "pending_responses": pending_responses,
         }
 
-    def export_marketplace_requests(self, db: Session, category_id):
+    def export_marketplace_requests(self, db: Session, category_id, company_id: int):
         """Экспорт заявок маркетплейса в Excel."""
         import io
         from datetime import datetime
@@ -1086,7 +1115,10 @@ class PublicService:
 
         stmt = (
             select(DispatchRequest)
-            .where(DispatchRequest.source_channel == "marketplace")
+            .where(
+                DispatchRequest.source_channel == "marketplace",
+                DispatchRequest.company_id == company_id,
+            )
             .where(DispatchRequest.is_published == True)
             .order_by(DispatchRequest.created_at.desc())
         )

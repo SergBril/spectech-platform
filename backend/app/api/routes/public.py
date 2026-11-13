@@ -368,7 +368,7 @@ def marketplace_payouts_report(
     """Экспорт отчёта по выплатам маркетплейса в Excel."""
 
     return public_service.marketplace_payouts_report(
-        db=db, date_from=date_from, date_to=date_to
+        db=db, date_from=date_from, date_to=date_to, company_id=company_id
     )
 
 
@@ -380,7 +380,7 @@ def marketplace_stats(
 ):
     """Статистика маркетплейса для дашборда."""
 
-    return public_service.marketplace_stats(db=db)
+    return public_service.marketplace_stats(db=db, company_id=company_id)
 
 
 @router.get("/marketplace/requests/export")
@@ -392,7 +392,9 @@ def export_marketplace_requests(
 ):
     """Экспорт заявок маркетплейса в Excel."""
 
-    return public_service.export_marketplace_requests(db=db, category_id=category_id)
+    return public_service.export_marketplace_requests(
+        db=db, category_id=category_id, company_id=company_id
+    )
 
 
 @router.get("/marketplace/my-responses")
