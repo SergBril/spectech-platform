@@ -1,6 +1,10 @@
-﻿from datetime import date, datetime
+﻿from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.rental import Rental
 
 from sqlalchemy import (
     JSON,

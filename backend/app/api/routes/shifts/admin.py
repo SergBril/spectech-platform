@@ -51,10 +51,10 @@ def list_audit_logs(
     items = [
         {
             "id": entry.id,
-            "user_id": l.user_id,
+            "user_id": entry.user_id,
             "action": entry.action,
-            "resource_type": l.resource_type,
-            "resource_id": l.resource_id,
+            "resource_type": entry.resource_type,
+            "resource_id": entry.resource_id,
             "details": entry.details,
             "ip_address": entry.ip_address,
             "created_at": entry.created_at.isoformat() if entry.created_at else None,

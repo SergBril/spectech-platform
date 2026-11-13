@@ -1,5 +1,10 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.auth import User
+    from app.models.catalog import Vehicle
 
 from sqlalchemy import (
     JSON,

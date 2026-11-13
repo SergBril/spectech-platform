@@ -1,5 +1,6 @@
 """API endpoints для учёта простоев техники."""
 
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -17,6 +18,8 @@ from app.schemas.downtime import (
     DowntimeStats,
 )
 from app.services.downtime_service import downtime_service
+
+logger = logging.getLogger("spectech.downtime")
 
 router = APIRouter()
 

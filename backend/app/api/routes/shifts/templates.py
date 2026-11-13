@@ -41,11 +41,14 @@ def list_shift_templates(
     result = []
     for t in templates:
         vehicle = db.get(Vehicle, t.vehicle_id)
-        (
+        driver = (
             db.get(DriverProfile, getattr(t, "driver_id", None))
             if getattr(t, "driver_id", None)
             else None
         )
+        driver_name = ""
+        if driver and driver.employee and driver.employee.contractor:
+            driver_name = driver.employee.contractor.name
         result.append(
             {
                 "id": t.id,

@@ -3,6 +3,10 @@
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum as PyEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.finance import Invoice, Payment
 
 from sqlalchemy import (
     Boolean,

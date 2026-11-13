@@ -1,5 +1,6 @@
 """API для карты техники."""
 
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
@@ -15,6 +16,8 @@ from app.services.gps_providers.factory import (
     create_gps_adapter,
     get_available_providers,
 )
+
+logger = logging.getLogger("spectech.map")
 
 router = APIRouter()
 
