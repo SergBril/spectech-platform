@@ -1,4 +1,4 @@
-﻿"""Модуль checklist_configs для shifts router."""
+"""Модуль checklist_configs для shifts router."""
 
 from fastapi import (
     APIRouter,

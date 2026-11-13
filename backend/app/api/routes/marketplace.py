@@ -1,4 +1,4 @@
-﻿"""Маркетплейс API эндпоинты — тонкие wrapper'ы над MarketplaceRouteService."""
+"""Маркетплейс API эндпоинты — тонкие wrapper'ы над MarketplaceRouteService."""
 
 from datetime import datetime
 from decimal import Decimal

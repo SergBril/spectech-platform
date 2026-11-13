@@ -1,4 +1,4 @@
-﻿"""Сервис маркетплейс API эндпоинтов."""
+"""Сервис маркетплейс API эндпоинтов."""
 
 import logging
 from datetime import UTC, datetime
