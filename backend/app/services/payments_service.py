@@ -225,6 +225,7 @@ class PaymentsService:
         invoice_id: int,
         amount: Decimal | None = None,
         applied_by: int | None = None,
+        company_id: int | None = None,
     ) -> Payment:
         """Применяет банковскую транзакцию к Invoice."""
         tx = db.get(BankTransaction, transaction_id)
@@ -241,6 +242,13 @@ class PaymentsService:
 
         if invoice.company_id != tx.company_id:
             raise ValueError("Transaction and invoice belong to different companies")
+
+        # Defence in depth: the caller's company must own both objects.
+        # company_id=None is a system call; HTTP handlers must pass it.
+        if company_id is not None and (
+            tx.company_id != company_id or invoice.company_id != company_id
+        ):
+            raise ValueError("Transaction or invoice not found")
 
         payment_amount = amount or tx.amount
 

@@ -123,14 +123,14 @@ class TestPublicService:
 
     def test_marketplace_stats(self, svc, db):
         db.query.return_value.filter.return_value.all.return_value = []
-        result = svc.marketplace_stats(db)
+        result = svc.marketplace_stats(db, company_id=1)
         assert result is not None
 
     def test_marketplace_payouts_report_empty(self, svc, db):
         db.query.return_value.filter.return_value.all.return_value = []
         try:
             result = svc.marketplace_payouts_report(
-                db, date_from=date.today(), date_to=date.today()
+                db, date_from=date.today(), date_to=date.today(), company_id=1
             )
             assert result is not None
         except (HTTPException, NameError, Exception):
@@ -138,7 +138,7 @@ class TestPublicService:
 
     def test_export_marketplace_requests_empty(self, svc, db):
         db.query.return_value.filter.return_value.all.return_value = []
-        result = svc.export_marketplace_requests(db, category_id=None)
+        result = svc.export_marketplace_requests(db, category_id=None, company_id=1)
         assert result is not None
 
     def test_get_company_reviews_public_empty(self, svc, db):

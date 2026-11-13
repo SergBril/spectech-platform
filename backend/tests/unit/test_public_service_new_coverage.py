@@ -194,7 +194,7 @@ class TestMarketplacePayoutsReport:
 
             with pytest.raises(HTTPException) as exc_info:
                 service.marketplace_payouts_report(
-                    mock_db, date_from=None, date_to=None
+                    mock_db, date_from=None, date_to=None, company_id=1
                 )
             assert exc_info.value.status_code == 500
         finally:
@@ -226,7 +226,7 @@ class TestMarketplaceStats:
         mock_scalar = MagicMock()
         mock_scalar.scalar.return_value = 0
         mock_db.execute.return_value = mock_scalar
-        result = service.marketplace_stats(mock_db)
+        result = service.marketplace_stats(mock_db, company_id=1)
         assert isinstance(result, dict)
 
 

@@ -132,11 +132,23 @@ def apply_payment_to_invoice(
     amount: float | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Применяет транзакцию к Invoice."""
+    """Применяет транзакцию к Invoice (только своей компании)."""
     from decimal import Decimal
 
+    from app.models.bank_statement import BankTransaction
+    from app.models.finance import Invoice
     from app.services.payments_service import payments_service
+
+    # 404, not the 400 used for status errors: a foreign object must not be
+    # distinguishable from a missing one.
+    tx = db.get(BankTransaction, transaction_id)
+    if not tx or tx.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    invoice = db.get(Invoice, invoice_id)
+    if not invoice or invoice.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Invoice not found")
 
     try:
         payment = payments_service.apply_payment(
@@ -145,6 +157,7 @@ def apply_payment_to_invoice(
             invoice_id=invoice_id,
             amount=Decimal(str(amount)) if amount else None,
             applied_by=current_user.id,
+            company_id=company_id,
         )
         return {
             "message": "Payment applied successfully",

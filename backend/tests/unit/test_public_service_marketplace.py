@@ -364,7 +364,7 @@ class TestMarketplacePayoutsReport:
     def test_empty_payouts_returns_excel(self, svc, db):
         db.scalars.return_value.all.return_value = []
 
-        result = svc.marketplace_payouts_report(db, None, None)
+        result = svc.marketplace_payouts_report(db, None, None, company_id=1)
 
         assert result is not None
         assert result is not None
@@ -376,7 +376,9 @@ class TestMarketplacePayoutsReport:
     def test_with_date_filters(self, svc, db):
         db.scalars.return_value.all.return_value = []
 
-        result = svc.marketplace_payouts_report(db, "2026-01-01", "2026-12-31")
+        result = svc.marketplace_payouts_report(
+            db, "2026-01-01", "2026-12-31", company_id=1
+        )
 
         assert result is not None
 
@@ -412,7 +414,7 @@ class TestMarketplacePayoutsReport:
 
         db.get.side_effect = mock_get
 
-        result = svc.marketplace_payouts_report(db, None, None)
+        result = svc.marketplace_payouts_report(db, None, None, company_id=1)
 
         assert result is not None
 
@@ -423,14 +425,14 @@ class TestExportMarketplaceRequests:
     def test_empty_requests_returns_excel(self, svc, db):
         db.scalars.return_value.all.return_value = []
 
-        result = svc.export_marketplace_requests(db, None)
+        result = svc.export_marketplace_requests(db, None, company_id=1)
 
         assert result is not None
 
     def test_with_category_filter(self, svc, db):
         db.scalars.return_value.all.return_value = []
 
-        result = svc.export_marketplace_requests(db, category_id=5)
+        result = svc.export_marketplace_requests(db, category_id=5, company_id=1)
 
         assert result is not None
 
@@ -462,6 +464,6 @@ class TestExportMarketplaceRequests:
         db.get.side_effect = mock_get
         db.scalars.return_value.all.return_value = [req]
 
-        result = svc.export_marketplace_requests(db, None)
+        result = svc.export_marketplace_requests(db, None, company_id=1)
 
         assert result is not None

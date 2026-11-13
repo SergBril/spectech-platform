@@ -36,6 +36,13 @@ class DocumentStatus(str, Enum):
     overdue = "overdue"
     cancelled = "cancelled"
     rejected = "rejected"
+    sent_to_edo = "sent_to_edo"
+    signed_by_client = "signed_by_client"
+    rejected_by_client = "rejected_by_client"
+    signed = "signed"
+    sent_to_client = "sent_to_client"
+    accepted = "accepted"
+    archived = "archived"
 
 
 class PaymentMethod(str, Enum):

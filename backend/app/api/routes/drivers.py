@@ -500,6 +500,7 @@ def bulk_bind_users(
     payload: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
     """
     Привязать пользователей к водителям массово.
@@ -520,7 +521,15 @@ def bulk_bind_users(
             errors.append("Пропущены contractor_id или user_id")
             continue
 
-        emp = db.query(Employee).filter(Employee.contractor_id == cid).first()
+        emp = (
+            db.query(Employee)
+            .join(Contractor, Employee.contractor_id == Contractor.id)
+            .filter(
+                Employee.contractor_id == cid,
+                Contractor.company_id == company_id,
+            )
+            .first()
+        )
         if not emp:
             errors.append(f"Сотрудник {cid} не найден")
             continue
@@ -536,6 +545,27 @@ def bulk_bind_users(
         )
         if existing:
             errors.append(f"Пользователь {uid} уже привязан к другому водителю")
+            continue
+
+        target = db.get(User, uid)
+        if not target:
+            errors.append(f"Пользователь {uid} не найден")
+            continue
+        belongs = target.company_id == company_id
+        if not belongs:
+            from app.models.user_company import UserCompany
+
+            belongs = (
+                db.query(UserCompany)
+                .filter(
+                    UserCompany.user_id == uid,
+                    UserCompany.company_id == company_id,
+                )
+                .first()
+                is not None
+            )
+        if not belongs:
+            errors.append(f"Пользователь {uid} не найден")
             continue
 
         emp.user_id = uid

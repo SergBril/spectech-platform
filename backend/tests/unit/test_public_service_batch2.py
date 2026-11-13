@@ -241,7 +241,9 @@ class TestMarketplacePayoutsReport:
 
     def test_empty(self, svc, mock_db):
         mock_db.scalars.return_value.all.return_value = []
-        response = svc.marketplace_payouts_report(mock_db, "2026-11-01", "2026-11-30")
+        response = svc.marketplace_payouts_report(
+            mock_db, "2026-11-01", "2026-11-30", company_id=1
+        )
         assert (
             response.media_type
             == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -272,7 +274,9 @@ class TestMarketplacePayoutsReport:
 
         mock_db.get.side_effect = mock_get
 
-        response = svc.marketplace_payouts_report(mock_db, "2026-11-01", "2026-11-30")
+        response = svc.marketplace_payouts_report(
+            mock_db, "2026-11-01", "2026-11-30", company_id=1
+        )
         assert (
             response.media_type
             == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -284,7 +288,7 @@ class TestMarketplaceStats:
 
     def test_success(self, svc, mock_db):
         mock_db.execute.return_value.scalar.side_effect = [10, 5, 3, 4, 1, 7.5, 20, 2]
-        result = svc.marketplace_stats(mock_db)
+        result = svc.marketplace_stats(mock_db, company_id=1)
         assert result["total_requests"] == 10
         assert result["active_requests"] == 5
         assert result["avg_payment_days"] == 7.5
