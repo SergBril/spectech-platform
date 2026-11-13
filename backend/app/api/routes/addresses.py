@@ -4,10 +4,12 @@ import logging
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.api.deps import get_current_user
 from app.core.config import settings
+from app.models.auth import User
 
 router = APIRouter(prefix="/addresses", tags=["addresses"])
 logger = logging.getLogger("spectech.addresses")
@@ -23,7 +25,10 @@ class AddressSuggestRequest(BaseModel):
 
 
 @router.post("/suggest")
-async def suggest_addresses(request: AddressSuggestRequest) -> dict[str, Any]:
+async def suggest_addresses(
+    request: AddressSuggestRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
     """
     Прокси к DaData API для получения подсказок адресов.
 

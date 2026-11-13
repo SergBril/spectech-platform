@@ -2,14 +2,23 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.core.db import get_db
+from app.models.auth import User
 from app.services.metrics_service import get_metrics
 
 router = APIRouter()
+
+
+def _require_superuser(current_user: User) -> None:
+    """Служебные эндпоинты — только superuser."""
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Admin only")
+
 
 APP_VERSION = "0.5.0-dev"
 _start_time = datetime.now(UTC)
@@ -57,14 +66,19 @@ def health_detailed(db: Session = Depends(get_db)):
 
 
 @router.get("/metrics")
-def metrics():
-    """Метрики приложения (в памяти)."""
+def metrics(current_user: User = Depends(get_current_user)):
+    """Метрики приложения (в памяти, только superuser).
+
+    Prometheus скрейпит корневой /metrics (setup_metrics), не этот эндпоинт.
+    """
+    _require_superuser(current_user)
     return get_metrics()
 
 
 @router.get("/background-log")
-def background_log():
-    """Журнал фоновых задач (без авторизации)."""
+def background_log(current_user: User = Depends(get_current_user)):
+    """Журнал фоновых задач (только superuser)."""
+    _require_superuser(current_user)
     from app.services.background_service import get_task_log
 
     tasks = get_task_log()

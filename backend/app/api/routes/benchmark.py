@@ -1,17 +1,27 @@
-"""Benchmark endpoints for performance testing."""
+"""Benchmark endpoints for performance testing (superuser only)."""
 
 import asyncio
 import time
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.api.deps import get_current_user
+from app.models.auth import User
 
 router = APIRouter(prefix="/benchmark", tags=["benchmark"])
 
 
+def _require_superuser(current_user: User) -> None:
+    """Нагрузочные эндпоинты доступны только superuser (защита от DoS)."""
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Admin only")
+
+
 @router.get("/fast")
-async def benchmark_fast():
+async def benchmark_fast(current_user: User = Depends(get_current_user)):
     """Fast endpoint — baseline performance."""
+    _require_superuser(current_user)
     start = time.perf_counter()
 
     # Минимальная работа
@@ -22,8 +32,9 @@ async def benchmark_fast():
 
 
 @router.get("/cpu")
-async def benchmark_cpu():
+async def benchmark_cpu(current_user: User = Depends(get_current_user)):
     """CPU-intensive endpoint."""
+    _require_superuser(current_user)
     start = time.perf_counter()
 
     # CPU работа: вычисление простых чисел
@@ -46,13 +57,15 @@ async def benchmark_cpu():
 
 
 @router.get("/memory")
-async def benchmark_memory():
+async def benchmark_memory(current_user: User = Depends(get_current_user)):
     """Memory-intensive endpoint."""
+    _require_superuser(current_user)
     import os
 
     import psutil
 
     start = time.perf_counter()
+
     process = psutil.Process(os.getpid())
     memory_before = process.memory_info().rss / 1024 / 1024  # MB
 
@@ -75,8 +88,9 @@ async def benchmark_memory():
 
 
 @router.get("/async")
-async def benchmark_async():
+async def benchmark_async(current_user: User = Depends(get_current_user)):
     """Async I/O endpoint — simulates parallel tasks."""
+    _require_superuser(current_user)
     start = time.perf_counter()
 
     # Параллельные "задачи" (эмуляция I/O)
@@ -98,8 +112,9 @@ async def benchmark_async():
 
 
 @router.get("/summary")
-async def benchmark_summary():
+async def benchmark_summary(current_user: User = Depends(get_current_user)):
     """Run all benchmarks and return summary."""
+    _require_superuser(current_user)
     results = {}
 
     # Fast
