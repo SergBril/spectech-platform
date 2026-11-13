@@ -84,15 +84,27 @@ async def list_diadoc_counterparties(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """Получить список контрагентов из Diadoc для выбора получателя акта."""
+    """Контрагенты Diadoc только своей компании (фильтр по ИНН контрагентов)."""
+    from app.models.contractor import Contractor
     from app.services.diadoc_service import diadoc_service
+
+    # ИНН контрагентов компании; пустые/NULL исключаем, чтобы не матчить лишнее
+    company_inns = {
+        inn
+        for inn in db.scalars(
+            select(Contractor.inn).where(Contractor.company_id == company_id)
+        ).all()
+        if inn
+    }
+    if not company_inns:
+        return []
 
     token = await diadoc_service.authenticate()
     if not token:
         raise HTTPException(status_code=503, detail="Diadoc authentication failed")
 
     counterparties = await diadoc_service.get_counterparties(token)
-    return counterparties
+    return [cp for cp in counterparties if cp.get("inn") and cp["inn"] in company_inns]
 
 
 @router.get("/diadoc/status/{message_id}", summary="📊 Статус документа")
@@ -102,8 +114,18 @@ async def get_diadoc_document_status(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """Проверить статус документа в Diadoc по message_id."""
+    """Статус документа Diadoc только по актам своей компании."""
     from app.services.diadoc_service import diadoc_service
+
+    # Документ должен быть привязан к акту текущей компании
+    act = db.scalar(
+        select(Act).where(
+            Act.edo_message_id == message_id,
+            Act.company_id == company_id,
+        )
+    )
+    if not act:
+        raise HTTPException(status_code=404, detail="Document not found")
 
     token = await diadoc_service.authenticate()
     if not token:

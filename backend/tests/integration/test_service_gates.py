@@ -59,3 +59,25 @@ class TestSystemGate:
 
     def test_health_stays_public(self, client: TestClient):
         assert client.get("/api/v1/system/health").status_code == 200
+
+
+class TestRoleHistoryGate:
+    """role-history закрыт RBAC (audit:read), как остальные admin-эндпоинты."""
+
+    def test_regular_user_returns_403(
+        self, client: TestClient, regular_headers: dict, sample_user: User
+    ):
+        resp = client.get(
+            f"/api/v1/shifts/audit-logs/role-history/{sample_user.id}",
+            headers=regular_headers,
+        )
+        assert resp.status_code == 403
+
+    def test_superuser_returns_200(
+        self, client: TestClient, auth_headers: dict, admin_user: User
+    ):
+        resp = client.get(
+            f"/api/v1/shifts/audit-logs/role-history/{admin_user.id}",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200

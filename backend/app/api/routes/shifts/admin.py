@@ -343,8 +343,10 @@ def get_role_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """История изменений роли пользователя."""
+    """История изменений роли пользователя (admin only)."""
     from app.models.auth import AuditLog
+
+    RBACMiddleware.require(current_user, "audit:read")
 
     logs = (
         db.execute(

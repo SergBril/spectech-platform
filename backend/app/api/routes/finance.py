@@ -757,16 +757,21 @@ def resend_invoice_email(
     invoice_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Повторно отправить счёт по email."""
+    """Повторно отправить счёт по email (только своей компании)."""
     from app.services.email_service import email_service
 
     invoice = db.get(Invoice, invoice_id)
-    if not invoice:
+    if not invoice or invoice.company_id != company_id:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
+    client = db.get(Contractor, invoice.client_id)
+    if not client or not client.email:
+        raise HTTPException(status_code=422, detail="Client email not configured")
+
     try:
-        email_service.send_invoice_email(invoice)
+        email_service.send_invoice_created(invoice, client.email, client.name)
         return {"message": "Email sent successfully", "id": invoice_id}
     except Exception as e:
         logger.error(f"Failed to resend invoice email: {e}")

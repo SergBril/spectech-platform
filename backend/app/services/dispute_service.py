@@ -42,12 +42,15 @@ def open_dispute(
     operator_version: dict | None = None,
     client_version: dict | None = None,
     evidence: dict | None = None,
+    company_id: int | None = None,
 ) -> Dispute:
     """
     Opens a new dispute for a shift report.
 
     Sets SLA deadline to 3 hours from now.
     Assigns to dispatcher for initial review.
+
+    company_id=None означает системный вызов; HTTP-обработчики ОБЯЗАНЫ его передавать.
     """
     # Get shift report
     shift_report = db.get(ShiftReport, shift_report_id)
@@ -63,6 +66,10 @@ def open_dispute(
     request = db.get(Request, shift_task.request_id)
     if not request:
         raise ValueError(f"Request {shift_task.request_id} not found")
+
+    # Tenant-изоляция: отчёт должен принадлежать компании инициатора
+    if company_id is not None and request.company_id != company_id:
+        raise ValueError(f"ShiftReport {shift_report_id} not found")
 
     # Calculate SLA deadline (✅ ИСПРАВЛЕНО: используем UTC)
     now = datetime.now(UTC)
@@ -140,15 +147,18 @@ def escalate_dispute(
     db: Session,
     dispute_id: int,
     escalated_by: int,
+    company_id: int | None = None,
 ) -> Dispute:
     """
     Escalates dispute to next level.
 
     dispatcher_review -> escalated_to_manager (24h deadline)
     escalated_to_manager -> escalated_to_ceo (48h deadline)
+
+    company_id=None означает системный вызов; HTTP-обработчики ОБЯЗАНЫ его передавать.
     """
     dispute = db.get(Dispute, dispute_id)
-    if not dispute:
+    if not dispute or (company_id is not None and dispute.company_id != company_id):
         raise ValueError(f"Dispute {dispute_id} not found")
 
     # ✅ ИСПРАВЛЕНО: используем UTC
@@ -171,52 +181,50 @@ def escalate_dispute(
     else:
         raise ValueError(f"Cannot escalate dispute in status {dispute.status}")
 
-        # 🆕 Отправляем уведомления об эскалации
-        try:
-            import asyncio
+    # 🆕 Отправляем уведомления об эскалации
+    try:
+        import asyncio
 
-            from app.models.auth import User
-            from app.services.notification_dispatcher import notification_dispatcher
+        from app.models.auth import User
+        from app.services.notification_dispatcher import notification_dispatcher
 
-            # Определяем роли
-            if dispute.status == DisputeStatus.escalated_to_manager:
-                from_role = "dispatcher"
-                to_role = "manager"
-            else:
-                from_role = "manager"
-                to_role = "CEO"
+        # Определяем роли
+        if dispute.status == DisputeStatus.escalated_to_manager:
+            from_role = "dispatcher"
+            to_role = "manager"
+        else:
+            from_role = "manager"
+            to_role = "CEO"
 
-            # Получаем менеджера (для простоты — второго admin)
-            manager = (
-                db.query(User).filter(User.status == "active").offset(1).first()
-            ) or (db.query(User).filter(User.status == "active").first())
+        # Получаем менеджера (для простоты — второго admin)
+        manager = (
+            db.query(User).filter(User.status == "active").offset(1).first()
+        ) or (db.query(User).filter(User.status == "active").first())
 
-            if manager:
-                manager_email = manager.email
-                manager_name = (
-                    manager.full_name
-                    if hasattr(manager, "full_name")
-                    else manager.email
-                )
-                manager_user_id = manager.id
+        if manager:
+            manager_email = manager.email
+            manager_name = (
+                manager.full_name if hasattr(manager, "full_name") else manager.email
+            )
+            manager_user_id = manager.id
 
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(
-                        notification_dispatcher.notify_dispute_escalated(
-                            db=db,
-                            dispute=dispute,
-                            manager_email=manager_email,
-                            manager_name=manager_name,
-                            from_role=from_role,
-                            to_role=to_role,
-                            manager_user_id=manager_user_id,
-                        )
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(
+                    notification_dispatcher.notify_dispute_escalated(
+                        db=db,
+                        dispute=dispute,
+                        manager_email=manager_email,
+                        manager_name=manager_name,
+                        from_role=from_role,
+                        to_role=to_role,
+                        manager_user_id=manager_user_id,
                     )
-                except RuntimeError:
-                    logger.info("No event loop, skipping escalation notifications")
-        except Exception as e:
-            logger.error(f"Failed to send escalation notifications: {e}")
+                )
+            except RuntimeError:
+                logger.info("No event loop, skipping escalation notifications")
+    except Exception as e:
+        logger.error(f"Failed to send escalation notifications: {e}")
 
     db.commit()
     db.refresh(dispute)
@@ -232,12 +240,15 @@ def resolve_dispute(
     final_moto_hours: float | None = None,
     final_odometer: int | None = None,
     final_fuel_used: float | None = None,
+    company_id: int | None = None,
 ) -> Dispute:
     """
     Resolves a dispute and updates shift report with final values.
+
+    company_id=None означает системный вызов; HTTP-обработчики ОБЯЗАНЫ его передавать.
     """
     dispute = db.get(Dispute, dispute_id)
-    if not dispute:
+    if not dispute or (company_id is not None and dispute.company_id != company_id):
         raise ValueError(f"Dispute {dispute_id} not found")
 
     if dispute.status == DisputeStatus.resolved:

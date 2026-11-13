@@ -36,6 +36,7 @@ def create_dispute(
             operator_version=payload.operator_version,
             client_version=payload.client_version,
             evidence=payload.evidence,
+            company_id=company_id,
         )
         return dispute
     except ValueError as e:
@@ -97,12 +98,19 @@ def escalate_dispute(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """Escalate dispute to next level."""
+    """Escalate dispute to next level (только своей компании)."""
+    from app.models.dispute import Dispute
+
+    existing = db.get(Dispute, dispute_id)
+    if not existing or existing.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Dispute not found")
+
     try:
         dispute = dispute_service.escalate_dispute(
             db=db,
             dispute_id=dispute_id,
             escalated_by=current_user.id,
+            company_id=company_id,
         )
         return dispute
     except ValueError as e:
@@ -117,7 +125,13 @@ def resolve_dispute(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """Resolve a dispute."""
+    """Resolve a dispute (только своей компании)."""
+    from app.models.dispute import Dispute
+
+    existing = db.get(Dispute, dispute_id)
+    if not existing or existing.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Dispute not found")
+
     try:
         dispute = dispute_service.resolve_dispute(
             db=db,
@@ -127,6 +141,7 @@ def resolve_dispute(
             final_moto_hours=payload.final_moto_hours,
             final_odometer=payload.final_odometer,
             final_fuel_used=payload.final_fuel_used,
+            company_id=company_id,
         )
         return dispute
     except ValueError as e:
