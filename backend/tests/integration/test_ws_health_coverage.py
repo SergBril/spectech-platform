@@ -56,6 +56,7 @@ class TestHealthEndpoints:
         assert resp.status_code in (200, 503)
 
     def test_root(self, client):
+        # Корневой маршрут существует (вне OpenAPI, include_in_schema=False)
         resp = client.get("/")
         assert resp.status_code == 200
 

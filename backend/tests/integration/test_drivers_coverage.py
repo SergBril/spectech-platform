@@ -74,6 +74,10 @@ class TestBulkBindUsers:
 class TestDriverKPI:
     """Cover KPI endpoints (lines 548, 629)."""
 
+    @pytest.mark.xfail(
+        reason="endpoint not implemented: /api/v1/drivers/{contractor_id}/kpi",
+        strict=True,
+    )
     def test_kpi_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/drivers/99999/kpi", headers=auth_headers)
-        assert resp.status_code in (404, 200)
+        assert resp.status_code == 200

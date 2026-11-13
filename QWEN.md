@@ -285,3 +285,9 @@ pre-commit run --all-files   # black, ruff, detect-secrets, базовые пр�
 
 ### 12.10 Код не перезагружается сам
 В `entrypoint.sh` uvicorn запущен БЕЗ `--reload` (только `--workers 4`). После любого изменения кода обязателен `docker compose restart backend` перед проверкой через HTTP — иначе воркеры исполняют старый модуль из памяти и дают ложные результаты (проверено: 200 вместо 401 на закрытом эндпоинте).
+
+
+### 12.11 Сверка путей и имён — с фактом, а не с догадкой
+- Пути эндпоинтов сверять с `app.routes`, а не только с `app.openapi()`: маршруты с `include_in_schema=False` в OpenAPI не попадают (например `GET /`).
+- SQLAlchemy для PEP-435 Enum использует **`.name`**, а не `.value`, как строку в БД. Имена членов должны совпадать со значениями в БД (поэтому в проекте они lowercase).
+- Дрейф model vs БД — реальный класс багов: `DocumentStatus` имел 7 из 14 значений, и строка со `sent_to_edo` ломала **весь** список актов; `Act.signed_at`, `ShiftTemplate.operator_id`, `UploadedFile.payout_id` не существовали.

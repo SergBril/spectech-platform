@@ -1,4 +1,4 @@
-﻿"""Tests for base.py _logged_call, log_gps_sync, normalize_point + WialonAdapter."""
+"""Tests for base.py _logged_call, log_gps_sync, normalize_point + WialonAdapter."""
 
 from contextlib import asynccontextmanager
 from datetime import datetime

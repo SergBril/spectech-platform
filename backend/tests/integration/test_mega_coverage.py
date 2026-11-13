@@ -1,4 +1,11 @@
-"""Mega coverage push - shifts/finance, bank_matching, salaries, rbac."""
+"""Mega coverage push - shifts/finance, bank_matching, salaries, rbac.
+
+Пути сверены с OpenAPI; loose-assert'ы сужены до конкретных кодов.
+auth_headers здесь = sample_user (НЕ superuser, без rbac:manage).
+Ожидания 422/403 отражают фактический контракт (валидация обязательных
+параметров; permission-зависимости раньше валидации тела).
+НАХОДКА (оставлен красным): salaries/99999/approve возвращает 400 вместо 404.
+"""
 
 import pytest
 
@@ -20,12 +27,16 @@ def auth_headers(auth_token):
 
 class TestShiftsFinance:
     def test_finance_dashboard(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/finance/dashboard", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        resp = client.get("/api/v1/finance/dashboard", headers=auth_headers)
+        # обязательные query-параметры не переданы -> 422
+        assert resp.status_code == 422
 
+    @pytest.mark.xfail(
+        reason="endpoint not implemented: /api/v1/shifts/finance/export", strict=True
+    )
     def test_export_excel(self, client, auth_headers):
         resp = client.get("/api/v1/shifts/finance/export", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 200
 
 
 # ==================== BANK MATCHING SERVICE ====================
@@ -78,27 +89,31 @@ class TestBankMatchingService:
 class TestSalariesRoutes:
     def test_calculate_validation(self, client, auth_headers):
         resp = client.post("/api/v1/salaries/calculate", json={}, headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 422
 
     def test_list_salaries(self, client, auth_headers):
         resp = client.get("/api/v1/salaries", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 200
 
     def test_summary(self, client, auth_headers):
         resp = client.get("/api/v1/salaries/summary", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # обязательные query-параметры не переданы -> 422
+        assert resp.status_code == 422
 
     def test_export_pdf(self, client, auth_headers):
         resp = client.get("/api/v1/salaries/export/pdf", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # обязательные query-параметры не переданы -> 422
+        assert resp.status_code == 422
 
     def test_export_excel(self, client, auth_headers):
         resp = client.get("/api/v1/salaries/export/excel", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # обязательные query-параметры не переданы -> 422
+        assert resp.status_code == 422
 
     def test_approve_not_found(self, client, auth_headers):
         resp = client.post("/api/v1/salaries/99999/approve", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # НАХОДКА: фактический код 400, ожидается 404 (not found) — не подгонял
+        assert resp.status_code == 404
 
 
 # ==================== RBAC ====================
@@ -107,31 +122,32 @@ class TestSalariesRoutes:
 class TestRbacRoutes:
     def test_list_roles(self, client, auth_headers):
         resp = client.get("/api/v1/rbac/roles", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
+        assert resp.status_code == 403
 
     def test_create_role_validation(self, client, auth_headers):
         resp = client.post("/api/v1/rbac/roles", json={}, headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # валидация тела раньше permission-проверки -> 422
+        assert resp.status_code == 422
 
     def test_list_permissions(self, client, auth_headers):
         resp = client.get("/api/v1/rbac/permissions", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
+        assert resp.status_code == 403
 
     def test_assign_permission_not_found(self, client, auth_headers):
         resp = client.post(
             "/api/v1/rbac/roles/99999/permissions/99999", headers=auth_headers
         )
-        assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
+        assert resp.status_code == 403
 
     def test_remove_permission_not_found(self, client, auth_headers):
         resp = client.delete(
             "/api/v1/rbac/roles/99999/permissions/99999", headers=auth_headers
         )
-        assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
+        assert resp.status_code == 403
 
     def test_user_roles_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/rbac/users/99999/roles", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
+        assert resp.status_code == 403
 
     def test_assign_user_role_not_found(self, client, auth_headers):
         resp = client.post(
@@ -139,18 +155,19 @@ class TestRbacRoutes:
             json={"role_id": 99999},
             headers=auth_headers,
         )
-        assert resp.status_code in (200, 400, 403, 404, 405, 422, 500)
+        # UserRoleCreate требует user_id -> 422 раньше permission-проверки
+        assert resp.status_code == 422
 
     def test_remove_user_role_not_found(self, client, auth_headers):
         resp = client.delete(
             "/api/v1/rbac/users/99999/roles/99999", headers=auth_headers
         )
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 403
 
     def test_my_permissions(self, client, auth_headers):
         resp = client.get("/api/v1/rbac/me/permissions", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 200
 
     def test_init_system(self, client, auth_headers):
         resp = client.post("/api/v1/rbac/init-system", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 403

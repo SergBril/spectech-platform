@@ -5,7 +5,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.constants import TaxSystem
+from app.core.constants import TaxSystem, vat_rate_for_date
 from app.models.auth import User
 from app.models.contractor import Contractor
 from app.models.dispatch import Request
@@ -82,7 +82,7 @@ def calculate_invoice_totals(invoice: Invoice) -> None:
         invoice.total = subtotal
         return
 
-    vat_rate = invoice.vat_rate or Decimal("22.00")
+    vat_rate = invoice.vat_rate or vat_rate_for_date(invoice.invoice_date, tax_system)
 
     if invoice.is_vat_included:
         vat_amount = (subtotal * vat_rate / (Decimal("100") + vat_rate)).quantize(
@@ -118,7 +118,12 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
 
         # Extract amounts from payload (support direct creation with amounts)
         subtotal = _get_field(payload, "subtotal") or Decimal("0.00")
-        vat_rate = _get_field(payload, "vat_rate", Decimal("20.00"))
+        # Ставка зависит от даты ДОКУМЕНТА: 22% с 2026, 20% за 2025 и ранее.
+        invoice_date_val = _get_field(payload, "invoice_date") or datetime.now()
+        tax_system_val = _get_field(payload, "tax_system", TaxSystem.OSNO.value)
+        vat_rate = _get_field(payload, "vat_rate") or vat_rate_for_date(
+            invoice_date_val, tax_system_val
+        )
         vat_amount = _get_field(payload, "vat_amount") or (
             (subtotal * vat_rate / Decimal("100")).quantize(Decimal("0.01"))
             if subtotal
@@ -138,12 +143,12 @@ def create_invoice(db: Session, payload, current_user: User) -> Invoice:
             vat_rate=vat_rate,
             total=total,
             paid_amount=paid_amount,
-            invoice_date=_get_field(payload, "invoice_date") or datetime.now(),
+            invoice_date=invoice_date_val,
             due_date=_get_field(payload, "due_date"),
             comment=_get_field(payload, "comment", ""),
             status=status_val,
             created_by=current_user.id,
-            tax_system=_get_field(payload, "tax_system", "osno"),
+            tax_system=tax_system_val,
             is_vat_included=_get_field(payload, "is_vat_included", True),
         )
         db.add(invoice)

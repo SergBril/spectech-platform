@@ -1,4 +1,4 @@
-﻿"""Regression: marketplace commission rate is a PERCENT, not a fraction.
+"""Regression: marketplace commission rate is a PERCENT, not a fraction.
 
 The column was numeric(5,4) with server_default 0.1 holding 0.1000, while
 calculate_payout() divides by 100 and the vehicle form sends 10.00. That

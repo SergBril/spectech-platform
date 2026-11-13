@@ -1,4 +1,4 @@
-﻿"""Unit tests for InvoiceService.generate_invoice_from_reconciliation."""
+"""Unit tests for InvoiceService.generate_invoice_from_reconciliation."""
 
 from datetime import date
 from decimal import Decimal

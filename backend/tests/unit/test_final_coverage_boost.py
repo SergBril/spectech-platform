@@ -1,97 +1,113 @@
-"""Final coverage boost: target specific uncovered lines."""
+"""Final coverage boost: target specific uncovered lines.
+
+Пути сверены с OpenAPI: analytics/revenue → revenue-chart,
+utilization → /shifts/stats/utilization; несуществующие эндпоинты — xfail strict.
+"""
 
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestAnalyticsUncoveredLines:
     """Cover analytics.py lines 49-50, 76, 78, 94-97, 129, 131, 142."""
 
+    @pytest.mark.xfail(
+        reason="endpoint not implemented: /api/v1/analytics/dashboard", strict=True
+    )
     def test_analytics_dashboard_no_data(self, client, auth_headers):
-        # Lines 49-50: empty data handling
         resp = client.get("/api/v1/analytics/dashboard", headers=auth_headers)
-        assert resp.status_code in (200, 404, 500)
+        assert resp.status_code == 200
 
+    @pytest.mark.xfail(
+        reason="endpoint not implemented: /api/v1/analytics/equipment", strict=True
+    )
     def test_analytics_equipment_stats(self, client, auth_headers):
-        # Lines 76, 78: equipment stats edge cases
         resp = client.get("/api/v1/analytics/equipment", headers=auth_headers)
-        assert resp.status_code in (200, 404, 500)
+        assert resp.status_code == 200
 
     def test_analytics_revenue_with_filters(self, client, auth_headers):
-        # Lines 94-97: revenue with date filters
         resp = client.get(
-            "/api/v1/analytics/revenue?period_start=2026-01-01&period_end=2026-01-31",
+            "/api/v1/analytics/revenue-chart?period_start=2026-01-01&period_end=2026-01-31",
             headers=auth_headers,
         )
-        assert resp.status_code in (200, 404, 422, 500)
+        assert resp.status_code == 200
 
     def test_analytics_utilization(self, client, auth_headers):
-        # Lines 129, 131: utilization rate calculation
-        resp = client.get("/api/v1/analytics/utilization", headers=auth_headers)
-        assert resp.status_code in (200, 404, 500)
+        resp = client.get("/api/v1/shifts/stats/utilization", headers=auth_headers)
+        # 422: обязательные query-параметры не переданы
+        assert resp.status_code == 422
 
+    @pytest.mark.xfail(
+        reason="endpoint not implemented: /api/v1/analytics/export", strict=True
+    )
     def test_analytics_export(self, client, auth_headers):
-        # Line 142: export endpoint
         resp = client.get("/api/v1/analytics/export", headers=auth_headers)
-        assert resp.status_code in (200, 404, 405, 500)
+        assert resp.status_code == 200
 
 
 class TestDisputesUncoveredLines:
     """Cover disputes.py lines 108-109, 132-133."""
 
     def test_dispute_resolve_not_found(self, client, auth_headers):
-        # Lines 108-109: resolve non-existent dispute
         resp = client.post(
             "/api/v1/disputes/999999/resolve",
             json={"resolution": "closed", "comment": "test"},
             headers=auth_headers,
         )
-        assert resp.status_code in (400, 404, 403, 405, 422, 500)
+        # 422: resolution должен быть dict, передана строка
+        assert resp.status_code == 422
 
     def test_dispute_escalate_not_found(self, client, auth_headers):
-        # Lines 132-133: escalate non-existent dispute
         resp = client.post(
             "/api/v1/disputes/999999/escalate",
             headers=auth_headers,
         )
-        assert resp.status_code in (400, 404, 403, 405, 500)
+        assert resp.status_code == 404
 
 
 class TestMarketplaceListingsUncoveredLines:
     """Cover marketplace_listings.py lines 238-239, 256-257, 268, 295-298."""
 
     def test_listing_update_not_found(self, client, auth_headers):
-        # Lines 238-239: update non-existent listing
         resp = client.put(
             "/api/v1/marketplace/listings/999999",
             json={"title": "test"},
             headers=auth_headers,
         )
-        assert resp.status_code in (400, 404, 403, 405, 422, 500)
+        # 405: PUT не разрешён (обновление через PATCH)
+        assert resp.status_code == 405
 
     def test_listing_delete_not_found(self, client, auth_headers):
-        # Lines 256-257: delete non-existent listing
         resp = client.delete(
             "/api/v1/marketplace/listings/999999",
             headers=auth_headers,
         )
-        assert resp.status_code in (400, 404, 403, 405, 500)
+        # 400: листинг не найден / не может быть удалён
+        assert resp.status_code == 400
 
+    @pytest.mark.xfail(
+        reason="endpoint not implemented: /api/v1/marketplace/listings/{vehicle_id}/respond",
+        strict=True,
+    )
     def test_listing_respond_invalid(self, client, auth_headers):
-        # Line 268: respond with invalid data
         resp = client.post(
             "/api/v1/marketplace/listings/999999/respond",
             json={},
             headers=auth_headers,
         )
-        assert resp.status_code in (404, 422, 500)
+        assert resp.status_code == 200
 
+    @pytest.mark.xfail(
+        reason="endpoint not implemented: /api/v1/marketplace/listings/{vehicle_id}/withdraw",
+        strict=True,
+    )
     def test_listing_withdraw_not_found(self, client, auth_headers):
-        # Lines 295-298: withdraw non-existent listing
         resp = client.post(
             "/api/v1/marketplace/listings/999999/withdraw",
             headers=auth_headers,
         )
-        assert resp.status_code in (400, 404, 403, 405, 500)
+        assert resp.status_code == 200
 
 
 class TestSalaryServiceUncoveredLines:
@@ -99,7 +115,6 @@ class TestSalaryServiceUncoveredLines:
 
     @patch("app.services.salary_service.Session")
     def test_calculate_salary_no_driver(self, mock_session):
-        # Lines 120-121: driver not found
         from app.services.salary_service import SalaryService
 
         svc = SalaryService()
@@ -116,7 +131,6 @@ class TestSalaryServiceUncoveredLines:
 
     @patch("app.services.salary_service.Session")
     def test_generate_payslip_edge(self, mock_session):
-        # Lines 141-144: payslip generation edge case
         from app.services.salary_service import SalaryService
 
         svc = SalaryService()
@@ -130,7 +144,6 @@ class TestSalaryServiceUncoveredLines:
 
     @patch("app.services.salary_service.Session")
     def test_bulk_calculate_empty(self, mock_session):
-        # Lines 245-247, 252: bulk calculate with no drivers
         from app.services.salary_service import SalaryService
 
         svc = SalaryService()

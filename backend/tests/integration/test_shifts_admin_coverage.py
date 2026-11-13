@@ -11,11 +11,11 @@ class TestAdminEndpoints:
         assert resp.status_code in (200, 403)
 
     def test_notification_templates(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/notification-templates", headers=auth_headers)
+        resp = client.get("/api/v1/email-templates/", headers=auth_headers)
         assert resp.status_code in (200, 403, 404)
 
     def test_my_profile(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/profile/me", headers=auth_headers)
+        resp = client.get("/api/v1/me", headers=auth_headers)
         assert resp.status_code in (200, 404)
         if resp.status_code == 200:
             data = resp.json()

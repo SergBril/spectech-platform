@@ -6,13 +6,17 @@ import pytest
 
 
 class TestAddressesRoute:
+    @pytest.mark.xfail(
+        reason="endpoint not implemented: GET /api/v1/addresses", strict=True
+    )
     def test_addresses_list(self, client, auth_headers):
         resp = client.get("/api/v1/addresses", headers=auth_headers)
-        assert resp.status_code in (200, 404, 500)
+        assert resp.status_code == 200
 
     def test_addresses_create_invalid(self, client, auth_headers):
-        resp = client.post("/api/v1/addresses", json={}, headers=auth_headers)
-        assert resp.status_code in (400, 404, 422, 500)
+        resp = client.post("/api/v1/addresses/suggest", json={}, headers=auth_headers)
+        # 422: обязательное поле query не передано
+        assert resp.status_code == 422
 
 
 class TestValidators:
@@ -187,8 +191,9 @@ class TestSentryConfig:
 
 class TestShiftsFinance:
     def test_shifts_finance_summary(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/finance/summary", headers=auth_headers)
-        assert resp.status_code in (200, 400, 404, 500)
+        resp = client.get("/api/v1/finance/finance/summary", headers=auth_headers)
+        # 422: обязательные query-параметры не переданы
+        assert resp.status_code == 422
 
 
 class TestTelegramService:

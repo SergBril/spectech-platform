@@ -1,13 +1,19 @@
 """Константы и перечисления для бизнес-логики."""
 
+from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
+
+# НДС на ОСНО: 22% с 2026-01-01, 20% для документов за 2025 и ранее.
+VAT_RATE_CHANGE_DATE = date(2026, 1, 1)
+VAT_RATE_CURRENT = Decimal("22.00")
+VAT_RATE_LEGACY = Decimal("20.00")
 
 
 class TaxSystem(str, Enum):
     """Системы налогообложения."""
 
-    OSNO = "osno"  # ОСНО — с НДС (обычно 20%)
+    OSNO = "osno"  # ОСНО — с НДС (22% с 2026, 20% ранее)
     USN_INCOME = "usn_6"  # УСН Доходы (6%, без НДС)
     USN_FULL = "usn_15"  # УСН Доходы-Расходы (15%, без НДС)
     PATENT = "patent"  # Патент (без НДС)
@@ -32,9 +38,12 @@ class TaxSystem(str, Enum):
 
     @property
     def default_vat_rate(self) -> Decimal:
-        """Ставка НДС по умолчанию для этой системы."""
+        """Текущая ставка НДС по умолчанию (без учёта даты документа).
+
+        Для расчётов по документу используй vat_rate_for_date().
+        """
         if self == TaxSystem.OSNO:
-            return Decimal("20.00")
+            return VAT_RATE_CURRENT
         return Decimal("0")
 
 
@@ -45,8 +54,8 @@ class VatRate(str, Enum):
     FIVE = "5"  # 5% (льготные товары)
     SEVEN = "7"  # 7% (льготные товары)
     TEN = "10"  # 10% (продукты, детские товары)
-    TWENTY = "20"  # 20% (стандартная)
-    TWENTY_TWO = "22"  # 22% (историческая)
+    TWENTY = "20"  # 20% (для документов за 2025 и ранее)
+    TWENTY_TWO = "22"  # 22% (стандартная с 2026-01-01)
 
     @property
     def label(self) -> str:
@@ -72,3 +81,30 @@ VAT_RATE_CHOICES = [
 TAX_SYSTEM_CHOICES = [
     {"value": ts.value, "label": ts.label, "has_vat": ts.has_vat} for ts in TaxSystem
 ]
+
+
+def vat_rate_for_date(doc_date=None, tax_system=None) -> Decimal:
+    """Ставка НДС по дате ДОКУМЕНТА, а не по сегодняшней дате.
+
+    ОСНО: 22% с 2026-01-01, 20% для документов за 2025 и ранее.
+    УСН/Патент/НПД — без НДС. doc_date=None означает текущую ставку.
+
+    Явно заданная ставка в документе имеет приоритет над этой функцией:
+    она нужна для ручного переопределения (например, 20% в документе 2026 года).
+    """
+    if tax_system is None:
+        ts = TaxSystem.OSNO
+    elif isinstance(tax_system, TaxSystem):
+        ts = tax_system
+    else:
+        try:
+            ts = TaxSystem(str(tax_system))
+        except ValueError:
+            ts = TaxSystem.OSNO
+    if not ts.has_vat:
+        return Decimal("0")
+    if doc_date is None:
+        return VAT_RATE_CURRENT
+    if isinstance(doc_date, datetime):
+        doc_date = doc_date.date()
+    return VAT_RATE_CURRENT if doc_date >= VAT_RATE_CHANGE_DATE else VAT_RATE_LEGACY

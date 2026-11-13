@@ -1,7 +1,9 @@
-﻿"""Полные тесты для bank_statement_parser.py — покрытие всех строк."""
-import pytest
-from pathlib import Path
+"""Полные тесты для bank_statement_parser.py — покрытие всех строк."""
+
 from unittest.mock import patch
+
+import pytest
+
 from app.services.bank_statement_parser import (
     ClientBankExchangeParser,
     extract_invoice_numbers_from_purpose,
@@ -20,12 +22,14 @@ class TestParseFileUnicodeFallback:
         content = "1CClientBankExchange\nВерсияФормата=1.03\nСекцияРасчСчет\nНомер=40702810900000001234\nДатаНачала=01.01.2026\nДатаКонца=31.01.2026\nОстатокНаНачало=1000.00\nВсегоПоступило=500.00\nВсегоСписано=200.00\nОстатокНаКонец=1300.00\nКонецРасчСчет\nКонецФайла\n"
         f.write_text(content, encoding="utf-8")
         original_open = open
+
         def patched_open(path, *args, **kwargs):
-            encoding = kwargs.get('encoding', None)
-            if encoding == 'windows-1251':
-                raise UnicodeDecodeError('cp1251', b'', 0, 1, 'fail')
+            encoding = kwargs.get("encoding", None)
+            if encoding == "windows-1251":
+                raise UnicodeDecodeError("cp1251", b"", 0, 1, "fail")
             return original_open(path, *args, **kwargs)
-        with patch('builtins.open', side_effect=patched_open):
+
+        with patch("builtins.open", side_effect=patched_open):
             result = parser.parse_file(f)
             assert result is not None
 

@@ -1,4 +1,7 @@
-"""Final coverage push - analytics, downtime, reviews routes + deps."""
+"""Final coverage push - analytics, downtime, reviews routes + deps.
+
+Loose-assert'ы сужены до конкретных кодов. auth_headers = sample_user.
+"""
 
 import pytest
 
@@ -21,19 +24,19 @@ def auth_headers(auth_token):
 class TestAnalyticsRoutes:
     def test_revenue_chart(self, client, auth_headers):
         resp = client.get("/api/v1/analytics/revenue-chart", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 200
 
     def test_status_chart(self, client, auth_headers):
         resp = client.get("/api/v1/analytics/status-chart", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 200
 
     def test_top_requests(self, client, auth_headers):
         resp = client.get("/api/v1/analytics/top-requests", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 200
 
     def test_sparkline(self, client, auth_headers):
         resp = client.get("/api/v1/analytics/sparkline", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 200
 
 
 # ==================== DOWNTIME ====================
@@ -42,31 +45,32 @@ class TestAnalyticsRoutes:
 class TestDowntimeRoutes:
     def test_list_downtime(self, client, auth_headers):
         resp = client.get("/api/v1/downtime", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 200
 
     def test_create_downtime_validation(self, client, auth_headers):
         resp = client.post("/api/v1/downtime", json={}, headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 422
 
     def test_downtime_stats(self, client, auth_headers):
         resp = client.get("/api/v1/downtime/stats", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 200
 
     def test_get_downtime_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/downtime/99999", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 404
 
     def test_end_downtime_not_found(self, client, auth_headers):
         resp = client.post("/api/v1/downtime/99999/end", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # 422: требуется тело запроса
+        assert resp.status_code == 422
 
     def test_approve_downtime_not_found(self, client, auth_headers):
         resp = client.post("/api/v1/downtime/99999/approve", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 404
 
     def test_reject_downtime_not_found(self, client, auth_headers):
         resp = client.post("/api/v1/downtime/99999/reject", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 404
 
 
 # ==================== REVIEWS ====================
@@ -75,19 +79,23 @@ class TestDowntimeRoutes:
 class TestReviewsRoutes:
     def test_list_reviews(self, client, auth_headers):
         resp = client.get("/api/v1/reviews", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # 405: GET /reviews не разрешён (список через /reviews/my)
+        assert resp.status_code == 405
 
     def test_get_review_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/reviews/99999", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # 405: GET /reviews/{id} не разрешён
+        assert resp.status_code == 405
 
     def test_patch_review_not_found(self, client, auth_headers):
         resp = client.patch("/api/v1/reviews/99999", json={}, headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # 403: нет contractor-профиля для авторства
+        assert resp.status_code == 403
 
     def test_delete_review_not_found(self, client, auth_headers):
         resp = client.delete("/api/v1/reviews/99999", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # 403: нет contractor-профиля для авторства
+        assert resp.status_code == 403
 
 
 # ==================== DEPS ====================

@@ -39,8 +39,8 @@ class Company(Base):
     )
     default_vat_rate = Column(
         Numeric(5, 2),
-        default=Decimal("20.00"),
-        server_default="20.00",
+        default=Decimal("22.00"),
+        server_default="22.00",
         nullable=False,
         comment="Ставка НДС по умолчанию (%)",
     )

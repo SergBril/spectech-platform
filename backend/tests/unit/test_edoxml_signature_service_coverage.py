@@ -1,4 +1,4 @@
-﻿"""Unit tests for edoxml/signature_service.py coverage gaps."""
+"""Unit tests for edoxml/signature_service.py coverage gaps."""
 
 from unittest.mock import patch
 

@@ -29,9 +29,13 @@ class TestMarketplaceList:
 class TestMarketplaceGet:
     """Cover marketplace get endpoint (line 228)."""
 
+    @pytest.mark.xfail(
+        reason="endpoint not implemented: /api/v1/marketplace/requests/{request_id}",
+        strict=True,
+    )
     def test_get_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/marketplace/requests/99999", headers=auth_headers)
-        assert resp.status_code in (404, 403)
+        assert resp.status_code == 200
 
 
 class TestMarketplaceRespond:
@@ -39,19 +43,21 @@ class TestMarketplaceRespond:
 
     def test_respond_validation(self, client, auth_headers):
         resp = client.post(
-            "/api/v1/marketplace/requests/99999/respond", json={}, headers=auth_headers
+            "/api/v1/public/marketplace/requests/99999/respond",
+            json={},
+            headers=auth_headers,
         )
-        assert resp.status_code in (422, 404, 403)
+        # 422: валидация тела отклика
+        assert resp.status_code == 422
 
 
 class TestMarketplaceResponses:
     """Cover marketplace responses endpoints."""
 
     def test_list_responses_not_found(self, client, auth_headers):
-        resp = client.get(
-            "/api/v1/marketplace/requests/99999/responses", headers=auth_headers
-        )
-        assert resp.status_code in (404, 200, 403)
+        resp = client.get("/api/v1/requests/99999/responses", headers=auth_headers)
+        # 404: заявка 99999 не найдена
+        assert resp.status_code == 404
 
 
 # ==================== COMPANIES ====================
@@ -97,13 +103,11 @@ class TestEdoSettings:
     """Cover EDO settings endpoints (lines 179, 204)."""
 
     def test_get_edo_settings(self, client, auth_headers):
-        resp = client.get("/api/v1/companies/edo-settings", headers=auth_headers)
+        resp = client.get("/api/v1/edo-settings", headers=auth_headers)
         assert resp.status_code in (200, 404)
 
     def test_put_edo_settings(self, client, auth_headers):
-        resp = client.put(
-            "/api/v1/companies/edo-settings", json={}, headers=auth_headers
-        )
+        resp = client.put("/api/v1/edo-settings", json={}, headers=auth_headers)
         assert resp.status_code in (200, 404, 422, 403)
 
 

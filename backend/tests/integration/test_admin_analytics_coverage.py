@@ -122,9 +122,12 @@ class TestAnalyticsSparkline:
 class TestBenchmark:
     """Cover benchmark endpoints."""
 
+    @pytest.mark.xfail(
+        reason="endpoint not implemented: /api/v1/benchmark/prices", strict=True
+    )
     def test_benchmark_list(self, client, auth_headers):
         resp = client.get("/api/v1/benchmark/prices", headers=auth_headers)
-        assert resp.status_code in (200, 404)
+        assert resp.status_code == 200
 
 
 # ==================== EMAIL ====================

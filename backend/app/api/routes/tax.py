@@ -3,7 +3,11 @@
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_user
-from app.core.constants import TAX_SYSTEM_CHOICES, VAT_RATE_CHOICES
+from app.core.constants import (
+    TAX_SYSTEM_CHOICES,
+    VAT_RATE_CHOICES,
+    vat_rate_for_date,
+)
 from app.models.auth import User
 
 router = APIRouter(prefix="/tax", tags=["tax"])
@@ -34,5 +38,5 @@ def get_tax_config(current_user: User = Depends(get_current_user)):
         "systems": TAX_SYSTEM_CHOICES,
         "vat_rates": VAT_RATE_CHOICES,
         "default_system": "osno",
-        "default_vat_rate": "20",
+        "default_vat_rate": f"{vat_rate_for_date():.0f}",
     }

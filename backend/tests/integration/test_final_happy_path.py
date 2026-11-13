@@ -2,6 +2,8 @@
 
 from datetime import date
 
+import pytest
+
 
 class TestInvoicesHappyPath:
     def test_list_invoices_with_data(self, client, auth_headers, sample_invoice):
@@ -27,9 +29,12 @@ class TestMaintenanceHappyPath:
         resp = client.get("/api/v1/maintenance/orders", headers=auth_headers)
         assert resp.status_code in (200, 404)
 
+    @pytest.mark.xfail(
+        reason="endpoint not implemented: /api/v1/maintenance/stats", strict=True
+    )
     def test_maintenance_stats(self, client, auth_headers):
         resp = client.get("/api/v1/maintenance/stats", headers=auth_headers)
-        assert resp.status_code in (200, 404)
+        assert resp.status_code == 200
 
 
 class TestDriversHappyPath:

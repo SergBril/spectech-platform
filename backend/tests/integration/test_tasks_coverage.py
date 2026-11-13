@@ -1,4 +1,7 @@
-"""Tests for tasks API coverage improvement."""
+"""Tests for tasks API coverage improvement.
+
+Loose-assert'ы сужены до конкретных кодов. auth_headers = sample_user (не superuser).
+"""
 
 import pytest
 
@@ -22,13 +25,13 @@ class TestTasksGeneratePdf:
         resp = client.post(
             "/api/v1/tasks/invoices/99999/generate-pdf-async", headers=auth_headers
         )
-        assert resp.status_code in (200, 404, 403, 422)
+        assert resp.status_code == 404
 
     def test_act_pdf_async(self, client, auth_headers):
         resp = client.post(
             "/api/v1/tasks/acts/99999/generate-pdf-async", headers=auth_headers
         )
-        assert resp.status_code in (200, 404, 403, 422)
+        assert resp.status_code == 404
 
 
 class TestTasksCleanupPdfs:
@@ -36,7 +39,8 @@ class TestTasksCleanupPdfs:
 
     def test_cleanup(self, client, auth_headers):
         resp = client.post("/api/v1/tasks/cleanup-pdfs", headers=auth_headers)
-        assert resp.status_code in (200, 403)
+        # 403: только superuser
+        assert resp.status_code == 403
 
 
 class TestTasksStatus:
@@ -55,7 +59,8 @@ class TestTasksEmailSend:
 
     def test_send_validation(self, client, auth_headers):
         resp = client.post("/api/v1/tasks/emails/send", json={}, headers=auth_headers)
-        assert resp.status_code in (422, 403, 400)
+        # 422: обязательные query-параметры раньше superuser-гейта
+        assert resp.status_code == 422
 
 
 class TestTasksAlertNotify:
@@ -63,7 +68,7 @@ class TestTasksAlertNotify:
 
     def test_notify_not_found(self, client, auth_headers):
         resp = client.post("/api/v1/tasks/alerts/99999/notify", headers=auth_headers)
-        assert resp.status_code in (404, 403, 422)
+        assert resp.status_code == 404
 
 
 class TestTasksTelematics:
@@ -71,7 +76,8 @@ class TestTasksTelematics:
 
     def test_cleanup_gps(self, client, auth_headers):
         resp = client.post("/api/v1/tasks/telematics/cleanup-gps", headers=auth_headers)
-        assert resp.status_code in (200, 403)
+        # 403: только superuser
+        assert resp.status_code == 403
 
     @pytest.mark.skip(reason="Requires Redis/Celery connection")
     def test_detect_offline(self, client, auth_headers):
@@ -88,7 +94,8 @@ class TestTasksScheduled:
         resp = client.post(
             "/api/v1/tasks/scheduled/morning-digest", headers=auth_headers
         )
-        assert resp.status_code in (200, 403)
+        # 403: только superuser
+        assert resp.status_code == 403
 
     @pytest.mark.skip(reason="Requires Redis/Celery connection")
     def test_health_check(self, client, auth_headers):

@@ -420,7 +420,12 @@ def _generate_act_pdf_fpdf(act, contractor=None) -> bytes:
     pdf.cell(40, 8, f"{_format_money(total)} ₽", 0, 1, "R")
 
     if tax_system == "osno":
-        vat_rate = _to_float(getattr(act, "vat_rate", 20))
+        from app.core.constants import vat_rate_for_date
+
+        vat_rate = _to_float(
+            getattr(act, "vat_rate", None)
+            or vat_rate_for_date(getattr(act, "act_date", None))
+        )
         vat_included = getattr(act, "is_vat_included", True)
         if vat_included:
             vat = total * vat_rate / (100 + vat_rate)

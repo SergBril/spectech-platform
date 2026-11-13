@@ -1,4 +1,7 @@
-"""Tests for GPS routes and mapix_sync_task coverage."""
+"""Tests for GPS routes and mapix_sync_task coverage.
+
+Loose-assert'ы сужены до конкретных кодов. auth_headers = sample_user.
+"""
 
 import pytest
 
@@ -21,43 +24,44 @@ def auth_headers(auth_token):
 class TestGpsPointsImport:
     def test_import_validation(self, client, auth_headers):
         resp = client.post("/api/v1/gps/points/import", json={}, headers=auth_headers)
-        assert resp.status_code in (422, 403, 400)
+        assert resp.status_code == 422
 
 
 class TestGpsPointsList:
     def test_list(self, client, auth_headers):
         resp = client.get("/api/v1/gps/points", headers=auth_headers)
-        assert resp.status_code in (200, 403)
+        assert resp.status_code == 200
 
 
 class TestGpsPositionsLatest:
     def test_latest(self, client, auth_headers):
         resp = client.get("/api/v1/gps/positions/latest", headers=auth_headers)
-        assert resp.status_code in (200, 403)
+        assert resp.status_code == 200
 
 
 class TestGpsPointsStats:
     def test_stats(self, client, auth_headers):
         resp = client.get("/api/v1/gps/points/stats", headers=auth_headers)
-        assert resp.status_code in (200, 403)
+        assert resp.status_code == 200
 
 
 class TestGpsPointsExport:
     def test_export(self, client, auth_headers):
         resp = client.get("/api/v1/gps/points/export", headers=auth_headers)
-        assert resp.status_code in (200, 403, 404, 422)
+        # 404: нет точек для экспорта
+        assert resp.status_code == 404
 
 
 class TestGpsProvidersVehicles:
     def test_list(self, client, auth_headers):
         resp = client.get("/api/v1/gps/providers/vehicles", headers=auth_headers)
-        assert resp.status_code in (200, 403)
+        assert resp.status_code == 200
 
     def test_patch_not_found(self, client, auth_headers):
         resp = client.patch(
             "/api/v1/gps/providers/vehicles/99999", json={}, headers=auth_headers
         )
-        assert resp.status_code in (404, 422, 403)
+        assert resp.status_code == 404
 
 
 # ==================== MAPIX SYNC TASK ====================

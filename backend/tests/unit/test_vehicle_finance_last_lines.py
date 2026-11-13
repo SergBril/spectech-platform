@@ -1,20 +1,37 @@
-﻿"""Точечные тесты для vehicle_service.py:57 и finance_service.py:208."""
-import pytest
-from unittest.mock import MagicMock, patch
+"""Точечные тесты для vehicle_service.py:57 и finance_service.py:208."""
+
 from types import SimpleNamespace
+from unittest.mock import patch
 
 
 # === vehicle_service.py line 57: number attr sets value_text after float ===
 class TestSaveVehicleAttributesNumber:
     def test_number_attr_sets_value_text(self, db_session, company, sample_vehicle):
+        from app.models.catalog import (
+            Category,
+            EquipmentAttributeDefinition,
+            EquipmentAttributeValue,
+        )
         from app.services.vehicle_service import save_vehicle_attributes
-        from app.models.catalog import Category, EquipmentAttributeDefinition, EquipmentAttributeValue
 
-        parent = Category(name="Землеройная", code="earth", level=0, company_id=company.id, is_active=True)
+        parent = Category(
+            name="Землеройная",
+            code="earth",
+            level=0,
+            company_id=company.id,
+            is_active=True,
+        )
         db_session.add(parent)
         db_session.flush()
 
-        subcat = Category(name="Экскаваторы", code="excavator", level=1, parent_id=parent.id, company_id=company.id, is_active=True)
+        subcat = Category(
+            name="Экскаваторы",
+            code="excavator",
+            level=1,
+            parent_id=parent.id,
+            company_id=company.id,
+            is_active=True,
+        )
         db_session.add(subcat)
         db_session.flush()
 
@@ -22,8 +39,12 @@ class TestSaveVehicleAttributesNumber:
         db_session.commit()
 
         attr_def = EquipmentAttributeDefinition(
-            name="Вес", slug="weight", data_type="number",
-            subcategory_id=subcat.id, is_active=True, sort_order=1,
+            name="Вес",
+            slug="weight",
+            data_type="number",
+            subcategory_id=subcat.id,
+            is_active=True,
+            sort_order=1,
         )
         db_session.add(attr_def)
         db_session.commit()
@@ -33,9 +54,13 @@ class TestSaveVehicleAttributesNumber:
         save_vehicle_attributes(db_session, sample_vehicle.id, subcat.id, attrs)
 
         # Verify attribute was saved (may be None in test DB due to FK constraints)
-        val = db_session.query(EquipmentAttributeValue).filter_by(
-            vehicle_id=sample_vehicle.id,
-        ).first()
+        val = (
+            db_session.query(EquipmentAttributeValue)
+            .filter_by(
+                vehicle_id=sample_vehicle.id,
+            )
+            .first()
+        )
         if val is not None:
             assert val.value_number == 42.5
             assert val.value_text == "42.5"
@@ -43,7 +68,9 @@ class TestSaveVehicleAttributesNumber:
 
 # === finance_service.py line 208: already covered ===
 class TestCreateInvoiceEmailLog:
-    def test_invoice_email_logs_success(self, db_session, company, sample_contractor, sample_user):
+    def test_invoice_email_logs_success(
+        self, db_session, company, sample_contractor, sample_user
+    ):
         from app.services.finance_service import create_invoice
 
         sample_contractor.contact_email = "client@test.com"

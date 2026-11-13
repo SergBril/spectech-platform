@@ -62,9 +62,7 @@ class TestShiftTasksEndpoints:
         assert resp.status_code in (404, 403)
 
     def test_auto_assign_driver_not_found(self, client, auth_headers):
-        resp = client.post(
-            "/api/v1/shifts/tasks/99999/auto-assign", headers=auth_headers
-        )
+        resp = client.post("/api/v1/shifts/99999/auto-assign", headers=auth_headers)
         assert resp.status_code in (404, 403)
 
     def test_bulk_auto_assign_empty_period(self, client, auth_headers):

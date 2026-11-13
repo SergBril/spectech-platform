@@ -1,10 +1,9 @@
-﻿"""Cover reportlab_pdf_generator.py lines 54-64 by creating real font files."""
-import importlib
-import sys
-import shutil
-import pytest
-from pathlib import Path
+"""Cover reportlab_pdf_generator.py lines 54-64 by creating real font files."""
 
+import importlib
+import shutil
+import sys
+from pathlib import Path
 
 # Use a path that works on Windows too
 _TEST_FONT_DIR = Path("C:/app/fonts")

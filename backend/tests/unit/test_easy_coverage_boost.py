@@ -1,4 +1,8 @@
-"""Quick coverage boost: cover 1-miss modules."""
+"""Quick coverage boost: cover 1-miss modules.
+
+Пути сверены с OpenAPI; loose-assert'ы сужены до конкретных кодов.
+auth_headers = admin (superuser) -> валидные роуты отвечают 200.
+"""
 
 
 class TestOneMissModules:
@@ -21,12 +25,12 @@ class TestOneMissModules:
         _ = getattr(settings, "NONEXISTENT_SETTING", None)
 
     def test_benchmark_route(self, client, auth_headers):
-        resp = client.get("/api/v1/benchmark", headers=auth_headers)
-        assert resp.status_code in (200, 404, 405, 500)
+        resp = client.get("/api/v1/benchmark/fast", headers=auth_headers)
+        assert resp.status_code == 200
 
     def test_signature_route(self, client, auth_headers):
-        resp = client.get("/api/v1/signature", headers=auth_headers)
-        assert resp.status_code in (200, 404, 405, 500)
+        resp = client.get("/api/v1/signature/info", headers=auth_headers)
+        assert resp.status_code == 200
 
     def test_exception_handler_404(self, client):
         resp = client.get("/nonexistent-route-xyz")
@@ -63,7 +67,7 @@ class TestOneMissModules:
 
     def test_rentals_route_list(self, client, auth_headers):
         resp = client.get("/api/v1/rentals", headers=auth_headers)
-        assert resp.status_code in (200, 404, 405, 500)
+        assert resp.status_code == 200
 
     def test_logging_config_edge(self):
         from app.core.logging_config import setup_logging
@@ -83,20 +87,20 @@ class TestOneMissModules:
             pass
 
     def test_alerts_route(self, client, auth_headers):
-        resp = client.get("/api/v1/shifts/alerts", headers=auth_headers)
-        assert resp.status_code in (200, 404, 405, 500)
+        resp = client.get("/api/v1/telematics/alerts", headers=auth_headers)
+        assert resp.status_code == 200
 
     def test_tax_route(self, client, auth_headers):
-        resp = client.get("/api/v1/tax", headers=auth_headers)
-        assert resp.status_code in (200, 404, 405, 500)
+        resp = client.get("/api/v1/tax/systems", headers=auth_headers)
+        assert resp.status_code == 200
 
     def test_secure_test_route(self, client, auth_headers):
-        resp = client.get("/api/v1/secure-test", headers=auth_headers)
-        assert resp.status_code in (200, 403, 404, 405, 500)
+        resp = client.get("/api/v1/secure-test/public", headers=auth_headers)
+        assert resp.status_code == 200
 
     def test_disputes_route_list(self, client, auth_headers):
         resp = client.get("/api/v1/disputes", headers=auth_headers)
-        assert resp.status_code in (200, 404, 405, 500)
+        assert resp.status_code == 200
 
     def test_constants_edge(self):
         from app.core.constants import TaxSystem
@@ -138,5 +142,5 @@ class TestOneMissModules:
             pass
 
     def test_debug_route(self, client, auth_headers):
-        resp = client.get("/api/v1/debug", headers=auth_headers)
-        assert resp.status_code in (200, 403, 404, 405, 500)
+        resp = client.get("/api/v1/debug/test-log", headers=auth_headers)
+        assert resp.status_code == 200

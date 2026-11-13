@@ -1,4 +1,8 @@
-"""Deep coverage - hit internal branches in contractors, companies, deps."""
+"""Deep coverage - hit internal branches in contractors, companies, deps.
+
+Loose-assert'ы сужены до конкретных кодов по фактическому контракту.
+auth_headers = sample_user (без специальных прав).
+"""
 
 import pytest
 
@@ -24,7 +28,8 @@ class TestContractorsDeep:
         resp = client.post(
             "/api/v1/contractors/suggest-inn", json={"inn": ""}, headers=auth_headers
         )
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # 400: пустой ИНН
+        assert resp.status_code == 400
 
     def test_suggest_inn_nonexistent(self, client, auth_headers):
         """Hit the DaData lookup branch."""
@@ -33,7 +38,8 @@ class TestContractorsDeep:
             json={"inn": "0000000000"},
             headers=auth_headers,
         )
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # 200: DaData-stub возвращает результат (пустой) без ошибки
+        assert resp.status_code == 200
 
     def test_create_employee_not_found(self, client, auth_headers):
         """Hit contractor not found branch."""
@@ -42,12 +48,14 @@ class TestContractorsDeep:
             json={"position": "driver", "role_in_system": "driver"},
             headers=auth_headers,
         )
-        assert resp.status_code in (200, 400, 403, 404, 405, 409, 422)
+        # 422: валидация тела раньше поиска контрагента
+        assert resp.status_code == 422
 
     def test_get_default_contractor(self, client, auth_headers):
         """Hit the get-default-contractor endpoint branches."""
         resp = client.get("/api/v1/contractors/default", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # 422: требуются query-параметры
+        assert resp.status_code == 422
 
 
 # ==================== COMPANIES DEEP ====================
@@ -61,7 +69,8 @@ class TestCompaniesDeep:
             json={"name": "Test Update"},
             headers=auth_headers,
         )
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # 403: permission-проверка раньше поиска компании
+        assert resp.status_code == 403
 
     def test_put_edo_settings_with_data(self, client, auth_headers):
         """Hit the EDO settings update branch with company_id=7."""
@@ -70,12 +79,13 @@ class TestCompaniesDeep:
             json={"operator": "diadoc"},
             headers=auth_headers,
         )
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        assert resp.status_code == 200
 
     def test_tax_settings_company_7(self, client, auth_headers):
         """Hit tax settings for existing company."""
         resp = client.get("/api/v1/companies/7/tax-settings", headers=auth_headers)
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # 404: компания 7 не найдена
+        assert resp.status_code == 404
 
     def test_patch_tax_settings_company_7(self, client, auth_headers):
         """Hit tax settings update for existing company."""
@@ -84,7 +94,8 @@ class TestCompaniesDeep:
             json={"tax_system": "usn"},
             headers=auth_headers,
         )
-        assert resp.status_code in (200, 400, 403, 404, 405, 422)
+        # 403: permission-проверка раньше поиска
+        assert resp.status_code == 403
 
 
 # ==================== DEPS DEEP ====================

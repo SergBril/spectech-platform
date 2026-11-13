@@ -1,4 +1,4 @@
-﻿"""Guard the connection budget: workers * (pool + overflow) must fit Postgres."""
+"""Guard the connection budget: workers * (pool + overflow) must fit Postgres."""
 
 from app.core.config import settings
 

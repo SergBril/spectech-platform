@@ -1,4 +1,4 @@
-﻿"""Unit tests for GPS providers coverage."""
+"""Unit tests for GPS providers coverage."""
 
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch

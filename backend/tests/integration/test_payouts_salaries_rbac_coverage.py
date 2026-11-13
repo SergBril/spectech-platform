@@ -1,4 +1,8 @@
-"""Tests for payouts, salaries, rbac API coverage improvement."""
+"""Tests for payouts, salaries, rbac API coverage improvement.
+
+Loose-assert'ы сужены до конкретных кодов. auth_headers = sample_user (без прав).
+RBAC-классы остаются skipped (известный баг require_permission).
+"""
 
 import pytest
 
@@ -34,7 +38,7 @@ class TestPayoutsSummary:
             "/api/v1/finance/payouts/summary?date_from=2025-01-01&date_to=2026-12-31",
             headers=auth_headers,
         )
-        assert resp.status_code in (200, 403, 422)
+        assert resp.status_code == 200
 
 
 class TestPayoutsCsv:
@@ -42,7 +46,7 @@ class TestPayoutsCsv:
 
     def test_csv(self, client, auth_headers):
         resp = client.get("/api/v1/finance/payouts/csv", headers=auth_headers)
-        assert resp.status_code in (200, 403)
+        assert resp.status_code == 200
 
 
 class TestPayoutsGet:
@@ -58,7 +62,8 @@ class TestPayoutsCreate:
 
     def test_create_validation(self, client, auth_headers):
         resp = client.post("/api/v1/finance/payouts", json={}, headers=auth_headers)
-        assert resp.status_code in (422, 403)
+        # 422: валидация тела раньше permission-проверки
+        assert resp.status_code == 422
 
 
 class TestPayoutsSendEmail:
@@ -68,7 +73,8 @@ class TestPayoutsSendEmail:
         resp = client.post(
             "/api/v1/finance/payouts/99999/send-email", headers=auth_headers
         )
-        assert resp.status_code in (404, 403)
+        # 404: выплата не найдена
+        assert resp.status_code == 404
 
 
 class TestPayoutsApprove:
@@ -78,7 +84,8 @@ class TestPayoutsApprove:
         resp = client.post(
             "/api/v1/finance/payouts/99999/approve", headers=auth_headers
         )
-        assert resp.status_code in (404, 403)
+        # 404: выплата не найдена
+        assert resp.status_code == 404
 
 
 class TestPayoutsPay:
@@ -86,7 +93,8 @@ class TestPayoutsPay:
 
     def test_pay_not_found(self, client, auth_headers):
         resp = client.post("/api/v1/finance/payouts/99999/pay", headers=auth_headers)
-        assert resp.status_code in (404, 403)
+        # 404: выплата не найдена
+        assert resp.status_code == 404
 
 
 class TestPayoutsPdf:
@@ -94,7 +102,7 @@ class TestPayoutsPdf:
 
     def test_pdf_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/finance/payouts/99999/pdf", headers=auth_headers)
-        assert resp.status_code in (401, 404, 500)
+        assert resp.status_code == 404
 
 
 # ==================== SALARIES ====================
@@ -105,7 +113,7 @@ class TestSalariesCalculate:
 
     def test_calculate_validation(self, client, auth_headers):
         resp = client.post("/api/v1/salaries/calculate", json={}, headers=auth_headers)
-        assert resp.status_code in (422, 403)
+        assert resp.status_code == 422
 
 
 class TestSalariesList:
@@ -113,7 +121,7 @@ class TestSalariesList:
 
     def test_list(self, client, auth_headers):
         resp = client.get("/api/v1/salaries", headers=auth_headers)
-        assert resp.status_code in (200, 403)
+        assert resp.status_code == 200
 
 
 class TestSalariesSummary:
@@ -123,7 +131,8 @@ class TestSalariesSummary:
         resp = client.get(
             "/api/v1/salaries/summary?month=2025-01", headers=auth_headers
         )
-        assert resp.status_code in (200, 403, 422)
+        # 422: параметр month не соответствует контракту
+        assert resp.status_code == 422
 
 
 class TestSalariesExportPdf:
@@ -133,7 +142,8 @@ class TestSalariesExportPdf:
         resp = client.get(
             "/api/v1/salaries/export/pdf?month=2025-01", headers=auth_headers
         )
-        assert resp.status_code in (200, 400, 403, 422)
+        # 422: обязательные query-параметры
+        assert resp.status_code == 422
 
 
 class TestSalariesExportExcel:
@@ -143,7 +153,8 @@ class TestSalariesExportExcel:
         resp = client.get(
             "/api/v1/salaries/export/excel?month=2025-01", headers=auth_headers
         )
-        assert resp.status_code in (200, 400, 403, 422)
+        # 422: обязательные query-параметры
+        assert resp.status_code == 422
 
 
 class TestSalariesApprove:
@@ -151,7 +162,9 @@ class TestSalariesApprove:
 
     def test_approve_not_found(self, client, auth_headers):
         resp = client.post("/api/v1/salaries/99999/approve", headers=auth_headers)
-        assert resp.status_code in (400, 404, 403)
+        # 400: известный баг — not-found маппится в 400 (см. test_mega_coverage,
+        # test_approve_not_found оставлен красным с ожиданием 404)
+        assert resp.status_code == 400
 
 
 # ==================== RBAC ====================

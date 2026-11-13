@@ -1,7 +1,9 @@
-﻿"""Targeted tests for diadoc.py, mobile.py, max_messenger.py route bodies."""
+"""Targeted tests for diadoc.py, mobile.py, max_messenger.py route bodies."""
 
 from datetime import date
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 
 class TestDiadocRouteBodies:
@@ -45,7 +47,7 @@ class TestDiadocRouteBodies:
             json={"act_id": act.id, "counterparty_box_id": "test-box"},
             headers=auth_headers,
         )
-        assert resp.status_code in (200, 404, 422, 500)
+        assert resp.status_code == 200
 
     @patch("app.services.diadoc_service.diadoc_service")
     def test_bulk_send_acts(self, mock_diadoc, client, auth_headers):
@@ -58,7 +60,7 @@ class TestDiadocRouteBodies:
             json={"act_ids": [], "counterparty_box_id": "box1"},
             headers=auth_headers,
         )
-        assert resp.status_code in (200, 422, 500)
+        assert resp.status_code == 200
 
     @patch("app.services.diadoc_service.diadoc_service")
     def test_refresh_statuses(self, mock_diadoc, client, auth_headers):
@@ -71,7 +73,7 @@ class TestDiadocRouteBodies:
         resp = client.post(
             "/api/v1/shifts/diadoc/refresh-statuses", headers=auth_headers
         )
-        assert resp.status_code in (200, 500)
+        assert resp.status_code == 200
 
     @patch("app.services.digital_signature_service.digital_signature_service")
     def test_verify_signature_route(
@@ -94,7 +96,7 @@ class TestDiadocRouteBodies:
         resp = client.get(
             f"/api/v1/shifts/acts/{act.id}/verify-signature", headers=auth_headers
         )
-        assert resp.status_code in (200, 404, 500)
+        assert resp.status_code == 200
 
 
 class TestMaxMessengerRouteBodies:
@@ -135,12 +137,12 @@ class TestMaxMessengerRouteBodies:
     @patch("app.services.max_messenger_service.max_messenger_service")
     def test_bind_link_generation(self, mock_svc, client, auth_headers):
         resp = client.get("/api/v1/shifts/max/bind-link", headers=auth_headers)
-        assert resp.status_code in (200, 404, 405)
+        assert resp.status_code == 200  # MAX service mocked
 
     @patch("app.services.max_messenger_service.max_messenger_service")
     def test_bind_status_check(self, mock_svc, client, auth_headers):
         resp = client.get("/api/v1/shifts/max/bind-status", headers=auth_headers)
-        assert resp.status_code in (200, 404, 405)
+        assert resp.status_code == 200  # MAX service mocked
 
 
 class TestMobileRouteBodies:
@@ -149,7 +151,7 @@ class TestMobileRouteBodies:
     def test_submit_report_mobile(self, client, auth_headers, dispute_test_data):
         report = dispute_test_data["shift_report"]
         resp = client.post(
-            "/api/v1/shifts/mobile/report",
+            f"/api/v1/shifts/report/{report.shift_task_id}",
             json={
                 "task_id": report.shift_task_id,
                 "moto_hours": 8.0,
@@ -157,7 +159,8 @@ class TestMobileRouteBodies:
             },
             headers=auth_headers,
         )
-        assert resp.status_code in (200, 404, 422, 500)
+        # 403: пользователь не оператор этой смены (проверка владельца)
+        assert resp.status_code in (200, 403, 404, 422, 500)
 
     def test_add_fuel_entry_mobile(self, client, auth_headers, dispute_test_data):
         task = dispute_test_data["shift_task"]
@@ -175,7 +178,7 @@ class TestMobileRouteBodies:
     def test_get_checklist_mobile(self, client, auth_headers, dispute_test_data):
         task = dispute_test_data["shift_task"]
         resp = client.get(
-            f"/api/v1/shifts/mobile/checklist?shift_task_id={task.id}",
+            f"/api/v1/shifts/checklist/{task.id}",
             headers=auth_headers,
         )
         assert resp.status_code in (200, 404, 422)
@@ -183,7 +186,7 @@ class TestMobileRouteBodies:
     def test_submit_checklist_mobile(self, client, auth_headers, dispute_test_data):
         task = dispute_test_data["shift_task"]
         resp = client.post(
-            "/api/v1/shifts/mobile/checklist",
+            f"/api/v1/shifts/checklist/{task.id}/submit",
             json={
                 "shift_task_id": task.id,
                 "items": [{"item_id": 1, "value": "ok", "comment": ""}],
@@ -200,9 +203,13 @@ class TestMobileRouteBodies:
         )
         assert resp.status_code in (200, 404, 422, 500)
 
+    @pytest.mark.xfail(
+        reason="endpoint not implemented: /api/v1/shifts/mobile/fuel/sync",
+        strict=True,
+    )
     def test_sync_fuel_cards_mobile(self, client, auth_headers):
         resp = client.get("/api/v1/shifts/mobile/fuel/sync", headers=auth_headers)
-        assert resp.status_code in (200, 404, 405)
+        assert resp.status_code == 200
 
     def test_register_device_token_mobile(self, client, auth_headers):
         resp = client.post(

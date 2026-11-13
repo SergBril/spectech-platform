@@ -1,4 +1,4 @@
-﻿"""Unit tests for GdeMoi and GPS-Trace adapters."""
+"""Unit tests for GdeMoi and GPS-Trace adapters."""
 
 from contextlib import asynccontextmanager
 from datetime import datetime

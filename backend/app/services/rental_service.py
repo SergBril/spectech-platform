@@ -630,11 +630,13 @@ class RentalService:
         """РЎРѕР·РґР°С‘С‚ Invoice РЅР° РѕСЃРЅРѕРІРµ Р·Р°РІРµСЂС€С‘РЅРЅРѕР№ Р°СЂРµРЅРґС‹."""
         from datetime import date, timedelta
 
-        from app.core.constants import TaxSystem
+        from app.core.constants import TaxSystem, vat_rate_for_date
         from app.models.finance import DocumentStatus, Invoice, InvoiceItem
         from app.services.finance_service import generate_document_number
 
-        vat_rate = Decimal("20.00")
+        # Дата счёта = дата завершения аренды, а не сегодня.
+        invoice_date_val = rental.end_date.date() if rental.end_date else date.today()
+        vat_rate = vat_rate_for_date(invoice_date_val, TaxSystem.OSNO.value)
         subtotal = rental.total_amount
         vat_amount = (subtotal * vat_rate / Decimal("100")).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
@@ -652,8 +654,8 @@ class RentalService:
             vat_rate=vat_rate,
             total=total,
             paid_amount=Decimal("0.00"),
-            invoice_date=date.today(),
-            due_date=date.today() + timedelta(days=30),
+            invoice_date=invoice_date_val,
+            due_date=invoice_date_val + timedelta(days=30),
             status=DocumentStatus.draft,
             tax_system=TaxSystem.OSNO.value,
             is_vat_included=False,

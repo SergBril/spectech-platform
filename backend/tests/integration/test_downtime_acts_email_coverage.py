@@ -1,4 +1,7 @@
-"""Tests for downtime, acts, email, addresses API coverage improvement."""
+"""Tests for downtime, acts, email, addresses API coverage improvement.
+
+Loose-assert'ы сужены до конкретных кодов. auth_headers = sample_user.
+"""
 
 import pytest
 
@@ -47,7 +50,7 @@ class TestDowntimeCreate:
 
     def test_create_validation(self, client, auth_headers):
         resp = client.post("/api/v1/downtime", json={}, headers=auth_headers)
-        assert resp.status_code in (422, 403)
+        assert resp.status_code == 422
 
 
 class TestDowntimeEnd:
@@ -55,7 +58,8 @@ class TestDowntimeEnd:
 
     def test_end_not_found(self, client, auth_headers):
         resp = client.post("/api/v1/downtime/99999/end", headers=auth_headers)
-        assert resp.status_code in (404, 403, 422)
+        # 422: требуется тело запроса
+        assert resp.status_code == 422
 
 
 class TestDowntimeApprove:
@@ -63,7 +67,7 @@ class TestDowntimeApprove:
 
     def test_approve_not_found(self, client, auth_headers):
         resp = client.post("/api/v1/downtime/99999/approve", headers=auth_headers)
-        assert resp.status_code in (404, 403)
+        assert resp.status_code == 404
 
 
 class TestDowntimeReject:
@@ -71,7 +75,7 @@ class TestDowntimeReject:
 
     def test_reject_not_found(self, client, auth_headers):
         resp = client.post("/api/v1/downtime/99999/reject", headers=auth_headers)
-        assert resp.status_code in (404, 403)
+        assert resp.status_code == 404
 
 
 class TestDowntimeUpload:
@@ -79,7 +83,7 @@ class TestDowntimeUpload:
 
     def test_upload_validation(self, client, auth_headers):
         resp = client.post("/api/v1/downtime/upload", headers=auth_headers)
-        assert resp.status_code in (422, 400, 403)
+        assert resp.status_code == 422
 
 
 # ==================== ACTS ====================
@@ -90,19 +94,19 @@ class TestActsPdf:
 
     def test_pdf_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/acts/99999/pdf", headers=auth_headers)
-        assert resp.status_code in (401, 404, 500)
+        assert resp.status_code == 404
 
     def test_invoice_facture_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/acts/99999/invoice-facture", headers=auth_headers)
-        assert resp.status_code in (401, 404, 500)
+        assert resp.status_code == 404
 
     def test_upd_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/acts/99999/upd", headers=auth_headers)
-        assert resp.status_code in (401, 404, 500)
+        assert resp.status_code == 404
 
     def test_torg12_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/acts/99999/torg12", headers=auth_headers)
-        assert resp.status_code in (401, 404, 500)
+        assert resp.status_code == 404
 
 
 # ==================== EMAIL ====================
@@ -113,7 +117,8 @@ class TestEmailLogs:
 
     def test_list_logs(self, client, auth_headers):
         resp = client.get("/api/v1/email/logs", headers=auth_headers)
-        assert resp.status_code in (200, 403)
+        # 403: нет права email:read
+        assert resp.status_code == 403
 
     def test_get_log_not_found(self, client, auth_headers):
         resp = client.get("/api/v1/email/logs/99999", headers=auth_headers)
@@ -121,7 +126,8 @@ class TestEmailLogs:
 
     def test_delete_log_not_found(self, client, auth_headers):
         resp = client.delete("/api/v1/email/logs/99999", headers=auth_headers)
-        assert resp.status_code in (404, 403)
+        # 403: permission-проверка раньше поиска
+        assert resp.status_code == 403
 
 
 # ==================== ADDRESSES ====================
@@ -134,4 +140,5 @@ class TestAddresses:
         resp = client.post(
             "/api/v1/addresses/suggest", json={"query": "москва"}, headers=auth_headers
         )
-        assert resp.status_code in (200, 422, 405, 503)
+        # 200: DaData-stub возвращает результат
+        assert resp.status_code == 200

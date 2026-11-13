@@ -1,4 +1,4 @@
-﻿"""Routing tests for GPS sync: positions must never mix between vehicles."""
+"""Routing tests for GPS sync: positions must never mix between vehicles."""
 
 from types import SimpleNamespace as NS
 

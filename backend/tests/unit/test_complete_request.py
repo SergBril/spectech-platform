@@ -1,4 +1,4 @@
-﻿"""Unit tests for RequestService.complete_request."""
+"""Unit tests for RequestService.complete_request."""
 
 from datetime import datetime
 from decimal import Decimal

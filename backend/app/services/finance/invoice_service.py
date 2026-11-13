@@ -93,8 +93,11 @@ class InvoiceService:
 
         subtotal = moto_hours_cost + fuel_cost
 
-        # НДС (20% для ОСНО)
-        vat_rate = Decimal("20")
+        # НДС по дате ДОКУМЕНТА: 22% с 2026-01-01, 20% за 2025 и ранее.
+        from app.core.constants import TaxSystem, vat_rate_for_date
+
+        invoice_date_val = invoice_date or date.today()
+        vat_rate = vat_rate_for_date(invoice_date_val, TaxSystem.OSNO.value)
         vat_amount = (subtotal * vat_rate / 100).quantize(Decimal("0.01"))
         total = subtotal + vat_amount
 
@@ -111,9 +114,9 @@ class InvoiceService:
             vat_amount=vat_amount,
             vat_rate=vat_rate,
             total=total,
-            tax_system="OSNO",
+            tax_system=TaxSystem.OSNO.value,
             is_vat_included=False,
-            invoice_date=invoice_date or date.today(),
+            invoice_date=invoice_date_val,
             due_date=due_date,
             status="draft",
             comment=f"Автоматически создан из сверки #{reconciliation_id}",

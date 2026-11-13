@@ -38,8 +38,8 @@ class TestInfrastructure:
         """Проверяем что асинхронные тесты работают."""
         import asyncio
 
-        await asyncio.sleep(0.01)
-        assert True
+        result = await asyncio.sleep(0.01, result="async-ok")
+        assert result == "async-ok"
 
     @pytest.mark.asyncio
     def test_client_fixture(self, client):

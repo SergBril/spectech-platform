@@ -1,4 +1,4 @@
-﻿"""Unit tests for MapixAdapter GPS provider."""
+"""Unit tests for MapixAdapter GPS provider."""
 
 from contextlib import asynccontextmanager
 from datetime import datetime

@@ -1038,10 +1038,17 @@ class RequestService:
 
         act = None
         if request.final_amount and request.final_amount > 0:
+            from app.core.constants import TaxSystem, vat_rate_for_date
+
             subtotal = request.final_amount
-            vat_amount = (subtotal * Decimal("20") / Decimal("120")).quantize(
-                Decimal("0.01")
-            )
+            # Дата акта = дата завершения работ, а не сегодня: иначе акт за
+            # декабрь 2025, закрытый в 2026, получит ставку 22%.
+            work_dt = request.actual_end or request.planned_end
+            act_date_val = work_dt.date() if work_dt else date.today()
+            vat_rate_val = vat_rate_for_date(act_date_val, TaxSystem.OSNO.value)
+            vat_amount = (
+                subtotal * vat_rate_val / (Decimal("100") + vat_rate_val)
+            ).quantize(Decimal("0.01"))
 
             act = Act(
                 document_number=generate_document_number(self.db, "ACT"),
@@ -1050,10 +1057,10 @@ class RequestService:
                 company_id=request.company_id,
                 total_amount=subtotal,
                 vat_amount=vat_amount,
-                vat_rate=Decimal("20"),
-                tax_system="OSNO",
+                vat_rate=vat_rate_val,
+                tax_system=TaxSystem.OSNO.value,
                 is_vat_included=True,
-                act_date=date.today(),
+                act_date=act_date_val,
                 status=DocumentStatus.draft,
                 comment=f"Автосоздан при завершении заявки #{request.id}",
             )
