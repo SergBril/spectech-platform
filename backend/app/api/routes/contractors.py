@@ -46,7 +46,7 @@ def get_my_contractor(
     contractor = db.scalar(
         select(Contractor)
         .where(
-            Contractor.company_id.in_(company_ids),
+            Contractor.company_id == company_id,
             Contractor.type == "client",
             Contractor.is_active == True,
         )

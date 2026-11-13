@@ -47,10 +47,13 @@ router = APIRouter()
 # =========================================
 
 
-def _check_vehicle_access(db: Session, vehicle_id: int, company_id: int) -> Vehicle:
+def _check_vehicle_access(
+    db: Session, vehicle_id: int, company_id: int | list[int]
+) -> Vehicle:
     """Проверяет, что техника принадлежит текущей компании."""
     vehicle = db.get(Vehicle, vehicle_id)
-    if not vehicle or vehicle.company_id != company_id:
+    allowed = {company_id} if isinstance(company_id, int) else set(company_id)
+    if not vehicle or vehicle.company_id not in allowed:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     return vehicle
 
@@ -224,7 +227,7 @@ def list_fuel_transactions(
         .order_by(FuelTransaction.occurred_at.desc())
     )
     if vehicle_id:
-        _check_vehicle_access(db, vehicle_id, company_id)
+        _check_vehicle_access(db, vehicle_id, company_ids)
         stmt = stmt.where(FuelTransaction.vehicle_id == vehicle_id)
     return db.scalars(stmt.limit(100)).all()
 
@@ -540,7 +543,7 @@ def list_alert_rules(
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Список правил алертов (только своей компании)."""
-    stmt = select(AlertRule).where(AlertRule.company_id == company_id)
+    stmt = select(AlertRule).where(AlertRule.company_id.in_(company_ids))
     return db.scalars(stmt).all()
 
 

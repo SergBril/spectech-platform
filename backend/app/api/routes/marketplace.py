@@ -139,7 +139,7 @@ def create_offer_on_request(
     """
     return marketplace_route_service.create_offer_on_request(
         db=db,
-        company_id=company_id,
+        company_id=current_company_id,
         request_id=request_id,
         data=data,
         current_company_id=current_company_id,
@@ -204,7 +204,7 @@ def accept_offer(
     """
     return marketplace_route_service.accept_offer(
         db=db,
-        company_id=company_id,
+        company_id=current_company_id,
         current_user=current_user,
         offer_id=offer_id,
         current_company_id=current_company_id,
@@ -226,7 +226,7 @@ def reject_offer(
     """
     return marketplace_route_service.reject_offer(
         db=db,
-        company_id=company_id,
+        company_id=current_company_id,
         current_user=current_user,
         offer_id=offer_id,
         data=data,
