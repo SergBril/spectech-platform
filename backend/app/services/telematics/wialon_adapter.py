@@ -33,9 +33,13 @@ class WialonAdapter:
         1005: 12,  # Wialon unit 1005 → vehicle_id 12 (Автовышка ПСС-22.Э)
     }
 
-    def parse_webhook(self, payload: dict) -> GpsPointCreate | None:
+    def parse_webhook(
+        self, payload: dict, vehicle_id: int | None = None
+    ) -> GpsPointCreate | None:
         """
         Парсит webhook payload от Wialon и преобразует в GpsPointCreate.
+
+        vehicle_id: явно разрешённый id техники (приоритет над хардкод-маппингом).
 
         Returns:
             GpsPointCreate если данные валидны, None иначе
@@ -44,8 +48,9 @@ class WialonAdapter:
             # Парсим payload через Pydantic
             wialon_data = WialonWebhookPayload.model_validate(payload)
 
-            # Маппинг unit_id → vehicle_id
-            vehicle_id = self.UNIT_TO_VEHICLE_MAP.get(wialon_data.unit_id)
+            # Маппинг unit_id → vehicle_id (переданный id имеет приоритет)
+            if vehicle_id is None:
+                vehicle_id = self.UNIT_TO_VEHICLE_MAP.get(wialon_data.unit_id)
             if not vehicle_id:
                 logger.warning(
                     f"Unknown Wialon unit_id: {wialon_data.unit_id}. "

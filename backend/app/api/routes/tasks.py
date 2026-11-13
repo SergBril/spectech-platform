@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.tasks.pdf_tasks import (
@@ -27,18 +27,19 @@ def generate_invoice_pdf_background(
     invoice_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Запускает генерацию PDF в фоне через Celery."""
+    """Запускает генерацию PDF в фоне через Celery (только своей компании)."""
     from app.models.finance import Invoice
 
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if not invoice:
+    if not invoice or invoice.company_id != company_id:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     # Запускаем задачу асинхронно
     task = generate_invoice_pdf_async.delay(
         invoice_id=invoice_id,
-        company_id=current_user.company_id or 0,
+        company_id=company_id,
     )
 
     return TaskResponse(
@@ -53,17 +54,18 @@ def generate_act_pdf_background(
     act_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Запускает генерацию PDF акта в фоне."""
+    """Запускает генерацию PDF акта в фоне (только своей компании)."""
     from app.models.finance import Act
 
     act = db.query(Act).filter(Act.id == act_id).first()
-    if not act:
+    if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
     task = generate_act_pdf_async.delay(
         act_id=act_id,
-        company_id=current_user.company_id or 0,
+        company_id=company_id,
     )
 
     return TaskResponse(
@@ -92,8 +94,8 @@ def trigger_pdf_cleanup(
 
 
 @router.get("/tasks/{task_id}/status")
-def get_task_status(task_id: str):
-    """Возвращает статус Celery задачи."""
+def get_task_status(task_id: str, current_user: User = Depends(get_current_user)):
+    """Возвращает статус Celery задачи (только авторизованным)."""
     from app.core.celery_app import celery_app
 
     result = celery_app.AsyncResult(task_id)
@@ -121,7 +123,10 @@ def send_email_task(
     body: str,
     current_user: User = Depends(get_current_user),
 ):
-    """Отправляет email через Celery."""
+    """Отправляет email через Celery (только superuser)."""
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Admin only")
+
     from app.tasks.email_tasks import send_email_async
 
     task = send_email_async.delay(

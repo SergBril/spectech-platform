@@ -154,6 +154,9 @@ class Settings(BaseSettings):
     MAX_TIMEOUT_SECONDS: int = Field(
         default=5, description="Timeout for MAX API requests"
     )
+    MAX_WEBHOOK_SECRET: str = Field(
+        default="", description="MAX webhook secret (X-Max-Bot-Api-Secret header)"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

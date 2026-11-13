@@ -103,7 +103,8 @@ class TestMaxRoutesWithMock:
             "/api/v1/shifts/max/webhook",
             json={"type": "message", "payload": {"text": "test"}},
         )
-        assert resp.status_code in (200, 400, 404, 422, 500)
+        # fail-closed: MAX_WEBHOOK_SECRET не задан в тест-среде
+        assert resp.status_code == 503
 
     @patch("app.services.max_messenger_service.max_messenger_service")
     def test_test_webhook(self, mock_svc, client, auth_headers):

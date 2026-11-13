@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import SessionLocal, get_db
 from app.models.auth import User
 from app.models.chat import (
@@ -179,6 +179,18 @@ def _get_chat_by_request(db: Session, request_id: int) -> RequestChat | None:
     ).scalar_one_or_none()
 
 
+def _check_request_company(db: Session, request_id: int, company_id: int) -> None:
+    """Заявка должна принадлежать компании пользователя (иначе 404).
+
+    Вызывается ДО создания чата/авто-добавления участника.
+    """
+    from app.models.dispatch import Request as DispatchRequest
+
+    req = db.get(DispatchRequest, request_id)
+    if not req or req.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+
 def _get_messages_cursor(
     db: Session,
     chat_id: int,
@@ -263,8 +275,10 @@ async def upload_chat_file(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Загружает файл в MinIO и возвращает метаданные."""
+    """Загружает файл в MinIO и возвращает метаданные (только своей компании)."""
+    _check_request_company(db, request_id, company_id)
     try:
         chat = _ensure_chat_exists(db, request_id)
     except ValueError:
@@ -306,8 +320,10 @@ async def upload_multiple_chat_files(
     files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Загружает несколько файлов в MinIO за один запрос."""
+    """Загружает несколько файлов в MinIO за один запрос (только своей компании)."""
+    _check_request_company(db, request_id, company_id)
     try:
         chat = _ensure_chat_exists(db, request_id)
     except ValueError:
@@ -350,8 +366,10 @@ def get_chat_by_request(
     request_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Получить чат по заявке. Создаёт чат, если его нет."""
+    """Получить чат по заявке своей компании. Создаёт чат, если его нет."""
+    _check_request_company(db, request_id, company_id)
     try:
         chat = _ensure_chat_exists(db, request_id)
     except ValueError:
@@ -410,8 +428,10 @@ def get_chat_messages_cursor(
     message_type: ChatMessageType | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """История сообщений чата с cursor-based пагинацией."""
+    """История сообщений чата своей компании с cursor-based пагинацией."""
+    _check_request_company(db, request_id, company_id)
     chat = _get_chat_by_request(db, request_id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -455,8 +475,10 @@ def send_message_to_chat(
     data: MessageCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Отправить сообщение в чат по заявке (REST)."""
+    """Отправить сообщение в чат по заявке своей компании (REST)."""
+    _check_request_company(db, request_id, company_id)
     try:
         chat = _ensure_chat_exists(db, request_id)
     except ValueError:
@@ -581,6 +603,14 @@ async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(
         chat = db.get(RequestChat, chat_id)
         if not chat:
             await websocket.close(code=4004, reason="Chat not found")
+            return
+
+        # 2.1 Изоляция по компании: чат заявки только своей компании
+        from app.models.dispatch import Request as DispatchRequest
+
+        req = db.get(DispatchRequest, chat.request_id)
+        if not req or req.company_id != user.company_id:
+            await websocket.close(code=4003, reason="Access denied")
             return
 
         # 3. Добавляем в участники

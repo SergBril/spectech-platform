@@ -129,7 +129,8 @@ class TestMaxMessengerRouteBodies:
                 },
             },
         )
-        assert resp.status_code in (200, 400, 404, 422, 500)
+        # fail-closed: MAX_WEBHOOK_SECRET не задан в тест-среде
+        assert resp.status_code == 503
 
     @patch("app.services.max_messenger_service.max_messenger_service")
     def test_bind_link_generation(self, mock_svc, client, auth_headers):

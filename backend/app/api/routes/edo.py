@@ -1,9 +1,10 @@
 """API для ЭДО (Diadoc): отправка документов, статусы, контрагенты."""
 
 import logging
-from datetime import UTC
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user
@@ -169,57 +170,81 @@ async def diadoc_webhook(
     db: Session = Depends(get_db),
 ):
     """
-    Обработка callback-уведомлений от Diadoc.
+    Callback от Diadoc: payload — только hint, статус НЕ применяется напрямую.
 
-    Diadoc отправляет POST при изменении статуса документа.
-    Обновляем статус акта в БД.
+    Перед применением статус перепроверяется через API (GetMessage).
+    API недоступен / нет токена → 503; верификация не дала статуса → 202;
+    verified-статус применяется, расхождение с payload логируется.
     """
+    from app.models.finance import Act
+    from app.services.diadoc_service import diadoc_service
+
     try:
         body = await request.json()
-        message_id = body.get("MessageId", "")
-        doc_status = body.get("DocflowStatus", {}).get("PrimaryStatus", "")
+    except Exception:
+        return {"status": "ignored", "reason": "invalid json"}
 
-        if not message_id:
-            return {"status": "ignored", "reason": "no MessageId"}
+    message_id = body.get("MessageId", "")
+    if not message_id:
+        return {"status": "ignored", "reason": "no MessageId"}
 
-        # Map Diadoc status to internal status
-        status_map = {
-            "WaitingForSenderSignature": "draft",
-            "WaitingForRecipientSignature": "sent_to_edo",
-            "WithRecipientSignature": "signed",
-            "RecipientSignatureRequestRejected": "rejected",
-            "InvalidDocument": "rejected",
-        }
-        internal_status = status_map.get(doc_status, doc_status)
+    # Привязка: обновляем только акт, отправленный через ЭДО (edo_message_id)
+    act = db.query(Act).filter(Act.edo_message_id == message_id).first()
+    if not act:
+        raise HTTPException(status_code=404, detail="Document not found")
 
-        # Update act status in DB
-        from app.models.finance import Act
+    payload_status = body.get("DocflowStatus", {}).get("PrimaryStatus", "")
 
-        act = db.query(Act).filter(Act.edo_message_id == message_id).first()
-        if act:
-            old_status = act.status
-            act.status = internal_status
-            if internal_status == "signed":
-                from datetime import datetime
+    token = await diadoc_service.authenticate()
+    if not token:
+        logger.error(
+            "Diadoc webhook: authentication failed, status NOT applied (msg=%s)",
+            message_id,
+        )
+        raise HTTPException(status_code=503, detail="Diadoc authentication failed")
 
-                act.signed_at = datetime.now(UTC)
-            db.commit()
-            logger.info(
-                "📬 Diadoc webhook: Act #%s status %s → %s (msg: %s)",
-                act.id,
-                old_status,
-                internal_status,
-                message_id,
-            )
-            return {
-                "status": "updated",
-                "act_id": act.id,
-                "new_status": internal_status,
-            }
+    verified = await diadoc_service.get_document_status(message_id, token)
+    api_status = verified.get("status")
+    if api_status in (None, "stub", "error", "unknown"):
+        logger.warning(
+            "Diadoc webhook: verification unavailable (%s), hint NOT applied (msg=%s)",
+            api_status,
+            message_id,
+        )
+        return JSONResponse(
+            status_code=202,
+            content={"status": "pending_verification", "message_id": message_id},
+        )
 
-        logger.warning("Diadoc webhook: no act found for message_id=%s", message_id)
-        return {"status": "not_found", "message_id": message_id}
+    # Расхождение payload и API — индикатор попытки подделки
+    status_map = {
+        "WaitingForSenderSignature": "draft",
+        "WaitingForRecipientSignature": "sent_to_edo",
+        "WithRecipientSignature": "signed",
+        "RecipientSignatureRequestRejected": "rejected",
+        "InvalidDocument": "rejected",
+    }
+    payload_mapped = status_map.get(payload_status, payload_status)
+    if payload_mapped and api_status != payload_mapped:
+        logger.warning(
+            "Diadoc webhook: STATUS MISMATCH payload=%s api=%s (msg=%s) — "
+            "applying API status (possible forgery)",
+            payload_status,
+            api_status,
+            message_id,
+        )
 
-    except Exception as e:
-        logger.error("❌ Diadoc webhook error: %s", e, exc_info=True)
-        return {"status": "error", "detail": str(e)}
+    old_status = act.status
+    act.status = api_status
+    if api_status == "signed":
+        # Подпись получателя (клиента); колонки signed_at в модели Act нет
+        act.signed_by_client_at = datetime.now(UTC)
+    db.commit()
+    logger.info(
+        "📬 Diadoc webhook verified: Act #%s status %s → %s (msg: %s)",
+        act.id,
+        old_status,
+        api_status,
+        message_id,
+    )
+    return {"status": "updated", "act_id": act.id, "new_status": api_status}

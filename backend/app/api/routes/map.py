@@ -1,7 +1,10 @@
 """API для карты техники."""
 
+import ipaddress
 import logging
+import socket
 from datetime import datetime
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import desc
@@ -20,6 +23,37 @@ from app.services.gps_providers.factory import (
 logger = logging.getLogger("spectech.map")
 
 router = APIRouter()
+
+
+def _validate_provider_config(config: dict) -> None:
+    """SSRF-защита: api_url только https и только публичные адреса.
+
+    Проверка до создания адаптера. Без api_url адаптер использует
+    официальный default провайдера (безопасен).
+    """
+    api_url = config.get("api_url")
+    if not api_url:
+        return
+    parsed = urlparse(str(api_url))
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise HTTPException(status_code=400, detail="api_url must use https")
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, None)
+    except OSError:
+        raise HTTPException(status_code=400, detail="api_url host cannot be resolved")
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise HTTPException(
+                status_code=400, detail="api_url points to a non-public address"
+            )
 
 
 @router.get("/vehicles/positions")
@@ -358,6 +392,7 @@ async def test_gps_provider(
     current_user: User = Depends(get_current_user),
 ):
     """🔌 Проверить соединение с GPS-провайдером."""
+    _validate_provider_config(config)
     try:
         adapter = create_gps_adapter(provider, config)
         ok = await adapter.test_connection()

@@ -1,19 +1,34 @@
 """Модуль max_messenger для shifts router."""
 
+import hmac
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.db import get_db
 from app.models.auth import User
+
+logger = logging.getLogger("spectech.max_messenger")
 
 router = APIRouter()
 
 
 @router.post("/max/webhook", tags=["MAX Bot"])
 async def max_webhook(request: Request, db: Session = Depends(get_db)):
-    """Обработка входящих событий от MAX Bot API."""
+    """Обработка входящих событий от MAX Bot API (проверка X-Max-Bot-Api-Secret)."""
+    if not settings.MAX_WEBHOOK_SECRET:
+        logger.error("MAX webhook rejected: MAX_WEBHOOK_SECRET is not configured")
+        raise HTTPException(status_code=503, detail="Webhook secret not configured")
+
+    provided = request.headers.get("X-Max-Bot-Api-Secret", "")
+    if not hmac.compare_digest(provided.encode(), settings.MAX_WEBHOOK_SECRET.encode()):
+        logger.warning("MAX webhook rejected: invalid X-Max-Bot-Api-Secret")
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
+
     body = await request.json()
     event_type = body.get("type", "")
     payload = body.get("payload", {})
@@ -49,6 +64,9 @@ async def max_webhook(request: Request, db: Session = Depends(get_db)):
                     ).scalar_one_or_none()
                     if user:
                         user.max_chat_id = str(chat_id)
+                        # Одноразовость: код привязки гасится после использования
+                        # (паттерн telegram_bot.py)
+                        user.telegram_link_code = None
                         db.commit()
                         msg = f"✅ Привязка успешна! Уведомления: {user.full_name or user.email}"
                         await max_messenger_service.send_message(str(chat_id), msg)
@@ -94,6 +112,7 @@ async def max_webhook(request: Request, db: Session = Depends(get_db)):
                 active = (
                     db.query(Request)
                     .filter(
+                        Request.company_id == user.company_id,
                         Request.status.in_(
                             [RequestStatus.new, RequestStatus.processing]
                         ),
@@ -102,7 +121,11 @@ async def max_webhook(request: Request, db: Session = Depends(get_db)):
                 )
                 avail = (
                     db.query(Vehicle)
-                    .filter(Vehicle.status == "available", Vehicle.is_deleted == False)
+                    .filter(
+                        Vehicle.company_id == user.company_id,
+                        Vehicle.status == "available",
+                        Vehicle.is_deleted == False,
+                    )
                     .count()
                 )
                 txt = f"<b>📊 Статус</b>\nАктивных заявок: {active}\nСвободной техники: {avail}"
@@ -113,12 +136,14 @@ async def max_webhook(request: Request, db: Session = Depends(get_db)):
             if text_clean.startswith("/shifts"):
                 from datetime import date as date_type
 
+                from app.models.catalog import Vehicle
                 from app.models.shift import ShiftTask
 
                 today = date_type.today()
                 shifts = (
                     db.query(ShiftTask)
                     .filter(
+                        ShiftTask.company_id == user.company_id,
                         ShiftTask.shift_date == today,
                         ShiftTask.status.in_(["planned", "confirmed", "in_progress"]),
                     )

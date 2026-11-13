@@ -1,7 +1,7 @@
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -611,65 +611,113 @@ def get_dashboard_summary(
 @router.post("/wialon/webhook")
 def receive_wialon_webhook(
     payload: dict,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """
-    Принять webhook от Wialon.
+    Принять webhook от Wialon (секрет на технику, маппинг из gps_provider_config).
 
-    Wialon отправляет данные о позициях техники в формате JSON.
-    Адаптер парсит payload и сохраняет точки в gps_points.
-
-    Пример payload:
-    {
-        "unit_id": 1001,
-        "type": "message",
-        "time": 1727539200,
-        "pos": {
-            "x": 37.6176,
-            "y": 55.7558,
-            "s": 45.5,
-            "c": 180
-        },
-        "param": {
-            "avl_fuel_level": 150.0,
-            "avl_engine_hours": 757.5,
-            "avl_driver_id": 1
-        }
-    }
+    Проверки до обработки payload: unit → техника (config wialon_unit_id,
+    fallback — хардкод адаптера) → webhook_secret из gps_provider_config.
+    Нет секрета в конфиге → 503; нет заголовка → 401; несовпадение/чужой unit → 404.
     """
+    import hmac
+
+    from app.models.catalog import Vehicle
     from app.services.telematics.wialon_adapter import wialon_adapter
 
-    response = wialon_adapter.process_webhook(db, payload)
-
-    if response.status == "success":
-        return response
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "status": response.status,
-                "message": response.message,
-                "errors": response.errors,
-            },
+    unit_id = payload.get("unit_id")
+    vehicle = None
+    if unit_id is not None:
+        # Маппинг из gps_provider_config (приоритет)
+        wialon_vehicles = (
+            db.query(Vehicle).filter(Vehicle.gps_provider == "wialon").all()
         )
+        for v in wialon_vehicles:
+            cfg = v.gps_provider_config or {}
+            try:
+                cfg_unit = int(cfg.get("wialon_unit_id"))
+            except (TypeError, ValueError):
+                continue
+            if cfg_unit == unit_id:
+                vehicle = v
+                break
+        # Fallback: текущий хардкод адаптера
+        if vehicle is None:
+            fallback_id = wialon_adapter.UNIT_TO_VEHICLE_MAP.get(unit_id)
+            if fallback_id:
+                vehicle = db.get(Vehicle, fallback_id)
+
+    if not vehicle:
+        logger.warning("Wialon webhook: unknown unit_id=%s", unit_id)
+        raise HTTPException(status_code=404, detail="Unit not found")
+
+    secret = (vehicle.gps_provider_config or {}).get("webhook_secret")
+    if not secret:
+        logger.error(
+            "Wialon webhook: webhook_secret not configured for vehicle #%s (unit=%s)",
+            vehicle.id,
+            unit_id,
+        )
+        raise HTTPException(status_code=503, detail="Webhook secret not configured")
+
+    provided = request.headers.get("X-Webhook-Secret", "")
+    if not provided:
+        logger.warning(
+            "Wialon webhook: missing X-Webhook-Secret header (unit=%s)", unit_id
+        )
+        raise HTTPException(status_code=401, detail="Missing webhook secret")
+    if not hmac.compare_digest(provided.encode(), str(secret).encode()):
+        # Единообразный 404 — защита от enumeration; реальная причина в логе
+        logger.warning(
+            "Wialon webhook: secret mismatch for unit=%s (vehicle #%s, company #%s)",
+            unit_id,
+            vehicle.id,
+            vehicle.company_id,
+        )
+        raise HTTPException(status_code=404, detail="Unit not found")
+
+    gps_point = wialon_adapter.parse_webhook(payload, vehicle_id=vehicle.id)
+    if not gps_point:
+        raise HTTPException(status_code=400, detail="Invalid webhook payload")
+
+    wialon_adapter.save_gps_point(db, gps_point)
+    return {
+        "status": "success",
+        "message": "GPS point saved successfully",
+        "points_created": 1,
+        "errors": [],
+    }
 
 
 @router.get("/wialon/mappings")
-def list_wialon_mappings():
-    """
-    Получить маппинг Wialon unit_id → vehicle_id.
-
-    В production должен читаться из БД (таблица wialon_mappings).
-    """
+def list_wialon_mappings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
+):
+    """Маппинг Wialon unit_id → vehicle_id только своей компании."""
+    from app.models.catalog import Vehicle
     from app.services.telematics.wialon_adapter import wialon_adapter
 
-    mappings = [
-        {
-            "wialon_unit_id": unit_id,
-            "vehicle_id": vehicle_id,
-        }
-        for unit_id, vehicle_id in wialon_adapter.UNIT_TO_VEHICLE_MAP.items()
-    ]
+    vehicles = db.query(Vehicle).filter(Vehicle.company_id == company_id).all()
+    company_vehicle_ids = {v.id for v in vehicles}
+
+    mappings = []
+    seen_units = set()
+    for v in vehicles:
+        cfg = v.gps_provider_config or {}
+        try:
+            unit = int(cfg.get("wialon_unit_id"))
+        except (TypeError, ValueError):
+            continue
+        mappings.append({"wialon_unit_id": unit, "vehicle_id": v.id})
+        seen_units.add(unit)
+
+    # Fallback: хардкод-маппинг для техники компании без конфига
+    for unit_id, vehicle_id in wialon_adapter.UNIT_TO_VEHICLE_MAP.items():
+        if vehicle_id in company_vehicle_ids and unit_id not in seen_units:
+            mappings.append({"wialon_unit_id": unit_id, "vehicle_id": vehicle_id})
 
     return {"mappings": mappings, "total": len(mappings)}
 
