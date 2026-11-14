@@ -119,8 +119,9 @@ class PayoutService:
             key = (owner_id, vehicle.id)
 
             if key not in payout_data:
-                # Получаем ставку собственника
-                owner_rate = Decimal(str(getattr(vehicle, "owner_rate", 2500)))
+                # Получаем ставку собственника. Колонка nullable: None → 2500
+                # (дефолт, который раньше давал getattr по отсутствующему атрибуту)
+                owner_rate = Decimal(str(getattr(vehicle, "owner_rate", None) or 2500))
 
                 payout_data[key] = {
                     "owner_id": owner_id,

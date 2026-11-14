@@ -248,6 +248,20 @@ class Act(Base):
         ForeignKey("users.id"), nullable=True
     )
 
+    # Колонки, синхронизированные с БД (в БД уже есть, миграция не нужна).
+    # FK в pg_constraint нет — голый Integer. signed_at в БД без timezone.
+    act_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    counterparty_inn: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    counterparty_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    driver_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    paid_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    payment_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    shift_task_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    signed_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

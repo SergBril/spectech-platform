@@ -127,6 +127,12 @@ class Vehicle(Base):
         nullable=True,
         comment="Ставка за смену (руб)",
     )
+    # Колонка синхронизирована с БД (numeric(10,2), миграция не нужна)
+    owner_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2),
+        nullable=True,
+        comment="Ставка собственника за моточас (руб) — расчёт выплат",
+    )
     downtime_hourly_rate: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2),
         nullable=True,

@@ -162,9 +162,8 @@ class TestSalariesApprove:
 
     def test_approve_not_found(self, client, auth_headers):
         resp = client.post("/api/v1/salaries/99999/approve", headers=auth_headers)
-        # 400: известный баг — not-found маппится в 400 (см. test_mega_coverage,
-        # test_approve_not_found оставлен красным с ожиданием 404)
-        assert resp.status_code == 400
+        # 404: существование записи проверяется до вызова сервиса
+        assert resp.status_code == 404
 
 
 # ==================== RBAC ====================

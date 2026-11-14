@@ -249,7 +249,9 @@ app.include_router(tasks_route.router, prefix="/api/v1/tasks", tags=["tasks"])
 app.include_router(system_route.router, prefix="/api/v1/system", tags=["system"])
 app.include_router(files_route.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(ws_route.router, prefix="/api/v1", tags=["websocket"])
-app.include_router(benchmark_route.router, prefix="/api/v1", tags=["benchmark"])
+# В production не монтируем: DoS-вектор (второй эшелон после superuser-гейта)
+if settings.environment != "production":
+    app.include_router(benchmark_route.router, prefix="/api/v1", tags=["benchmark"])
 app.include_router(
     secure_test_route.router, prefix="/api/v1", tags=["🔒 Secure Test (RBAC)"]
 )

@@ -176,6 +176,10 @@ class BankTransaction(Base):
     match_confidence: Mapped[float | None] = mapped_column(
         Numeric(3, 2), nullable=True, comment="Уверенность в матчинге (0.0 - 1.0)"
     )
+    # Колонки, синхронизированные с БД (миграция не нужна).
+    # FK на acts в pg_constraint нет — голый Integer.
+    matched_act_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Связанный Payment (после применения)
     payment_id: Mapped[int | None] = mapped_column(

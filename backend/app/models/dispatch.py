@@ -33,6 +33,11 @@ class RequestStatus(str, Enum):
     closed = "closed"
     cancelled = "cancelled"
     disputed = "disputed"
+    # Значения есть в PG enum request_status; имена lowercase = значения,
+    # т.к. SQLAlchemy хранит .name
+    has_responses = "has_responses"
+    expired = "expired"
+    draft = "draft"
 
 
 class Request(Base):

@@ -274,6 +274,9 @@ async def approve_salary_record(
     company_id: int = Depends(get_current_company_id),
 ):
     """✅ Утвердить начисление зарплаты и отправить уведомления."""
+    record = db.get(SalaryRecord, record_id)
+    if record is None or record.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Salary record not found")
     try:
         record = salary_service.approve_record(db, record_id, current_user.id)
 
