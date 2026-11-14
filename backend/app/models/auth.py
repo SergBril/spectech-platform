@@ -78,6 +78,9 @@ class User(Base):
         index=True,
         comment="Одноразовый код для привязки Telegram",
     )
+    telegram_link_code_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Password reset
     reset_token_hash: Mapped[str | None] = mapped_column(

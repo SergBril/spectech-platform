@@ -317,6 +317,9 @@ class UploadedFile(Base):
         ForeignKey("invoices.id"), nullable=True
     )
     act_id: Mapped[int | None] = mapped_column(ForeignKey("acts.id"), nullable=True)
+    payout_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("payouts.id", ondelete="SET NULL"), nullable=True
+    )
     contractor_id: Mapped[int | None] = mapped_column(
         ForeignKey("contractors.id"), nullable=True
     )

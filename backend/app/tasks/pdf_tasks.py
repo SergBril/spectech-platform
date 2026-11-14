@@ -255,6 +255,7 @@ def generate_payout_pdf_async(self, payout_id: int, company_id: int):
             file_category="payout_pdf",
             invoice_id=None,
             company_id=company_id,
+            payout_id=payout_id,
         )
         db.add(uploaded_file)
         db.commit()
