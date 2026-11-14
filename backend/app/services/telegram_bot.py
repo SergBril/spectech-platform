@@ -100,7 +100,11 @@ class TelegramBotService:
         db = SessionLocal()
         try:
             # Ищем пользователя с этим кодом
+            from app.core.constants import link_code_is_valid
+
             user = db.query(User).filter(User.telegram_link_code == code).first()
+            if user and not link_code_is_valid(user.telegram_link_code_expires_at):
+                user = None
 
             if not user:
                 await update.message.reply_text(

@@ -1,5 +1,6 @@
 """Coverage tests for telegram_bot."""
 
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -87,7 +88,12 @@ class TestHandleLinkCode:
         from telegram.ext import ConversationHandler
 
         mock_update.message.text = "ABC123"
-        user = SimpleNamespace(id=1, telegram_id=None, telegram_link_code="ABC123")
+        user = SimpleNamespace(
+            id=1,
+            telegram_id=None,
+            telegram_link_code="ABC123",
+            telegram_link_code_expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
         with patch("app.services.telegram_bot.SessionLocal") as MockDB:
             db = MagicMock()
             MockDB.return_value = db

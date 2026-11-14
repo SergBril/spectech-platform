@@ -1,6 +1,6 @@
 """Константы и перечисления для бизнес-логики."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from enum import Enum
 
@@ -116,3 +116,32 @@ def vat_rate_for_date(doc_date=None, tax_system=None) -> Decimal:
     if not isinstance(doc_date, date):
         return VAT_RATE_CURRENT
     return VAT_RATE_CURRENT if doc_date >= VAT_RATE_CHANGE_DATE else VAT_RATE_LEGACY
+
+
+# Код привязки чата (Telegram/MAX) - единственный секрет для захвата аккаунта,
+# поэтому он ограничен по времени и одноразовый.
+LINK_CODE_TTL_MINUTES = 60
+
+
+def link_code_expiry() -> datetime:
+    """Момент истечения кода привязки."""
+    return datetime.now(UTC) + timedelta(minutes=LINK_CODE_TTL_MINUTES)
+
+
+def link_code_is_valid(expires_at) -> bool:
+    """Действителен ли код привязки.
+
+    None означает недействителен (fail-closed): коды, выданные до введения
+    срока действия, были вечными и должны перестать работать. Пользователь
+    просто запрашивает новый.
+    """
+    if expires_at is None:
+        return False
+    if isinstance(expires_at, str):
+        try:
+            expires_at = datetime.fromisoformat(expires_at)
+        except ValueError:
+            return False
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    return expires_at > datetime.now(UTC)

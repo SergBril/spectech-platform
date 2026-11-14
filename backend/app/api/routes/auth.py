@@ -82,8 +82,11 @@ def generate_telegram_link_code(
         current_user.telegram_link_code = None
 
     # Генерируем новый код
+    from app.core.constants import link_code_expiry
+
     code = secrets.token_urlsafe(16)
     current_user.telegram_link_code = code
+    current_user.telegram_link_code_expires_at = link_code_expiry()
     db.commit()
 
     logger.info(f"User {current_user.id} generated Telegram link code")

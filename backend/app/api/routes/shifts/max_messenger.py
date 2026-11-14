@@ -59,9 +59,15 @@ async def max_webhook(request: Request, db: Session = Depends(get_db)):
                 parts = text_clean.split()
                 if len(parts) >= 2:
                     link_token = parts[1]
+                    from app.core.constants import link_code_is_valid
+
                     user = db.execute(
                         select(User).where(User.telegram_link_code == link_token)
                     ).scalar_one_or_none()
+                    if user and not link_code_is_valid(
+                        user.telegram_link_code_expires_at
+                    ):
+                        user = None
                     if user:
                         user.max_chat_id = str(chat_id)
                         # Одноразовость: код привязки гасится после использования
@@ -234,8 +240,13 @@ def get_max_bind_link(
     """Генерирует ссылку для привязки MAX бота к аккаунту."""
     import secrets
 
-    if not current_user.telegram_link_code:
+    from app.core.constants import link_code_expiry, link_code_is_valid
+
+    if not current_user.telegram_link_code or not link_code_is_valid(
+        current_user.telegram_link_code_expires_at
+    ):
         current_user.telegram_link_code = secrets.token_urlsafe(16)
+        current_user.telegram_link_code_expires_at = link_code_expiry()
         db.commit()
     from app.core.config import settings
 

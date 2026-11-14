@@ -1,5 +1,6 @@
 """Tests for TelegramBotService."""
 
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -122,7 +123,10 @@ class TestHandleLinkCode:
         update = _make_update(text="valid_code_123")
         context = MagicMock()
         user = SimpleNamespace(
-            id=1, telegram_id=None, telegram_link_code="valid_code_123"
+            id=1,
+            telegram_id=None,
+            telegram_link_code="valid_code_123",
+            telegram_link_code_expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
 
         with patch("app.services.telegram_bot.SessionLocal") as MockSession:
