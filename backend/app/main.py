@@ -216,7 +216,9 @@ app.add_middleware(
 app.add_middleware(RequestLoggingMiddleware)
 
 # 5. Роутеры API (используем алиасы _route чтобы не конфликтовать с моделями)
-app.include_router(debug_route.router, prefix="/api/v1", tags=["debug"])
+# В production не монтируем: тестовые ручки без auth (лог/ошибка Sentry)
+if settings.environment != "production":
+    app.include_router(debug_route.router, prefix="/api/v1", tags=["debug"])
 app.include_router(auth_route.router, prefix="/api/v1", tags=["auth"])
 app.include_router(addresses_route.router, prefix="/api/v1")
 app.include_router(
@@ -252,9 +254,11 @@ app.include_router(ws_route.router, prefix="/api/v1", tags=["websocket"])
 # В production не монтируем: DoS-вектор (второй эшелон после superuser-гейта)
 if settings.environment != "production":
     app.include_router(benchmark_route.router, prefix="/api/v1", tags=["benchmark"])
-app.include_router(
-    secure_test_route.router, prefix="/api/v1", tags=["🔒 Secure Test (RBAC)"]
-)
+# В production не монтируем: тестовые RBAC-ручки (public без auth)
+if settings.environment != "production":
+    app.include_router(
+        secure_test_route.router, prefix="/api/v1", tags=["🔒 Secure Test (RBAC)"]
+    )
 app.include_router(
     analytics_route.router, prefix="/api/v1/analytics", tags=["analytics"]
 )
@@ -448,7 +452,10 @@ def readiness_check():
     }
 
 
-@app.get("/api/v1/debug/simple")
-async def simple_debug():
-    """Simple debug endpoint without router."""
-    return {"message": "Simple debug works", "status": "ok"}
+# В production не монтируем: тестовая ручка без auth (вне роутера debug)
+if settings.environment != "production":
+
+    @app.get("/api/v1/debug/simple")
+    async def simple_debug():
+        """Simple debug endpoint without router."""
+        return {"message": "Simple debug works", "status": "ok"}
