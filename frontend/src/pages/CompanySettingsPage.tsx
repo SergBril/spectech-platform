@@ -5,6 +5,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { companiesApi, type CompanyTaxSettings } from '../api/companies';
 import { TaxSystemSelector } from '../components/TaxSystemSelector';
 import { showToast } from '../utils/toast';
+import { vatRateOnSystemChange } from '../utils/vat';
 import apiClient from '../api/client';
 import Layout from '../components/Layout';
 
@@ -84,7 +85,7 @@ export const CompanySettingsPage: React.FC = () => {
 
   const [taxSettings, setTaxSettings] = useState<CompanyTaxSettings>({
     default_tax_system: 'osno',
-    default_vat_rate: 20,
+    default_vat_rate: 22,
     default_is_vat_included: true,
   });
 
@@ -162,7 +163,7 @@ export const CompanySettingsPage: React.FC = () => {
     setTaxSettings((prev) => ({
       ...prev,
       default_tax_system: newSystem,
-      default_vat_rate: newSystem !== 'osno' ? 0 : prev.default_vat_rate === 0 ? 20 : prev.default_vat_rate,
+      default_vat_rate: vatRateOnSystemChange(newSystem, prev.default_vat_rate),
     }));
   };
 
@@ -378,6 +379,7 @@ export const CompanySettingsPage: React.FC = () => {
               <p className="text-sm text-gray-600 mb-4">Эти настройки будут использоваться по умолчанию при создании новых счетов и актов.</p>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <TaxSystemSelector value={taxSettings.default_tax_system} onChange={handleTaxSystemChange}
+                  vatRate={String(taxSettings.default_vat_rate)}
                   onVatRateChange={(rate) => setTaxSettings((prev) => ({ ...prev, default_vat_rate: parseFloat(rate) }))} />
                 {taxSettings.default_tax_system === 'osno' && (
                   <div className="mt-3 flex items-center">

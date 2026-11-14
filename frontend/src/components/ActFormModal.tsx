@@ -5,6 +5,7 @@ import { companiesApi } from '../api/companies';
 import { TaxSystemSelector } from './TaxSystemSelector';
 import type { Act, ActCreate } from '../api/finance';
 import { useAuth } from '../contexts/AuthContext';
+import { vatRateForDate } from '../utils/vat';
 
 interface Props {
   act: Act | null;
@@ -24,6 +25,8 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [searchContractor, setSearchContractor] = useState('');
   const [isManualTaxOverride, setIsManualTaxOverride] = useState(false);
+  // Ручной выбор ставки НДС имеет приоритет над автоподбором по дате
+  const [isVatRateManual, setIsVatRateManual] = useState(false);
 
   const [requestId, setRequestId] = useState<string>(
     act?.request_id?.toString() || initialRequestId?.toString() || '',
@@ -74,7 +77,6 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
         .getTaxSettings(user.company_id)
         .then((settings) => {
           setTaxSystem(settings.default_tax_system);
-          setVatRate(settings.default_vat_rate.toString());
           setIsVatIncluded(settings.default_is_vat_included);
         })
         .catch((err) => {
@@ -82,6 +84,13 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
         });
     }
   }, [act, user]);
+
+  // Автоподбор ставки НДС по дате документа (ОСНО): <=2025 → 20, >=2026 → 22.
+  // Ручной выбор ставки приоритетнее; при редактировании ставка документа сохраняется.
+  useEffect(() => {
+    if (act || isVatRateManual) return;
+    setVatRate(taxSystem === 'osno' ? vatRateForDate(actDate) : '0');
+  }, [act, actDate, taxSystem, isVatRateManual]);
 
   const handleAmountChange = (value: string) => {
     setTotalAmount(value);
@@ -91,11 +100,7 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
   const handleTaxSystemChange = (newSystem: string) => {
     setIsManualTaxOverride(true);
     setTaxSystem(newSystem);
-    if (newSystem !== 'osno') {
-      setVatRate('0');
-    } else if (vatRate === '0') {
-      setVatRate('22');
-    }
+    // Ставку выставит эффект автоподбора по дате документа
   };
 
   // Выбор клиента с автоподстановкой системы налогов
@@ -108,7 +113,6 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
     const contractor = contractors.find((c) => c.id === parseInt(contractorId));
     if (contractor?.tax_system) {
       setTaxSystem(contractor.tax_system);
-      setVatRate(contractor.tax_system !== 'osno' ? '0' : '22');
     }
   };
 
@@ -281,6 +285,7 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
                 <label className="block text-sm font-medium text-gray-700 mb-1">Дата акта *</label>
                 <input
                   type="date"
+                  aria-label="Дата акта"
                   value={actDate}
                   onChange={(e) => setActDate(e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
@@ -293,9 +298,11 @@ export const ActFormModal: React.FC<Props> = ({ act, initialRequestId, onClose, 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <TaxSystemSelector
                 value={taxSystem}
+                vatRate={vatRate}
                 onChange={handleTaxSystemChange}
                 onVatRateChange={(rate) => {
                   setIsManualTaxOverride(true);
+                  setIsVatRateManual(true);
                   setVatRate(rate);
                 }}
               />

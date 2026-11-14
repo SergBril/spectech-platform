@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 interface TaxSystemSelectorProps {
   value: string;
   onChange: (system: string) => void;
+  /** Контролируемая ставка (формы документов): отображается и принадлежит родителю. */
+  vatRate?: string;
   onVatRateChange?: (vatRate: string) => void;
   disabled?: boolean;
 }
@@ -27,13 +29,20 @@ const VAT_RATES = [
 export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
   value,
   onChange,
+  vatRate,
   onVatRateChange,
   disabled = false,
 }) => {
   const [selectedVatRate, setSelectedVatRate] = useState('22');
+  // Контролируемый режим (формы документов): ставкой владеет родитель,
+  // авто-огонь onVatRateChange при смене системы не нужен
+  const isControlled = vatRate !== undefined;
+  const displayedVatRate = vatRate ?? selectedVatRate;
 
-  // 🆕 СИНХРОНИЗАЦИЯ: когда родитель меняет value (систему), обновляем ставку НДС
+  // СИНХРОНИЗАЦИЯ: когда родитель меняет value (систему), обновляем ставку НДС
+  // (только неконтролируемый режим)
   useEffect(() => {
+    if (isControlled) return;
     const system = TAX_SYSTEMS.find((s) => s.value === value);
     if (system && !system.has_vat) {
       setSelectedVatRate('0');
@@ -44,6 +53,7 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
 
   const handleSystemChange = (newSystem: string) => {
     onChange(newSystem);
+    if (isControlled) return;
     const system = TAX_SYSTEMS.find((s) => s.value === newSystem);
 
     if (system && !system.has_vat) {
@@ -70,6 +80,7 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
           💼 Система налогообложения
         </label>
         <select
+          aria-label="Система налогообложения"
           value={value}
           onChange={(e) => handleSystemChange(e.target.value)}
           disabled={disabled}
@@ -89,7 +100,8 @@ export const TaxSystemSelector: React.FC<TaxSystemSelectorProps> = ({
             🧾 Ставка НДС
           </label>
           <select
-            value={selectedVatRate}
+            aria-label="Ставка НДС"
+            value={displayedVatRate}
             onChange={(e) => handleVatRateChange(e.target.value)}
             disabled={disabled}
             className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100"

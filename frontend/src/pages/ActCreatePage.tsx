@@ -9,6 +9,7 @@ import { showToast } from '../utils/toast';
 import NotificationBell from '../components/NotificationBell';
 import { TaxSystemSelector } from '../components/TaxSystemSelector';
 import Layout from '../components/Layout';
+import { vatRateForDate } from '../utils/vat';
 
 export const ActCreatePage: React.FC = () => {
   const navigate = useNavigate();
@@ -22,6 +23,8 @@ export const ActCreatePage: React.FC = () => {
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [searchContractor, setSearchContractor] = useState('');
   const [isManualTaxOverride, setIsManualTaxOverride] = useState(false);
+  // Ручной выбор ставки НДС имеет приоритет над автоподбором по дате
+  const [isVatRateManual, setIsVatRateManual] = useState(false);
 
   const [formData, setFormData] = useState({
     request_id: requestId ? parseInt(requestId) : 0,
@@ -64,7 +67,6 @@ export const ActCreatePage: React.FC = () => {
           setFormData((prev) => ({
             ...prev,
             tax_system: settings.default_tax_system,
-            vat_rate: settings.default_vat_rate.toString(),
             is_vat_included: settings.default_is_vat_included,
           }));
         })
@@ -73,6 +75,16 @@ export const ActCreatePage: React.FC = () => {
         });
     }
   }, [user]);
+
+  // Автоподбор ставки НДС по дате документа (ОСНО): <=2025 → 20, >=2026 → 22.
+  // Ручной выбор ставки приоритетнее.
+  useEffect(() => {
+    if (isVatRateManual) return;
+    setFormData((prev) => ({
+      ...prev,
+      vat_rate: prev.tax_system === 'osno' ? vatRateForDate(prev.act_date) : '0',
+    }));
+  }, [formData.act_date, formData.tax_system, isVatRateManual]);
 
   const loadRequest = async (id: number) => {
     try {
@@ -97,7 +109,6 @@ export const ActCreatePage: React.FC = () => {
     setFormData((prev) => ({
       ...prev,
       tax_system: newSystem,
-      vat_rate: newSystem !== 'osno' ? '0' : prev.vat_rate === '0' ? '22' : prev.vat_rate,
     }));
   };
 
@@ -114,7 +125,6 @@ export const ActCreatePage: React.FC = () => {
         const contractor = contractors.find((c) => c.id === id);
         if (contractor?.tax_system) {
           newData.tax_system = contractor.tax_system;
-          newData.vat_rate = contractor.tax_system !== 'osno' ? '0' : '22';
         }
       }
 
@@ -173,7 +183,7 @@ export const ActCreatePage: React.FC = () => {
 
   return (
     <Layout>
-      
+
      <div className="bg-white rounded-lg shadow p-6">
        <h1 className="text-2xl font-bold text-gray-900 mb-6">📄 Создание акта</h1>
 
@@ -193,6 +203,7 @@ export const ActCreatePage: React.FC = () => {
            <label className="block text-sm font-medium text-gray-700 mb-1">📅 Дата акта</label>
            <input
              type="date"
+             aria-label="Дата акта"
              value={formData.act_date}
              onChange={(e) => setFormData({ ...formData, act_date: e.target.value })}
              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
@@ -284,9 +295,11 @@ export const ActCreatePage: React.FC = () => {
          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
            <TaxSystemSelector
              value={formData.tax_system}
+             vatRate={formData.vat_rate}
              onChange={handleTaxSystemChange}
              onVatRateChange={(rate) => {
                setIsManualTaxOverride(true);
+               setIsVatRateManual(true);
                setFormData({ ...formData, vat_rate: rate });
              }}
            />
