@@ -1,4 +1,5 @@
 import React, { createContext, useContext, ReactNode, useEffect, useRef, useState, useCallback } from 'react';
+import apiClient from '../api/client';
 
 interface WebSocketContextType {
   lastMessage: any | null;
@@ -30,15 +31,28 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
     };
   }, []);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     const token = localStorage.getItem('access_token');
     if (!token) return;
 
+    // Одноразовый короткоживущий ticket вместо сессионного JWT в URL
+    // (браузерный WS не умеет заголовки; JWT в query утекал в логи/историю).
+    // Каждый connect, включая reconnect после обрыва, запрашивает НОВЫЙ ticket.
+    let ticket: string;
+    try {
+      const res = await apiClient.post('/ws/ticket');
+      ticket = res.data.ticket;
+    } catch (e) {
+      console.error('WS ticket request failed:', e);
+      reconnectTimerRef.current = setTimeout(() => connect(), 5000);
+      return;
+    }
+
     // Use Vite proxy in dev, direct connection in production
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/ws?token=${token}`;
+    const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/ws?ticket=${ticket}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
