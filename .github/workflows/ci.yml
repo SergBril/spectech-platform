@@ -90,6 +90,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg2://test:test@localhost:5432/spectech_test  # pragma: allowlist secret
         run: python scripts/check_schema_drift.py
+
       - name: Run tests
         working-directory: backend
         env:
