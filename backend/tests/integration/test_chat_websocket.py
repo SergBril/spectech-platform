@@ -1,10 +1,37 @@
-"""Интеграционные тесты для WebSocket чата."""
+"""Интеграционные тесты для WebSocket чата (одноразовый ticket вместо ?token=)."""
 
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.models.chat import ChatMessageType
+
+
+class _FakeRedis:
+    """Async-fake внешнего Redis (БД не мокается)."""
+
+    def __init__(self):
+        self.store = {}
+
+    async def set(self, key, value, ex=None, nx=False):
+        if nx and key in self.store:
+            return None
+        self.store[key] = value
+        return True
+
+    async def getdel(self, key):
+        return self.store.pop(key, None)
+
+
+@pytest.fixture(autouse=True)
+def _fake_ws_redis(monkeypatch):
+    monkeypatch.setattr("app.core.ws_tickets._client", _FakeRedis())
+
+
+def _chat_ticket(client: TestClient, auth_headers: dict) -> str:
+    resp = client.post("/api/v1/chat/ws-ticket", headers=auth_headers)
+    assert resp.status_code == 200
+    return resp.json()["ticket"]
 
 
 class TestChatWebSocket:
@@ -36,7 +63,7 @@ class TestChatWebSocket:
 
         # 3. Подключаемся к WebSocket
         with auth_client.websocket_connect(
-            f"/api/v1/chat/ws/{chat_id}?token={auth_token}"
+            f"/api/v1/chat/ws/{chat_id}?ticket={_chat_ticket(auth_client, auth_headers)}"
         ) as websocket:
             # Получаем системное сообщение о входе (user_joined)
             # Добавляем обработку, чтобы понять, что происходит
@@ -52,16 +79,27 @@ class TestChatWebSocket:
             except Exception as e:
                 raise AssertionError(f"Failed to receive system join message: {e}")
 
-    def test_websocket_connect_invalid_token(self, client: TestClient):
-        """Тест: отклонение подключения с невалидным токеном."""
+    def test_websocket_connect_invalid_ticket(self, client: TestClient):
+        """Тест: отклонение подключения с невалидным ticket."""
         with pytest.raises(WebSocketDisconnect) as exc_info:
             with client.websocket_connect(
-                "/api/v1/chat/ws/1?token=invalid_token"
+                "/api/v1/chat/ws/1?ticket=invalid_ticket"
             ) as websocket:
                 # Пытаемся прочитать, чтобы получить код закрытия
                 websocket.receive_json()
 
         # WebSocket закрыт с кодом 1008 (Policy Violation)
+        assert exc_info.value.code == 1008
+
+    def test_websocket_session_token_rejected(
+        self, client: TestClient, auth_token: str
+    ):
+        """Breaking change: сессионный JWT в ?token= больше не принимается."""
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(
+                f"/api/v1/chat/ws/1?token={auth_token}"
+            ) as websocket:
+                websocket.receive_json()
         assert exc_info.value.code == 1008
 
     def test_websocket_send_message(
@@ -87,7 +125,7 @@ class TestChatWebSocket:
 
         # 2. Подключаемся и отправляем сообщение
         with auth_client.websocket_connect(
-            f"/api/v1/chat/ws/{chat_id}?token={auth_token}"
+            f"/api/v1/chat/ws/{chat_id}?ticket={_chat_ticket(auth_client, auth_headers)}"
         ) as websocket:
             # Пропускаем системное сообщение user_joined
             websocket.receive_json()
@@ -132,7 +170,7 @@ class TestChatWebSocket:
 
         # 2. Подключаемся и отправляем сообщение с файлом
         with auth_client.websocket_connect(
-            f"/api/v1/chat/ws/{chat_id}?token={auth_token}"
+            f"/api/v1/chat/ws/{chat_id}?ticket={_chat_ticket(auth_client, auth_headers)}"
         ) as websocket:
             # Пропускаем user_joined
             websocket.receive_json()
@@ -177,7 +215,7 @@ class TestChatWebSocket:
 
         # 2. Подключаемся и отправляем typing
         with auth_client.websocket_connect(
-            f"/api/v1/chat/ws/{chat_id}?token={auth_token}"
+            f"/api/v1/chat/ws/{chat_id}?ticket={_chat_ticket(auth_client, auth_headers)}"
         ) as websocket:
             # Пропускаем user_joined
             websocket.receive_json()
@@ -224,7 +262,7 @@ class TestChatWebSocket:
 
         # 3. Подключаемся к WebSocket и помечаем как прочитанное
         with auth_client.websocket_connect(
-            f"/api/v1/chat/ws/{chat_id}?token={auth_token}"
+            f"/api/v1/chat/ws/{chat_id}?ticket={_chat_ticket(auth_client, auth_headers)}"
         ) as websocket:
             # Пропускаем user_joined
             websocket.receive_json()
@@ -257,7 +295,7 @@ class TestChatWebSocket:
         """Тест: подключение к несуществующему чату."""
         with pytest.raises(WebSocketDisconnect) as exc_info:
             with auth_client.websocket_connect(
-                f"/api/v1/chat/ws/99999?token={auth_token}"
+                f"/api/v1/chat/ws/99999?ticket={_chat_ticket(auth_client, auth_headers)}"
             ) as websocket:
                 # Пытаемся прочитать, чтобы получить код закрытия
                 websocket.receive_json()

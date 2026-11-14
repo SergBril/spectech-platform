@@ -19,6 +19,33 @@ from app.models.dispatch import Request
 pytestmark = [pytest.mark.integration]
 
 
+class _FakeRedis:
+    """Async-fake внешнего Redis (БД не мокается)."""
+
+    def __init__(self):
+        self.store = {}
+
+    async def set(self, key, value, ex=None, nx=False):
+        if nx and key in self.store:
+            return None
+        self.store[key] = value
+        return True
+
+    async def getdel(self, key):
+        return self.store.pop(key, None)
+
+
+@pytest.fixture(autouse=True)
+def _fake_ws_redis(monkeypatch):
+    monkeypatch.setattr("app.core.ws_tickets._client", _FakeRedis())
+
+
+def _chat_ticket(client: TestClient, auth_headers: dict) -> str:
+    resp = client.post("/api/v1/chat/ws-ticket", headers=auth_headers)
+    assert resp.status_code == 200
+    return resp.json()["ticket"]
+
+
 @pytest.fixture
 def second_company(db_session: Session) -> Company:
     company = Company(
@@ -164,12 +191,17 @@ class TestChatTenantIsolation:
     def test_ws_foreign_closes_4003(
         self,
         client: TestClient,
-        auth_token: str,
+        auth_headers: dict,
         chat_b: RequestChat,
     ):
+        """Главный тест: валидный ticket НЕ обходит tenant-изоляцию.
+
+        Ticket подтверждает личность, company-чек — право на чат.
+        """
+        ticket = _chat_ticket(client, auth_headers)
         with pytest.raises(WebSocketDisconnect) as exc_info:
             with client.websocket_connect(
-                f"/api/v1/chat/ws/{chat_b.id}?token={auth_token}"
+                f"/api/v1/chat/ws/{chat_b.id}?ticket={ticket}"
             ) as websocket:
                 websocket.receive_json()
         assert exc_info.value.code == 4003
@@ -203,14 +235,13 @@ class TestChatOwnAccess:
         self,
         client: TestClient,
         auth_headers: dict,
-        auth_token: str,
         request_a: Request,
     ):
         resp = client.get(f"/api/v1/chat/requests/{request_a.id}", headers=auth_headers)
         assert resp.status_code == 200
         chat_id = resp.json()["id"]
         with client.websocket_connect(
-            f"/api/v1/chat/ws/{chat_id}?token={auth_token}"
+            f"/api/v1/chat/ws/{chat_id}?ticket={_chat_ticket(client, auth_headers)}"
         ) as websocket:
             data = websocket.receive_json()
             assert data["type"] == "message"

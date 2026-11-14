@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import SessionLocal, get_db
-from app.models.auth import User
+from app.models.auth import User, UserStatus
 from app.models.chat import (
     ChatMessage,
     ChatMessageType,
@@ -29,7 +29,6 @@ from app.models.chat import (
 )
 from app.models.shift import ShiftTask
 from app.services import storage_service
-from app.services.auth_service import decode_access_token
 from app.services.chat_service import send_chat_message
 from app.services.websocket_manager import manager
 
@@ -580,22 +579,59 @@ def send_message_to_chat(
 # ============================================================
 
 
+@router.post("/ws-ticket")
+async def create_chat_ws_ticket(current_user: User = Depends(get_current_user)):
+    """Одноразовый ticket (60 с) для подключения к чату вместо JWT в URL.
+
+    Ticket подтверждает личность; право на чат проверяется отдельно
+    (company-чек при connect). Redis обязателен: недоступен — 503,
+    без in-memory fallback (одноразовость между воркерами).
+    """
+    from app.core.ws_tickets import TICKET_TTL_SECONDS, issue_ticket
+
+    try:
+        ticket = await issue_ticket(current_user.id)
+    except Exception as e:
+        logger.error("Chat WS ticket: Redis недоступен: %s", e)
+        raise HTTPException(status_code=503, detail="Ticket service unavailable")
+    return {"ticket": ticket, "expires_in": TICKET_TTL_SECONDS}
+
+
 @router.websocket("/ws/{chat_id}")
-async def chat_websocket(websocket: WebSocket, chat_id: int, token: str = Query(...)):
-    """WebSocket для real-time чата."""
+async def chat_websocket(
+    websocket: WebSocket,
+    chat_id: int,
+    ticket: str | None = None,
+    token: str | None = None,
+):
+    """WebSocket для real-time чата (одноразовый ticket вместо ?token=)."""
+    from app.core.ws_tickets import consume_ticket
+
     db = SessionLocal()
     user = None
     try:
-        # 1. Аутентификация
+        # 1. Аутентификация по одноразовому ticket.
+        # Сессионный JWT в URL больше не принимается (breaking change).
+        if token is not None:
+            await websocket.close(
+                code=1008, reason="Use /chat/ws-ticket instead of ?token="
+            )
+            return
+        if not ticket:
+            await websocket.close(code=1008, reason="Ticket required")
+            return
         try:
-            payload = decode_access_token(token)
-            user_id = int(payload.get("sub"))
-        except Exception:
-            await websocket.close(code=1008, reason="Invalid token")
+            user_id = await consume_ticket(ticket)
+        except Exception as e:
+            logger.error("Chat WS ticket: Redis недоступен: %s", e)
+            await websocket.close(code=4002, reason="Ticket service unavailable")
+            return
+        if user_id is None:
+            await websocket.close(code=1008, reason="Invalid or expired ticket")
             return
 
         user = db.get(User, user_id)
-        if not user:
+        if not user or user.status != UserStatus.active:
             await websocket.close(code=1008, reason="User not found")
             return
 

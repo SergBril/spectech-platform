@@ -8,6 +8,7 @@ import {
   MaintenanceOrderStatus,
 } from '../api/maintenance';
 import toast from 'react-hot-toast';
+import apiClient from '../api/client';
 
 const STATUS_CONFIG: Record<MaintenanceOrderStatus, { label: string; color: string; icon: string }> = {
   planned: { label: 'Запланирован', color: 'bg-blue-100 text-blue-800', icon: '📋' },
@@ -123,12 +124,19 @@ export const MaintenanceDetailPage: React.FC = () => {
 
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => {
-                const token = localStorage.getItem('access_token');
-                window.open(
-                  `/api/v1/maintenance/orders/${order.id}/pdf?token=${token}`,
-                  '_blank'
-                );
+              onClick={async () => {
+                // PDF через Authorization + blob: сессионный JWT больше не в URL
+                try {
+                  const res = await apiClient.get(
+                    `/maintenance/orders/${order.id}/pdf`,
+                    { responseType: 'blob' }
+                  );
+                  const url = URL.createObjectURL(res.data);
+                  window.open(url, '_blank');
+                  setTimeout(() => URL.revokeObjectURL(url), 60000);
+                } catch {
+                  toast.error('Не удалось открыть PDF наряд-заказа');
+                }
               }}
               className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
             >
@@ -138,12 +146,19 @@ export const MaintenanceDetailPage: React.FC = () => {
             {order.status === 'completed' && (
               <>
                 <button
-                  onClick={() => {
-                    const token = localStorage.getItem('access_token');
-                    window.open(
-                      `/api/v1/maintenance/orders/${order.id}/act/pdf?token=${token}`,
-                      '_blank'
-                    );
+                  onClick={async () => {
+                    // PDF через Authorization + blob: сессионный JWT больше не в URL
+                    try {
+                      const res = await apiClient.get(
+                        `/maintenance/orders/${order.id}/act/pdf`,
+                        { responseType: 'blob' }
+                      );
+                      const url = URL.createObjectURL(res.data);
+                      window.open(url, '_blank');
+                      setTimeout(() => URL.revokeObjectURL(url), 60000);
+                    } catch {
+                      toast.error('Не удалось открыть PDF акта');
+                    }
                   }}
                   className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm font-medium"
                 >

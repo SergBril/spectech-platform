@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_company_id, get_current_user, get_user_company_ids
 from app.core.db import get_db
-from app.models.auth import User, UserStatus
+from app.models.auth import User
 from app.models.catalog import Vehicle
 from app.models.maintenance import (
     MaintenanceOrder,
@@ -32,7 +32,6 @@ from app.schemas.maintenance import (
     MaintenanceOrderRead,
     MaintenanceOrderUpdate,
 )
-from app.services.auth_service import decode_access_token
 from app.services.maintenance_service import maintenance_service
 
 router = APIRouter(prefix="/maintenance", tags=["maintenance"])
@@ -483,31 +482,21 @@ def download_order_pdf(
     order_id: int,
     token: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Скачать PDF наряд-заказа (поддержка ?token= для новой вкладки)."""
+    """Скачать PDF наряд-заказа (Authorization header; ?token= закрыт)."""
     from urllib.parse import quote
 
     from app.services.pdf_service import generate_maintenance_order_pdf
 
-    # === INLINE АУТЕНТИФИКАЦИЯ ===
-    if not token:
-        raise HTTPException(status_code=401, detail="Токен не указан")
-
-    try:
-        payload = decode_access_token(token)
-        user_id = int(payload.get("sub"))
-        user = db.get(User, user_id)
-        if not user or user.status != UserStatus.active:
-            raise HTTPException(status_code=401, detail="Пользователь не найден")
-        company_id = user.company_id
-    except HTTPException:
-        raise
-    except Exception as e:
+    # Сессионный JWT в URL больше не принимается: утекал в логи nginx,
+    # историю браузера и Referer (отчёт AB, вариант A)
+    if token is not None:
         raise HTTPException(
             status_code=401,
-            detail=f"Токен недействителен. Обновите страницу. ({e})",
+            detail="Token in URL is not supported; use Authorization header",
         )
-    # === КОНЕЦ АУТЕНТИФИКАЦИИ ===
 
     order = db.get(MaintenanceOrder, order_id)
     if not order or order.company_id != company_id:
@@ -589,31 +578,20 @@ def download_act_pdf(
     order_id: int,
     token: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: int = Depends(get_current_company_id),
 ):
-    """Скачать PDF акта выполненных работ."""
+    """Скачать PDF акта выполненных работ (Authorization header; ?token= закрыт)."""
     from urllib.parse import quote
 
     from app.services.pdf_service import generate_act_maintenance_pdf
 
-    # === INLINE АУТЕНТИФИКАЦИЯ ===
-    if not token:
-        raise HTTPException(status_code=401, detail="Токен не указан")
-
-    try:
-        payload = decode_access_token(token)
-        user_id = int(payload.get("sub"))
-        user = db.get(User, user_id)
-        if not user or user.status != UserStatus.active:
-            raise HTTPException(status_code=401, detail="Пользователь не найден")
-        company_id = user.company_id
-    except HTTPException:
-        raise
-    except Exception as e:
+    # Сессионный JWT в URL больше не принимается (отчёт AB, вариант A)
+    if token is not None:
         raise HTTPException(
             status_code=401,
-            detail=f"Токен недействителен. Обновите страницу. ({e})",
+            detail="Token in URL is not supported; use Authorization header",
         )
-    # === КОНЕЦ АУТЕНТИФИКАЦИИ ===
 
     order = db.get(MaintenanceOrder, order_id)
     if not order or order.company_id != company_id:
