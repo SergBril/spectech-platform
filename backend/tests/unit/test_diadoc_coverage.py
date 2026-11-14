@@ -1,8 +1,12 @@
 """Tests for diadoc_service with proper async mocking."""
 
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from app.models.company import Company
+from app.models.finance import Act
 
 
 @pytest.mark.asyncio
@@ -113,10 +117,69 @@ class TestDiadocRoutesWithMock:
         assert resp.status_code in (200, 500)
 
     @patch("app.services.diadoc_service.diadoc_service")
-    def test_get_document_status_route(self, mock_svc, client, auth_headers):
+    def test_get_document_status_route(
+        self, mock_svc, client, auth_headers, db_session, company, sample_contractor
+    ):
+        """Контракт: статус только по акту своей компании.
+
+        Свой акт с edo_message_id → 200 (positive-control),
+        несуществующий message_id → 404.
+        """
         mock_svc.authenticate = AsyncMock(return_value="fake-token")
         mock_svc.get_document_status = AsyncMock(return_value={"status": "delivered"})
+
+        own_act = Act(
+            document_number="ACT-DIADOC-OWN",
+            client_id=sample_contractor.id,
+            act_date=date(2025, 12, 15),
+            company_id=company.id,
+            edo_message_id="test-doc-id",
+        )
+        db_session.add(own_act)
+        db_session.commit()
+
         resp = client.get(
             "/api/v1/shifts/diadoc/status/test-doc-id", headers=auth_headers
         )
-        assert resp.status_code in (200, 500)
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "delivered"}
+
+        resp = client.get(
+            "/api/v1/shifts/diadoc/status/no-such-doc", headers=auth_headers
+        )
+        assert resp.status_code == 404
+
+    @patch("app.services.diadoc_service.diadoc_service")
+    def test_get_document_status_foreign_company_404(
+        self, mock_svc, client, auth_headers, db_session, sample_contractor
+    ):
+        """Акт чужой компании с тем же message_id → 404 без утечки существования."""
+        mock_svc.authenticate = AsyncMock(return_value="fake-token")
+        mock_svc.get_document_status = AsyncMock(return_value={"status": "delivered"})
+
+        other = Company(
+            name="Other Co",
+            legal_name="Other Co LLC",
+            inn="7800000001",
+            kpp="780001002",
+        )
+        db_session.add(other)
+        db_session.commit()
+        db_session.refresh(other)
+
+        foreign_act = Act(
+            document_number="ACT-DIADOC-FOREIGN",
+            client_id=sample_contractor.id,
+            act_date=date(2025, 12, 15),
+            company_id=other.id,
+            edo_message_id="foreign-doc-id",
+        )
+        db_session.add(foreign_act)
+        db_session.commit()
+
+        resp = client.get(
+            "/api/v1/shifts/diadoc/status/foreign-doc-id", headers=auth_headers
+        )
+        assert resp.status_code == 404
+        # внешний сервис не вызывался для чужого документа
+        mock_svc.get_document_status.assert_not_awaited()

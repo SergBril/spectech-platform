@@ -11,7 +11,13 @@ from app.core.db import Base
 
 
 class EmailTemplateType(str, PyEnum):
-    """Типы email-шаблонов."""
+    """Типы email-шаблонов.
+
+    Набор синхронизирован с PG enum emailtemplatetype и schemas/email.py (7).
+    Расширять только вместе с миграцией и API-схемой. Уведомления аренды/
+    выплат/споров шлются через файловые шаблоны email/*.html и этот enum
+    не используют.
+    """
 
     invoice_created = "invoice_created"
     invoice_overdue = "invoice_overdue"
@@ -20,10 +26,6 @@ class EmailTemplateType(str, PyEnum):
     maintenance_completed = "maintenance_completed"
     welcome = "welcome"
     custom = "custom"
-    rental_completed = "rental_completed"  # Клиенту: аренда завершена + счёт
-    payout_created = "payout_created"  # Собственнику: выплата создана
-    dispute_opened = "dispute_opened"  # Диспетчеру: новый спор
-    dispute_escalated = "dispute_escalated"  # Менеджеру/CEO: эскалация
 
 
 class EmailTemplate(Base):
