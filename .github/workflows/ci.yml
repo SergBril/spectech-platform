@@ -79,6 +79,17 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/spectech_test  # pragma: allowlist secret
         run: alembic check || echo "::warning::Pending migrations detected"
 
+      - name: Apply migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg2://test:test@localhost:5432/spectech_test  # pragma: allowlist secret
+        run: alembic upgrade head
+
+      - name: Check schema drift
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg2://test:test@localhost:5432/spectech_test  # pragma: allowlist secret
+        run: python scripts/check_schema_drift.py
       - name: Run tests
         working-directory: backend
         env:
