@@ -105,6 +105,14 @@ def vat_rate_for_date(doc_date=None, tax_system=None) -> Decimal:
         return Decimal("0")
     if doc_date is None:
         return VAT_RATE_CURRENT
+    # Дата может прийти строкой (шаблоны, SimpleNamespace, payload) - приводим.
+    if isinstance(doc_date, str):
+        try:
+            doc_date = date.fromisoformat(doc_date[:10])
+        except ValueError:
+            return VAT_RATE_CURRENT
     if isinstance(doc_date, datetime):
         doc_date = doc_date.date()
+    if not isinstance(doc_date, date):
+        return VAT_RATE_CURRENT
     return VAT_RATE_CURRENT if doc_date >= VAT_RATE_CHANGE_DATE else VAT_RATE_LEGACY

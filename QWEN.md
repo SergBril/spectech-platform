@@ -291,3 +291,7 @@ pre-commit run --all-files   # black, ruff, detect-secrets, базовые пр�
 - Пути эндпоинтов сверять с `app.routes`, а не только с `app.openapi()`: маршруты с `include_in_schema=False` в OpenAPI не попадают (например `GET /`).
 - SQLAlchemy для PEP-435 Enum использует **`.name`**, а не `.value`, как строку в БД. Имена членов должны совпадать со значениями в БД (поэтому в проекте они lowercase).
 - Дрейф model vs БД — реальный класс багов: `DocumentStatus` имел 7 из 14 значений, и строка со `sent_to_edo` ломала **весь** список актов; `Act.signed_at`, `ShiftTemplate.operator_id`, `UploadedFile.payout_id` не существовали.
+
+
+### 12.12 Не запускать два pytest в контейнере одновременно
+Тесты используют общий SQLite `./test.db` с `drop_all`/`create_all` на каждый тест. Параллельный прогон даёт ложные `no such table: ...` и `table ... already exists`. Перед запуском убедиться, что другой прогон не идёт; при странных падениях — перепроверить по одному, прежде чем считать их багами.
