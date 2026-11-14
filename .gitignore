@@ -156,3 +156,8 @@ gitleaks.json
 
 # agent scratch
 .qwen/
+
+# tsc -b build artifacts
+frontend/vite.config.js
+frontend/vite.config.d.ts
+frontend/*.tsbuildinfo
