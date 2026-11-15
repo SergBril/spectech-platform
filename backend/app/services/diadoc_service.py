@@ -14,6 +14,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Проверенные адреса API Diadoc (источник: документация Citeck по интеграции
+# с Контур). Другие адреса не использовать.
+DIADOC_PROD_URL = "https://diadoc-api.kontur.ru"
+DIADOC_SANDBOX_URL = "https://diadoc-api-test.kontur.ru"
+
 
 class DiadocService:
     """Сервис интеграции с Diadoc API (stub с подготовкой к реальной интеграции)."""
@@ -23,9 +28,8 @@ class DiadocService:
 
         self.api_key = getattr(settings, "DIADOC_API_KEY", "")
         self.box_id = getattr(settings, "DIADOC_BOX_ID", "")
-        self.base_url = getattr(
-            settings, "DIADOC_BASE_URL", "https://diadoc-api.kontur.ru"
-        )
+        self.use_sandbox = bool(getattr(settings, "DIADOC_USE_SANDBOX", True))
+        self.base_url = DIADOC_SANDBOX_URL if self.use_sandbox else DIADOC_PROD_URL
         self.enabled = bool(self.api_key and self.box_id)
 
     def _credentials(self, company: "Company | None" = None) -> tuple[str, str]:
@@ -50,6 +54,19 @@ class DiadocService:
             box_id = self.box_id
         return api_key, box_id
 
+    def _base_url(self, company: "Company | None" = None) -> str:
+        """URL по флагу sandbox компании; fallback — глобальный DIADOC_USE_SANDBOX.
+
+        Дефолт True (безопасно): тестовые отправки не создают настоящих
+        документов у контрагентов.
+        """
+        sandbox = self.use_sandbox
+        if company is not None:
+            flag = getattr(company, "diadoc_use_sandbox", None)
+            if flag is not None:
+                sandbox = bool(flag)
+        return DIADOC_SANDBOX_URL if sandbox else DIADOC_PROD_URL
+
     async def authenticate(self, company: "Company | None" = None) -> str | None:
         """Получить токен авторизации Diadoc для компании (или глобальный fallback)."""
         api_key, box_id = self._credentials(company)
@@ -57,12 +74,13 @@ class DiadocService:
             logger.info("DIADOC STUB → authenticate")
             return "stub-token"
 
+        base_url = self._base_url(company)
         import httpx
 
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.post(
-                    f"{self.base_url}/V3/Authenticate",
+                    f"{base_url}/V3/Authenticate",
                     headers={"ddauth_api_client_id": api_key},
                     json={"type": "ApiKey"},
                 )
@@ -87,6 +105,7 @@ class DiadocService:
             logger.info(f"DIADOC STUB → send_act to {counterparty_box_id}")
             return {"message_id": "stub-msg-id", "status": "sent_stub"}
 
+        base_url = self._base_url(company)
         import base64
 
         import httpx
@@ -109,7 +128,7 @@ class DiadocService:
                     ],
                 }
                 resp = await client.post(
-                    f"{self.base_url}/V3/PostMessage",
+                    f"{base_url}/V3/PostMessage",
                     headers={
                         "ddauth_api_client_id": api_key,
                         "ddauth_service_token": token,
@@ -156,12 +175,13 @@ class DiadocService:
                 }
             ]
 
+        base_url = self._base_url(company)
         import httpx
 
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.get(
-                    f"{self.base_url}/V2/GetCounteragents",
+                    f"{base_url}/V2/GetCounteragents",
                     params={"boxId": box_id},
                     headers={
                         "ddauth_api_client_id": api_key,
@@ -190,12 +210,13 @@ class DiadocService:
         if not (api_key and box_id):
             return {"status": "stub", "message_id": message_id}
 
+        base_url = self._base_url(company)
         import httpx
 
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.get(
-                    f"{self.base_url}/V3/GetMessage",
+                    f"{base_url}/V3/GetMessage",
                     params={"boxId": box_id, "messageId": message_id},
                     headers={
                         "ddauth_api_client_id": api_key,

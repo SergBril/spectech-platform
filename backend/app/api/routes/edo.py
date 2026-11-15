@@ -56,10 +56,12 @@ async def refresh_all_diadoc_statuses(
     company_id: int = Depends(get_current_company_id),
 ):
     """Обновить статусы всех отправленных через Diadoc актов."""
+    from app.models.company import Company
     from app.models.finance import Act
     from app.services.diadoc_service import diadoc_service
 
-    token = await diadoc_service.authenticate()
+    company = db.get(Company, company_id)
+    token = await diadoc_service.authenticate(company=company)
     if not token:
         raise HTTPException(status_code=503, detail="Diadoc authentication failed")
 
@@ -76,7 +78,9 @@ async def refresh_all_diadoc_statuses(
     updated = 0
     for act in acts:
         try:
-            result = await diadoc_service.get_document_status(act.edo_message_id, token)
+            result = await diadoc_service.get_document_status(
+                act.edo_message_id, token, company=company
+            )
             new_status = result.get("status")
             if new_status and new_status != "stub" and new_status != "unknown":
                 act.status = new_status
@@ -100,6 +104,7 @@ async def diadoc_webhook(
     API недоступен / нет токена → 503; верификация не дала статуса → 202;
     verified-статус применяется, расхождение с payload логируется.
     """
+    from app.models.company import Company
     from app.models.finance import Act
     from app.services.diadoc_service import diadoc_service
 
@@ -119,7 +124,8 @@ async def diadoc_webhook(
 
     payload_status = body.get("DocflowStatus", {}).get("PrimaryStatus", "")
 
-    token = await diadoc_service.authenticate()
+    company = db.get(Company, act.company_id) if act.company_id else None
+    token = await diadoc_service.authenticate(company=company)
     if not token:
         logger.error(
             "Diadoc webhook: authentication failed, status NOT applied (msg=%s)",
@@ -127,7 +133,9 @@ async def diadoc_webhook(
         )
         raise HTTPException(status_code=503, detail="Diadoc authentication failed")
 
-    verified = await diadoc_service.get_document_status(message_id, token)
+    verified = await diadoc_service.get_document_status(
+        message_id, token, company=company
+    )
     api_status = verified.get("status")
     if api_status in (None, "stub", "error", "unknown"):
         logger.warning(
