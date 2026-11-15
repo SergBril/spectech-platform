@@ -33,7 +33,7 @@ async def send_act_via_diadoc(
     from app.models.contractor import Contractor
     from app.models.dispatch import Request
     from app.services.diadoc_service import diadoc_service
-    from app.services.edoxml.upd_xml_generator import generate_upd_xml
+    from app.services.edoxml.upd_xml_generator import generate_upd_xml, validate_upd_xml
 
     act = db.get(Act, act_id)
     if not act or act.company_id != company_id:
@@ -48,6 +48,14 @@ async def send_act_via_diadoc(
     request = db.get(Request, act.request_id) if act.request_id else None
 
     xml_bytes = generate_upd_xml(act, company, client, request)
+
+    # Невалидный по формату ФНС документ контрагенту не отправляем.
+    xsd_ok, xsd_errors = validate_upd_xml(xml_bytes)
+    if not xsd_ok:
+        raise HTTPException(
+            status_code=400,
+            detail=f"УПД не проходит формат ФНС: {'; '.join(xsd_errors[:2])}",
+        )
 
     token = await diadoc_service.authenticate()
     if not token:
@@ -176,7 +184,7 @@ async def bulk_send_acts_via_diadoc(
     from app.models.contractor import Contractor
     from app.models.dispatch import Request
     from app.services.diadoc_service import diadoc_service
-    from app.services.edoxml.upd_xml_generator import generate_upd_xml
+    from app.services.edoxml.upd_xml_generator import generate_upd_xml, validate_upd_xml
 
     token = await diadoc_service.authenticate()
     if not token:
@@ -205,6 +213,12 @@ async def bulk_send_acts_via_diadoc(
         request = db.get(Request, act.request_id) if act.request_id else None
 
         xml_bytes = generate_upd_xml(act, company, client, request)
+
+        # Один невалидный акт не должен ронять весь батч.
+        xsd_ok, _xsd_errors = validate_upd_xml(xml_bytes)
+        if not xsd_ok:
+            errors += 1
+            continue
 
         result = await diadoc_service.send_act(xml_bytes, counterparty_box_id, token)
         if result.get("status") in ("sent", "sent_stub"):
