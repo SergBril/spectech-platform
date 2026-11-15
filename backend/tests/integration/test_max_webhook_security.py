@@ -188,7 +188,11 @@ class TestStartOneTime:
         db_session: Session,
         sample_user: User,
     ):
+        from app.core.constants import link_code_expiry
+
         sample_user.telegram_link_code = "code-once"
+        # Контракт: код действителен только с непросроченным expires_at
+        sample_user.telegram_link_code_expires_at = link_code_expiry()
         sample_user.max_chat_id = None
         db_session.commit()
 
@@ -209,3 +213,25 @@ class TestStartOneTime:
         assert "Неверный код" in send2.call_args[0][1]
         db_session.expire_all()
         assert db_session.get(User, sample_user.id).max_chat_id == "chat-new"
+
+    def test_link_code_without_expiry_rejected(
+        self,
+        client: TestClient,
+        webhook_secret,
+        db_session: Session,
+        sample_user: User,
+    ):
+        """Fail-closed контракт: код без expires_at (выдан до введения срока) не работает."""
+        sample_user.telegram_link_code = "code-legacy"
+        sample_user.telegram_link_code_expires_at = None
+        sample_user.max_chat_id = None
+        db_session.commit()
+
+        with patch(SEND_PATCH, new_callable=AsyncMock) as send:
+            resp = _post_webhook(client, _msg("/start code-legacy", "chat-legacy"))
+        assert resp.status_code == 200
+        assert "Неверный код" in send.call_args[0][1]
+        # DB-факт: привязки не случилось
+        db_session.expire_all()
+        user = db_session.get(User, sample_user.id)
+        assert user.max_chat_id is None

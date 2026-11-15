@@ -429,13 +429,14 @@ class TestRentalFinanceIntegration:
         assert invoice.rental_id == sample_rental.id
         assert invoice.status.value == "draft"
 
-        # Проверяем суммы (8 часов × 2500 = 20000, + 20% VAT = 24000)
+        # Проверяем суммы (8 часов × 2500 = 20000, + 22% VAT = 24400).
+        # НДС ОСНО 22% с 2026; счёт создаётся текущей датой (2026) → 22%.
         assert invoice.subtotal >= Decimal("20000.00")
-        assert invoice.vat_amount >= Decimal("4000.00")
-        assert invoice.vat_amount == (invoice.subtotal * Decimal("0.20")).quantize(
+        assert invoice.vat_amount >= Decimal("4400.00")
+        assert invoice.vat_amount == (invoice.subtotal * Decimal("0.22")).quantize(
             Decimal("0.01")
         )
-        assert invoice.total >= Decimal("24000.00")
+        assert invoice.total >= Decimal("24400.00")
 
         # 5. Проверяем, что создалась позиция счёта
         items = (
