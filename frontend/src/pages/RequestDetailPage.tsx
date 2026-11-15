@@ -11,6 +11,7 @@ import { FileUploadButton } from '../components/FileUploadButton';
 import { FileList } from '../components/FileList';
 import type { FileUploadResponse } from '../api/files';
 import Layout from '../components/Layout';
+import DiadocSendModal from '../components/DiadocSendModal';
 import apiClient from '../api/client';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
@@ -79,6 +80,7 @@ export const RequestDetailPage: React.FC = () => {
   const [error, setError] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [filesRefreshTrigger, setFilesRefreshTrigger] = useState(0);
+  const [diadocActId, setDiadocActId] = useState<number | null>(null);
 
   const canEdit = hasPermission('requests', 'update');
   const canCreateInvoice = hasPermission('finance', 'create');
@@ -201,12 +203,8 @@ export const RequestDetailPage: React.FC = () => {
     } catch { showToast.error('❌ Ошибка ZIP'); }
   };
 
-  const handleSendToDiadoc = async (act: Act) => {
-    if (!confirm(`Отправить УПД ${act.document_number} в Диадок?`)) return;
-    try {
-      const res = await financeApi.sendToDiadoc(act.id);
-      showToast.success(`✅ ${res.message || 'Отправлено'}`);
-    } catch (err: any) { showToast.error('❌ ' + (err.response?.data?.detail || '')); }
+  const handleSendToDiadoc = (act: Act) => {
+    setDiadocActId(act.id);
   };
 
   const handleRejectAct = async (act: Act) => {
@@ -638,6 +636,14 @@ export const RequestDetailPage: React.FC = () => {
            </div>
          )}
        </div>
+
+      {diadocActId !== null && (
+        <DiadocSendModal
+          actId={diadocActId}
+          onClose={() => setDiadocActId(null)}
+          onSent={() => { if (id) loadData(parseInt(id)); }}
+        />
+      )}
      </div>
    </Layout>
   );

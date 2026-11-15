@@ -9,6 +9,7 @@ import InvoiceFormModal from '../components/InvoiceFormModal';
 import PaymentModal from '../components/PaymentModal';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import ActFormModal from '../components/ActFormModal';
+import DiadocSendModal from '../components/DiadocSendModal';
 import NotificationBell from '../components/NotificationBell';
 import Layout from '../components/Layout';
 import PayoutBatchModal from '../components/PayoutBatchModal';
@@ -40,6 +41,7 @@ export const FinancePage: React.FC = () => {
   const [paymentTarget, setPaymentTarget] = useState<Invoice | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
   const [deleteActTarget, setDeleteActTarget] = useState<Act | null>(null);
+  const [diadocActId, setDiadocActId] = useState<number | null>(null);
   // Период для расширенной аналитики
   const [periodPreset, setPeriodPreset] = useState<'month' | 'prev_month' | 'quarter' | 'year' | 'custom'>('month');
   const [dashboardV2, setDashboardV2] = useState<FinanceDashboardV2 | null>(null);
@@ -243,12 +245,8 @@ export const FinancePage: React.FC = () => {
     } catch { showToast.error('❌ Ошибка скачивания ZIP'); }
   };
 
-  const handleSendToDiadoc = async (act: Act) => {
-    if (!confirm(`Отправить УПД ${act.document_number} в Диадок?`)) return;
-    try {
-      const res = await financeApi.sendToDiadoc(act.id);
-      showToast.success(`✅ ${res.message || 'Отправлено в Диадок'}`);
-    } catch (err: any) { showToast.error('❌ ' + (err.response?.data?.detail || 'Ошибка отправки')); }
+  const handleSendToDiadoc = (act: Act) => {
+    setDiadocActId(act.id);
   };
 
   const handleRejectAct = async (act: Act) => {
@@ -1001,6 +999,14 @@ export const FinancePage: React.FC = () => {
           <PayoutBatchModal
             onClose={() => setIsPayoutBatchModalOpen(false)}
             onSuccess={() => { setIsPayoutBatchModalOpen(false); loadData(); }}
+          />
+        )}
+
+        {diadocActId !== null && (
+          <DiadocSendModal
+            actId={diadocActId}
+            onClose={() => setDiadocActId(null)}
+            onSent={() => loadData()}
           />
         )}
       </div>
