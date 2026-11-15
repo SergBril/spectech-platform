@@ -3,7 +3,6 @@ from decimal import Decimal
 from enum import Enum
 
 from sqlalchemy import (
-    JSON,
     Boolean,
     DateTime,
     ForeignKey,
@@ -15,6 +14,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     Enum as SqlEnum,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -119,7 +119,7 @@ class Request(Base):
         comment="Дата публикации в маркетплейсе",
     )
     requirements: Mapped[dict | None] = mapped_column(
-        JSON,
+        JSONB,
         nullable=True,
         comment="Требования к технике: {min_tonnage, min_boom_length, chassis_type, ...}",
     )

@@ -18,19 +18,30 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Override sqlalchemy.url from environment variable
+# Override sqlalchemy.url from the environment.
+# Credentials must not live in source: the previous fallback embedded a
+# real database password, which detect-secrets correctly flagged.
 database_url = os.environ.get("DATABASE_URL")
-if database_url:
-    # Заменяем postgresql+psycopg на postgresql для Alembic (использует psycopg напрямую)
-    # Keep original driver (psycopg or psycopg2)
-    config.set_main_option("sqlalchemy.url", database_url)
-else:
-    # Fallback для локальной разработки без Docker
-    config.set_main_option(
-        "sqlalchemy.url", "postgresql://spectech:spectech@localhost:5470/spectech"
+if not database_url:
+    raise RuntimeError(
+        "DATABASE_URL is not set. Alembic requires an explicit database URL; "
+        "set it in .env / .env.prod or export it before running migrations."
     )
+config.set_main_option("sqlalchemy.url", database_url)
 
 # Model metadata for 'autogenerate' support
+# Регистрируем ВСЕ модели в Base.metadata.
+# Без этого autogenerate видит только импортированные модели и молча
+# пропускает остальные таблицы: так цепочка миграций и оказалась неполной
+# (11 таблиц никогда не попадали в autogenerate).
+import importlib as _importlib
+import pkgutil as _pkgutil
+
+import app.models as _models
+
+for _mod in _pkgutil.iter_modules(_models.__path__):
+    _importlib.import_module(f"app.models.{_mod.name}")
+
 target_metadata = Base.metadata
 
 print(f"[INFO] Found {len(Base.metadata.tables)} tables in Base.metadata:")

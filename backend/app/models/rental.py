@@ -72,14 +72,20 @@ class Rental(Base):
 
     # Статус
     status = Column(
-        Enum(RentalStatus, name="rental_status"),
+        Enum(
+            RentalStatus,
+            name="rental_status",
+            values_callable=lambda e: [m.value for m in e],
+        ),
         default=RentalStatus.DRAFT,
         nullable=False,
     )
 
     # Тип тарификации
     rate_type = Column(
-        Enum(RateType, name="rate_type"),
+        Enum(
+            RateType, name="rate_type", values_callable=lambda e: [m.value for m in e]
+        ),
         default=RateType.HOURLY,
         nullable=False,
         comment="Тип тарификации",
@@ -118,7 +124,11 @@ class Rental(Base):
 
     # Предоплата
     prepayment_status = Column(
-        Enum(PrepaymentStatus, name="prepayment_status"),
+        Enum(
+            PrepaymentStatus,
+            name="prepayment_status",
+            values_callable=lambda e: [m.value for m in e],
+        ),
         default=PrepaymentStatus.NONE,
         nullable=False,
         comment="Статус предоплаты",

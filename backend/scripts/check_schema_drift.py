@@ -2,7 +2,7 @@
 
 Сравнивает:
   1. Колонки каждой таблицы модели с information_schema.columns.
-  2. Члены Python Enum (.name — SQLAlchemy хранит именно имя члена)
+  2. Метки native-enum из type.enums (учитывает values_callable)
      с pg_enum для native-enum колонок.
 
 Запуск (cwd=/app в контейнере или backend/ локально):
@@ -47,11 +47,47 @@ def diff_sets(model: set, db: set) -> dict:
     }
 
 
+def expected_data_type(column) -> str:
+    """Ожидаемый information_schema.data_type для колонки модели.
+
+    Маппинг построен по типам, реально используемым в моделях:
+    Integer, BigInteger, String, Boolean, Enum, DateTime, JSON, JSONB,
+    Text, Date, Numeric, Float, Time.
+    """
+    t = column.type
+    name = type(t).__name__
+    if name in ("Enum",):
+        return "USER-DEFINED"
+    if name == "DateTime":
+        return (
+            "timestamp with time zone"
+            if getattr(t, "timezone", False)
+            else "timestamp without time zone"
+        )
+    if name == "Time":
+        return (
+            "time with time zone"
+            if getattr(t, "timezone", False)
+            else "time without time zone"
+        )
+    return {
+        "Integer": "integer",
+        "BigInteger": "bigint",
+        "String": "character varying",
+        "Boolean": "boolean",
+        "JSON": "json",
+        "JSONB": "jsonb",
+        "Text": "text",
+        "Date": "date",
+        "Numeric": "numeric",
+        "Float": "double precision",
+    }.get(name, "UNKNOWN:" + name)
+
+
 def enum_column_specs(metadata) -> list:
     """(table, column, pg_type_name, expected_names) для native enum-колонок.
 
-    SQLAlchemy хранит .name члена Enum, поэтому ожидаемые значения — имена.
-    Для строковых Enum (без enum_class) — значения из type.enums.
+    Ожидания берутся из type.enums: это учитывает values_callable.
     """
     specs = []
     for table in metadata.sorted_tables:
@@ -59,10 +95,10 @@ def enum_column_specs(metadata) -> list:
             ctype = column.type
             if not isinstance(ctype, SqlEnum) or not ctype.native_enum:
                 continue
-            if ctype.enum_class is not None:
-                expected = {member.name for member in ctype.enum_class}
-            else:
-                expected = set(ctype.enums)
+            # type.enums - авторитетный список того, что SQLAlchemy пишет.
+            # Брать .name нельзя: values_callable может хранить значения
+            # (rentals хранит 'none', а не 'NONE').
+            expected = set(ctype.enums)
             specs.append((table.name, column.name, ctype.name, expected))
     return specs
 
@@ -71,16 +107,22 @@ def collect_drift(conn, metadata, excluded: frozenset = EXCLUDED_TABLES) -> dict
     """Собирает отчёт о дрейфе по колонкам, enum'ам и отсутствующим таблицам."""
     db_columns: dict = {}
     db_udt: dict = {}
+    db_nullable: dict = {}
+    db_data_type: dict = {}
     for row in conn.execute(
         text(
-            "SELECT table_name, column_name, udt_name "
+            "SELECT table_name, column_name, udt_name, is_nullable, data_type "
             "FROM information_schema.columns WHERE table_schema = 'public'"
         )
     ):
         db_columns.setdefault(row[0], set()).add(row[1])
         db_udt[(row[0], row[1])] = row[2]
+        db_nullable[(row[0], row[1])] = row[3] == "YES"
+        db_data_type[(row[0], row[1])] = row[4]
 
     columns_report = []
+    nullable_report = []
+    types_report = []
     missing_tables = []
     for table in metadata.sorted_tables:
         if table.name in excluded:
@@ -91,6 +133,33 @@ def collect_drift(conn, metadata, excluded: frozenset = EXCLUDED_TABLES) -> dict
         diff = diff_sets({c.name for c in table.columns}, db_columns[table.name])
         if diff["model_only"] or diff["db_only"]:
             columns_report.append({"table": table.name, **diff})
+        for column in table.columns:
+            key = (table.name, column.name)
+            if key not in db_nullable:
+                continue
+            expected_type = expected_data_type(column)
+            actual_type = db_data_type.get(key)
+            if (
+                not expected_type.startswith("UNKNOWN:")
+                and actual_type != expected_type
+            ):
+                types_report.append(
+                    {
+                        "table": table.name,
+                        "column": column.name,
+                        "model_type": expected_type,
+                        "db_type": actual_type,
+                    }
+                )
+            if bool(column.nullable) != db_nullable[key]:
+                nullable_report.append(
+                    {
+                        "table": table.name,
+                        "column": column.name,
+                        "model_nullable": bool(column.nullable),
+                        "db_nullable": db_nullable[key],
+                    }
+                )
 
     db_enums: dict = {}
     for row in conn.execute(
@@ -134,6 +203,8 @@ def collect_drift(conn, metadata, excluded: frozenset = EXCLUDED_TABLES) -> dict
         "tables_checked": len(metadata.tables) - len(excluded),
         "missing_tables": sorted(missing_tables),
         "columns": columns_report,
+        "nullable": nullable_report,
+        "types": types_report,
         "enums": enums_report,
         "varchar_enums": sorted(varchar_enums),
         "db_only_tables": db_only_tables,
@@ -151,6 +222,16 @@ def format_report(report: dict) -> str:
         lines.append(
             f"КОЛОНКИ {item['table']}: "
             f"model_only={item['model_only']} db_only={item['db_only']}"
+        )
+    for item in report.get("nullable", []):
+        lines.append(
+            f"NULLABLE {item['table']}.{item['column']}: "
+            f"model={item['model_nullable']} db={item['db_nullable']}"
+        )
+    for item in report.get("types", []):
+        lines.append(
+            f"TYPE {item['table']}.{item['column']}: "
+            f"model={item['model_type']} db={item['db_type']}"
         )
     for item in report["enums"]:
         if "error" in item:
@@ -174,7 +255,13 @@ def format_report(report: dict) -> str:
             + ", ".join(report["db_only_tables"])
         )
 
-    has_drift = bool(report["missing_tables"] or report["columns"] or report["enums"])
+    has_drift = bool(
+        report["missing_tables"]
+        or report["columns"]
+        or report["enums"]
+        or report.get("nullable")
+        or report.get("types")
+    )
     lines.append(
         "ИТОГ: ОБНАРУЖЕН ДРЕЙФ (exit 1)"
         if has_drift
@@ -192,7 +279,13 @@ def main() -> int:
         print(f"Нет соединения с БД: {exc}")
         return 2
     print(format_report(report))
-    has_drift = bool(report["missing_tables"] or report["columns"] or report["enums"])
+    has_drift = bool(
+        report["missing_tables"]
+        or report["columns"]
+        or report["enums"]
+        or report.get("nullable")
+        or report.get("types")
+    )
     return 1 if has_drift else 0
 
 
