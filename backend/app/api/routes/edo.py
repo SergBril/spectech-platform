@@ -16,39 +16,6 @@ logger = logging.getLogger("spectech.edo")
 router = APIRouter(prefix="/edo", tags=["edo"])
 
 
-@router.get("/document-status/{message_id}")
-async def get_edo_document_status(
-    message_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Проверить статус документа в Diadoc."""
-    from app.services.diadoc_service import diadoc_service
-
-    token = await diadoc_service.authenticate()
-    if not token:
-        raise HTTPException(status_code=503, detail="Diadoc authentication failed")
-
-    result = await diadoc_service.get_document_status(message_id, token)
-    return result
-
-
-@router.get("/counterparties")
-async def list_diadoc_counterparties(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Список контрагентов из Diadoc."""
-    from app.services.diadoc_service import diadoc_service
-
-    token = await diadoc_service.authenticate()
-    if not token:
-        raise HTTPException(status_code=503, detail="Diadoc authentication failed")
-
-    counterparties = await diadoc_service.get_counterparties(token)
-    return {"counterparties": counterparties, "total": len(counterparties)}
-
-
 @router.post("/refresh-statuses")
 async def refresh_all_diadoc_statuses(
     db: Session = Depends(get_db),
