@@ -190,16 +190,21 @@ def get_edo_settings(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    # Return EDO settings from company model or defaults
+    # Секреты наружу только маской: ключ ЭДО даёт право отправлять первичку
+    # от лица юрлица. Флаг *_set нужен UI, чтобы показать "задан".
+    from app.core.crypto import mask_secret
+
     return {
-        "operator": getattr(company, "edo_operator", "diadoc") or "diadoc",
-        "diadoc_api_key": getattr(company, "diadoc_api_key", "") or "",
-        "diadoc_box_id": getattr(company, "diadoc_box_id", "") or "",
-        "diadoc_use_sandbox": getattr(company, "diadoc_use_sandbox", True),
-        "sbis_token": getattr(company, "sbis_token", "") or "",
-        "sbis_client_id": getattr(company, "sbis_client_id", "") or "",
-        "auto_send_on_sign": getattr(company, "auto_send_on_sign", False),
-        "default_format": getattr(company, "default_format", "upd_5_03") or "upd_5_03",
+        "operator": company.edo_operator or "diadoc",
+        "diadoc_api_key": mask_secret(company.diadoc_api_key),
+        "diadoc_api_key_set": bool(company.diadoc_api_key),
+        "diadoc_box_id": company.diadoc_box_id or "",
+        "diadoc_use_sandbox": bool(company.diadoc_use_sandbox),
+        "sbis_token": mask_secret(company.sbis_token),
+        "sbis_token_set": bool(company.sbis_token),
+        "sbis_client_id": company.sbis_client_id or "",
+        "auto_send_on_sign": bool(company.auto_send_on_sign),
+        "default_format": company.default_format or "upd_5_03",
     }
 
 
@@ -242,9 +247,24 @@ def update_edo_settings(
     if default_format is not None:
         updates["default_format"] = default_format
 
+    # Раньше здесь было `if hasattr(company, key)` - ни одной колонки не
+    # существовало, поэтому запись молча отбрасывалась, а ответ сообщал об
+    # успехе. Теперь поля есть, и секреты шифруются перед записью.
+    from app.core.crypto import encrypt_secret
+
+    secret_fields = {"diadoc_api_key", "sbis_token"}
     for key, value in updates.items():
-        if hasattr(company, key):
-            setattr(company, key, value)
+        if key in secret_fields:
+            # UI присылает обратно маску - она не должна затирать ключ.
+            if str(value).startswith("****"):
+                continue
+            # Пустая строка = явное удаление секрета. Без этого ключ ЭДО
+            # нельзя было убрать из настроек вообще.
+            if value == "":
+                setattr(company, key, None)
+                continue
+            value = encrypt_secret(value)
+        setattr(company, key, value)
 
     db.commit()
     return {"message": "EDO settings updated"}

@@ -49,9 +49,8 @@ class TestSendActXsdGate:
                 return_value=b"<not-fns/>",
             ),
             patch(
-                "app.api.routes.shifts.diadoc.diadoc_service.send_act",
-                new_callable=AsyncMock,
-            ) as send_mock,
+                "app.services.diadoc_service.diadoc_service", new_callable=AsyncMock
+            ) as diadoc_mock,
         ):
             r = client.post(
                 "/api/v1/shifts/diadoc/send-act",
@@ -61,7 +60,7 @@ class TestSendActXsdGate:
 
         assert r.status_code == 400, r.text
         assert "ФНС" in r.json()["detail"]
-        send_mock.assert_not_awaited()
+        diadoc_mock.send_act.assert_not_called()
 
         db_session.expire_all()
         fresh = db_session.get(Act, act.id)
@@ -84,9 +83,8 @@ class TestBulkSendXsdGate:
                 return_value=b"<not-fns/>",
             ),
             patch(
-                "app.api.routes.shifts.diadoc.diadoc_service.send_act",
-                new_callable=AsyncMock,
-            ) as send_mock,
+                "app.services.diadoc_service.diadoc_service", new_callable=AsyncMock
+            ) as diadoc_mock,
         ):
             r = client.post(
                 "/api/v1/shifts/diadoc/bulk-send",
@@ -98,7 +96,7 @@ class TestBulkSendXsdGate:
         body = r.json()
         assert body["sent"] == 0
         assert body["errors"] == 2
-        send_mock.assert_not_awaited()
+        diadoc_mock.send_act.assert_not_called()
 
         db_session.expire_all()
         for aid in ids:

@@ -56,6 +56,13 @@ class Settings(BaseSettings):
         alias="JWT_SECRET_KEY",
     )
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
+
+    # Шифрование секретов интеграций (companies.diadoc_api_key, sbis_token).
+    # Отдельный от JWT ключ: ротация JWT не должна делать секреты
+    # нерасшифровываемыми. В production обязателен (core/crypto._keys).
+    ENCRYPTION_KEY: str = ""
+    # Предыдущий ключ - только на время ротации, затем очистить.
+    ENCRYPTION_KEY_PREVIOUS: str = ""
     access_token_expire_minutes: int = Field(
         default=1440, alias="ACCESS_TOKEN_EXPIRE_MINUTES"
     )

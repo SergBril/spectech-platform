@@ -1,6 +1,16 @@
-"""Интеграция с Diadoc (ЭДО) для отправки актов контрагентам."""
+"""Интеграция с Diadoc (ЭДО) для отправки актов контрагентам.
+
+Credentials берутся per-company (Company.diadoc_api_key/diadoc_box_id;
+ключ хранится зашифрованным и читается через app.core.crypto.decrypt_secret)
+с fallback на глобальные settings.DIADOC_API_KEY/BOX_ID. Если ключа нет
+ни у компании, ни в settings — stub-режим.
+"""
 
 import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.company import Company
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +28,32 @@ class DiadocService:
         )
         self.enabled = bool(self.api_key and self.box_id)
 
-    async def authenticate(self) -> str | None:
-        """Получить токен авторизации Diadoc."""
-        if not self.enabled:
+    def _credentials(self, company: "Company | None" = None) -> tuple[str, str]:
+        """api_key/box_id компании с fallback на глобальные settings.
+
+        Пустые значения компании откатываются к глобальным (self.api_key/box_id,
+        инициализируются из settings). Ключ компании расшифровывается
+        через decrypt_secret; ошибка расшифровки не глотается.
+        """
+        api_key = ""
+        box_id = ""
+        if company is not None:
+            raw_key = getattr(company, "diadoc_api_key", None)
+            if raw_key:
+                from app.core.crypto import decrypt_secret
+
+                api_key = decrypt_secret(raw_key) or ""
+            box_id = getattr(company, "diadoc_box_id", None) or ""
+        if not api_key:
+            api_key = self.api_key
+        if not box_id:
+            box_id = self.box_id
+        return api_key, box_id
+
+    async def authenticate(self, company: "Company | None" = None) -> str | None:
+        """Получить токен авторизации Diadoc для компании (или глобальный fallback)."""
+        api_key, box_id = self._credentials(company)
+        if not (api_key and box_id):
             logger.info("DIADOC STUB → authenticate")
             return "stub-token"
 
@@ -30,7 +63,7 @@ class DiadocService:
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.post(
                     f"{self.base_url}/V3/Authenticate",
-                    headers={"ddauth_api_client_id": self.api_key},
+                    headers={"ddauth_api_client_id": api_key},
                     json={"type": "ApiKey"},
                 )
                 resp.raise_for_status()
@@ -42,10 +75,15 @@ class DiadocService:
             return None
 
     async def send_act(
-        self, act_xml: bytes, counterparty_box_id: str, token: str
+        self,
+        act_xml: bytes,
+        counterparty_box_id: str,
+        token: str,
+        company: "Company | None" = None,
     ) -> dict:
-        """Отправить акт через Diadoc."""
-        if not self.enabled:
+        """Отправить акт через Diadoc от ящика компании."""
+        api_key, box_id = self._credentials(company)
+        if not (api_key and box_id):
             logger.info(f"DIADOC STUB → send_act to {counterparty_box_id}")
             return {"message_id": "stub-msg-id", "status": "sent_stub"}
 
@@ -56,7 +94,7 @@ class DiadocService:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 payload = {
-                    "BoxId": self.box_id,
+                    "BoxId": box_id,
                     "ToBoxId": counterparty_box_id,
                     "Documents": [
                         {
@@ -73,7 +111,7 @@ class DiadocService:
                 resp = await client.post(
                     f"{self.base_url}/V3/PostMessage",
                     headers={
-                        "ddauth_api_client_id": self.api_key,
+                        "ddauth_api_client_id": api_key,
                         "ddauth_service_token": token,
                         "Content-Type": "application/json",
                     },
@@ -101,12 +139,15 @@ class DiadocService:
             logger.info("✅ Document signed for Diadoc (%s)", result.get("provider"))
             return sig
         except Exception as e:
-            logger.error("❌ KEP signing failed: %s", e)
+            logger.error(f"❌ KEP signing failed: {e}")
             return ""
 
-    async def get_counterparties(self, token: str) -> list[dict]:
-        """Получить список контрагентов из Diadoc."""
-        if not self.enabled:
+    async def get_counterparties(
+        self, token: str, company: "Company | None" = None
+    ) -> list[dict]:
+        """Получить список контрагентов из Diadoc для ящика компании."""
+        api_key, box_id = self._credentials(company)
+        if not (api_key and box_id):
             return [
                 {
                     "box_id": "stub-box",
@@ -121,9 +162,9 @@ class DiadocService:
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.get(
                     f"{self.base_url}/V2/GetCounteragents",
-                    params={"boxId": self.box_id},
+                    params={"boxId": box_id},
                     headers={
-                        "ddauth_api_client_id": self.api_key,
+                        "ddauth_api_client_id": api_key,
                         "ddauth_service_token": token,
                     },
                 )
@@ -141,9 +182,12 @@ class DiadocService:
             logger.error(f"❌ Diadoc counterparties failed: {e}")
             return []
 
-    async def get_document_status(self, message_id: str, token: str) -> dict:
-        """Получить статус документа в Diadoc."""
-        if not self.enabled:
+    async def get_document_status(
+        self, message_id: str, token: str, company: "Company | None" = None
+    ) -> dict:
+        """Получить статус документа в Diadoc для ящика компании."""
+        api_key, box_id = self._credentials(company)
+        if not (api_key and box_id):
             return {"status": "stub", "message_id": message_id}
 
         import httpx
@@ -152,9 +196,9 @@ class DiadocService:
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.get(
                     f"{self.base_url}/V3/GetMessage",
-                    params={"boxId": self.box_id, "messageId": message_id},
+                    params={"boxId": box_id, "messageId": message_id},
                     headers={
-                        "ddauth_api_client_id": self.api_key,
+                        "ddauth_api_client_id": api_key,
                         "ddauth_service_token": token,
                     },
                 )

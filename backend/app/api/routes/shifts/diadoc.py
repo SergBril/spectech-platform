@@ -57,11 +57,13 @@ async def send_act_via_diadoc(
             detail=f"УПД не проходит формат ФНС: {'; '.join(xsd_errors[:2])}",
         )
 
-    token = await diadoc_service.authenticate()
+    token = await diadoc_service.authenticate(company=company)
     if not token:
         raise HTTPException(status_code=503, detail="Diadoc authentication failed")
 
-    result = await diadoc_service.send_act(xml_bytes, counterparty_box_id, token)
+    result = await diadoc_service.send_act(
+        xml_bytes, counterparty_box_id, token, company=company
+    )
 
     # Update act status
     if result.get("status") == "sent" or result.get("status") == "sent_stub":
@@ -79,8 +81,11 @@ async def list_diadoc_counterparties(
     company_id: int = Depends(get_current_company_id),
 ):
     """Контрагенты Diadoc только своей компании (фильтр по ИНН контрагентов)."""
+    from app.models.company import Company
     from app.models.contractor import Contractor
     from app.services.diadoc_service import diadoc_service
+
+    company = db.get(Company, company_id)
 
     # ИНН контрагентов компании; пустые/NULL исключаем, чтобы не матчить лишнее
     company_inns = {
@@ -93,11 +98,11 @@ async def list_diadoc_counterparties(
     if not company_inns:
         return []
 
-    token = await diadoc_service.authenticate()
+    token = await diadoc_service.authenticate(company=company)
     if not token:
         raise HTTPException(status_code=503, detail="Diadoc authentication failed")
 
-    counterparties = await diadoc_service.get_counterparties(token)
+    counterparties = await diadoc_service.get_counterparties(token, company=company)
     return [cp for cp in counterparties if cp.get("inn") and cp["inn"] in company_inns]
 
 
@@ -109,6 +114,7 @@ async def get_diadoc_document_status(
     company_id: int = Depends(get_current_company_id),
 ):
     """Статус документа Diadoc только по актам своей компании."""
+    from app.models.company import Company
     from app.services.diadoc_service import diadoc_service
 
     # Документ должен быть привязан к акту текущей компании
@@ -121,11 +127,14 @@ async def get_diadoc_document_status(
     if not act:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    token = await diadoc_service.authenticate()
+    company = db.get(Company, company_id)
+    token = await diadoc_service.authenticate(company=company)
     if not token:
         raise HTTPException(status_code=503, detail="Diadoc authentication failed")
 
-    result = await diadoc_service.get_document_status(message_id, token)
+    result = await diadoc_service.get_document_status(
+        message_id, token, company=company
+    )
     return result
 
 
@@ -136,6 +145,7 @@ async def refresh_all_diadoc_statuses(
     company_id: int = Depends(get_current_company_id),
 ):
     """Массово обновить статусы всех актов, отправленных через Diadoc."""
+    from app.models.company import Company
     from app.services.diadoc_service import diadoc_service
 
     acts = (
@@ -152,7 +162,8 @@ async def refresh_all_diadoc_statuses(
     if not acts:
         return {"updated": 0, "message": "Нет актов для обновления"}
 
-    token = await diadoc_service.authenticate()
+    company = db.get(Company, company_id)
+    token = await diadoc_service.authenticate(company=company)
     if not token:
         raise HTTPException(status_code=503, detail="Diadoc authentication failed")
 
@@ -161,7 +172,9 @@ async def refresh_all_diadoc_statuses(
         edo_msg_id = getattr(act, "edo_message_id", None)
         if not edo_msg_id:
             continue
-        result = await diadoc_service.get_document_status(edo_msg_id, token)
+        result = await diadoc_service.get_document_status(
+            edo_msg_id, token, company=company
+        )
         new_status = result.get("status", "")
         if new_status in ("signed", "rejected") and act.status != new_status:
             act.status = new_status
@@ -186,13 +199,13 @@ async def bulk_send_acts_via_diadoc(
     from app.services.diadoc_service import diadoc_service
     from app.services.edoxml.upd_xml_generator import generate_upd_xml, validate_upd_xml
 
-    token = await diadoc_service.authenticate()
-    if not token:
-        raise HTTPException(status_code=503, detail="Diadoc authentication failed")
-
     company = db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
+
+    token = await diadoc_service.authenticate(company=company)
+    if not token:
+        raise HTTPException(status_code=503, detail="Diadoc authentication failed")
 
     sent = 0
     errors = 0
@@ -220,7 +233,9 @@ async def bulk_send_acts_via_diadoc(
             errors += 1
             continue
 
-        result = await diadoc_service.send_act(xml_bytes, counterparty_box_id, token)
+        result = await diadoc_service.send_act(
+            xml_bytes, counterparty_box_id, token, company=company
+        )
         if result.get("status") in ("sent", "sent_stub"):
             act.status = "sent_to_edo"
             act.edo_message_id = result.get("message_id")

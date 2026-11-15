@@ -383,6 +383,7 @@ def start_scheduler() -> None:
         from sqlalchemy import select
 
         from app.core.db import SessionLocal
+        from app.models.company import Company
         from app.models.finance import Act
         from app.models.user_company import UserCompany
         from app.services.diadoc_service import diadoc_service
@@ -403,56 +404,77 @@ def start_scheduler() -> None:
                 if not acts:
                     return
 
-                token = await diadoc_service.authenticate()
-                if not token:
-                    logger.warning("Diadoc auth failed during act status check")
-                    return
-
+                # Итерация по компаниям с собственным ключом Diadoc;
+                # getattr — чтобы код работал и до миграции колонок.
+                companies = db.execute(select(Company)).scalars().all()
+                keyed = {
+                    c.id: c for c in companies if getattr(c, "diadoc_api_key", None)
+                }
+                global_enabled = bool(diadoc_service.api_key and diadoc_service.box_id)
                 updated = 0
-                for act in acts:
-                    result = await diadoc_service.get_document_status(
-                        act.edo_message_id, token
-                    )
-                    new_status = result.get("status", "")
 
-                    if (
-                        new_status in ("signed", "rejected")
-                        and act.status != new_status
-                    ):
-                        old_status = act.status
-                        act.status = new_status
-                        updated += 1
+                async def _process(company_acts, company):
+                    nonlocal updated
+                    if not company_acts:
+                        return
+                    token = await diadoc_service.authenticate(company=company)
+                    if not token:
+                        logger.warning(
+                            "Diadoc auth failed during act status check (company=%s)",
+                            getattr(company, "id", None),
+                        )
+                        return
+                    for act in company_acts:
+                        result = await diadoc_service.get_document_status(
+                            act.edo_message_id, token, company=company
+                        )
+                        new_status = result.get("status", "")
 
-                        # Notify dispatchers
-                        company_id = act.company_id
-                        dispatcher_ids = (
-                            db.execute(
-                                select(UserCompany.user_id).where(
-                                    UserCompany.company_id == company_id
+                        if (
+                            new_status in ("signed", "rejected")
+                            and act.status != new_status
+                        ):
+                            old_status = act.status
+                            act.status = new_status
+                            updated += 1
+
+                            # Notify dispatchers
+                            company_id = act.company_id
+                            dispatcher_ids = (
+                                db.execute(
+                                    select(UserCompany.user_id).where(
+                                        UserCompany.company_id == company_id
+                                    )
                                 )
-                            )
-                            .scalars()
-                            .all()
-                        )
-
-                        status_emoji = "✅" if new_status == "signed" else "❌"
-                        msg = f"{status_emoji} Акт {act.act_number} {'подписан' if new_status == 'signed' else 'ОТКЛОНЁН'} контрагентом"
-
-                        for uid in dispatcher_ids:
-                            await fcm_service.send_to_user(
-                                uid,
-                                "Статус акта",
-                                msg,
-                                data={"act_id": str(act.id)},
-                                db=db,
+                                .scalars()
+                                .all()
                             )
 
-                        logger.info(
-                            "Act %s status changed: %s → %s",
-                            act.act_number,
-                            old_status,
-                            new_status,
-                        )
+                            status_emoji = "✅" if new_status == "signed" else "❌"
+                            msg = f"{status_emoji} Акт {act.document_number} {'подписан' if new_status == 'signed' else 'ОТКЛОНЁН'} контрагентом"
+
+                            for uid in dispatcher_ids:
+                                await fcm_service.send_to_user(
+                                    uid,
+                                    "Статус акта",
+                                    msg,
+                                    data={"act_id": str(act.id)},
+                                    db=db,
+                                )
+
+                            logger.info(
+                                "Act %s status changed: %s → %s",
+                                act.document_number,
+                                old_status,
+                                new_status,
+                            )
+
+                for cid, company in keyed.items():
+                    await _process([a for a in acts if a.company_id == cid], company)
+
+                # Глобальный fallback: акты компаний без собственного ключа
+                if global_enabled:
+                    await _process([a for a in acts if a.company_id not in keyed], None)
 
                 db.commit()
                 if updated > 0:

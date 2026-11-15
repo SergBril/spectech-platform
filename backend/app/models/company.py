@@ -110,3 +110,14 @@ class Company(Base):
     signature_image_url = Column(
         String(500), nullable=True, comment="URL изображения подписи"
     )
+
+    # Настройки ЭДО. diadoc_api_key и sbis_token хранятся зашифрованными
+    # (app.core.crypto) и никогда не отдаются в API в открытом виде.
+    edo_operator: Mapped[str | None] = mapped_column(String(50), default="diadoc")
+    diadoc_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    diadoc_box_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    diadoc_use_sandbox: Mapped[bool | None] = mapped_column(Boolean, default=True)
+    sbis_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sbis_client_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    auto_send_on_sign: Mapped[bool | None] = mapped_column(Boolean, default=False)
+    default_format: Mapped[str | None] = mapped_column(String(50), default="upd_5_03")
