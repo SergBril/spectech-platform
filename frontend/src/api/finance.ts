@@ -86,6 +86,19 @@ export interface Act {
   is_vat_included?: boolean;
 }
 
+export interface DiadocCounterparty {
+  box_id: string;
+  name: string;
+  inn: string;
+}
+
+export interface DiadocSendResult {
+  message: string;
+  message_id?: string | null;
+  status?: string;
+  error?: string;
+}
+
 export interface Payout {
   id: number;
   document_number: string;
@@ -528,9 +541,17 @@ export const financeApi = {
     return response.data;
   },
 
-  sendToDiadoc: async (actId: number): Promise<{ status: string; message: string }> => {
-    const response = await apiClient.post(`/acts/${actId}/send-to-diadoc`);
+  sendToDiadoc: async (actId: number, counterpartyBoxId: string): Promise<DiadocSendResult> => {
+    const response = await apiClient.post('/shifts/diadoc/send-act', {
+      act_id: actId,
+      counterparty_box_id: counterpartyBoxId,
+    });
     return response.data;
+  },
+
+  getDiadocCounterparties: async (): Promise<DiadocCounterparty[]> => {
+    const response = await apiClient.get('/shifts/diadoc/counterparties');
+    return Array.isArray(response.data) ? response.data : [];
   },
 
   rejectAct: async (actId: number, reason: string): Promise<{ message: string }> => {

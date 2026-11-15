@@ -58,14 +58,19 @@ def download_invoice_facture_pdf(
 
     from fastapi.responses import StreamingResponse
 
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
     from app.services.pdf_generator import generate_invoice_facture_pdf
 
     act = db.get(Act, act_id)
     if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
+    request = db.get(Request, act.request_id) if act.request_id else None
+    contractor = db.get(Contractor, act.client_id)
+
     try:
-        pdf_bytes = generate_invoice_facture_pdf(act)
+        pdf_bytes = generate_invoice_facture_pdf(act, request, contractor)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
@@ -90,14 +95,25 @@ def download_upd_pdf(
 
     from fastapi.responses import StreamingResponse
 
+    from app.models.company import Company
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
     from app.services.pdf_generator import generate_upd_pdf
 
     act = db.get(Act, act_id)
     if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
+    company = db.get(Company, act.company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    client = db.get(Contractor, act.client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    request = db.get(Request, act.request_id) if act.request_id else None
+
     try:
-        pdf_bytes = generate_upd_pdf(act)
+        pdf_bytes = generate_upd_pdf(act, company, client, request)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
@@ -122,14 +138,25 @@ def download_torg12_pdf(
 
     from fastapi.responses import StreamingResponse
 
+    from app.models.company import Company
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
     from app.services.pdf_generator import generate_torg12_pdf
 
     act = db.get(Act, act_id)
     if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
+    company = db.get(Company, act.company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    client = db.get(Contractor, act.client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    request = db.get(Request, act.request_id) if act.request_id else None
+
     try:
-        pdf_bytes = generate_torg12_pdf(act)
+        pdf_bytes = generate_torg12_pdf(act, company, client, request)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",

@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
+import DiadocSendModal from '../components/DiadocSendModal';
 import apiClient from '../api/client';
 
 const ActsPage: React.FC = () => {
@@ -7,7 +8,6 @@ const ActsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [counterparties, setCounterparties] = useState<any[]>([]);
   const [sendModal, setSendModal] = useState<number | null>(null);
-  const [selectedBoxId, setSelectedBoxId] = useState('');
   const [sending, setSending] = useState(false);
   const [selectedActIds, setSelectedActIds] = useState<Set<number>>(new Set());
   const [bulkModal, setBulkModal] = useState(false);
@@ -85,24 +85,8 @@ const ActsPage: React.FC = () => {
     finally { setSending(false); }
   };
 
-  const openSendModal = async (actId: number) => {
+  const openSendModal = (actId: number) => {
     setSendModal(actId);
-    setSelectedBoxId('');
-    await loadCounterparties();
-  };
-
-  const sendAct = async () => {
-    if (!sendModal || !selectedBoxId) return;
-    setSending(true);
-    try {
-      const res = await apiClient.post('/shifts/diadoc/send-act', {
-        act_id: sendModal, counterparty_box_id: selectedBoxId,
-      });
-      alert(`✅ ${res.data.message}`);
-      setSendModal(null);
-      loadActs();
-    } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
-    finally { setSending(false); }
   };
 
   const statusLabels: Record<string, { label: string; color: string }> = {
@@ -219,32 +203,12 @@ const ActsPage: React.FC = () => {
         )}
 
         {/* Send Modal */}
-        {sendModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
-              <h2 className="text-lg font-bold text-gray-900">📤 Отправить акт в Diadoc</h2>
-              <label className="block">
-                <span className="text-xs text-gray-500">Контрагент</span>
-                <select value={selectedBoxId} onChange={e => setSelectedBoxId(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 border rounded-lg text-sm">
-                  <option value="">Выберите контрагента...</option>
-                  {counterparties.map((c: any) => (
-                    <option key={c.box_id} value={c.box_id}>{c.name} (ИНН: {c.inn})</option>
-                  ))}
-                </select>
-              </label>
-              {counterparties.length === 0 && (
-                <p className="text-xs text-orange-600">⚠️ Контрагенты не загружены. Проверьте настройки Diadoc.</p>
-              )}
-              <div className="flex gap-3 justify-end">
-                <button onClick={() => setSendModal(null)} className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Отмена</button>
-                <button onClick={sendAct} disabled={!selectedBoxId || sending}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
-                  {sending ? '⏳ Отправка...' : '📤 Отправить'}
-                </button>
-              </div>
-            </div>
-          </div>
+        {sendModal !== null && (
+          <DiadocSendModal
+            actId={sendModal}
+            onClose={() => setSendModal(null)}
+            onSent={() => loadActs()}
+          />
         )}
       </div>
     </Layout>

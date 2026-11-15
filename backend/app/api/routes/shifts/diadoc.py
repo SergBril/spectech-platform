@@ -29,39 +29,25 @@ async def send_act_via_diadoc(
     company_id: int = Depends(get_current_company_id),
 ):
     """Отправить акт выполненных работ контрагенту через Diadoc ЭДО."""
-    from xml.etree.ElementTree import Element, SubElement, tostring
-
+    from app.models.company import Company
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
     from app.services.diadoc_service import diadoc_service
+    from app.services.edoxml.upd_xml_generator import generate_upd_xml
 
     act = db.get(Act, act_id)
     if not act or act.company_id != company_id:
         raise HTTPException(status_code=404, detail="Act not found")
 
-    # Generate XML for this act
-    root = Element("UniversalTransferDocument")
-    root.set("Function", "СЧФДОП")
-    root.set("Date", str(act.act_date))
-    root.set("Number", getattr(act, "document_number", None) or f"ACT-{act.id}")
+    company = db.get(Company, act.company_id) if act.company_id else None
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    client = db.get(Contractor, act.client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    request = db.get(Request, act.request_id) if act.request_id else None
 
-    seller = SubElement(root, "Seller")
-    SubElement(seller, "Name").text = (
-        current_user.company.name
-        if hasattr(current_user, "company") and current_user.company
-        else ""
-    )
-
-    buyer = SubElement(root, "Buyer")
-    SubElement(buyer, "BoxId").text = counterparty_box_id
-
-    item = SubElement(root, "Item")
-    SubElement(item, "Name").text = f"Услуги спецтехники ({act.act_date})"
-    SubElement(item, "Quantity").text = str(act.hours_worked or 0)
-    SubElement(item, "Price").text = str(act.hourly_rate or 0)
-    SubElement(item, "Total").text = str(act.total_amount or 0)
-    SubElement(item, "VATRate").text = "20%"
-    SubElement(item, "VATAmount").text = str(act.vat_amount or 0)
-
-    xml_bytes = tostring(root, encoding="unicode", xml_declaration=True).encode("utf-8")
+    xml_bytes = generate_upd_xml(act, company, client, request)
 
     token = await diadoc_service.authenticate()
     if not token:
@@ -186,13 +172,19 @@ async def bulk_send_acts_via_diadoc(
     company_id: int = Depends(get_current_company_id),
 ):
     """Массово отправить несколько актов одному контрагенту через Diadoc."""
-    from xml.etree.ElementTree import Element, SubElement, tostring
-
+    from app.models.company import Company
+    from app.models.contractor import Contractor
+    from app.models.dispatch import Request
     from app.services.diadoc_service import diadoc_service
+    from app.services.edoxml.upd_xml_generator import generate_upd_xml
 
     token = await diadoc_service.authenticate()
     if not token:
         raise HTTPException(status_code=503, detail="Diadoc authentication failed")
+
+    company = db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
 
     sent = 0
     errors = 0
@@ -206,28 +198,13 @@ async def bulk_send_acts_via_diadoc(
             errors += 1
             continue
 
-        # Generate XML
-        root = Element("UniversalTransferDocument")
-        root.set("Function", "СЧФДОП")
-        root.set("Date", str(act.act_date))
-        root.set("Number", getattr(act, "document_number", None) or f"ACT-{act.id}")
+        client = db.get(Contractor, act.client_id)
+        if not client:
+            errors += 1
+            continue
+        request = db.get(Request, act.request_id) if act.request_id else None
 
-        seller = SubElement(root, "Seller")
-        SubElement(seller, "Name").text = ""
-        buyer = SubElement(root, "Buyer")
-        SubElement(buyer, "BoxId").text = counterparty_box_id
-
-        item = SubElement(root, "Item")
-        SubElement(item, "Name").text = f"Услуги спецтехники ({act.act_date})"
-        SubElement(item, "Quantity").text = str(act.hours_worked or 0)
-        SubElement(item, "Price").text = str(act.hourly_rate or 0)
-        SubElement(item, "Total").text = str(act.total_amount or 0)
-        SubElement(item, "VATRate").text = "20%"
-        SubElement(item, "VATAmount").text = str(act.vat_amount or 0)
-
-        xml_bytes = tostring(root, encoding="unicode", xml_declaration=True).encode(
-            "utf-8"
-        )
+        xml_bytes = generate_upd_xml(act, company, client, request)
 
         result = await diadoc_service.send_act(xml_bytes, counterparty_box_id, token)
         if result.get("status") in ("sent", "sent_stub"):

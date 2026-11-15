@@ -73,7 +73,11 @@ def _add_participant(parent: ET.Element, tag: str, org, is_seller: bool = True):
     elem = ET.SubElement(parent, tag)
     id_sv = ET.SubElement(elem, "ИдСв")
     sv_yul = ET.SubElement(id_sv, "СвЮЛУч")
-    sv_yul.set("НаимОрг", getattr(org, "name", "") or "Не указано")
+    # В УПД нужно юридическое наименование; name - коммерческое.
+    org_name = (
+        getattr(org, "legal_name", None) or getattr(org, "name", "") or "Не указано"
+    )
+    sv_yul.set("НаимОрг", org_name)
     sv_yul.set("ИННЮЛ", getattr(org, "inn", "") or "7700000001")
     kpp = getattr(org, "kpp", "") or ""
     if kpp:
@@ -92,10 +96,15 @@ def _add_participant(parent: ET.Element, tag: str, org, is_seller: bool = True):
     if addr_data.get("Индекс"):
         adr_rf.set("Индекс", addr_data["Индекс"][:6])
 
-    bank_account = getattr(org, "bank_account", "") or ""
+    # У Company поле называется checking_account, у Contractor - bank_account.
+    bank_account = (
+        getattr(org, "bank_account", None) or getattr(org, "checking_account", "") or ""
+    )
     bik = getattr(org, "bik", "") or ""
     bank_name = getattr(org, "bank_name", "") or ""
-    if bank_account or bik:
+    # НомерСчета обязателен внутри БанкРекв (minLength=1 по XSD).
+    # БИК без счёта давал невалидный XML - блок не создаём.
+    if bank_account:
         bank_rekv = ET.SubElement(elem, "БанкРекв")
         bank_rekv.set("НомерСчета", bank_account)
         if bik or bank_name:
@@ -206,18 +215,33 @@ def generate_upd_xml(act, company, client, request=None, items=None) -> bytes:
 
     is_osno = getattr(act, "tax_system", "osno") == "osno"
     function = "СЧФДОП" if is_osno else "ДОП"
+    from app.core.constants import vat_rate_for_date
+
     vat_rate = float(getattr(act, "vat_rate", 0) or 0)
     if is_osno and vat_rate <= 0:
-        vat_rate = 20.0
+        # Ставка по дате ДОКУМЕНТА: 22% с 2026, 20% за 2025 и ранее.
+        vat_rate = float(vat_rate_for_date(act_date, getattr(act, "tax_system", None)))
     show_vat = is_osno
 
     if not items:
         total = float(getattr(act, "total_amount", 0) or 0)
+        recorded_vat = float(getattr(act, "vat_amount", 0) or 0)
+        vat_included = bool(getattr(act, "is_vat_included", True))
         if show_vat and vat_rate > 0:
-            subtotal = total / (1 + vat_rate / 100)
-            vat = total - subtotal
+            # Сумма НДС из первички приоритетнее пересчёта: она уже зафиксирована
+            # в документе. Пересчёт - только fallback, и он учитывает режим.
+            if recorded_vat > 0:
+                vat = recorded_vat
+            elif vat_included:
+                vat = total - total / (1 + vat_rate / 100)
+            else:
+                vat = total * vat_rate / 100
+            if vat_included:
+                subtotal, grand_total = total - vat, total
+            else:
+                subtotal, grand_total = total, total + vat
         else:
-            subtotal, vat = total, 0.0
+            subtotal, vat, grand_total = total, 0.0, total
         work = getattr(request, "work_type", None) or "Работы по акту"
         items = [
             {
@@ -227,7 +251,7 @@ def generate_upd_xml(act, company, client, request=None, items=None) -> bytes:
                 "unit_price": subtotal,
                 "subtotal": subtotal,
                 "vat_amount": vat,
-                "total": total,
+                "total": grand_total,
             }
         ]
 
