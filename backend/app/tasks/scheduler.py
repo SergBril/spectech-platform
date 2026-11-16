@@ -1,6 +1,7 @@
 """Планировщик фоновых задач (APScheduler)."""
 
 import logging
+from decimal import Decimal
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -660,9 +661,11 @@ def start_scheduler() -> None:
                             remaining = (act.total_amount or 0) - (act.paid_amount or 0)
                             if remaining <= 0:
                                 continue
-                            amount_match = abs(payment.amount - remaining) < max(
-                                remaining * 0.01, 1
-                            )
+                            # Numeric приходит как Decimal: умножение на float
+                            # бросает TypeError, и задача падала целиком при
+                            # первой же паре платёж-акт, откатываясь молча.
+                            tolerance = max(remaining * Decimal("0.01"), Decimal("1"))
+                            amount_match = abs(payment.amount - remaining) < tolerance
                             inn_match = bool(
                                 payment.payer_inn
                                 and act.counterparty_inn
