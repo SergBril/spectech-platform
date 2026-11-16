@@ -123,3 +123,144 @@ class TestRoutePositions:
         by_vehicle, skipped = _route_positions([_pos(None)], route, ambiguous, acc)
         assert not by_vehicle, "cannot attribute without object_id"
         assert skipped["no_id"] == 1
+
+
+class _FakeQuery:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def all(self):
+        return self._rows
+
+
+class _FakeDB:
+    """Minimal session: the sync loop never reaches writes when positions=[]."""
+
+    def __init__(self, rows):
+        self._rows = rows
+        self.commits = 0
+
+    def query(self, *args, **kwargs):
+        return _FakeQuery(self._rows)
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        pass
+
+    def add(self, *args):
+        pass
+
+
+def _encrypted_veh(vid, oid, password, login="atr", api_url="https://gps.mapix.su"):
+    return NS(
+        id=vid,
+        name=f"Vehicle {vid}",
+        gps_provider="mapix",
+        gps_provider_config={
+            "login": login,
+            "api_url": api_url,
+            "password": password,
+            "object_ids": [oid],
+        },
+    )
+
+
+class TestCredentialsReachTheAdapter:
+    """The task must delegate decryption to the factory, never read the secret."""
+
+    def test_account_key_ignores_the_password(self):
+        from app.core.crypto import encrypt_secret
+
+        plain = _account_key("mapix", {"login": "atr", "api_url": "u", "password": "p"})
+        enc = _account_key(
+            "mapix", {"login": "atr", "api_url": "u", "password": encrypt_secret("p")}
+        )
+        assert plain == enc
+
+    def test_encrypted_and_legacy_vehicles_share_one_account(self):
+        """Transition period: one provider account must stay one request."""
+        from app.core.crypto import encrypt_secret
+
+        vehicles = [
+            _encrypted_veh(1, "111", encrypt_secret("same")),
+            _encrypted_veh(2, "222", "same"),
+        ]
+        route, ambiguous, accounts, multi = _build_routes(vehicles)
+        assert len(accounts) == 1
+        assert not ambiguous
+        assert set(route) == {"111", "222"}
+
+    def test_task_hands_the_factory_an_untouched_ciphertext(self, monkeypatch):
+        from app.core.crypto import encrypt_secret
+        from app.tasks import mapix_sync_task as task
+
+        secret = encrypt_secret("open-sesame")
+        vehicles = [_encrypted_veh(1, "111", secret)]
+        seen = {}
+
+        def spy(provider, cfg):
+            seen["provider"] = provider
+            seen["cfg"] = dict(cfg)
+            return NS(get_all_positions_sync=lambda: [])
+
+        monkeypatch.setattr(task, "SessionLocal", lambda: _FakeDB(vehicles))
+        monkeypatch.setattr(task, "_broadcast_latest", lambda db: None)
+        monkeypatch.setattr(task, "create_gps_adapter", spy)
+
+        task.sync_gps_positions()
+
+        assert seen["provider"] == "mapix"
+        assert seen["cfg"]["password"] == secret
+        assert seen["cfg"]["password"].startswith("enc::")
+
+    def test_adapter_ends_up_with_the_open_password(self, monkeypatch):
+        """Full chain through the real factory: DB ciphertext -> adapter plaintext."""
+        from app.core.crypto import encrypt_secret
+        from app.services.gps_providers.mapix import MapixAdapter
+        from app.tasks import mapix_sync_task as task
+
+        vehicles = [_encrypted_veh(1, "111", encrypt_secret("open-sesame"))]
+        captured = {}
+
+        def fake_fetch(self):
+            captured["password"] = self.password
+            captured["login"] = self.login
+            captured["object_ids"] = list(self.object_ids)
+            return []
+
+        monkeypatch.setattr(task, "SessionLocal", lambda: _FakeDB(vehicles))
+        monkeypatch.setattr(task, "_broadcast_latest", lambda db: None)
+        monkeypatch.setattr(MapixAdapter, "get_all_positions_sync", fake_fetch)
+
+        task.sync_gps_positions()
+
+        assert captured["password"] == "open-sesame"
+        assert captured["login"] == "atr"
+        assert captured["object_ids"] == ["111"]
+
+    def test_legacy_plaintext_still_reaches_the_adapter(self, monkeypatch):
+        from app.services.gps_providers.mapix import MapixAdapter
+        from app.tasks import mapix_sync_task as task
+
+        vehicles = [_encrypted_veh(1, "111", "plain-legacy")]
+        captured = {}
+
+        def fake_fetch(self):
+            captured["password"] = self.password
+            return []
+
+        monkeypatch.setattr(task, "SessionLocal", lambda: _FakeDB(vehicles))
+        monkeypatch.setattr(task, "_broadcast_latest", lambda db: None)
+        monkeypatch.setattr(MapixAdapter, "get_all_positions_sync", fake_fetch)
+
+        task.sync_gps_positions()
+
+        assert captured["password"] == "plain-legacy"
