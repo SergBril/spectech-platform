@@ -711,13 +711,6 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
-    scheduler.start()
-    logger.info(
-        "⏰ Scheduler started. Interval: %d min. Jobs: %d",
-        settings.SCHEDULER_INTERVAL_MINUTES,
-        len(scheduler.get_jobs()),
-    )
-
     # === PHASE 4: New scheduled tasks ===
 
     async def _check_maintenance_due():
@@ -923,6 +916,16 @@ def start_scheduler() -> None:
         id="daily_overdue_invoices_check",
         name="Daily overdue invoices check",
         replace_existing=True,
+    )
+
+    # Старт и отчёт - после ВСЕХ регистраций. Раньше лог стоял в середине
+    # функции и показывал 9 из 14 задач: пять добавлялись ниже и в счётчик
+    # не попадали, из-за чего расписание выглядело потерявшим задачи.
+    scheduler.start()
+    logger.info(
+        "⏰ Scheduler started. Interval: %d min. Jobs: %d",
+        settings.SCHEDULER_INTERVAL_MINUTES,
+        len(scheduler.get_jobs()),
     )
 
 
