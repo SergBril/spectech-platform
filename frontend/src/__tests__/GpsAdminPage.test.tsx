@@ -91,3 +91,48 @@ describe('GpsAdminPage — сохранённый пароль не затира
     expect(patchBodies()[0].gps_provider_config.password).toBe('rotated');
   });
 });
+
+describe('GpsAdminPage — placeholder говорит правду о наличии пароля', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (init?.method === 'PATCH') {
+          return Promise.resolve({ ok: true, json: async () => ({}) });
+        }
+        if (String(url).includes('/points/stats')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              total_points: 3,
+              vehicles_with_data: 1,
+              latest_recorded_at: null,
+              oldest_recorded_at: null,
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => [
+            {
+              ...vehicleRow,
+              gps_provider_config: { login: 'fleet', api_url: 'https://x' },
+            },
+          ],
+        });
+      }),
+    );
+  });
+
+  it('пароля нет → поле не обещает, что он сохранён', async () => {
+    render(<GpsAdminPage />);
+    await screen.findByRole('cell', { name: 'GPS Truck' });
+    fireEvent.click(screen.getByRole('button', { name: 'Настроить' }));
+
+    expect(await screen.findByPlaceholderText('Пароль не задан')).toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText('сохранён — введите для замены'),
+    ).not.toBeInTheDocument();
+  });
+});

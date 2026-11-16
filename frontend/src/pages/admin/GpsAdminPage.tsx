@@ -28,6 +28,7 @@ export default function GpsAdminPage() {
   const [editProvider, setEditProvider] = useState('');
   const [editLogin, setEditLogin] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  const [editPasswordSet, setEditPasswordSet] = useState(false);
   const [editApiUrl, setEditApiUrl] = useState('');
 
   // Фильтры экспорта
@@ -63,6 +64,7 @@ export default function GpsAdminPage() {
     setEditLogin(v.gps_provider_config?.login || '');
     // Пароль больше не приходит в ответе. Пустое поле = оставить сохранённый.
     setEditPassword('');
+    setEditPasswordSet(v.gps_provider_config?.password_set === true);
     setEditApiUrl(v.gps_provider_config?.api_url || 'https://gps.mapix.su');
   };
 
@@ -289,7 +291,7 @@ export default function GpsAdminPage() {
                           className="border rounded px-2 py-1 text-sm w-32"
                         />
                         <input
-                          placeholder="сохранён — введите для замены"
+                          placeholder={editPasswordSet ? 'сохранён — введите для замены' : 'Пароль не задан'}
                           type="password"
                           value={editPassword}
                           onChange={(e) => setEditPassword(e.target.value)}
