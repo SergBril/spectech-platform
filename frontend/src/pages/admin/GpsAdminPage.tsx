@@ -61,18 +61,22 @@ export default function GpsAdminPage() {
     setEditingId(v.id);
     setEditProvider(v.gps_provider || '');
     setEditLogin(v.gps_provider_config?.login || '');
-    setEditPassword(v.gps_provider_config?.password || '');
+    // Пароль больше не приходит в ответе. Пустое поле = оставить сохранённый.
+    setEditPassword('');
     setEditApiUrl(v.gps_provider_config?.api_url || 'https://gps.mapix.su');
   };
 
   const saveConfig = async (vehicleId: number) => {
     try {
       const token = localStorage.getItem('access_token');
-      const config = editProvider ? {
-        login: editLogin,
-        password: editPassword,
-        api_url: editApiUrl,
-      } : null;
+      const config = editProvider
+        ? {
+            login: editLogin,
+            api_url: editApiUrl,
+            // Пустой пароль не отправляем: бэкенд сохранит прежний.
+            ...(editPassword ? { password: editPassword } : {}),
+          }
+        : null;
 
       const res = await fetch(`${API_BASE}/gps/providers/vehicles/${vehicleId}`, {
         method: 'PATCH',
@@ -285,7 +289,7 @@ export default function GpsAdminPage() {
                           className="border rounded px-2 py-1 text-sm w-32"
                         />
                         <input
-                          placeholder="Password"
+                          placeholder="сохранён — введите для замены"
                           type="password"
                           value={editPassword}
                           onChange={(e) => setEditPassword(e.target.value)}

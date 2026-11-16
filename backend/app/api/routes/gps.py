@@ -63,6 +63,44 @@ class VehicleGpsConfigResponse(BaseModel):
         from_attributes = True
 
 
+# ─── GPS config: secrets never leave the server ─────────────────────────────────
+
+GPS_SECRET_KEYS = ("password", "api_key", "token", "webhook_secret")
+
+
+def _public_gps_config(cfg: dict | None) -> dict | None:
+    """Конфиг для ответа: без секретов, с флагами заполненности.
+
+    Пароль GPS-провайдера уходил в ответ целиком — любой сотрудник компании
+    видел его в JSON. Возвращаем только факт наличия.
+    """
+    if cfg is None:
+        return None
+    public = {k: v for k, v in cfg.items() if k not in GPS_SECRET_KEYS}
+    for key in GPS_SECRET_KEYS:
+        if key in cfg:
+            public[f"{key}_set"] = bool(cfg.get(key))
+    return public
+
+
+def _merge_gps_config(existing: dict | None, incoming: dict | None) -> dict | None:
+    """Слияние вместо замены.
+
+    Клиент присылает только login/password/api_url, а замена целиком стирала
+    object_ids — маппинг объектов пропадал при каждом редактировании.
+    Пустой или отсутствующий секрет сохраняет прежний: поле в UI пустое,
+    и затирать рабочий пароль нельзя.
+    """
+    if incoming is None:
+        return None
+    merged = dict(existing or {})
+    for key, value in incoming.items():
+        if key in GPS_SECRET_KEYS and not value:
+            continue
+        merged[key] = value
+    return merged
+
+
 # ─── Access Control ─────────────────────────────────────────────────────────────
 
 
@@ -446,7 +484,7 @@ def list_vehicles_with_gps(
                 id=v.id,
                 name=v.name,
                 gps_provider=v.gps_provider,
-                gps_provider_config=v.gps_provider_config,
+                gps_provider_config=_public_gps_config(v.gps_provider_config),
                 last_point_at=last_point,
                 total_points=total_points,
             )
@@ -471,7 +509,9 @@ def update_vehicle_gps_config(
     if "gps_provider" in payload:
         vehicle.gps_provider = payload["gps_provider"]
     if "gps_provider_config" in payload:
-        vehicle.gps_provider_config = payload["gps_provider_config"]
+        vehicle.gps_provider_config = _merge_gps_config(
+            vehicle.gps_provider_config, payload["gps_provider_config"]
+        )
 
     db.commit()
     db.refresh(vehicle)
@@ -487,5 +527,5 @@ def update_vehicle_gps_config(
         "id": vehicle.id,
         "name": vehicle.name,
         "gps_provider": vehicle.gps_provider,
-        "gps_provider_config": vehicle.gps_provider_config,
+        "gps_provider_config": _public_gps_config(vehicle.gps_provider_config),
     }
