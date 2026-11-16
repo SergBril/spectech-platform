@@ -4,6 +4,7 @@ import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.db import SessionLocal
@@ -90,6 +91,25 @@ def _release_scheduler_lock() -> None:
         _scheduler_lock_conn = None
 
 
+def _active_company_ids(db) -> list[int]:
+    """Компании, по которым нужно выполнять системные задачи.
+
+    Раньше набор брался из user_companies.distinct(). Но связь UserCompany -
+    это fallback в get_user_company_ids: у обычного пользователя компания
+    берётся из users.company_id, и строк в user_companies может не быть вовсе.
+    Активные компании без таких строк выпадали из всех задач молча: ни алертов,
+    ни проверки ТО, ни разноски платежей, и ни одной ошибки в логе, потому что
+    итерации по ним просто не происходило.
+    """
+    from app.models.company import Company
+
+    return list(
+        db.execute(select(Company.id).where(Company.is_active.is_(True)))
+        .scalars()
+        .all()
+    )
+
+
 def start_scheduler() -> None:
     """Запускает планировщик фоновых задач."""
     if not settings.SCHEDULER_ENABLED:
@@ -160,7 +180,6 @@ def start_scheduler() -> None:
         from datetime import date as date_type
 
         from app.core.db import SessionLocal
-        from app.models.user_company import UserCompany
         from app.services.alert_service import (
             check_and_notify_conflicts,
             check_and_notify_idle_vehicles,
@@ -169,13 +188,8 @@ def start_scheduler() -> None:
         today = date_type.today()
         with SessionLocal() as db:
             try:
-                from sqlalchemy import select
 
-                company_ids = (
-                    db.execute(select(UserCompany.company_id).distinct())
-                    .scalars()
-                    .all()
-                )
+                company_ids = _active_company_ids(db)
                 for cid in company_ids:
                     await check_and_notify_idle_vehicles(db, cid, today)
                     await check_and_notify_conflicts(db, cid, today)
@@ -205,7 +219,6 @@ def start_scheduler() -> None:
         from app.core.db import SessionLocal
         from app.models.catalog import Vehicle
         from app.models.shift import ShiftFuelEntry, ShiftTask
-        from app.models.user_company import UserCompany
         from app.services.alert_service import send_alert_email, send_telegram_alert
 
         yesterday = date_type.today() - timedelta(days=1)
@@ -213,11 +226,7 @@ def start_scheduler() -> None:
 
         with SessionLocal() as db:
             try:
-                company_ids = (
-                    db.execute(select(UserCompany.company_id).distinct())
-                    .scalars()
-                    .all()
-                )
+                company_ids = _active_company_ids(db)
                 for cid in company_ids:
                     entries = db.execute(
                         select(ShiftFuelEntry, Vehicle.name)
@@ -303,13 +312,7 @@ def start_scheduler() -> None:
             try:
                 from sqlalchemy import select
 
-                from app.models.user_company import UserCompany
-
-                company_ids = (
-                    db.execute(select(UserCompany.company_id).distinct())
-                    .scalars()
-                    .all()
-                )
+                company_ids = _active_company_ids(db)
                 for cid in company_ids:
                     tasks = (
                         db.execute(
@@ -505,11 +508,7 @@ def start_scheduler() -> None:
         today = date_type.today()
         with SessionLocal() as db:
             try:
-                company_ids = (
-                    db.execute(select(UserCompany.company_id).distinct())
-                    .scalars()
-                    .all()
-                )
+                company_ids = _active_company_ids(db)
                 for cid in company_ids:
                     overdue_acts = (
                         db.execute(
@@ -624,17 +623,12 @@ def start_scheduler() -> None:
         from sqlalchemy import select
 
         from app.core.db import SessionLocal
-        from app.models.bank_statement import BankTransaction
+        from app.models.bank_statement import BankTransaction, MatchStatus
         from app.models.finance import Act
-        from app.models.user_company import UserCompany
 
         with SessionLocal() as db:
             try:
-                company_ids = (
-                    db.execute(select(UserCompany.company_id).distinct())
-                    .scalars()
-                    .all()
-                )
+                company_ids = _active_company_ids(db)
                 total_matched = 0
 
                 for cid in company_ids:
@@ -685,6 +679,10 @@ def start_scheduler() -> None:
                                 inn_match or purpose_match or not act.counterparty_inn
                             ):
                                 payment.matched_invoice_id = act.id
+                                # Статус обязан следовать за связью: иначе платёж
+                                # выглядит неразнесённым в отчётах и его разнесут
+                                # руками второй раз.
+                                payment.match_status = MatchStatus.auto_matched
                                 act.paid_amount = (
                                     act.paid_amount or 0
                                 ) + payment.amount
