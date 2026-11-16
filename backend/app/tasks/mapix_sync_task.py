@@ -61,6 +61,43 @@ def _build_routes(vehicles):
     return route, ambiguous, accounts, multi
 
 
+def _rows_to_insert(vid: int, vpositions, seen: set) -> list[dict]:
+    """Подготовить строки к вставке, пропустив пустые координаты и дубли.
+
+    Ноль по обеим координатам - не позиция, а отсутствие фикса. Точка без
+    времени не может быть дедуплицирована. `seen` мутируется, чтобы повтор
+    одной метки внутри пачки схлопнулся в первую точку.
+    """
+    rows: list[dict] = []
+    for pos in vpositions:
+        if pos.latitude == 0 and pos.longitude == 0:
+            continue
+        if not pos.recorded_at:
+            continue
+        if pos.recorded_at in seen:
+            continue
+        seen.add(pos.recorded_at)
+        rows.append(
+            {
+                "vehicle_id": vid,
+                "latitude": pos.latitude,
+                "longitude": pos.longitude,
+                "altitude": getattr(pos, "altitude", None),
+                "speed": pos.speed,
+                "heading": pos.heading,
+                "engine_on": pos.engine_on,
+                "fuel_level": getattr(pos, "fuel_level", None),
+                "engine_hours": getattr(pos, "engine_hours", None),
+                "signal_quality": getattr(pos, "signal_quality", None),
+                "recorded_at": pos.recorded_at,
+                "received_at": datetime.now(UTC),
+                "device_id": (pos.raw_data.get("imei") if pos.raw_data else None),
+                "raw_data": pos.raw_data,
+            }
+        )
+    return rows
+
+
 def _route_positions(positions, route, ambiguous, acc):
     """Attribute each position to its own vehicle. Never mix machines."""
     by_vehicle = defaultdict(list)
@@ -162,35 +199,7 @@ def sync_gps_positions() -> None:
                             ).scalars()
                         )
 
-                    rows_to_insert = []
-                    for pos in vpositions:
-                        if pos.latitude == 0 and pos.longitude == 0:
-                            continue
-                        if not pos.recorded_at:
-                            continue
-                        if pos.recorded_at in seen:
-                            continue
-                        seen.add(pos.recorded_at)
-                        rows_to_insert.append(
-                            {
-                                "vehicle_id": vid,
-                                "latitude": pos.latitude,
-                                "longitude": pos.longitude,
-                                "altitude": getattr(pos, "altitude", None),
-                                "speed": pos.speed,
-                                "heading": pos.heading,
-                                "engine_on": pos.engine_on,
-                                "fuel_level": getattr(pos, "fuel_level", None),
-                                "engine_hours": getattr(pos, "engine_hours", None),
-                                "signal_quality": getattr(pos, "signal_quality", None),
-                                "recorded_at": pos.recorded_at,
-                                "received_at": datetime.now(UTC),
-                                "device_id": (
-                                    pos.raw_data.get("imei") if pos.raw_data else None
-                                ),
-                                "raw_data": pos.raw_data,
-                            }
-                        )
+                    rows_to_insert = _rows_to_insert(vid, vpositions, seen)
 
                     # ON CONFLICT makes duplicates impossible even if another
                     # instance inserts the same (vehicle_id, recorded_at).

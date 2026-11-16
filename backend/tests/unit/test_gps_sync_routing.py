@@ -264,3 +264,98 @@ class TestCredentialsReachTheAdapter:
         task.sync_gps_positions()
 
         assert captured["password"] == "plain-legacy"
+
+
+class TestRowsToInsert:
+    """Атрибуция и дедупликация точек до вставки - без БД."""
+
+    @staticmethod
+    def _point(lat=55.7, lon=37.6, ts=None, raw=None, **kw):
+        from datetime import UTC, datetime
+
+        from app.services.gps_providers.base import GpsPointData
+
+        return GpsPointData(
+            latitude=lat,
+            longitude=lon,
+            recorded_at=(
+                ts if ts is not None else datetime(2026, 11, 16, 10, 0, tzinfo=UTC)
+            ),
+            raw_data=raw,
+            **kw,
+        )
+
+    def test_zero_coordinates_are_not_a_position(self):
+        from app.tasks.mapix_sync_task import _rows_to_insert
+
+        rows = _rows_to_insert(1, [self._point(lat=0, lon=0)], set())
+        assert rows == []
+
+    def test_zero_latitude_alone_is_kept(self):
+        """Экватор - валидная широта. Пропускать только оба нуля."""
+        from app.tasks.mapix_sync_task import _rows_to_insert
+
+        rows = _rows_to_insert(1, [self._point(lat=0, lon=37.6)], set())
+        assert len(rows) == 1
+
+    def test_point_without_timestamp_is_skipped(self):
+        from app.tasks.mapix_sync_task import _rows_to_insert
+
+        p = self._point()
+        p.recorded_at = None
+        assert _rows_to_insert(1, [p], set()) == []
+
+    def test_duplicate_stamp_inside_one_batch_collapses(self):
+        from app.tasks.mapix_sync_task import _rows_to_insert
+
+        p1 = self._point(speed=10)
+        p2 = self._point(speed=99)
+        seen: set = set()
+        rows = _rows_to_insert(1, [p1, p2], seen)
+        assert len(rows) == 1
+        assert rows[0]["speed"] == 10
+        assert p1.recorded_at in seen
+
+    def test_stamp_already_stored_is_skipped(self):
+        from app.tasks.mapix_sync_task import _rows_to_insert
+
+        p = self._point()
+        assert _rows_to_insert(1, [p], {p.recorded_at}) == []
+
+    def test_seen_mutated_so_a_second_call_skips_the_same_stamp(self):
+        from app.tasks.mapix_sync_task import _rows_to_insert
+
+        p = self._point()
+        seen: set = set()
+        assert len(_rows_to_insert(1, [p], seen)) == 1
+        assert _rows_to_insert(1, [p], seen) == []
+
+    def test_device_id_taken_from_imei(self):
+        from app.tasks.mapix_sync_task import _rows_to_insert
+
+        rows = _rows_to_insert(
+            1, [self._point(raw={"imei": "860001", "object_id": "42"})], set()
+        )
+        assert rows[0]["device_id"] == "860001"
+        assert rows[0]["raw_data"]["object_id"] == "42"
+
+    def test_missing_raw_data_does_not_crash(self):
+        from app.tasks.mapix_sync_task import _rows_to_insert
+
+        rows = _rows_to_insert(1, [self._point(raw=None)], set())
+        assert rows[0]["device_id"] is None
+
+    def test_sensor_values_are_carried_through(self):
+        from app.tasks.mapix_sync_task import _rows_to_insert
+
+        p = self._point(
+            speed=42.5, fuel_level=120.0, engine_hours=3456.7, engine_on=True
+        )
+        row = _rows_to_insert(7, [p], set())[0]
+        assert row["vehicle_id"] == 7
+        assert row["speed"] == 42.5
+        assert row["fuel_level"] == 120.0
+        assert row["engine_hours"] == 3456.7
+        assert row["engine_on"] is True
+        assert row["latitude"] == 55.7
+        assert row["received_at"] is not None
