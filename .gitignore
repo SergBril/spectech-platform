@@ -163,3 +163,6 @@ frontend/vite.config.d.ts
 frontend/*.tsbuildinfo
 # local test-run output
 regression-full.log
+# database dumps - never commit live data
+backup-*.sql
+*.dump

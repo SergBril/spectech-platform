@@ -28,7 +28,9 @@ services:
   # PostgreSQL Database
   # ═══════════════════════════════════════════════════════════════
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    # Запинено: плавающий latest-pg16 сменил базу с glibc на musl под живой БД.
+    # Версия расширения в базе: 2.30.1. Обновлять осознанно, с REINDEX при смене libc.
+    image: timescale/timescaledb:2.30.1-pg16@sha256:f495f2bc25ca7596ca8e1606c6241ca250ccc56a0c082b9f2ec0d290e0126cd9
     container_name: spectech-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
