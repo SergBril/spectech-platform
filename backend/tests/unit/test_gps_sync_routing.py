@@ -359,3 +359,36 @@ class TestRowsToInsert:
         assert row["engine_on"] is True
         assert row["latitude"] == 55.7
         assert row["received_at"] is not None
+
+
+class TestPositionsByCompany:
+    """Группировка рассылки и видимость потерянных позиций."""
+
+    def test_split_per_company(self):
+        from app.tasks.mapix_sync_task import _positions_by_company
+
+        payload = [
+            {"vehicle_id": 1, "company_id": 10},
+            {"vehicle_id": 2, "company_id": 20},
+            {"vehicle_id": 3, "company_id": 10},
+        ]
+        groups, unassigned = _positions_by_company(payload)
+        assert set(groups) == {10, 20}
+        assert [p["vehicle_id"] for p in groups[10]] == [1, 3]
+        assert unassigned == []
+
+    def test_company_id_is_removed_from_the_payload(self):
+        """company_id - служебное поле маршрутизации, клиенту оно не нужно."""
+        from app.tasks.mapix_sync_task import _positions_by_company
+
+        groups, _ = _positions_by_company([{"vehicle_id": 1, "company_id": 10}])
+        assert "company_id" not in groups[10][0]
+
+    def test_vehicle_without_company_is_reported_not_silently_dropped(self):
+        from app.tasks.mapix_sync_task import _positions_by_company
+
+        groups, unassigned = _positions_by_company(
+            [{"vehicle_id": 7, "company_id": None}, {"vehicle_id": 8}]
+        )
+        assert groups == {}
+        assert unassigned == [7, 8]

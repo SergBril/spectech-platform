@@ -251,6 +251,26 @@ def sync_gps_positions() -> None:
         db.close()
 
 
+def _positions_by_company(
+    positions: list[dict],
+) -> tuple[dict[int, list[dict]], list[int]]:
+    """Разложить позиции по компаниям, вынув company_id из полезной нагрузки.
+
+    Возвращает группировку и id машин без компании. Такие позиции некому
+    доставить, но выбрасывать их молча нельзя: пропажа техники с карты
+    выглядела бы как отказ провайдера, а не как незаполненное поле.
+    """
+    by_company: dict[int, list[dict]] = {}
+    unassigned: list[int] = []
+    for pos in positions:
+        cid = pos.pop("company_id", None)
+        if not cid:
+            unassigned.append(pos.get("vehicle_id"))
+            continue
+        by_company.setdefault(cid, []).append(pos)
+    return by_company, unassigned
+
+
 def _broadcast_latest(db: Session) -> None:
     """Push the latest position per vehicle over WebSocket.
 
@@ -311,13 +331,13 @@ def _broadcast_latest(db: Session) -> None:
             for r in rows
         ]
 
-        # Группировка по компании: каждая получает только свою технику.
-        by_company: dict[int, list[dict]] = {}
-        for pos in positions:
-            cid = pos.pop("company_id", None)
-            if not cid:
-                continue
-            by_company.setdefault(cid, []).append(pos)
+        by_company, unassigned = _positions_by_company(positions)
+        if unassigned:
+            logger.warning(
+                "\u26a0\ufe0f GPS broadcast: %d positions dropped, vehicles without company_id: %s",
+                len(unassigned),
+                sorted(x for x in unassigned if x is not None),
+            )
 
         loop = asyncio.new_event_loop()
         try:
