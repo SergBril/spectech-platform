@@ -16,6 +16,10 @@ from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
 from app.models.telematics import GpsPoint
+from app.services.gps_providers.secrets import (
+    GPS_SECRET_KEYS,
+    encrypt_gps_secrets,
+)
 
 logger = logging.getLogger("spectech.gps")
 
@@ -64,8 +68,6 @@ class VehicleGpsConfigResponse(BaseModel):
 
 
 # ─── GPS config: secrets never leave the server ─────────────────────────────────
-
-GPS_SECRET_KEYS = ("password", "api_key", "token", "webhook_secret")
 
 
 def _public_gps_config(cfg: dict | None) -> dict | None:
@@ -509,9 +511,10 @@ def update_vehicle_gps_config(
     if "gps_provider" in payload:
         vehicle.gps_provider = payload["gps_provider"]
     if "gps_provider_config" in payload:
-        vehicle.gps_provider_config = _merge_gps_config(
+        merged = _merge_gps_config(
             vehicle.gps_provider_config, payload["gps_provider_config"]
         )
+        vehicle.gps_provider_config = encrypt_gps_secrets(merged)
 
     db.commit()
     db.refresh(vehicle)

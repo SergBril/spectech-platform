@@ -652,7 +652,11 @@ def receive_wialon_webhook(
         logger.warning("Wialon webhook: unknown unit_id=%s", unit_id)
         raise HTTPException(status_code=404, detail="Unit not found")
 
-    secret = (vehicle.gps_provider_config or {}).get("webhook_secret")
+    from app.services.gps_providers.secrets import decrypt_gps_secrets
+
+    secret = (decrypt_gps_secrets(vehicle.gps_provider_config) or {}).get(
+        "webhook_secret"
+    )
     if not secret:
         logger.error(
             "Wialon webhook: webhook_secret not configured for vehicle #%s (unit=%s)",

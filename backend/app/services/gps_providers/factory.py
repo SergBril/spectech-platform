@@ -7,6 +7,7 @@ from app.services.gps_providers.gdemoi import GdeMoiAdapter
 from app.services.gps_providers.gps_trace import GpsTraceAdapter
 from app.services.gps_providers.manual import ManualAdapter
 from app.services.gps_providers.mapix import MapixAdapter
+from app.services.gps_providers.secrets import decrypt_gps_secrets
 from app.services.gps_providers.wialon import WialonAdapter
 
 PROVIDER_ADAPTERS: dict[str, type[GpsProviderAdapter]] = {
@@ -28,6 +29,9 @@ PROVIDER_LABELS: dict[str, str] = {
 
 def create_gps_adapter(provider: str, config: dict[str, Any]) -> GpsProviderAdapter:
     """Создаёт адаптер GPS-провайдера по имени."""
+    # Секреты в БД зашифрованы; адаптер ждёт открытый пароль.
+    config = decrypt_gps_secrets(config)
+
     adapter_class = PROVIDER_ADAPTERS.get(provider)
     if not adapter_class:
         raise ValueError(

@@ -12,7 +12,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.core.crypto import ENC_PREFIX
 from app.models.catalog import Vehicle
+from app.services.gps_providers.secrets import decrypt_gps_secrets
 
 pytestmark = [pytest.mark.integration]
 
@@ -83,18 +85,84 @@ class TestEditingPreservesData:
         )
         assert r.status_code == 200
         db_session.refresh(gps_vehicle)
-        assert gps_vehicle.gps_provider_config["password"] == "super-secret"
+        stored = gps_vehicle.gps_provider_config["password"]
+        assert stored.startswith(ENC_PREFIX), "секрет должен лежать зашифрованным"
+        assert decrypt_gps_secrets(gps_vehicle.gps_provider_config)["password"] == (
+            "super-secret"
+        )
 
     def test_absent_password_keeps_the_stored_one(
         self, client: TestClient, auth_headers, gps_vehicle, db_session
     ):
         _patch(client, auth_headers, gps_vehicle.id, {"api_url": "https://new"})
         db_session.refresh(gps_vehicle)
-        assert gps_vehicle.gps_provider_config["password"] == "super-secret"
+        stored = gps_vehicle.gps_provider_config["password"]
+        assert stored.startswith(ENC_PREFIX), "секрет должен лежать зашифрованным"
+        assert decrypt_gps_secrets(gps_vehicle.gps_provider_config)["password"] == (
+            "super-secret"
+        )
 
     def test_explicit_new_password_replaces_the_old(
         self, client: TestClient, auth_headers, gps_vehicle, db_session
     ):
         _patch(client, auth_headers, gps_vehicle.id, {"password": "rotated"})
         db_session.refresh(gps_vehicle)
-        assert gps_vehicle.gps_provider_config["password"] == "rotated"
+        stored = gps_vehicle.gps_provider_config["password"]
+        assert stored.startswith(ENC_PREFIX), "секрет должен лежать зашифрованным"
+        assert decrypt_gps_secrets(gps_vehicle.gps_provider_config)["password"] == (
+            "rotated"
+        )
+
+
+class TestSecretsAreEncryptedAtRest:
+    def test_patch_stores_ciphertext_not_plaintext(
+        self, client: TestClient, auth_headers, gps_vehicle, db_session
+    ):
+        _patch(client, auth_headers, gps_vehicle.id, {"password": "brand-new"})
+        db_session.refresh(gps_vehicle)
+        raw = gps_vehicle.gps_provider_config["password"]
+        assert raw.startswith(ENC_PREFIX)
+        assert "brand-new" not in raw
+        assert (
+            decrypt_gps_secrets(gps_vehicle.gps_provider_config)["password"]
+            == "brand-new"
+        )
+
+    def test_non_secret_fields_stay_readable(
+        self, client: TestClient, auth_headers, gps_vehicle, db_session
+    ):
+        _patch(client, auth_headers, gps_vehicle.id, {"login": "fleet9"})
+        db_session.refresh(gps_vehicle)
+        cfg = gps_vehicle.gps_provider_config
+        assert cfg["login"] == "fleet9"
+        assert cfg["object_ids"] == ["12345", "67890"]
+
+    def test_legacy_plaintext_is_left_alone_by_the_decryptor(self):
+        """Без префикса enc:: значение проходит как есть — иначе синхронизация
+        молча перестанет авторизоваться на немиг­рированных машинах."""
+        cfg = {"login": "old", "password": "plain-legacy", "object_ids": ["1"]}
+        out = decrypt_gps_secrets(cfg)
+        assert out["password"] == "plain-legacy"
+        assert out["object_ids"] == ["1"]
+
+    def test_factory_hands_the_adapter_an_open_password(self):
+        from app.core.crypto import encrypt_secret
+        from app.services.gps_providers.factory import create_gps_adapter
+
+        cfg = {
+            "login": "fleet",
+            "password": encrypt_secret("open-sesame"),
+            "api_url": "https://gps.mapix.su",
+            "object_ids": ["42"],
+        }
+        adapter = create_gps_adapter("mapix", cfg)
+        assert adapter.password == "open-sesame"
+        assert adapter.object_ids == ["42"]
+
+    def test_factory_also_accepts_legacy_plaintext(self):
+        from app.services.gps_providers.factory import create_gps_adapter
+
+        adapter = create_gps_adapter(
+            "mapix", {"login": "fleet", "password": "plain-legacy"}
+        )
+        assert adapter.password == "plain-legacy"
