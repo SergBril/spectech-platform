@@ -133,8 +133,10 @@ class TestBroadcastPositions:
         ws_ok = AsyncMock()
         ws_fail = AsyncMock()
         ws_fail.send_text.side_effect = Exception("Disconnected")
-        manager.user_connections[1] = ws_ok
-        manager.user_connections[2] = ws_fail
+        # Получатели должны быть подписчиками компании. Прямая запись в
+        # user_connections мимо company_users закрепляла утечку как требование.
+        await manager.connect(ws_ok, 1, 7)
+        await manager.connect(ws_fail, 2, 7)
         await manager.broadcast_positions([{"lat": 55.75}], company_id=7)
         ws_ok.send_text.assert_called_once()
         assert 2 not in manager.user_connections
@@ -198,3 +200,57 @@ class TestGlobalManager:
         from app.services.websocket_manager import manager
 
         assert manager is not None
+
+
+class TestPositionIsolation:
+    """Координаты техники не должны уходить другой компании."""
+
+    @pytest.mark.asyncio
+    async def test_other_company_receives_nothing(self, manager):
+        from unittest.mock import AsyncMock
+
+        ws_a, ws_b = AsyncMock(), AsyncMock()
+        await manager.connect(ws_a, 1, 10)
+        await manager.connect(ws_b, 2, 20)
+        await manager.broadcast_positions([{"vehicle_id": 5}], company_id=10)
+        ws_a.send_text.assert_called_once()
+        ws_b.send_text.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_zero_company_sends_to_nobody(self, manager):
+        from unittest.mock import AsyncMock
+
+        ws = AsyncMock()
+        await manager.connect(ws, 1, 10)
+        await manager.broadcast_positions([{"vehicle_id": 5}], company_id=0)
+        ws.send_text.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_multi_company_user_gets_both(self, manager):
+        from unittest.mock import AsyncMock
+
+        ws = AsyncMock()
+        await manager.connect(ws, 1, [10, 20])
+        await manager.broadcast_positions([{"vehicle_id": 5}], company_id=20)
+        ws.send_text.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_disconnect_clears_every_subscription(self, manager):
+        from unittest.mock import AsyncMock
+
+        ws = AsyncMock()
+        await manager.connect(ws, 1, [10, 20])
+        manager.disconnect(ws)
+        assert 1 not in manager.company_users.get(10, set())
+        assert 1 not in manager.company_users.get(20, set())
+
+    @pytest.mark.asyncio
+    async def test_dead_socket_leaves_no_subscription(self, manager):
+        from unittest.mock import AsyncMock
+
+        ws = AsyncMock()
+        ws.send_text.side_effect = Exception("gone")
+        await manager.connect(ws, 1, 10)
+        await manager.broadcast_positions([{"vehicle_id": 5}], company_id=10)
+        assert 1 not in manager.user_connections
+        assert 1 not in manager.company_users.get(10, set())

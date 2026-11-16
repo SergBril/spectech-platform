@@ -31,15 +31,24 @@ class ConnectionManager:
     # GPS/Telemetry методы (для существующего websocket.py)
     # ============================================================
 
-    async def connect(self, websocket: WebSocket, user_id: int, company_id: int = 0):
-        """Подключение для GPS/телеметрии (старый API)."""
+    async def connect(
+        self,
+        websocket: WebSocket,
+        user_id: int,
+        company_id: int | list[int] = 0,
+    ):
+        """Подключение для GPS/телеметрии.
+
+        company_id может быть списком: пользователь с несколькими юрлицами
+        подписывается на все доступные ему компании.
+        """
         await websocket.accept()
         self.user_connections[user_id] = websocket
-        if company_id:
-            if company_id not in self.company_users:
-                self.company_users[company_id] = set()
-            self.company_users[company_id].add(user_id)
-        logger.info("GPS WS connected: user=%s, company=%s", user_id, company_id)
+        ids = [company_id] if isinstance(company_id, int) else list(company_id)
+        for cid in ids:
+            if cid:
+                self.company_users.setdefault(cid, set()).add(user_id)
+        logger.info("GPS WS connected: user=%s, companies=%s", user_id, ids)
 
     def disconnect(self, websocket: WebSocket):
         """Отключение GPS/телеметрии (старый API)."""
@@ -55,13 +64,16 @@ class ConnectionManager:
         if user_to_remove:
             del self.user_connections[user_to_remove]
             # Удалить из company_users
+            # Снять подписку со ВСЕХ компаний, иначе после переподключения
+            # останутся висячие подписки и утечка вернётся.
+            removed_from = []
             for cid, users in list(self.company_users.items()):
                 if user_to_remove in users:
-                    users.remove(user_to_remove)
-                    company_to_update = cid
+                    users.discard(user_to_remove)
+                    removed_from.append(cid)
                     if not users:
                         del self.company_users[cid]
-                    break
+            company_to_update = removed_from
             logger.info(
                 "GPS WS disconnected: user=%s, company=%s",
                 user_to_remove,
@@ -104,18 +116,34 @@ class ConnectionManager:
         )
 
     async def broadcast_positions(self, positions: list[dict], company_id: int = 0):
-        """Broadcast GPS positions to all connected users of a company."""
+        """Отправить позиции только подписчикам указанной компании.
+
+        company_id=0 не означает "всем": без компании получателей нет.
+        Координаты, скорость и топливо - операционные данные юрлица, и
+        конкурирующая компания не должна их видеть.
+        """
         import json
+
+        if not company_id:
+            logger.warning(
+                "GPS broadcast without company_id: %d positions dropped", len(positions)
+            )
+            return
 
         message = json.dumps({"type": "gps_positions", "positions": positions})
         disconnected = []
-        for uid, ws in self.user_connections.items():
+        for uid in list(self.company_users.get(company_id, set())):
+            ws = self.user_connections.get(uid)
+            if ws is None:
+                continue
             try:
                 await ws.send_text(message)
             except Exception:
                 disconnected.append(uid)
         for uid in disconnected:
             self.user_connections.pop(uid, None)
+            for users in self.company_users.values():
+                users.discard(uid)
 
     def disconnect_chat(self, websocket: WebSocket, chat_id: int):
         """Отключение от чата."""

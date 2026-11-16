@@ -271,7 +271,7 @@ def _broadcast_latest(db: Session) -> None:
             db.execute(
                 text(
                     """
-                SELECT v.id AS vehicle_id, v.name AS vehicle_name,
+                SELECT v.id AS vehicle_id, v.name AS vehicle_name, v.company_id,
                        g.latitude, g.longitude, g.speed, g.heading,
                        g.engine_on, g.fuel_level, g.recorded_at
                 FROM vehicles v
@@ -296,6 +296,7 @@ def _broadcast_latest(db: Session) -> None:
         positions = [
             {
                 "vehicle_id": r["vehicle_id"],
+                "company_id": r["company_id"],
                 "vehicle_name": r["vehicle_name"] or f"Vehicle #{r['vehicle_id']}",
                 "latitude": r["latitude"],
                 "longitude": r["longitude"],
@@ -310,11 +311,26 @@ def _broadcast_latest(db: Session) -> None:
             for r in rows
         ]
 
+        # Группировка по компании: каждая получает только свою технику.
+        by_company: dict[int, list[dict]] = {}
+        for pos in positions:
+            cid = pos.pop("company_id", None)
+            if not cid:
+                continue
+            by_company.setdefault(cid, []).append(pos)
+
         loop = asyncio.new_event_loop()
         try:
-            loop.run_until_complete(manager.broadcast_positions(positions))
+            for cid, company_positions in by_company.items():
+                loop.run_until_complete(
+                    manager.broadcast_positions(company_positions, company_id=cid)
+                )
         finally:
             loop.close()
-        logger.info("\U0001f4e1 Broadcast %d positions via WebSocket", len(positions))
+        logger.info(
+            "\U0001f4e1 Broadcast %d positions to %d companies via WebSocket",
+            len(positions),
+            len(by_company),
+        )
     except Exception as ws_err:
         logger.warning("\u26a0\ufe0f WebSocket broadcast failed: %s", ws_err)

@@ -72,10 +72,38 @@ async def websocket_endpoint(
         await websocket.close(code=4001, reason="User not found or inactive")
         return
 
-    company_id = getattr(user, "company_id", 0) or 0
-    logger.info("✅ WebSocket auth OK: user_id=%s, company_id=%s", user_id, company_id)
+    # Скоупинг ровно как в get_user_company_ids, не шире: superuser - все
+    # активные компании, обычный пользователь - своя активная, иначе активные
+    # связи UserCompany. Подписка на все доступные компании нужна, чтобы
+    # пользователь с несколькими юрлицами не потерял технику остальных.
+    from sqlalchemy import select
 
-    await manager.connect(websocket, user_id, company_id)
+    from app.models.company import Company
+    from app.models.user_company import UserCompany
+
+    db = SessionLocal()
+    try:
+        if user.is_superuser:
+            company_ids = list(
+                db.scalars(select(Company.id).where(Company.is_active == True)).all()
+            )
+        elif user.company_id:
+            company_ids = [user.company_id]
+        else:
+            company_ids = list(
+                db.scalars(
+                    select(UserCompany.company_id).where(
+                        UserCompany.user_id == user.id,
+                        UserCompany.is_active == True,
+                    )
+                ).all()
+            )
+    finally:
+        db.close()
+
+    logger.info("✅ WebSocket auth OK: user_id=%s, companies=%s", user_id, company_ids)
+
+    await manager.connect(websocket, user_id, company_ids)
 
     try:
         await websocket.send_json(
