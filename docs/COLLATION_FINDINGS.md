@@ -1,4 +1,4 @@
-# Collation mismatch:调查结果 и вердикт
+# Collation mismatch: расследование и вердикт
 
 ## Среда
 
