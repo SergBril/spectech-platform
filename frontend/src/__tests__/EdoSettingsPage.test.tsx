@@ -158,3 +158,54 @@ describe('EdoSettingsPage — рабочий URL, видимые ошибки, �
     expect(screen.queryByText(/БОЕВОЙ Диадок/)).not.toBeInTheDocument();
   });
 });
+
+describe('EdoSettingsPage — нечитаемый секрет не выдаётся за настроенный', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedClient.put.mockResolvedValue({ data: { message: 'EDO settings updated' } });
+  });
+
+  it('decryptable=false → предупреждение вместо зелёного бейджа', async () => {
+    mockedClient.get.mockResolvedValue({
+      data: { ...serverSettings, diadoc_api_key_decryptable: false },
+    });
+    render(<EdoSettingsPage />);
+
+    expect(
+      await screen.findByText(/Ключ сохранён, но не расшифровывается/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('🔑 Ключ задан (****abcd)')).not.toBeInTheDocument();
+    expect(screen.getByText(/ENCRYPTION_KEY/)).toBeInTheDocument();
+  });
+
+  it('флаг отсутствует в ответе → прежнее поведение (обратная совместимость)', async () => {
+    mockedClient.get.mockResolvedValue({ data: serverSettings });
+    render(<EdoSettingsPage />);
+
+    expect(await screen.findByText('🔑 Ключ задан (****abcd)')).toBeInTheDocument();
+    expect(screen.queryByText(/не расшифровывается/)).not.toBeInTheDocument();
+  });
+
+  it('decryptable=true явно → зелёный бейдж', async () => {
+    mockedClient.get.mockResolvedValue({
+      data: { ...serverSettings, diadoc_api_key_decryptable: true },
+    });
+    render(<EdoSettingsPage />);
+
+    expect(await screen.findByText('🔑 Ключ задан (****abcd)')).toBeInTheDocument();
+  });
+
+  it('токен СБИС нечитаем → предупреждение после переключения оператора', async () => {
+    mockedClient.get.mockResolvedValue({
+      data: { ...serverSettings, sbis_token_decryptable: false },
+    });
+    render(<EdoSettingsPage />);
+    await screen.findByDisplayValue('box-123');
+
+    fireEvent.click(screen.getByRole('radio', { name: /СБИС/ }));
+    expect(
+      screen.getByText(/Токен сохранён, но не расшифровывается/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('🔑 Токен задан (****wxyz)')).not.toBeInTheDocument();
+  });
+});

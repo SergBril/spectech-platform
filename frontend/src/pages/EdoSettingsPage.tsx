@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import apiClient from '../api/client';
 
@@ -14,6 +14,9 @@ interface EdoForm {
 interface SecretState {
   set: boolean;
   mask: string;
+  // false только когда бэкенд явно сообщил, что секрет не расшифровывается.
+  // undefined в старом ответе трактуется как true - обратной совместимости ради.
+  decryptable: boolean;
 }
 
 const errorDetail = (err: unknown, fallback: string): string => {
@@ -33,8 +36,8 @@ const EdoSettingsPage: React.FC = () => {
     default_format: 'upd_5_03',
   });
   const [secrets, setSecrets] = useState<{ diadoc: SecretState; sbis: SecretState }>({
-    diadoc: { set: false, mask: '' },
-    sbis: { set: false, mask: '' },
+    diadoc: { set: false, mask: '', decryptable: true },
+    sbis: { set: false, mask: '', decryptable: true },
   });
   const [newDiadocKey, setNewDiadocKey] = useState('');
   const [newSbisToken, setNewSbisToken] = useState('');
@@ -60,8 +63,16 @@ const EdoSettingsPage: React.FC = () => {
         default_format: d.default_format ?? 'upd_5_03',
       });
       setSecrets({
-        diadoc: { set: Boolean(d.diadoc_api_key_set), mask: d.diadoc_api_key ?? '' },
-        sbis: { set: Boolean(d.sbis_token_set), mask: d.sbis_token ?? '' },
+        diadoc: {
+          set: Boolean(d.diadoc_api_key_set),
+          mask: d.diadoc_api_key ?? '',
+          decryptable: d.diadoc_api_key_decryptable !== false,
+        },
+        sbis: {
+          set: Boolean(d.sbis_token_set),
+          mask: d.sbis_token ?? '',
+          decryptable: d.sbis_token_decryptable !== false,
+        },
       });
       setNewDiadocKey('');
       setNewSbisToken('');
@@ -158,7 +169,11 @@ const EdoSettingsPage: React.FC = () => {
   }
 
   const secretBadge = (secret: SecretState, label: string) =>
-    secret.set ? (
+    secret.set && !secret.decryptable ? (
+      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-50 border border-red-200 text-xs text-red-700">
+        ⚠️ {label} сохранён, но не расшифровывается — проверьте ENCRYPTION_KEY или введите заново
+      </span>
+    ) : secret.set ? (
       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-50 border border-green-200 text-xs text-green-700">
         🔑 {label} задан ({secret.mask})
       </span>
