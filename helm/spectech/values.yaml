@@ -117,8 +117,7 @@ ingress:
   host: spectehpro.ru
   tls:
     enabled: true
-    secretName: spectech-tls
-
+    secretName: spectech-tls  # pragma: allowlist secret
 # ───────────────────────────────────────────────────────────
 # Credentials (override via --set in production!)
 # ───────────────────────────────────────────────────────────
@@ -130,3 +129,10 @@ credentials:
   minio:
     rootUser: spectech
     rootPassword: CHANGE_ME_IN_PRODUCTION  # pragma: allowlist secret
+  encryption:
+    # Обязателен в production (fail-fast при старте). Fernet-ключ, сгенерировать:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Реальный ключ задавать через --set credentials.encryption.key=... или внешний secret.
+    key: ""  # pragma: allowlist secret
+    # Предыдущий ключ — только на время ротации, затем очистить.
+    previous: ""  # pragma: allowlist secret

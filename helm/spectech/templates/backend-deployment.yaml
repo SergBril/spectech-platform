@@ -46,6 +46,16 @@ spec:
             secretKeyRef:
               name: db-credentials
               key: POSTGRES_DB
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: ENCRYPTION_KEY
+        - name: ENCRYPTION_KEY_PREVIOUS
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: ENCRYPTION_KEY_PREVIOUS
         - name: POSTGRES_HOST
           value: "postgres"
         - name: POSTGRES_PORT

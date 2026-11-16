@@ -253,3 +253,11 @@ docker-compose exec postgres psql -U spectech -d spectech
 
 # Посмотреть использование ресурсов
 docker stats
+
+## Шифрование секретов интеграций (ENCRYPTION_KEY)
+
+В production обязателен отдельный ключ `ENCRYPTION_KEY` (Fernet) — без него
+backend не стартует (fail-fast в lifespan). Генерация ключа, ротация через
+`ENCRYPTION_KEY_PREVIOUS` с обязательной перешифровкой
+(`scripts/rotate_company_secrets.py`), бэкап ключа ОТДЕЛЬНО от бэкапа БД и
+перенос dev-БД в прод — см. **[docs/ENCRYPTION.md](ENCRYPTION.md)**.

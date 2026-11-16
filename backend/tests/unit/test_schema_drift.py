@@ -21,7 +21,10 @@ class Color(PyEnum):
 class FakeConn:
     """Подставное соединение: отвечает на два запроса collect_drift.
 
-    Строки колонок — 3-кортежи (table, column, udt_name).
+    Строки колонок — 5-кортежи:
+    (table, column, udt_name, is_nullable, data_type).
+    Контракт расширен: проверка сравнивает не только наличие, но и типы
+    с nullable — раньше она этого не видела.
     """
 
     def __init__(self, column_rows, enum_rows):
@@ -50,7 +53,11 @@ def _metadata():
 
 
 def _rows(*extra):
-    base = [("t", "a", "int4"), ("t", "b", "int4"), ("t", "color", "color_type")]
+    base = [
+        ("t", "a", "int4", "NO", "integer"),
+        ("t", "b", "int4", "YES", "integer"),
+        ("t", "color", "color_type", "YES", "USER-DEFINED"),
+    ]
     return base + list(extra)
 
 
@@ -110,7 +117,11 @@ class TestCollectDrift:
         assert report["varchar_enums"] == []
 
     def test_column_drift_both_directions(self):
-        rows = [("t", "a", "int4"), ("t", "c", "int4"), ("t", "color", "color_type")]
+        rows = [
+            ("t", "a", "int4", "NO", "integer"),
+            ("t", "c", "int4", "YES", "integer"),
+            ("t", "color", "color_type", "YES", "USER-DEFINED"),
+        ]
         conn = FakeConn(rows, [("color_type", "red"), ("color_type", "green")])
         report = collect_drift(conn, _metadata())
         assert report["columns"] == [
@@ -145,7 +156,11 @@ class TestCollectDrift:
 
     def test_varchar_enum_skipped_as_info(self):
         """Колонка VARCHAR в БД — не native enum, сравнение пропускается."""
-        rows = [("t", "a", "int4"), ("t", "b", "int4"), ("t", "color", "varchar")]
+        rows = [
+            ("t", "a", "int4", "NO", "integer"),
+            ("t", "b", "int4", "YES", "integer"),
+            ("t", "color", "varchar", "YES", "character varying"),
+        ]
         conn = FakeConn(rows, [])
         report = collect_drift(conn, _metadata())
         assert report["enums"] == []
@@ -153,14 +168,18 @@ class TestCollectDrift:
 
     def test_enum_type_mismatch_is_drift(self):
         """Колонка — другой native enum-тип в БД → дрейф."""
-        rows = [("t", "a", "int4"), ("t", "b", "int4"), ("t", "color", "other_type")]
+        rows = [
+            ("t", "a", "int4", "NO", "integer"),
+            ("t", "b", "int4", "YES", "integer"),
+            ("t", "color", "other_type", "YES", "USER-DEFINED"),
+        ]
         conn = FakeConn(rows, [("other_type", "x")])
         report = collect_drift(conn, _metadata())
         assert "other_type != color_type" in report["enums"][0]["error"]
 
     def test_db_only_tables_informational(self):
         conn = FakeConn(
-            _rows(("legacy", "x", "int4")),
+            _rows(("legacy", "x", "int4", "YES", "integer")),
             [("color_type", "red"), ("color_type", "green")],
         )
         report = collect_drift(conn, _metadata())

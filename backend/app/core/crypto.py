@@ -99,3 +99,33 @@ def mask_secret(value: str | None) -> str:
     if not plain:
         return ""
     return f"****{plain[-4:]}" if len(plain) >= 4 else "****"
+
+
+def ensure_keys_configured() -> None:
+    """Fail-fast проверка ключей при старте (production).
+
+    В production без ENCRYPTION_KEY вызывает RuntimeError — контейнер
+    не должен подниматься. В dev/testing допустима derivation из JWT.
+    """
+    _keys()
+
+
+def is_encrypted_with_active_key(value: str | None) -> bool:
+    """Расшифровывается ли значение АКТИВНЫМ ключом (идемпотентная ротация)."""
+    if not value or not value.startswith(ENC_PREFIX):
+        return False
+    try:
+        Fernet(_keys()[0]).decrypt(value[len(ENC_PREFIX) :].encode())
+        return True
+    except InvalidToken:
+        return False
+
+
+def is_decryptable(value: str | None) -> bool:
+    """Читается ли секрет активным или предыдущим ключом (UI-флаг).
+
+    Пустое и легаси-открытое значения считаются читаемыми.
+    """
+    if not value or not value.startswith(ENC_PREFIX):
+        return True
+    return decrypt_secret(value) != ""

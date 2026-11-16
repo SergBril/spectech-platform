@@ -73,11 +73,15 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov pytest-asyncio alembic psycopg2-binary
 
-      - name: Check pending migrations
+      - name: Migrations must build the whole schema from an empty database
         working-directory: backend
         env:
-          DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/spectech_test  # pragma: allowlist secret
-        run: alembic check || echo "::warning::Pending migrations detected"
+          DATABASE_URL: postgresql+psycopg2://test:test@localhost:5432/spectech_migrate  # pragma: allowlist secret
+          ADMIN_DATABASE_URL: postgresql+psycopg2://test:test@localhost:5432/postgres  # pragma: allowlist secret
+        run: |
+          python -c "import os; from sqlalchemy import create_engine, text; e = create_engine(os.environ['ADMIN_DATABASE_URL'], isolation_level='AUTOCOMMIT'); c = e.connect(); c.execute(text('DROP DATABASE IF EXISTS spectech_migrate')); c.execute(text('CREATE DATABASE spectech_migrate')); c.close(); e.dispose()"
+          alembic upgrade head
+          python scripts/check_schema_drift.py
 
 
       - name: Run tests

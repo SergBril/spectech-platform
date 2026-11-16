@@ -36,6 +36,11 @@ frontend:
     limits:
       memory: 512Mi
       cpu: 500m
+credentials:
+  encryption:
+    # Сгенерировать: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    key: CHANGE_ME_GENERATE_WITH_Fernet_generate_key  # pragma: allowlist secret
+    previous: ""  # pragma: allowlist secret
 postgres:
   storage: 50Gi
   resources:

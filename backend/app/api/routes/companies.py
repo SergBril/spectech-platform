@@ -192,7 +192,7 @@ def get_edo_settings(
 
     # Секреты наружу только маской: ключ ЭДО даёт право отправлять первичку
     # от лица юрлица. Флаг *_set нужен UI, чтобы показать "задан".
-    from app.core.crypto import mask_secret
+    from app.core.crypto import is_decryptable, mask_secret
 
     return {
         "operator": company.edo_operator or "diadoc",
@@ -205,6 +205,8 @@ def get_edo_settings(
         "sbis_client_id": company.sbis_client_id or "",
         "auto_send_on_sign": bool(company.auto_send_on_sign),
         "default_format": company.default_format or "upd_5_03",
+        "diadoc_api_key_decryptable": is_decryptable(company.diadoc_api_key),
+        "sbis_token_decryptable": is_decryptable(company.sbis_token),
     }
 
 

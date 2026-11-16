@@ -93,6 +93,13 @@ logger = logging.getLogger("spectech.app")
 async def lifespan(app: FastAPI):
     logger.info("🚀 SpectechPlatform v0.1.0 starting...")
 
+    # Fail-fast: production без ENCRYPTION_KEY не должен стартовать вовсе
+    # (crash-loop сразу, а не 500 на первом запросе настроек ЭДО).
+    if settings.environment == "production":
+        from app.core.crypto import ensure_keys_configured
+
+        ensure_keys_configured()
+
     # Импортируем модели ВНУТРИ lifespan чтобы не затенять роутеры
 
     # Запускаем планировщик фоновых задач
