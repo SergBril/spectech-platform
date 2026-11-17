@@ -952,9 +952,73 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
-    # Старт и отчёт - после ВСЕХ регистраций. Раньше лог стоял в середине
-    # функции и показывал 9 из 14 задач: пять добавлялись ниже и в счётчик
-    # не попадали, из-за чего расписание выглядело потерявшим задачи.
+    async def _refresh_business_metrics():
+        """Обновление бизнес-гейджей Prometheus из БД.
+
+        Гейджи и сеттеры существовали, но set_active_vehicles, set_pending_requests
+        и set_active_alerts не вызывались НИГДЕ. Дашборд показывал "Активная
+        техника: 0" при 15 машинах в базе. Ноль от незаполненной метрики читается
+        как спокойствие, а не как отсутствие данных - это опаснее пустой панели.
+        """
+        from sqlalchemy import func, select
+
+        from app.core.db import SessionLocal, engine
+        from app.core.metrics import (
+            db_connections_active,
+            set_active_alerts,
+            set_active_vehicles,
+            set_pending_requests,
+        )
+        from app.models.catalog import Vehicle
+        from app.models.dispatch import Request
+        from app.models.telematics import Alert
+
+        db = SessionLocal()
+        try:
+            vehicles = db.execute(
+                select(func.count(Vehicle.id)).where(Vehicle.is_deleted.is_(False))
+            ).scalar()
+            set_active_vehicles(vehicles or 0)
+
+            pending = db.execute(
+                select(func.count(Request.id)).where(Request.status == "new")
+            ).scalar()
+            set_pending_requests(pending or 0)
+
+            # Все три severity выставляются явно, иначе гейдж с метками не
+            # появляется в /metrics до первого ненулевого значения.
+            for severity in ("info", "warning", "critical"):
+                count = db.execute(
+                    select(func.count(Alert.id))
+                    .where(Alert.severity == severity)
+                    .where(Alert.status != "resolved")
+                ).scalar()
+                set_active_alerts(severity, count or 0)
+
+            db_connections_active.set(engine.pool.checkedout())
+            logger.debug(
+                "📈 Business metrics: vehicles=%s pending=%s", vehicles, pending
+            )
+        except Exception as e:
+            logger.error(f"Business metrics refresh failed: {e}")
+            raise
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _refresh_business_metrics,
+        trigger=IntervalTrigger(minutes=1),
+        id="business_metrics_refresh",
+        name="Refresh business metrics",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    # Старт и отчёт - в самом конце, после ВСЕХ регистраций. Лог в середине
+    # показывал 9 из 14 задач, а сегодня я сам вернул дефект, добавив задачу
+    # ниже строки подсчёта: получилось 14 из 15. Перенос в конец убирает саму
+    # возможность наступить на эти грабли при добавлении следующей задачи.
     scheduler.start()
     logger.info(
         "⏰ Scheduler started. Interval: %d min. Jobs: %d",

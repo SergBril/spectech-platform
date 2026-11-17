@@ -13,7 +13,7 @@
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
       "title": "📊 HTTP Requests Rate (by status)",
       "type": "timeseries",
-      "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"spectech\", app=\"backend\"}[5m])) by (status)", "legendFormat": "status {{status}}", "refId": "A"}]
+      "targets": [{"expr": "sum(rate(http_requests_total{job=\"spectech-backend\"}[5m])) by (status)", "legendFormat": "status {{status}}", "refId": "A"}]
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -23,7 +23,7 @@
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
       "title": "⚡ Response Latency (p95)",
       "type": "timeseries",
-      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace=\"spectech\", app=\"backend\"}[5m])) by (le))", "legendFormat": "p95", "refId": "A"}]
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"spectech-backend\"}[5m])) by (le))", "legendFormat": "p95", "refId": "A"}]
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -33,7 +33,7 @@
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
       "title": "🚗 Active Vehicles",
       "type": "stat",
-      "targets": [{"expr": "spectech_vehicles_active{namespace=\"spectech\", app=\"backend\"}", "refId": "A"}]
+      "targets": [{"expr": "spectech_vehicles_active{job=\"spectech-backend\"}", "refId": "A"}]
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -43,7 +43,7 @@
       "options": {"colorMode": "value", "graphMode": "area"},
       "title": "⏳ Pending Requests",
       "type": "stat",
-      "targets": [{"expr": "spectech_requests_pending{namespace=\"spectech\", app=\"backend\"}", "refId": "A"}]
+      "targets": [{"expr": "spectech_requests_pending{job=\"spectech-backend\"}", "refId": "A"}]
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -53,7 +53,7 @@
       "options": {"colorMode": "value", "graphMode": "area"},
       "title": "🚨 Active Alerts",
       "type": "stat",
-      "targets": [{"expr": "spectech_alerts_active{namespace=\"spectech\", app=\"backend\"}", "refId": "A"}]
+      "targets": [{"expr": "sum(spectech_alerts_active{job=\"spectech-backend\"})", "refId": "A"}]
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -63,7 +63,7 @@
       "options": {"colorMode": "value", "graphMode": "area"},
       "title": "💾 DB Connections",
       "type": "stat",
-      "targets": [{"expr": "spectech_db_connections_active{namespace=\"spectech\", app=\"backend\"}", "refId": "A"}]
+      "targets": [{"expr": "spectech_db_connections_active{job=\"spectech-backend\"}", "refId": "A"}]
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -73,7 +73,7 @@
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
       "title": "🧠 Memory Usage (MB)",
       "type": "timeseries",
-      "targets": [{"expr": "process_resident_memory_bytes{namespace=\"spectech\", app=\"backend\"} / 1024 / 1024", "legendFormat": "Backend Memory", "refId": "A"}]
+      "targets": [{"expr": "process_resident_memory_bytes{job=\"spectech-backend\"} / 1024 / 1024", "legendFormat": "Backend Memory", "refId": "A"}]
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -83,7 +83,7 @@
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
       "title": "⚙️ CPU Usage",
       "type": "timeseries",
-      "targets": [{"expr": "rate(process_cpu_seconds_total{namespace=\"spectech\", app=\"backend\"}[5m])", "legendFormat": "CPU Usage", "refId": "A"}]
+      "targets": [{"expr": "rate(process_cpu_seconds_total{job=\"spectech-backend\"}[5m])", "legendFormat": "CPU Usage", "refId": "A"}]
     }
   ],
   "schemaVersion": 39,

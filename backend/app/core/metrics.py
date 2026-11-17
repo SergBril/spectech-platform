@@ -1,6 +1,19 @@
 """Prometheus metrics for SpectechPlatform."""
 
-from prometheus_client import Counter, Gauge
+import os
+
+# При 4 воркерах uvicorn у каждого процесса свой реестр: планировщик живёт в
+# одном (advisory lock в Postgres), а скрейп /metrics попадает в случайный.
+# Из-за этого гейджи показывали 0 при 15 машинах, а http_requests_total -
+# трафик одного воркера. Multiprocess-режим собирает метрики всех процессов.
+#
+# Режимы live (livemax/livesum) учитывают только живые PID, поэтому файлы
+# умерших воркеров не искажают значения и чистка каталога не требуется.
+_MULTIPROC_DIR = os.environ.get("PROMETHEUS_MULTIPROC_DIR", "")
+if _MULTIPROC_DIR:
+    os.makedirs(_MULTIPROC_DIR, exist_ok=True)
+
+from prometheus_client import REGISTRY, Counter, Gauge
 from prometheus_fastapi_instrumentator import Instrumentator
 
 # ═══════════════════════════════════════════════════════════════
@@ -24,17 +37,20 @@ auth_failures_total = Counter(
 vehicles_active = Gauge(
     "spectech_vehicles_active",
     "Number of active vehicles",
+    multiprocess_mode="livemax",
 )
 
 requests_pending = Gauge(
     "spectech_requests_pending",
     "Number of pending requests",
+    multiprocess_mode="livemax",
 )
 
 alerts_active = Gauge(
     "spectech_alerts_active",
     "Number of active alerts",
     ["severity"],
+    multiprocess_mode="livemax",
 )
 
 telematics_events_total = Counter(
@@ -47,6 +63,7 @@ telematics_events_total = Counter(
 db_connections_active = Gauge(
     "spectech_db_connections_active",
     "Number of active database connections",
+    multiprocess_mode="livesum",
 )
 
 # Cache metrics
@@ -83,21 +100,51 @@ scheduler_job_missed_total = Counter(
 
 def setup_metrics(app):
     """Configure Prometheus metrics for FastAPI application."""
+    registry = REGISTRY
+    if _MULTIPROC_DIR:
+        from prometheus_client import CollectorRegistry, ProcessCollector
+        from prometheus_client.multiprocess import MultiProcessCollector
+
+        registry = CollectorRegistry()
+        MultiProcessCollector(registry)
+        # Процессные метрики не входят в multiprocess-сборку. Регистрируем
+        # отдельно, иначе панели памяти и CPU опустеют. Значения отражают
+        # тот воркер, который обслужил скрейп.
+        ProcessCollector(registry=registry)
+
     instrumentator = Instrumentator(
         should_group_status_codes=True,
         should_ignore_untemplated=True,
         should_respect_env_var=False,
         excluded_handlers=["/metrics", "/health", "/ready"],
         env_var_name="ENABLE_METRICS",
+        registry=registry,
     )
 
-    # Add default metrics (request count, latency, etc)
-    instrumentator.instrument(app).expose(
-        app,
-        endpoint="/metrics",
-        include_in_schema=False,
-        should_gzip=True,
-    )
+    instrumentator.instrument(app)
+
+    if _MULTIPROC_DIR:
+        # expose() в instrumentator 7.0 при наличии PROMETHEUS_MULTIPROC_DIR
+        # строит СВОЙ реестр только с MultiProcessCollector, игнорируя
+        # переданный. Процессные метрики при этом теряются: панели памяти и
+        # CPU пустели. Поэтому эндпоинт отдаём сами из своего реестра.
+        from fastapi import Response
+        from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+        @app.get("/metrics", include_in_schema=False)
+        def _metrics_endpoint() -> Response:
+            return Response(
+                content=generate_latest(registry),
+                media_type=CONTENT_TYPE_LATEST,
+            )
+
+    else:
+        instrumentator.expose(
+            app,
+            endpoint="/metrics",
+            include_in_schema=False,
+            should_gzip=True,
+        )
 
     return instrumentator
 
