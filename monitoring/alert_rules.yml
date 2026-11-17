@@ -105,3 +105,23 @@ groups:
         annotations:
           summary: "Container restarting frequently"
           description: "Container {{ $labels.name }} restarted {{ $value }} times in last hour"
+
+  - name: scheduler
+    rules:
+      - alert: SchedulerJobFailing
+        expr: increase(scheduler_job_failures_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Задача планировщика {{ $labels.job_id }} завершилась провалом"
+          description: "Провалов за час: {{ $value }}. Раньше задачи глотали исключения и APScheduler рапортовал успех, поэтому провал был неотличим от простоя."
+
+      - alert: SchedulerJobMissed
+        expr: increase(scheduler_job_missed_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Задача {{ $labels.job_id }} пропустила время запуска"
+          description: "Пропусков за час: {{ $value }}. Проверь нагрузку и misfire_grace_time."

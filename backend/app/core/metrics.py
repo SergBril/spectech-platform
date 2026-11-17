@@ -68,6 +68,19 @@ cache_misses_total = Counter(
 # ═══════════════════════════════════════════════════════════════
 
 
+scheduler_job_failures_total = Counter(
+    "scheduler_job_failures_total",
+    "Провалы задач планировщика по job_id",
+    ["job_id"],
+)
+
+scheduler_job_missed_total = Counter(
+    "scheduler_job_missed_total",
+    "Задачи планировщика, пропустившие своё время запуска",
+    ["job_id"],
+)
+
+
 def setup_metrics(app):
     """Configure Prometheus metrics for FastAPI application."""
     instrumentator = Instrumentator(

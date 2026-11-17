@@ -25,14 +25,21 @@ def _on_scheduler_job_event(event) -> None:
     исключение. Именно так нерабочая разноска платежей прожила незамеченной.
     Задачи теперь поднимают отказ, а этот слушатель делает его явным.
     """
+    from app.core.metrics import (
+        scheduler_job_failures_total,
+        scheduler_job_missed_total,
+    )
+
     exc = getattr(event, "exception", None)
     if exc is not None:
+        scheduler_job_failures_total.labels(job_id=str(event.job_id)).inc()
         logger.error(
             "🔴 Scheduler job FAILED: %s",
             event.job_id,
             exc_info=(type(exc), exc, exc.__traceback__),
         )
     else:
+        scheduler_job_missed_total.labels(job_id=str(event.job_id)).inc()
         logger.warning("⚠️ Scheduler job MISSED its run time: %s", event.job_id)
 
 
