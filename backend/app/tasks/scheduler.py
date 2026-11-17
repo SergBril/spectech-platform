@@ -1,7 +1,6 @@
 """Планировщик фоновых задач (APScheduler)."""
 
 import logging
-from decimal import Decimal
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -621,88 +620,48 @@ def start_scheduler() -> None:
 
     # Авто-разнесение платежей (ежедневно в 10:00)
     async def _auto_match_payments():
-        from sqlalchemy import select
+        """Разноска платежей через BankMatchingService.
 
+        Прежняя реализация в этом месте была нерабочей и опасной: сравнивала
+        Decimal с float (TypeError на первой паре), читала несуществующие
+        payer_inn и act_number, и писала id АКТА в matched_invoice_id, который
+        ссылается на invoices.id. 15 из 19 id актов совпадают с id счетов, то
+        есть FK пропустил бы запись и платёж оказался бы привязан к чужому
+        счёту. Логика матчинга уже есть в сервисе и покрыта тестами - задача
+        вызывает её, а не reimplements.
+        """
         from app.core.db import SessionLocal
         from app.models.bank_statement import BankTransaction, MatchStatus
-        from app.models.finance import Act
+        from app.services.bank_matching_service import BankMatchingService
 
+        total_matched = 0
         with SessionLocal() as db:
-            try:
-                company_ids = _active_company_ids(db)
-                total_matched = 0
-
-                for cid in company_ids:
-                    payments = (
+            for cid in _active_company_ids(db):
+                try:
+                    txs = (
                         db.execute(
                             select(BankTransaction).where(
                                 BankTransaction.company_id == cid,
-                                BankTransaction.matched_invoice_id.is_(None),
-                                BankTransaction.match_status == "unmatched",
+                                BankTransaction.match_status == MatchStatus.unmatched,
+                                BankTransaction.is_excluded.is_(False),
                             )
                         )
                         .scalars()
                         .all()
                     )
-
-                    unpaid_acts = (
-                        db.execute(
-                            select(Act).where(
-                                Act.company_id == cid,
-                                Act.status.in_(["draft", "sent_to_edo", "signed"]),
-                            )
-                        )
-                        .scalars()
-                        .all()
+                    for tx in txs:
+                        result = BankMatchingService.match_transaction(db, tx, cid)
+                        if result.get("matched"):
+                            total_matched += 1
+                    db.commit()
+                except Exception as e:
+                    # Ошибка одной компании не должна останавливать остальные.
+                    db.rollback()
+                    logger.error(
+                        "❌ Auto-match failed for company %s: %s", cid, e, exc_info=True
                     )
-
-                    for payment in payments:
-                        for act in unpaid_acts:
-                            remaining = (act.total_amount or 0) - (act.paid_amount or 0)
-                            if remaining <= 0:
-                                continue
-                            # Numeric приходит как Decimal: умножение на float
-                            # бросает TypeError, и задача падала целиком при
-                            # первой же паре платёж-акт, откатываясь молча.
-                            tolerance = max(remaining * Decimal("0.01"), Decimal("1"))
-                            amount_match = abs(payment.amount - remaining) < tolerance
-                            inn_match = bool(
-                                payment.payer_inn
-                                and act.counterparty_inn
-                                and payment.payer_inn == act.counterparty_inn
-                            )
-                            purpose_match = bool(
-                                payment.purpose
-                                and act.act_number
-                                and act.act_number.replace("-", "")
-                                in payment.purpose.replace("-", "").replace(" ", "")
-                            )
-
-                            if amount_match and (
-                                inn_match or purpose_match or not act.counterparty_inn
-                            ):
-                                payment.matched_invoice_id = act.id
-                                # Статус обязан следовать за связью: иначе платёж
-                                # выглядит неразнесённым в отчётах и его разнесут
-                                # руками второй раз.
-                                payment.match_status = MatchStatus.auto_matched
-                                act.paid_amount = (
-                                    act.paid_amount or 0
-                                ) + payment.amount
-                                act.payment_status = (
-                                    "paid"
-                                    if act.paid_amount >= act.total_amount
-                                    else "partial"
-                                )
-                                total_matched += 1
-                                break
-
-                db.commit()
-                if total_matched > 0:
-                    logger.info("✅ Auto-match: %d payments matched", total_matched)
-            except Exception as e:
-                logger.error("❌ Auto-match failed: %s", e)
-                db.rollback()
+        if total_matched:
+            logger.info("✅ Auto-match: %d payments matched", total_matched)
 
     scheduler.add_job(
         _auto_match_payments,
