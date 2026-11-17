@@ -725,29 +725,61 @@ def start_scheduler() -> None:
         # логе была бессмысленная "NoneType can't be used in await" вместо
         # настоящей причины.
         try:
-            threshold = 250.0  # Стандартный порог ТО
-
-            # Получаем последние записи моточасов для каждой техники
+            # Порог считается ПО МАШИНЕ. Прежний код сравнивал пожизненные
+            # моточасы с константой 250: любая техника с наработкой больше 250
+            # попадала в "пора ТО" навсегда, потому что абсолютные часы не
+            # убывают после обслуживания. Машина с 510 ч и следующим ТО на 560 ч
+            # объявлялась просроченной, а обслуженная на 760 ч оставалась
+            # просроченной вечно.
+            #
+            # Приоритет: явный next_maintenance_hours, иначе часы последнего ТО
+            # плюс интервал машины (maintenance_interval, дефолт модели 250).
             result = db.execute(
-                select(Vehicle.id, Vehicle.name, Vehicle.company_id).where(
-                    Vehicle.is_deleted.is_(False)
-                )
+                select(
+                    Vehicle.id,
+                    Vehicle.name,
+                    Vehicle.company_id,
+                    Vehicle.engine_hours,
+                    Vehicle.last_maintenance_hours,
+                    Vehicle.next_maintenance_hours,
+                    Vehicle.maintenance_interval,
+                ).where(Vehicle.is_deleted.is_(False))
             )
             vehicles = result.all()
 
             due_count = 0
-            for v_id, v_name, company_id in vehicles:
+            for (
+                v_id,
+                v_name,
+                company_id,
+                v_hours,
+                last_hours,
+                next_hours,
+                interval,
+            ) in vehicles:
                 hours_result = db.execute(
                     select(EngineHoursLog.hours)
                     .where(EngineHoursLog.vehicle_id == v_id)
                     .order_by(EngineHoursLog.date.desc())
                     .limit(1)
                 )
-                row = hours_result.scalar_one_or_none()
-                if row and row >= threshold:
+                logged = hours_result.scalar_one_or_none()
+                # Журнал телематики авторитетнее кэша, но при пустом журнале
+                # берём наработку самой машины, а не считаем её нулевой.
+                hours = float(logged if logged is not None else (v_hours or 0))
+
+                if next_hours is not None:
+                    threshold = float(next_hours)
+                    basis = "next_maintenance_hours"
+                else:
+                    threshold = float(last_hours or 0) + float(interval or 250)
+                    basis = "last + interval"
+
+                if hours >= threshold:
                     due_count += 1
                     logger.warning(
-                        f"🔧 Maintenance due: {v_name} ({row:.0f}h >= {threshold}h)"
+                        f"🔧 Maintenance due: {v_name} "
+                        f"({hours:.0f}h >= {threshold:.0f}h by {basis})"
                     )
 
             if due_count > 0:

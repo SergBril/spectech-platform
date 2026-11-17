@@ -180,3 +180,115 @@ async def test_business_metrics_reflect_the_database(db_session, sample_vehicle)
             _sample(text, "spectech_alerts_active", f'severity="{severity}"')
             is not None
         )
+
+
+async def _maintenance_warnings(db_session) -> list[str]:
+    """Собрать предупреждения о просрочке ТО.
+
+    caplog здесь недоступен: прогон идёт с -p no:logging, отключающим плагин.
+    Перехватываем логгер планировщика напрямую.
+    """
+    with patch("app.tasks.scheduler.logger") as log:
+        await _run("daily_maintenance_due_check", db_session)
+    return [
+        str(c.args[0])
+        for c in log.warning.call_args_list
+        if c.args and "Maintenance due:" in str(c.args[0])
+    ]
+
+
+def _set_vehicle_hours(session, vehicle_id, *, engine_hours, log_hours):
+    """Обновить наработку после запуска задачи.
+
+    Задача закрывает сессию в finally, экземпляры отсоединяются, и обращение к
+    атрибутам падает с DetachedInstanceError. Поэтому обновляем через query.update
+    по id, а не через объект, полученный до запуска.
+    """
+    from app.models.catalog import Vehicle
+    from app.models.telematics import EngineHoursLog
+
+    session.query(Vehicle).filter(Vehicle.id == vehicle_id).update(
+        {"engine_hours": engine_hours}
+    )
+    session.query(EngineHoursLog).filter(
+        EngineHoursLog.vehicle_id == vehicle_id
+    ).update({"hours": log_hours})
+    session.commit()
+
+
+@pytest.mark.asyncio
+async def test_maintenance_threshold_is_per_vehicle(db_session, sample_vehicle):
+    """Порог ТО считается по машине, а не по пожизненной наработке.
+
+    Прежний код сравнивал абсолютные моточасы с константой 250. Такие часы не
+    убывают после обслуживания, поэтому машина оставалась "просроченной"
+    навсегда, а техника с 510 ч при следующем ТО на 560 ч попадала в список
+    без оснований.
+    """
+    from app.models.catalog import Vehicle
+    from app.models.telematics import EngineHoursLog
+
+    vid = sample_vehicle.id
+    cid = sample_vehicle.company_id
+    db_session.query(Vehicle).filter(Vehicle.id == vid).update(
+        {
+            "engine_hours": 510,
+            "last_maintenance_hours": 310,
+            "next_maintenance_hours": 560,
+            "maintenance_interval": 250,
+        }
+    )
+    db_session.add(
+        EngineHoursLog(
+            vehicle_id=vid, company_id=cid, date=datetime.utcnow().date(), hours=510
+        )
+    )
+    db_session.commit()
+
+    assert not await _maintenance_warnings(
+        db_session
+    ), "510 ч при пороге 560 ч не должны считаться просрочкой"
+
+    _set_vehicle_hours(db_session, vid, engine_hours=570, log_hours=570)
+    assert await _maintenance_warnings(
+        db_session
+    ), "570 ч при пороге 560 ч обязаны считаться просрочкой"
+
+
+@pytest.mark.asyncio
+async def test_maintenance_falls_back_to_last_plus_interval(db_session, sample_vehicle):
+    """Без next_maintenance_hours порог = часы последнего ТО + интервал машины."""
+    from app.models.catalog import Vehicle
+    from app.models.telematics import EngineHoursLog
+
+    vid = sample_vehicle.id
+    cid = sample_vehicle.company_id
+    db_session.query(Vehicle).filter(Vehicle.id == vid).update(
+        {
+            "engine_hours": 400,
+            "last_maintenance_hours": 200,
+            "next_maintenance_hours": None,
+            "maintenance_interval": 300,
+        }
+    )
+    db_session.add(
+        EngineHoursLog(
+            vehicle_id=vid, company_id=cid, date=datetime.utcnow().date(), hours=400
+        )
+    )
+    db_session.commit()
+
+    # 200 + 300 = 500, наработка 400 - не пора.
+    assert not await _maintenance_warnings(db_session)
+
+    # Интервал машины 300, а не константа 250: при 200+250=450 наработка 460
+    # дала бы ложное срабатывание.
+    _set_vehicle_hours(db_session, vid, engine_hours=460, log_hours=460)
+    assert not await _maintenance_warnings(
+        db_session
+    ), "460 ч при пороге 500 ч (200+300) не пора; константа 250 дала бы ложное"
+
+    _set_vehicle_hours(db_session, vid, engine_hours=505, log_hours=505)
+    assert await _maintenance_warnings(
+        db_session
+    ), "505 ч при пороге 500 ч обязаны считаться просрочкой"
