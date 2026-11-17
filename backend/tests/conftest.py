@@ -14,6 +14,15 @@ os.environ["MINIO_ACCESS_KEY"] = "test-key"
 os.environ["MINIO_SECRET_KEY"] = "test-secret"
 os.environ["MINIO_BUCKET"] = "test-bucket"
 os.environ["SENTRY_DSN"] = ""
+# Метрики тестов НЕ должны попадать в каталог живого приложения.
+# Regression прогоняется внутри backend-контейнера, где задан
+# PROMETHEUS_MULTIPROC_DIR: без изоляции тестовые значения оказываются в
+# продакшен-дашборде (так там появилась серия severity="high", которой нет
+# в enum alert_severity). Режим выбирается при импорте prometheus_client.values,
+# поэтому присваивание обязано быть раньше любого импорта app.*.
+import tempfile as _tempfile
+
+os.environ["PROMETHEUS_MULTIPROC_DIR"] = _tempfile.mkdtemp(prefix="prom_test_")
 # ======================
 
 # === Учим SQLite понимать PostgreSQL JSONB ===

@@ -37,6 +37,16 @@ fi
 WORKERS=${UVICORN_WORKERS:-4}
 GRACEFUL_TIMEOUT=${UVICORN_GRACEFUL_TIMEOUT:-30}
 
+# Очистка каталога multiprocess-метрик ПЕРЕД стартом воркеров.
+# Live-режимы (livemax/livesum) отбрасывают файлы мёртвых PID, но после
+# рестарта контейнера нумерация PID начинается заново: файлы прошлых воркеров
+# с PID 10-13 совпадают с живыми PID новых и считаются живыми. Из-за этого в
+# дашборде держалась серия severity="high" из тестового прогона.
+if [ -n "$PROMETHEUS_MULTIPROC_DIR" ]; then
+    mkdir -p "$PROMETHEUS_MULTIPROC_DIR"
+    rm -f "$PROMETHEUS_MULTIPROC_DIR"/*.db
+    echo "Cleared multiprocess metrics dir: $PROMETHEUS_MULTIPROC_DIR"
+fi
 echo "Starting Uvicorn with $WORKERS workers, graceful timeout ${GRACEFUL_TIMEOUT}s..."
 exec uvicorn app.main:app \
     --host 0.0.0.0 \

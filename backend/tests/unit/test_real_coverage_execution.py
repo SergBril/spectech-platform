@@ -59,10 +59,12 @@ class TestMetricsRealExecution:
         set_pending_requests(count=3)
 
     def test_set_alerts_active(self):
-        # Line 134: alerts_active.labels().set()
+        # severity берётся из enum alert_severity (info, warning, critical).
+        # Прежний "high" вне enum: тест покрывал строку, а не корректность,
+        # и заодно создавал в дашборде серию, которой не бывает в данных.
         from app.core.metrics import set_active_alerts
 
-        set_active_alerts(severity="high", count=2)
+        set_active_alerts(severity="critical", count=2)
 
 
 class TestAuditServiceRealExecution:
