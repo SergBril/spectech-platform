@@ -170,12 +170,19 @@ class TestNotifyOverdueReceivables:
         session.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_exception_triggers_rollback(self, mock_db):
+    async def test_exception_rolls_back_and_propagates(self, mock_db):
+        """Откат выполняется, но отказ не глотается.
+
+        Проглоченное исключение заставляло APScheduler рапортовать
+        "executed successfully" при провале - так нерабочая задача могла жить
+        незамеченной. Отказ должен дойти до планировщика.
+        """
         mock_sl, session, scalars = mock_db
         session.execute.side_effect = Exception("DB crash")
 
         with patch("app.core.db.SessionLocal", mock_sl):
-            await JOBS["daily_overdue_receivables"]()
+            with pytest.raises(Exception, match="DB crash"):
+                await JOBS["daily_overdue_receivables"]()
 
         session.rollback.assert_called_once()
         session.commit.assert_not_called()
@@ -374,7 +381,13 @@ class TestAutoGenerateAndSendActs:
         session.commit.assert_called()
 
     @pytest.mark.asyncio
-    async def test_exception_triggers_rollback(self, mock_db):
+    async def test_exception_rolls_back_and_propagates(self, mock_db):
+        """Откат выполняется, но отказ не глотается.
+
+        Проглоченное исключение заставляло APScheduler рапортовать
+        "executed successfully" при провале - так нерабочая задача могла жить
+        незамеченной. Отказ должен дойти до планировщика.
+        """
         mock_sl, session, scalars = mock_db
         session.execute.side_effect = Exception("DB crash")
 
@@ -383,6 +396,7 @@ class TestAutoGenerateAndSendActs:
         with patch("datetime.date") as mock_date:
             mock_date.today.return_value = date(2026, 11, 1)
             with patch("app.core.db.SessionLocal", mock_sl):
-                await JOBS["monthly_auto_acts"]()
+                with pytest.raises(Exception, match="DB crash"):
+                    await JOBS["monthly_auto_acts"]()
 
         session.rollback.assert_called_once()

@@ -78,5 +78,6 @@ class TestStartSchedulerDeep:
         mock_session_local.return_value = mock_db
         with patch("app.tasks.scheduler.dispute_service") as mock_dispute:
             mock_dispute.auto_escalate_overdue.side_effect = RuntimeError("fail")
-            await auto_escalate_disputes_task()
+            with pytest.raises(RuntimeError, match="fail"):
+                await auto_escalate_disputes_task()
             mock_db.close.assert_called()

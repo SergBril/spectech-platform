@@ -43,7 +43,8 @@ class TestSchedulerPublicAPI:
         mock_db = MagicMock()
         mock_session_local.return_value = mock_db
         mock_dispute.auto_escalate_overdue.side_effect = RuntimeError("DB error")
-        await auto_escalate_disputes_task()
+        with pytest.raises(RuntimeError, match="DB error"):
+            await auto_escalate_disputes_task()
         mock_db.close.assert_called_once()
 
     def test_get_scheduler_status(self):

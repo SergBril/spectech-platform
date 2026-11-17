@@ -2,6 +2,7 @@
 
 import logging
 
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select
@@ -15,6 +16,27 @@ logger = logging.getLogger("spectech.scheduler")
 
 # Глобальный экземпляр планировщика
 scheduler = AsyncIOScheduler(timezone="UTC")
+
+
+def _on_scheduler_job_event(event) -> None:
+    """Провал задачи должен быть виден, а не только оседать в логе.
+
+    APScheduler рапортует "executed successfully", если задача проглотила
+    исключение. Именно так нерабочая разноска платежей прожила незамеченной.
+    Задачи теперь поднимают отказ, а этот слушатель делает его явным.
+    """
+    exc = getattr(event, "exception", None)
+    if exc is not None:
+        logger.error(
+            "🔴 Scheduler job FAILED: %s",
+            event.job_id,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+    else:
+        logger.warning("⚠️ Scheduler job MISSED its run time: %s", event.job_id)
+
+
+scheduler.add_listener(_on_scheduler_job_event, EVENT_JOB_ERROR | EVENT_JOB_MISSED)
 
 
 async def auto_escalate_disputes_task() -> None:
@@ -33,6 +55,7 @@ async def auto_escalate_disputes_task() -> None:
             logger.debug("No overdue disputes found")
     except Exception as e:
         logger.error("Error in auto_escalate_disputes_task: %s", e, exc_info=True)
+        raise
     finally:
         db.close()
 
@@ -149,6 +172,7 @@ def start_scheduler() -> None:
             logger.info("📧 Weekly digest completed: %s", result)
         except Exception as e:
             logger.error("Error in weekly_digest_task: %s", e, exc_info=True)
+            raise
         finally:
             db.close()
 
@@ -200,6 +224,7 @@ def start_scheduler() -> None:
             except Exception as e:
                 logger.error("❌ Daily alerts check failed: %s", e)
                 db.rollback()
+                raise
 
     scheduler.add_job(
         _check_daily_alerts,
@@ -281,6 +306,7 @@ def start_scheduler() -> None:
             except Exception as e:
                 logger.error("❌ Fuel anomaly check failed: %s", e)
                 db.rollback()
+                raise
 
     scheduler.add_job(
         _check_fuel_anomalies,
@@ -372,6 +398,7 @@ def start_scheduler() -> None:
             except Exception as e:
                 logger.error("❌ Auto acts generation failed: %s", e)
                 db.rollback()
+                raise
 
     scheduler.add_job(
         _auto_generate_and_send_acts,
@@ -485,6 +512,7 @@ def start_scheduler() -> None:
             except Exception as e:
                 logger.error("❌ Act status check failed: %s", e)
                 db.rollback()
+                raise
 
     scheduler.add_job(
         _check_act_statuses,
@@ -609,6 +637,7 @@ def start_scheduler() -> None:
             except Exception as e:
                 logger.error("❌ Overdue notification failed: %s", e)
                 db.rollback()
+                raise
 
     scheduler.add_job(
         _notify_overdue_receivables,
@@ -717,6 +746,7 @@ def start_scheduler() -> None:
                 logger.debug("Maintenance due check: all clear")
         except Exception as e:
             logger.error(f"Maintenance due check failed: {e}")
+            raise
         finally:
             await db.close()
 
@@ -752,6 +782,7 @@ def start_scheduler() -> None:
                 logger.debug("Pending payouts check: all clear")
         except Exception as e:
             logger.error(f"Pending payouts check failed: {e}")
+            raise
         finally:
             await db.close()
 
@@ -787,6 +818,7 @@ def start_scheduler() -> None:
         except Exception as e:
             logger.error(f"Session cleanup failed: {e}")
             await db.rollback()
+            raise
         finally:
             await db.close()
 
@@ -832,6 +864,7 @@ def start_scheduler() -> None:
             )
         except Exception as e:
             logger.error(f"Daily report failed: {e}")
+            raise
         finally:
             await db.close()
 
@@ -867,6 +900,7 @@ def start_scheduler() -> None:
                 logger.debug("Overdue invoices check: all clear")
         except Exception as e:
             logger.error(f"Overdue invoices check failed: {e}")
+            raise
         finally:
             await db.close()
 
