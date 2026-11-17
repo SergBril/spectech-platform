@@ -712,23 +712,28 @@ def start_scheduler() -> None:
         from app.models.telematics import EngineHoursLog
 
         db = SessionLocal()
+        # SessionLocal - синхронный sessionmaker; асинхронной фабрики в
+        # app.core.db нет. Await на синхронном вызове падал, а await db.close()
+        # в finally бросал TypeError и ЗАМЕЩАЛ исходную ошибку, из-за чего в
+        # логе была бессмысленная "NoneType can't be used in await" вместо
+        # настоящей причины.
         try:
             threshold = 250.0  # Стандартный порог ТО
 
             # Получаем последние записи моточасов для каждой техники
-            result = await db.execute(
+            result = db.execute(
                 select(Vehicle.id, Vehicle.name, Vehicle.company_id).where(
-                    Vehicle.is_active == True
+                    Vehicle.is_deleted.is_(False)
                 )
             )
             vehicles = result.all()
 
             due_count = 0
             for v_id, v_name, company_id in vehicles:
-                hours_result = await db.execute(
-                    select(EngineHoursLog.total_hours)
+                hours_result = db.execute(
+                    select(EngineHoursLog.hours)
                     .where(EngineHoursLog.vehicle_id == v_id)
-                    .order_by(EngineHoursLog.recorded_at.desc())
+                    .order_by(EngineHoursLog.date.desc())
                     .limit(1)
                 )
                 row = hours_result.scalar_one_or_none()
@@ -748,7 +753,7 @@ def start_scheduler() -> None:
             logger.error(f"Maintenance due check failed: {e}")
             raise
         finally:
-            await db.close()
+            db.close()
 
     scheduler.add_job(
         _check_maintenance_due,
@@ -765,14 +770,19 @@ def start_scheduler() -> None:
         from sqlalchemy import func, select
 
         from app.core.db import SessionLocal
-        from app.models.finance import Payout
+        from app.models.finance import DocumentStatus, Payout
 
         db = SessionLocal()
+        # SessionLocal - синхронный sessionmaker; асинхронной фабрики в
+        # app.core.db нет. Await на синхронном вызове падал, а await db.close()
+        # в finally бросал TypeError и ЗАМЕЩАЛ исходную ошибку, из-за чего в
+        # логе была бессмысленная "NoneType can't be used in await" вместо
+        # настоящей причины.
         try:
             cutoff = datetime.utcnow() - timedelta(days=3)
-            result = await db.execute(
+            result = db.execute(
                 select(func.count(Payout.id))
-                .where(Payout.status == "pending")
+                .where(Payout.status.in_([DocumentStatus.draft, DocumentStatus.sent]))
                 .where(Payout.created_at < cutoff)
             )
             count = result.scalar() or 0
@@ -784,7 +794,7 @@ def start_scheduler() -> None:
             logger.error(f"Pending payouts check failed: {e}")
             raise
         finally:
-            await db.close()
+            db.close()
 
     scheduler.add_job(
         _check_pending_payouts,
@@ -803,10 +813,15 @@ def start_scheduler() -> None:
         from app.core.db import SessionLocal
 
         db = SessionLocal()
+        # SessionLocal - синхронный sessionmaker; асинхронной фабрики в
+        # app.core.db нет. Await на синхронном вызове падал, а await db.close()
+        # в finally бросал TypeError и ЗАМЕЩАЛ исходную ошибку, из-за чего в
+        # логе была бессмысленная "NoneType can't be used in await" вместо
+        # настоящей причины.
         try:
             # Очищаем истёкшие записи gps_sync_logs старше 30 дней
             cutoff = datetime.utcnow() - __import__("datetime").timedelta(days=30)
-            result = await db.execute(
+            result = db.execute(
                 text("DELETE FROM gps_sync_logs WHERE created_at < :cutoff"),
                 {"cutoff": cutoff},
             )
@@ -814,13 +829,13 @@ def start_scheduler() -> None:
             if deleted > 0:
                 logger.info(f"🧹 Cleaned up {deleted} old gps_sync_logs entries")
 
-            await db.commit()
+            db.commit()
         except Exception as e:
             logger.error(f"Session cleanup failed: {e}")
-            await db.rollback()
+            db.rollback()
             raise
         finally:
-            await db.close()
+            db.close()
 
     scheduler.add_job(
         _cleanup_expired_sessions,
@@ -842,18 +857,23 @@ def start_scheduler() -> None:
         from app.models.shift import ShiftTask
 
         db = SessionLocal()
+        # SessionLocal - синхронный sessionmaker; асинхронной фабрики в
+        # app.core.db нет. Await на синхронном вызове падал, а await db.close()
+        # в finally бросал TypeError и ЗАМЕЩАЛ исходную ошибку, из-за чего в
+        # логе была бессмысленная "NoneType can't be used in await" вместо
+        # настоящей причины.
         try:
             yesterday = date_type.today() - timedelta(days=1)
 
-            shifts_result = await db.execute(
+            shifts_result = db.execute(
                 select(func.count(ShiftTask.id)).where(
-                    func.date(ShiftTask.planned_start) == yesterday
+                    ShiftTask.shift_date == yesterday
                 )
             )
             shifts_count = shifts_result.scalar() or 0
 
-            invoices_result = await db.execute(
-                select(func.sum(Invoice.total_amount))
+            invoices_result = db.execute(
+                select(func.sum(Invoice.total))
                 .where(func.date(Invoice.created_at) == yesterday)
                 .where(Invoice.status == "paid")
             )
@@ -866,7 +886,7 @@ def start_scheduler() -> None:
             logger.error(f"Daily report failed: {e}")
             raise
         finally:
-            await db.close()
+            db.close()
 
     scheduler.add_job(
         _send_daily_company_report,
@@ -883,14 +903,27 @@ def start_scheduler() -> None:
         from sqlalchemy import func, select
 
         from app.core.db import SessionLocal
-        from app.models.finance import Invoice
+        from app.models.finance import DocumentStatus, Invoice
 
         db = SessionLocal()
+        # SessionLocal - синхронный sessionmaker; асинхронной фабрики в
+        # app.core.db нет. Await на синхронном вызове падал, а await db.close()
+        # в finally бросал TypeError и ЗАМЕЩАЛ исходную ошибку, из-за чего в
+        # логе была бессмысленная "NoneType can't be used in await" вместо
+        # настоящей причины.
         try:
             today = date_type.today()
-            result = await db.execute(
+            result = db.execute(
                 select(func.count(Invoice.id))
-                .where(Invoice.status.in_(["sent", "approved"]))
+                .where(
+                    Invoice.status.in_(
+                        [
+                            DocumentStatus.sent,
+                            DocumentStatus.partially_paid,
+                            DocumentStatus.overdue,
+                        ]
+                    )
+                )
                 .where(Invoice.due_date < today)
             )
             count = result.scalar() or 0
@@ -902,7 +935,7 @@ def start_scheduler() -> None:
             logger.error(f"Overdue invoices check failed: {e}")
             raise
         finally:
-            await db.close()
+            db.close()
 
     scheduler.add_job(
         _check_overdue_invoices,
