@@ -204,157 +204,119 @@ class TestNotifyOverdueReceivables:
 
 
 class TestAutoMatchPayments:
-    """Tests for _auto_match_payments (100 lines)."""
+    """Разноска платежей делегируется BankMatchingService.
+
+    Прежние тесты этого класса собирали MagicMock с payer_inn и SimpleNamespace
+    с act_number - таких полей в моделях нет. Голый MagicMock принимает любой
+    атрибут, поэтому тесты оставались зелёными, пока задача падала на реальных
+    данных каждый день в 10:00. Теперь моки со spec, а контракт полей закреплён
+    отдельным тестом.
+    """
 
     @pytest.mark.asyncio
     async def test_no_companies(self, mock_db):
         mock_sl, session, scalars = mock_db
         scalars.all.return_value = []
 
-        with patch("app.core.db.SessionLocal", mock_sl):
+        with (
+            patch("app.core.db.SessionLocal", mock_sl),
+            patch(
+                "app.services.bank_matching_service.BankMatchingService.match_transaction"
+            ) as m,
+        ):
             await JOBS["daily_auto_match_payments"]()
 
+        m.assert_not_called()
+        session.commit.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delegates_each_transaction_with_its_own_company(self, mock_db):
+        from app.models.bank_statement import BankTransaction
+
+        mock_sl, session, scalars = mock_db
+        tx1 = MagicMock(spec=BankTransaction)
+        tx2 = MagicMock(spec=BankTransaction)
+        scalars.all.side_effect = [[7, 9], [tx1], [tx2]]
+
+        with (
+            patch("app.core.db.SessionLocal", mock_sl),
+            patch(
+                "app.services.bank_matching_service.BankMatchingService.match_transaction",
+                return_value={"matched": True},
+            ) as m,
+        ):
+            await JOBS["daily_auto_match_payments"]()
+
+        assert m.call_count == 2
+        assert m.call_args_list[0].args[2] == 7
+        assert m.call_args_list[1].args[2] == 9
+        assert session.commit.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_unmatched_result_does_not_break_the_run(self, mock_db):
+        from app.models.bank_statement import BankTransaction
+
+        mock_sl, session, scalars = mock_db
+        scalars.all.side_effect = [[1], [MagicMock(spec=BankTransaction)]]
+
+        with (
+            patch("app.core.db.SessionLocal", mock_sl),
+            patch(
+                "app.services.bank_matching_service.BankMatchingService.match_transaction",
+                return_value={"matched": False},
+            ) as m,
+        ):
+            await JOBS["daily_auto_match_payments"]()
+
+        assert m.call_count == 1
         session.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_no_unmatched_payments(self, mock_db):
-        mock_sl, session, scalars = mock_db
-        scalars.all.side_effect = [[1], [], []]
+    async def test_one_company_failure_does_not_stop_the_others(self, mock_db):
+        from app.models.bank_statement import BankTransaction
 
-        with patch("app.core.db.SessionLocal", mock_sl):
+        mock_sl, session, scalars = mock_db
+        tx = MagicMock(spec=BankTransaction)
+        scalars.all.side_effect = [[1, 2], [tx], [tx]]
+
+        with (
+            patch("app.core.db.SessionLocal", mock_sl),
+            patch(
+                "app.services.bank_matching_service.BankMatchingService.match_transaction",
+                side_effect=[Exception("boom"), {"matched": True}],
+            ) as m,
+        ):
             await JOBS["daily_auto_match_payments"]()
 
+        assert m.call_count == 2
+        session.rollback.assert_called_once()
         session.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_match_by_amount_and_inn(self, mock_db):
-        mock_sl, session, scalars = mock_db
-        payment = MagicMock(
-            amount=10000,
-            payer_inn="1234567890",
-            matched_invoice_id=None,
-            purpose="",
-            match_status="unmatched",
-        )
-        from types import SimpleNamespace
+    async def test_failure_reading_companies_is_not_swallowed(self, mock_db):
+        """Отказ чтения списка компаний должен быть виден планировщику.
 
-        act = SimpleNamespace(
-            id=42,
-            total_amount=10000,
-            paid_amount=0,
-            counterparty_inn="1234567890",
-            act_number="ACT-001",
-            payment_status="unpaid",
-        )
-
-        scalars.all.side_effect = [[1], [payment], [act]]
-
-        with patch("app.core.db.SessionLocal", mock_sl):
-            await JOBS["daily_auto_match_payments"]()
-
-        assert payment.matched_invoice_id == 42
-        assert act.paid_amount == 10000
-        assert act.payment_status == "paid"
-        session.commit.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_match_by_amount_and_purpose(self, mock_db):
-        mock_sl, session, scalars = mock_db
-        payment = MagicMock(
-            amount=5000,
-            payer_inn=None,
-            matched_invoice_id=None,
-            purpose="Оплата ACT-2024-001",
-            match_status="unmatched",
-        )
-        from types import SimpleNamespace
-
-        act = SimpleNamespace(
-            id=10,
-            total_amount=5000,
-            paid_amount=0,
-            counterparty_inn=None,
-            act_number="ACT-2024-001",
-            payment_status="unpaid",
-        )
-
-        scalars.all.side_effect = [[1], [payment], [act]]
-
-        with patch("app.core.db.SessionLocal", mock_sl):
-            await JOBS["daily_auto_match_payments"]()
-
-        assert payment.matched_invoice_id == 10
-        assert act.payment_status == "paid"
-
-    @pytest.mark.asyncio
-    async def test_completes_partial_to_paid(self, mock_db):
-        mock_sl, session, scalars = mock_db
-        payment = MagicMock(
-            amount=3000,
-            payer_inn="111",
-            matched_invoice_id=None,
-            purpose="",
-            match_status="unmatched",
-        )
-        from types import SimpleNamespace
-
-        # remaining = 10000 - 7000 = 3000, payment.amount = 3000 -> exact match
-        act = SimpleNamespace(
-            id=5,
-            total_amount=10000,
-            paid_amount=7000,
-            counterparty_inn="111",
-            act_number="X",
-            payment_status="partial",
-        )
-
-        scalars.all.side_effect = [[1], [payment], [act]]
-
-        with patch("app.core.db.SessionLocal", mock_sl):
-            await JOBS["daily_auto_match_payments"]()
-
-        assert act.paid_amount == 10000  # 7000 + 3000
-        assert act.payment_status == "paid"  # now fully paid
-
-    @pytest.mark.asyncio
-    async def test_no_match_different_amount(self, mock_db):
-        mock_sl, session, scalars = mock_db
-        payment = MagicMock(
-            amount=999,
-            payer_inn="111",
-            matched_invoice_id=None,
-            purpose="",
-            match_status="unmatched",
-        )
-        from types import SimpleNamespace
-
-        act = SimpleNamespace(
-            id=5,
-            total_amount=10000,
-            paid_amount=0,
-            counterparty_inn="111",
-            act_number="X",
-            payment_status="unpaid",
-        )
-
-        scalars.all.side_effect = [[1], [payment], [act]]
-
-        with patch("app.core.db.SessionLocal", mock_sl):
-            await JOBS["daily_auto_match_payments"]()
-
-        assert payment.matched_invoice_id is None
-        session.commit.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_exception_triggers_rollback(self, mock_db):
+        Прежняя реализация глотала всё широким except, и APScheduler рапортовал
+        "executed successfully" при провале - именно это скрыло нерабочую
+        разноску. Ошибка вне цикла по компаниям пусть поднимается.
+        """
         mock_sl, session, scalars = mock_db
         session.execute.side_effect = Exception("DB crash")
 
         with patch("app.core.db.SessionLocal", mock_sl):
-            await JOBS["daily_auto_match_payments"]()
+            with pytest.raises(Exception, match="DB crash"):
+                await JOBS["daily_auto_match_payments"]()
 
-        session.rollback.assert_called_once()
         session.commit.assert_not_called()
+
+    def test_fields_the_old_implementation_invented_do_not_exist(self):
+        from app.models.bank_statement import BankTransaction
+        from app.models.finance import Act
+
+        assert not hasattr(BankTransaction, "payer_inn")
+        assert hasattr(BankTransaction, "counterparty_inn")
+        assert not hasattr(Act, "act_number")
+        assert hasattr(Act, "document_number")
 
 
 class TestAutoGenerateAndSendActs:
