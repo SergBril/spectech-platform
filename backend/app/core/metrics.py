@@ -85,6 +85,17 @@ cache_misses_total = Counter(
 # ═══════════════════════════════════════════════════════════════
 
 
+maintenance_due_without_order = Gauge(
+    "spectech_maintenance_due_without_order",
+    "Техника, достигшая порога ТО и не имеющая активного наряда",
+)
+
+
+def set_maintenance_due_without_order(count: int) -> None:
+    """Вызывается из обновления бизнес-метрик; ноль означает отсутствие просрочки."""
+    maintenance_due_without_order.set(count)
+
+
 scheduler_job_failures_total = Counter(
     "scheduler_job_failures_total",
     "Провалы задач планировщика по job_id",

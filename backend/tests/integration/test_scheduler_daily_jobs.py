@@ -347,13 +347,15 @@ async def test_maintenance_skips_vehicle_with_active_order(
     )
     db_session.add(order)
     db_session.commit()
+    # Задача закрывает сессию в finally, объект отсоединяется.
+    order_id = order.id
 
     assert not await _maintenance_warnings(
         db_session
     ), "машина с planned-нарядом уже в работе и не должна попадать в предупреждения"
 
     # Завершённый наряд не считается активным: после ТО наработка снова выросла.
-    db_session.query(MaintenanceOrder).filter(MaintenanceOrder.id == order.id).update(
+    db_session.query(MaintenanceOrder).filter(MaintenanceOrder.id == order_id).update(
         {"status": MaintenanceOrderStatus.completed}
     )
     db_session.commit()

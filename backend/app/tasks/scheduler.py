@@ -720,112 +720,31 @@ def start_scheduler() -> None:
     # === PHASE 4: New scheduled tasks ===
 
     async def _check_maintenance_due():
-        """Проверка техники, требующей ТО по моточасам."""
+        """Проверка техники, требующей ТО по моточасам.
 
-        from sqlalchemy import select
-
+        Расчёт живёт в maintenance_service.find_vehicles_due_without_order -
+        одном источнике правды для этой задачи и для минутного гейджа.
+        """
         from app.core.db import SessionLocal
-        from app.models.catalog import Vehicle
-        from app.models.maintenance import (
-            MaintenanceOrder,
-            MaintenanceOrderStatus,
-            MaintenanceOrderType,
-        )
-        from app.models.telematics import EngineHoursLog
+        from app.services.maintenance_service import find_vehicles_due_without_order
 
         db = SessionLocal()
         # SessionLocal - синхронный sessionmaker; асинхронной фабрики в
         # app.core.db нет. Await на синхронном вызове падал, а await db.close()
-        # в finally бросал TypeError и ЗАМЕЩАЛ исходную ошибку, из-за чего в
-        # логе была бессмысленная "NoneType can't be used in await" вместо
-        # настоящей причины.
+        # в finally бросал TypeError и ЗАМЕЩАЛ исходную ошибку.
         try:
-            # Порог считается ПО МАШИНЕ. Прежний код сравнивал пожизненные
-            # моточасы с константой 250: любая техника с наработкой больше 250
-            # попадала в "пора ТО" навсегда, потому что абсолютные часы не
-            # убывают после обслуживания. Машина с 510 ч и следующим ТО на 560 ч
-            # объявлялась просроченной, а обслуженная на 760 ч оставалась
-            # просроченной вечно.
-            #
-            # Приоритет: явный next_maintenance_hours, иначе часы последнего ТО
-            # плюс интервал машины (maintenance_interval, дефолт модели 250).
-            result = db.execute(
-                select(
-                    Vehicle.id,
-                    Vehicle.name,
-                    Vehicle.company_id,
-                    Vehicle.engine_hours,
-                    Vehicle.last_maintenance_hours,
-                    Vehicle.next_maintenance_hours,
-                    Vehicle.maintenance_interval,
-                ).where(Vehicle.is_deleted.is_(False))
-            )
-            vehicles = result.all()
-
-            due_count = 0
-            for (
-                v_id,
-                v_name,
-                company_id,
-                v_hours,
-                last_hours,
-                next_hours,
-                interval,
-            ) in vehicles:
-                hours_result = db.execute(
-                    select(EngineHoursLog.hours)
-                    .where(EngineHoursLog.vehicle_id == v_id)
-                    .order_by(EngineHoursLog.date.desc())
-                    .limit(1)
-                )
-                logged = hours_result.scalar_one_or_none()
-                # Журнал телематики авторитетнее кэша, но при пустом журнале
-                # берём наработку самой машины, а не считаем её нулевой.
-                hours = float(logged if logged is not None else (v_hours or 0))
-
-                if next_hours is not None:
-                    threshold = float(next_hours)
-                    basis = "next_maintenance_hours"
-                else:
-                    threshold = float(last_hours or 0) + float(interval or 250)
-                    basis = "last + interval"
-
-                if hours < threshold:
-                    continue
-
-                # Машина с активным нарядом уже в работе: кричать о ней значит
-                # приучать оператора игнорировать предупреждения. Тот же пропуск
-                # делает MaintenanceService.check_scheduled_maintenance.
-                active_scheduled = (
-                    db.query(MaintenanceOrder)
-                    .filter(
-                        MaintenanceOrder.vehicle_id == v_id,
-                        MaintenanceOrder.order_type == MaintenanceOrderType.scheduled,
-                        MaintenanceOrder.status.in_(
-                            [
-                                MaintenanceOrderStatus.planned,
-                                MaintenanceOrderStatus.in_progress,
-                            ]
-                        ),
-                    )
-                    .first()
-                )
-                if active_scheduled:
-                    logger.debug(
-                        f"🔧 Maintenance already scheduled: {v_name} "
-                        f"(order {active_scheduled.order_number})"
-                    )
-                    continue
-
-                due_count += 1
+            due = find_vehicles_due_without_order(db)
+            for item in due:
                 logger.warning(
-                    f"🔧 Maintenance due without order: {v_name} "
-                    f"({hours:.0f}h >= {threshold:.0f}h by {basis})"
+                    "🔧 Maintenance due without order: %s (%.0fh >= %.0fh by %s)",
+                    item["vehicle_name"],
+                    item["hours"],
+                    item["threshold"],
+                    item["basis"],
                 )
-
-            if due_count > 0:
+            if due:
                 logger.info(
-                    f"🔧 Maintenance due check: {due_count} vehicles need an order"
+                    "🔧 Maintenance due check: %d vehicles need an order", len(due)
                 )
             else:
                 logger.debug("Maintenance due check: all clear")
@@ -1040,6 +959,7 @@ def start_scheduler() -> None:
             db_connections_active,
             set_active_alerts,
             set_active_vehicles,
+            set_maintenance_due_without_order,
             set_pending_requests,
         )
         from app.models.catalog import Vehicle
@@ -1067,6 +987,14 @@ def start_scheduler() -> None:
                     .where(Alert.status != "resolved")
                 ).scalar()
                 set_active_alerts(severity, count or 0)
+
+            # Просрочка ТО без наряда: находка должна быть видна на дашборде,
+            # а не только в логе, который никто не читает.
+            from app.services.maintenance_service import (
+                find_vehicles_due_without_order,
+            )
+
+            set_maintenance_due_without_order(len(find_vehicles_due_without_order(db)))
 
             db_connections_active.set(engine.pool.checkedout())
             logger.debug(
