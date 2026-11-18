@@ -96,6 +96,50 @@ groups:
           summary: "Disk space low"
           description: "Only {{ $value | humanizePercentage }} disk space remaining"
 
+      # Системный диск WINDOWS (C:), а не корень VM. node-exporter отдаёт его
+      # как mountpoint="/mnt/host/c" (fstype 9p, device C:\). Инцидент: C: упал
+      # до 1.6 ГБ из 128.85 (1.2%) — стек чуть не встал, алертов не было
+      # (DiskSpaceLow смотрит только mountpoint="/" — корень VM на D:).
+      # Явные исключения (НЕ через fstype):
+      #  - точный mountpoint="/mnt/host/c" отсекает ДУБЛИ того же физического
+      #    диска /parent-distro/mnt/host/c и /run/desktop/mnt/host/c (иначе
+      #    было бы 3 алерта об одном диске);
+      #  - node_filesystem_readonly==0 отсекает read-only монтирования WSL2
+      #    (usr/lib/wsl/drivers, linux-headers и пр. с 0-1% свободного — они
+      #    не могут освободиться и не должны порождать алерты).
+      # Порог 10% (≈12.9 ГБ из 128.85): текущие 10.6% (13.65 ГБ) чуть выше —
+      # в покое не firing; при просадке к зоне инцидента предупредит. 15%
+      # сработало бы прямо сейчас (10.6% < 15%), поэтому не подходит.
+      - alert: HostDiskSpaceLow
+        expr: |
+          (
+            node_filesystem_avail_bytes{job="node-exporter", mountpoint="/mnt/host/c"}
+            / node_filesystem_size_bytes{job="node-exporter", mountpoint="/mnt/host/c"}
+          ) < 0.10
+          and node_filesystem_readonly{job="node-exporter", mountpoint="/mnt/host/c"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Windows host disk C: space low (not the VM root)"
+          description: "Windows system disk C: (mountpoint /mnt/host/c) has {{ $value | humanizePercentage }} free — this is the HOST disk, not the Docker VM root."
+
+      # Критичный уровень <5% (≈6.4 ГБ): отдельный порог, чтобы page-ить до
+      # точки коллапса стека (инцидент 1.6 ГБ / 1.2%), а не ждать одного warning.
+      - alert: HostDiskSpaceCritical
+        expr: |
+          (
+            node_filesystem_avail_bytes{job="node-exporter", mountpoint="/mnt/host/c"}
+            / node_filesystem_size_bytes{job="node-exporter", mountpoint="/mnt/host/c"}
+          ) < 0.05
+          and node_filesystem_readonly{job="node-exporter", mountpoint="/mnt/host/c"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Windows host disk C: critically low (not the VM root)"
+          description: "Windows system disk C: (mountpoint /mnt/host/c) has {{ $value | humanizePercentage }} free — imminent risk to the stack (incident at 1.2%)."
+
       # ─── Container ────────────────────────────────────────
       # container_last_seen — отметка времени (растёт монотонно у живого
       # контейнера), поэтому increase(...)≈3600 у здоровых и старое ">3"
