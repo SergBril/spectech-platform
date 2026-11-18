@@ -129,6 +129,35 @@ class VehicleBase(BaseModel):
         description="Посменная ставка аренды (₽/смена)",
         examples=[Decimal("20000.00")],
     )
+    # === ТО: поля существовали в модели, но были недоступны через API ===
+    # Интервал нельзя было задать: все машины получали дефолт 250 независимо
+    # от типа и условий работы. Для экскаватора CAT регламент 500 м/ч, для
+    # самосвала на стройплощадке КАМАЗ предписывает 600 м/ч.
+    maintenance_interval: int = Field(
+        250,
+        ge=1,
+        le=100000,
+        description="Интервал ТО в моточасах (регламент производителя)",
+        examples=[250, 500, 600],
+    )
+    engine_hours: Decimal = Field(
+        Decimal("0"),
+        ge=0,
+        description="Текущая наработка по счётчику моточасов (фактическое показание)",
+        examples=[Decimal("760.00")],
+    )
+    last_maintenance_hours: Decimal | None = Field(
+        None,
+        ge=0,
+        description="Показание моточасов при последнем ТО",
+        examples=[Decimal("500.00")],
+    )
+    next_maintenance_hours: Decimal | None = Field(
+        None,
+        ge=0,
+        description="Показание моточасов для следующего ТО (пусто = последнее + интервал)",
+        examples=[Decimal("750.00")],
+    )
 
 
 class VehicleCreate(VehicleBase):
@@ -148,6 +177,10 @@ class VehicleUpdate(BaseModel):
     fuel_norm_per_hour: Decimal | None = Field(None, ge=0)
     fuel_norm_per_100km: Decimal | None = Field(None, ge=0)
     psm_number: str | None = Field(None, max_length=100)
+    maintenance_interval: int | None = Field(None, ge=1, le=100000)
+    engine_hours: Decimal | None = Field(None, ge=0)
+    last_maintenance_hours: Decimal | None = Field(None, ge=0)
+    next_maintenance_hours: Decimal | None = Field(None, ge=0)
     osago_expiry_date: date | None = None
     category_id: int | None = None
     subcategory_id: int | None = None
