@@ -307,9 +307,10 @@ services:
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: spectech-cadvisor
-    # ContainerRestarting фильтрует container_last_seen{name=~"spectech-.*"} —
-    # нужен доступ к docker runtime и cgroups хоста.
-    privileged: true
+    # Минимальные привилегии вместо privileged: container-метрики (включая
+    # container_last_seen для ContainerRestarting) читаются из cgroups через
+    # ro-монтирования /sys, /var/lib/docker и docker-socket /var/run.
+    # privileged не требуется и мог дестабилизировать Docker Desktop VM.
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro

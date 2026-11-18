@@ -125,3 +125,42 @@ groups:
         annotations:
           summary: "Задача {{ $labels.job_id }} пропустила время запуска"
           description: "Пропусков за час: {{ $value }}. Проверь нагрузку и misfire_grace_time."
+
+  - name: target_health
+    rules:
+      # Смерть ЛЮБОГО таргета/экспортёра. Prometheus эмитит up для каждого
+      # активного scrape job, поэтому up==0 покрывает все job без перечисления.
+      # Закрывает слепоту: остановка экспортёра делала pg_up/redis_up
+      # исчезающими, и pg_up==0/redis_up==0 не срабатывали — смерть самого
+      # экспортёра не была видна никак.
+      - alert: TargetDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Target {{ $labels.job }}/{{ $labels.instance }} is down"
+          description: "Prometheus не может scrape-ить {{ $labels.instance }} (job {{ $labels.job }}) более 1 минуты."
+
+      # Полное исчезновение таргета из service discovery: up для job тоже
+      # исчезает, и up==0 не сработает (нет серии). Закрываем absent_over_time
+      # per-job. Выбор absent_over_time, а не absent(): окно 5m (~20 scrape-
+      # интервалов по 15s) не флапает на кратких reload/рестартах Prometheus;
+      # absent() срабатывал бы мгновенно на любой пустой выдаче. Селекторы
+      # несут job-метку, поэтому алерт приходит per-job. Перечисление job
+      # осознанное (static_configs Compose): новый job up==0 покроет
+      # автоматически, а сюда его нужно добавить явно.
+      - alert: TargetAbsent
+        expr: |
+          absent_over_time(up{job="spectech-backend"}[5m])
+          or absent_over_time(up{job="prometheus"}[5m])
+          or absent_over_time(up{job="postgres-exporter"}[5m])
+          or absent_over_time(up{job="redis-exporter"}[5m])
+          or absent_over_time(up{job="node-exporter"}[5m])
+          or absent_over_time(up{job="cadvisor"}[5m])
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Job {{ $labels.job }} исчез из service discovery"
+          description: "Нет ни одного образца up для job {{ $labels.job }} за 5 минут — таргет удалён из discovery или изменена конфигурация Prometheus."
