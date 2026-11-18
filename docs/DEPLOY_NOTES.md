@@ -66,39 +66,96 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-## Инвентаризация алертов (17.11.2026)
+## Инвентаризация алертов (18.11.2026)
 
-Проверено исполнением выражений через API Prometheus, а не чтением файлов.
+Проверено исполнением выражений через API Prometheus и саботажем, не чтением
+файлов. **16 правил в 4 группах, ноль слепых, ноль firing в покое.**
 
-**Что было сломано:** в `prometheus.yml` не было секции `rule_files`. Файл с
-правилами был смонтирован и валиден, но не загружался: API отдавал ноль групп.
-Десять алертов, написанных ранее, никогда не вычислялись.
+| Правило | Состояние | Чем подтверждено |
+|---|---|---|
+| BackendDown | armed | up=6 серий, все job=1 |
+| TargetDown | armed | саботаж: stop redis-exporter → firing → resolved |
+| TargetAbsent | armed | absent_over_time по 6 job, в покое 0 = все на месте |
+| PostgresDown / ConnectionsNearLimit / Deadlocks | armed | pg_up=1, activity=37, deadlocks=6 |
+| RedisDown / RedisMemoryHigh | armed | саботаж: stop redis-server → firing → resolved |
+| DiskSpaceLow | armed | оживлён, см. ниже |
+| HostDiskSpaceLow / HostDiskSpaceCritical | armed | чувствительность проверена порогом → firing → ушёл |
+| SchedulerJobFailing / SchedulerJobMissed | event-driven | 0 серий = провалов не было |
+| HighErrorRate / HighLatency | event-driven | 0 серий = трафика не было |
+| ContainerRestarting | **inert** | селектор живой, сигнал заморожен, см. ниже |
 
-**Что работает после починки (12 правил в 3 группах):**
+### Четыре состояния, которые нельзя смешивать
 
-| Правило | Состояние |
-|---|---|
-| BackendDown | видит данные, up=1 |
-| HighLatency | видит данные, p95≈0.10s |
-| HighErrorRate | сработает при первом 5xx (серии 5xx пока нет) |
-| SchedulerJobFailing / SchedulerJobMissed | сработают при первом провале задачи |
-| PostgresDown / ConnectionsNearLimit / Deadlocks | мертвы: нет postgres-exporter |
-| RedisDown / RedisMemoryHigh | мертвы: нет redis-exporter |
-| DiskSpaceLow | мёртво: нет node-exporter |
-| ContainerRestarting | мёртво: нет cadvisor |
+- **armed** — селектор матчит серии, порог не превышен. Сработает при отказе.
+- **event-driven** — Counter с метками не создаёт серий до первого события.
+  Ноль здесь означает «событий не было», а не «правило сломано».
+- **inert** — селектор матчит, но метрика никогда не меняется. Правило не
+  сработает никогда, хотя выглядит живым. Самая опасная категория.
+- **blind** — метрики не существует вовсе (нет экспортёра или селектор мимо).
 
-**Доставки нет:** секции `alerting` в конфиге нет, Alertmanager не поднят,
-`/api/v1/alertmanagers` отдаёт ноль активных. Алерты видны в UI Prometheus и
-никуда не отправляются.
+Одинаковое наблюдение «0 серий» означает разное: у `scheduler_job_failures_total`
+это здоровье, у `node_filesystem_avail_bytes{mountpoint="/"}` — смерть правила.
 
-**Как проверять, а не угадывать:** пустой результат выражения с сравнением
-(`up == 0`) означает «условие ложно», а не «правило сломано». Чтобы отличить
-здоровое правило от слепого, надо вычислять основу без сравнения (`up`).
-Метка статуса у instrumentator сгруппирована: `status="2xx"`, не `200`.
+### DiskSpaceLow был мёртв с самого начала
+
+Селектор `{mountpoint="/"}` не матчил ничего: корень VM имеет fstype **overlay**,
+а коллектор filesystem исключает overlay по умолчанию. В выдаче 50 серий, и `/`
+среди них нет. Включать overlay нельзя — в /proc/mounts сотни контейнерных
+overlay-монтирований containerd snapshotter.
+
+Правило перенаправлено на `/mnt/docker-desktop-disk` — ext4 /dev/sdd, 1081 ГБ,
+89.9% свободно, именно там лежит DockerRootDir=/var/lib/docker.
+
+### Добавлены правила на диск Windows
+
+Инцидент 18.11: C: упал до 1.6 ГБ, стек чуть не встал, алертов не было.
+`HostDiskSpaceLow` (<10%) и `HostDiskSpaceCritical` (<5%) смотрят на
+`/mnt/host/c` (9p, device C:\). Дубли того же диска (`/parent-distro/...`,
+`/run/desktop/...`) отсеяны точным mountpoint, read-only монтирования WSL2 —
+через `node_filesystem_readonly==0`.
+
+### ContainerRestarting: правило было не слепым, а неверным
+
+Прежнее выражение `increase(container_last_seen[1h]) > 3` считало прирост
+**отметки времени**: у здорового контейнера это ≈3600 в час. С рабочим селектором
+оно давало **110 ложных срабатываний**. Слепота маскировала неверную логику.
+
+Новое выражение `changes(container_start_time_seconds[1h]) > 3` семантически
+верно, но на Docker Desktop **инертно**: метрика заморожена на создании cgroup,
+snapshot байт-в-байт идентичен после `docker restart` и `--force-recreate`.
+Причина: docker-handler cadvisor падает с ENOENT на
+`image/overlayfs/layerdb/mounts/<id>/mount-id` — containerd snapshotter этого
+пути не создаёт. Проверено и с `privileged: true` — результат тот же, снижение
+привилегий не причина.
+
+`ContainerGone` (`time() - container_last_seen > 120`) удалён: у остановленного
+контейнера cgroup живёт до `rm`, и last_seen остаётся свежим (~10 с). Остановку
+он не ловит.
+
+Реальное покрытие смерти процессов — `TargetDown` / `TargetAbsent`. Важно:
+остановка **экспортёра** делает `pg_up`/`redis_up` исчезающими, поэтому правила
+вида `pg_up == 0` на неё не реагируют — нужен именно `up == 0`.
+
+### Доставки по-прежнему нет
+
+Секции `alerting` нет, Alertmanager не поднят, `/api/v1/alertmanagers` отдаёт
+ноль активных. Правила видят отказы, но сообщения никому не уходят. Алерт,
+который горит только в UI Prometheus, ночью никого не разбудит.
+
+### Как проверять, а не угадывать
+
+1. Пустой результат выражения с сравнением (`up == 0`) — «условие ложно», а не
+   «правило сломано». Вычисляй основу без сравнения (`up`).
+2. Считай серии **самой метрики**, а не выражения: это отличает event-driven
+   от blind.
+3. Проверяй **чувствительность**: метрика может существовать и никогда не
+   меняться. Ноль в покое ничего не доказывает, пока не показан переход
+   pending → firing при отказе или при временном сдвиге порога.
+4. Метка статуса у instrumentator сгруппирована: `status="2xx"`, не `200`.
+5. В API Prometheus поле выражения называется `query`, не `expr`.
 
 **Не сделано (требует решения):** Alertmanager с доставкой в MAX через
-внутренний webhook backend; экспортёры postgres/redis/cadvisor/node для
-семи мёртвых правил.
+внутренний webhook backend — нужен рабочий токен MAX.
 
 ## Метрики при четырёх воркерах (17.11.2026)
 
