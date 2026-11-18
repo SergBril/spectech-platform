@@ -86,15 +86,42 @@ groups:
           description: "Redis using {{ $value | humanizePercentage }} of max memory"
 
       # ─── Disk / Backup ────────────────────────────────────
+      # Диск ДАННЫХ Docker внутри VM (D:), а не корень VM и не Windows C:.
+      # Причина смерти старого правила: DiskSpaceLow смотрел mountpoint="/",
+      # но корень VM имеет fstype overlay (проверено /proc/1/mounts:
+      # "overlay / overlay ... lowerdir=/tmp/docker-desktop-root-ro"), а
+      # коллектор filesystem по умолчанию исключает overlay →
+      # node_filesystem_size_bytes{mountpoint="/"} = 0 серий (overlay-серий
+      # в выдаче тоже 0). Правило не матчило ничего с самого начала.
+      # Включать overlay через --collector.filesystem.fs-types-exclude НЕ
+      # нужно и вредно: в /proc/mounts сотни overlay-монтирований контейнеров
+      # containerd snapshotter (/mnt/docker-desktop-disk/data/docker/rootfs/
+      # overlayfs/<hash> ×3 префикса) — они замусорили бы выдачу. Данные
+      # Docker (DockerRootDir=/var/lib/docker) лежат на ext4-диске /dev/sdd,
+      # который УЖЕ виден как mountpoint="/mnt/docker-desktop-disk"
+      # (1081 ГБ, 89.93% свободно) — перенаправляем на него, fs-types не
+      # трогаем (число серий node_filesystem_size_bytes остаётся 50).
+      # Точный mountpoint отсекает 3 дубля того же /dev/sdd:
+      # /parent-distro/mnt/docker-desktop-disk, /run/desktop/mnt/docker-desktop-disk
+      # и /var/lib (иначе было бы 4 алерта об одном физическом диске).
+      # Порог 15% свободного обоснован фактической заполненностью: сейчас
+      # свободно 89.93% (972 ГБ из 1081), занято 10.07% (109 ГБ). 15% ≈ 162 ГБ
+      # headroom — в покое не firing (89.93% ≫ 15%), предупредит когда данные
+      # Docker вырастут с текущих 109 ГБ до ~919 ГБ (>85% диска), задолго до
+      # исчерпания 1 ТБ. Аннотации явно отличают этот диск (VM/Docker, D:) от
+      # HostDiskSpaceLow (Windows C:).
       - alert: DiskSpaceLow
         expr: |
-          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.15
+          (
+            node_filesystem_avail_bytes{job="node-exporter", mountpoint="/mnt/docker-desktop-disk"}
+            / node_filesystem_size_bytes{job="node-exporter", mountpoint="/mnt/docker-desktop-disk"}
+          ) < 0.15
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "Disk space low"
-          description: "Only {{ $value | humanizePercentage }} disk space remaining"
+          summary: "Docker VM data disk space low (D:, not Windows C:)"
+          description: "Docker data disk /mnt/docker-desktop-disk (ext4 /dev/sdd, holds /var/lib/docker) has {{ $value | humanizePercentage }} free — this is the VM/Docker data disk on D:, NOT the Windows host C: (see HostDiskSpaceLow)."
 
       # Системный диск WINDOWS (C:), а не корень VM. node-exporter отдаёт его
       # как mountpoint="/mnt/host/c" (fstype 9p, device C:\). Инцидент: C: упал
