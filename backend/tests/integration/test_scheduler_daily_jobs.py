@@ -193,7 +193,7 @@ async def _maintenance_warnings(db_session) -> list[str]:
     return [
         str(c.args[0])
         for c in log.warning.call_args_list
-        if c.args and "Maintenance due:" in str(c.args[0])
+        if c.args and "Maintenance due" in str(c.args[0])
     ]
 
 
@@ -292,3 +292,71 @@ async def test_maintenance_falls_back_to_last_plus_interval(db_session, sample_v
     assert await _maintenance_warnings(
         db_session
     ), "505 ч при пороге 500 ч обязаны считаться просрочкой"
+
+
+@pytest.mark.asyncio
+async def test_maintenance_skips_vehicle_with_active_order(
+    db_session, sample_vehicle, sample_user
+):
+    """Машина с активным нарядом не должна попадать в предупреждения.
+
+    Из трёх просроченных машин в проде двое уже имели planned-наряды. Кричать о
+    них - значит приучать оператора игнорировать предупреждения. Тот же пропуск
+    делает MaintenanceService.check_scheduled_maintenance.
+    """
+    from app.models.catalog import Vehicle
+    from app.models.maintenance import (
+        MaintenanceOrder,
+        MaintenanceOrderStatus,
+        MaintenanceOrderType,
+        MaintenancePriority,
+    )
+    from app.models.telematics import EngineHoursLog
+
+    vid = sample_vehicle.id
+    cid = sample_vehicle.company_id
+    uid = sample_user.id
+    db_session.query(Vehicle).filter(Vehicle.id == vid).update(
+        {
+            "engine_hours": 800,
+            "next_maintenance_hours": 750,
+            "maintenance_interval": 250,
+        }
+    )
+    db_session.add(
+        EngineHoursLog(
+            vehicle_id=vid, company_id=cid, date=datetime.utcnow().date(), hours=800
+        )
+    )
+    db_session.commit()
+
+    # Без наряда просрочка обязана попасть в предупреждения.
+    assert await _maintenance_warnings(
+        db_session
+    ), "800 ч при пороге 750 ч без наряда - пора"
+
+    order = MaintenanceOrder(
+        order_number="ТО-TEST-0001",
+        vehicle_id=vid,
+        company_id=cid,
+        order_type=MaintenanceOrderType.scheduled,
+        status=MaintenanceOrderStatus.planned,
+        priority=MaintenancePriority.medium,
+        title="Плановое ТО",
+        created_by_id=uid,
+    )
+    db_session.add(order)
+    db_session.commit()
+
+    assert not await _maintenance_warnings(
+        db_session
+    ), "машина с planned-нарядом уже в работе и не должна попадать в предупреждения"
+
+    # Завершённый наряд не считается активным: после ТО наработка снова выросла.
+    db_session.query(MaintenanceOrder).filter(MaintenanceOrder.id == order.id).update(
+        {"status": MaintenanceOrderStatus.completed}
+    )
+    db_session.commit()
+    assert await _maintenance_warnings(
+        db_session
+    ), "completed-наряд не покрывает новую просрочку"

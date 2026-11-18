@@ -716,6 +716,11 @@ def start_scheduler() -> None:
 
         from app.core.db import SessionLocal
         from app.models.catalog import Vehicle
+        from app.models.maintenance import (
+            MaintenanceOrder,
+            MaintenanceOrderStatus,
+            MaintenanceOrderType,
+        )
         from app.models.telematics import EngineHoursLog
 
         db = SessionLocal()
@@ -775,16 +780,42 @@ def start_scheduler() -> None:
                     threshold = float(last_hours or 0) + float(interval or 250)
                     basis = "last + interval"
 
-                if hours >= threshold:
-                    due_count += 1
-                    logger.warning(
-                        f"🔧 Maintenance due: {v_name} "
-                        f"({hours:.0f}h >= {threshold:.0f}h by {basis})"
+                if hours < threshold:
+                    continue
+
+                # Машина с активным нарядом уже в работе: кричать о ней значит
+                # приучать оператора игнорировать предупреждения. Тот же пропуск
+                # делает MaintenanceService.check_scheduled_maintenance.
+                active_scheduled = (
+                    db.query(MaintenanceOrder)
+                    .filter(
+                        MaintenanceOrder.vehicle_id == v_id,
+                        MaintenanceOrder.order_type == MaintenanceOrderType.scheduled,
+                        MaintenanceOrder.status.in_(
+                            [
+                                MaintenanceOrderStatus.planned,
+                                MaintenanceOrderStatus.in_progress,
+                            ]
+                        ),
                     )
+                    .first()
+                )
+                if active_scheduled:
+                    logger.debug(
+                        f"🔧 Maintenance already scheduled: {v_name} "
+                        f"(order {active_scheduled.order_number})"
+                    )
+                    continue
+
+                due_count += 1
+                logger.warning(
+                    f"🔧 Maintenance due without order: {v_name} "
+                    f"({hours:.0f}h >= {threshold:.0f}h by {basis})"
+                )
 
             if due_count > 0:
                 logger.info(
-                    f"🔧 Maintenance due check: {due_count} vehicles need service"
+                    f"🔧 Maintenance due check: {due_count} vehicles need an order"
                 )
             else:
                 logger.debug("Maintenance due check: all clear")
