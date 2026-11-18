@@ -97,14 +97,35 @@ groups:
           description: "Only {{ $value | humanizePercentage }} disk space remaining"
 
       # ─── Container ────────────────────────────────────────
+      # container_last_seen — отметка времени (растёт монотонно у живого
+      # контейнера), поэтому increase(...)≈3600 у здоровых и старое ">3"
+      # било бы по всем: проверено count(increase(container_last_seen
+      # {id=~"/docker/.*"}[1h])>3)=110 ложных. Перезапуск меняет
+      # container_start_time_seconds; changes() считает число перезапусков.
+      # id на Docker Desktop (WSL2) — cgroup-путь с containerd-хэшем
+      # (cri-containerd-<hash>.scope); name-метки нет и извлечь имя сервиса
+      # из id нельзя (проверено эмпирически) — поэтому алерт на все
+      # Docker-контейнеры, идентификатор в аннотации.
+      # N=3: firing при 4+ перезапусках за час — явный crash-loop; одиночные
+      # рестарты (деплой, ручные) не шумят. В покое changes>3 = 0.
+      # ПЛАТФОРМЕННОЕ ОГРАНИЧЕНИЕ (проверено, в т.ч. с privileged): на
+      # Docker Desktop с containerd snapshotter docker-handler cadvisor
+      # падает с ENOENT на image/overlayfs/layerdb → container_start_time_seconds
+      # заморожен на создании cgroup и НЕ меняется при restart/recreate.
+      # Здесь правило инертно (саботаж-гейт недостижим); на обычном Linux
+      # (overlay2) cadvisor читает метаданные и правило работает. Смерть
+      # scrape-таргетов надёжно покрыта TargetDown/TargetAbsent (группа
+      # target_health). ContainerGone (time()-container_last_seen>120) убран:
+      # container_last_seen обновляется и у остановленного контейнера
+      # (cgroup жив до rm) → на остановку не срабатывает.
       - alert: ContainerRestarting
-        expr: increase(container_last_seen{name=~"spectech-.*"}[1h]) > 3
-        for: 5m
+        expr: changes(container_start_time_seconds{id=~"/docker/.*"}[1h]) > 3
+        for: 1m
         labels:
           severity: warning
         annotations:
-          summary: "Container restarting frequently"
-          description: "Container {{ $labels.name }} restarted {{ $value }} times in last hour"
+          summary: "Container restarting frequently (crash loop)"
+          description: "Container {{ $labels.id }} restarted {{ $value }} times in the last hour"
 
   - name: scheduler
     rules:
