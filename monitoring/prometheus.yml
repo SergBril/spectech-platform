@@ -15,3 +15,23 @@ scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+
+  # Инфраструктурные экспортёры: без этих job'ов 7 правил infrastructure_alerts
+  # слепы (у их метрик нет ни одной серии). Метки job/instance — как у
+  # существующих таргетов: стек на Docker Compose, не K8s, поэтому
+  # namespace/app здесь не используются и правилами не фильтруются.
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  - job_name: 'redis-exporter'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']

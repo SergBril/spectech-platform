@@ -249,6 +249,77 @@ services:
     networks:
       - database
 
+  # ═══════════════════════════════════════════════════════════════
+  # Exporters — делают 7 инфраструктурных алертов не слепыми.
+  # Без них pg_up / redis_up / node_filesystem_* / container_last_seen
+  # не имеют ни одной серии, и правила infrastructure_alerts формально
+  # "ok", но не сработают никогда. Сети: database — доступ к БД/redis,
+  # monitoring — scrape со стороны Prometheus.
+  # ═══════════════════════════════════════════════════════════════
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: spectech-postgres-exporter
+    environment:
+      # Отдельный пользователь spectech_exporter с ролью pg_monitor
+      # (минимальные права на чтение статистики), пароль — из env, не хардкодим.
+      DATA_SOURCE_NAME: "postgresql://spectech_exporter:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+    networks:
+      - database
+      - monitoring
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: spectech-redis-exporter
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - database
+      - monitoring
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: spectech-node-exporter
+    # DiskSpaceLow должен мерить диск хоста (Docker VM), а не контейнера:
+    # файловая система хоста пробрасывается через rootfs/procfs/sysfs.
+    command:
+      - '--path.rootfs=/host/root'
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/.+)($|/)'
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    restart: always
+    networks:
+      - monitoring
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: spectech-cadvisor
+    # ContainerRestarting фильтрует container_last_seen{name=~"spectech-.*"} —
+    # нужен доступ к docker runtime и cgroups хоста.
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    restart: always
+    networks:
+      - monitoring
+
 volumes:
   postgres_data:
   redis_data:
