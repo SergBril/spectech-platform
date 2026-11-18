@@ -88,6 +88,10 @@ cache_misses_total = Counter(
 maintenance_due_without_order = Gauge(
     "spectech_maintenance_due_without_order",
     "Техника, достигшая порога ТО и не имеющая активного наряда",
+    # Без multiprocess_mode гейдж отдаёт серию НА КАЖДЫЙ воркер: задачу
+    # выполняет один, остальные показывают ноль. Панель тогда показывает 0
+    # при реальной просрочке - та же болезнь, что незаполненная метрика.
+    multiprocess_mode="livemax",
 )
 
 
