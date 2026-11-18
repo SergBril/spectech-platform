@@ -67,8 +67,19 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Число машин, требующих наряда на ТО (моточасы достигли порога, активного наряда нет). Гейдж обновляется раз в минуту; 0 — зелёный, >=1 — красный.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 14},
+      "id": 9,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "title": "🔧 Maintenance Due Without Order",
+      "type": "stat",
+      "targets": [{"expr": "spectech_maintenance_due_without_order{job=\"spectech-backend\"}", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisBorderShow": false, "axisLabel": "MB"}, "unit": "decmbytes"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
       "id": 7,
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
       "title": "🧠 Memory Usage (MB)",
@@ -78,7 +89,7 @@
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisBorderShow": false, "axisLabel": "%"}, "unit": "percentunit"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
       "id": 8,
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
       "title": "⚙️ CPU Usage",
