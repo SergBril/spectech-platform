@@ -332,6 +332,13 @@ def find_vehicles_due_without_order(db) -> list[dict]:
     а планировщик по константе 250, и система давала два разных ответа на один
     вопрос "пора ли ТО".
 
+    НАРАБОТКА БЕРЁТСЯ ИЗ Vehicle.engine_hours - это накопленное показание
+    счётчика. EngineHoursLog.hours использовать здесь НЕЛЬЗЯ: оба писателя
+    (telematics_tasks и maintenance_service) кладут туда ВЫРАБОТКУ ЗА СУТКИ
+    (разность показаний за день), а не показание. Сравнение суточных 8.5 ч
+    с порогом 750 ч объявило бы просроченную машину здоровой - молча, как
+    только агрегация начнёт заполнять журнал.
+
     Порог ПО МАШИНЕ: явный next_maintenance_hours, иначе часы последнего ТО
     плюс интервал машины. Пожизненные моточасы не убывают после обслуживания,
     поэтому сравнение с константой делало любую машину вечно просроченной.
@@ -339,9 +346,9 @@ def find_vehicles_due_without_order(db) -> list[dict]:
     Машина с planned/in_progress нарядом уже в работе и в выборку не попадает.
     Завершённый наряд новую просрочку НЕ покрывает.
 
-    Только чтение, без commit. Три запроса независимо от размера парка.
+    Только чтение, без commit. Два запроса независимо от размера парка.
     """
-    from sqlalchemy import func, select
+    from sqlalchemy import select
 
     from app.models.catalog import Vehicle
     from app.models.maintenance import (
@@ -349,7 +356,6 @@ def find_vehicles_due_without_order(db) -> list[dict]:
         MaintenanceOrderStatus,
         MaintenanceOrderType,
     )
-    from app.models.telematics import EngineHoursLog
 
     vehicles = db.execute(
         select(
@@ -362,24 +368,6 @@ def find_vehicles_due_without_order(db) -> list[dict]:
             Vehicle.maintenance_interval,
         ).where(Vehicle.is_deleted.is_(False))
     ).all()
-
-    # Последние моточасы по всем машинам одним запросом, а не по одной на машину.
-    latest_date = (
-        select(
-            EngineHoursLog.vehicle_id.label("vid"),
-            func.max(EngineHoursLog.date).label("d"),
-        )
-        .group_by(EngineHoursLog.vehicle_id)
-        .subquery()
-    )
-    rows = db.execute(
-        select(EngineHoursLog.vehicle_id, EngineHoursLog.hours).join(
-            latest_date,
-            (EngineHoursLog.vehicle_id == latest_date.c.vid)
-            & (EngineHoursLog.date == latest_date.c.d),
-        )
-    ).all()
-    logged_hours = {vid: float(h) for vid, h in rows if h is not None}
 
     busy = set(
         db.execute(
@@ -401,9 +389,7 @@ def find_vehicles_due_without_order(db) -> list[dict]:
     for v_id, v_name, company_id, v_hours, last_hours, next_hours, interval in vehicles:
         if v_id in busy:
             continue
-        # Журнал телематики авторитетнее кэша, но при пустом журнале берём
-        # наработку самой машины, а не считаем её нулевой.
-        hours = logged_hours.get(v_id, float(v_hours or 0))
+        hours = float(v_hours or 0)
         if next_hours is not None:
             threshold = float(next_hours)
             basis = "next_maintenance_hours"
