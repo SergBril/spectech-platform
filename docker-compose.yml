@@ -236,6 +236,7 @@ services:
     volumes:
       - ./backend/scripts/backup_db.sh:/backup.sh:ro
       - db_backups:/backups
+      - backup_metrics:/metrics
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -246,7 +247,13 @@ services:
         # Бэкап сразу при старте устраняет пустой том; hourly держит свежесть.
         /backup.sh 30 >> /var/log/backup.log 2>&1
         echo "0 * * * * /backup.sh 30 >> /var/log/backup.log 2>&1" > /etc/crontabs/root
-        crond -f -l 2
+        # При остановке контейнера удаляем textfile-метрику: иначе общий том
+        # переживает остановку, node-exporter продолжает отдавать старый
+        # timestamp, и BackupMissing (absent) не отличил бы «сервис лёг» от
+        # «бэкап устарел». crond в фоне + wait, чтобы sh принял SIGTERM и trap.
+        trap 'rm -f /metrics/backup_last_success.prom; exit 0' TERM INT
+        crond -f -l 2 &
+        wait $!
     depends_on:
       postgres:
         condition: service_healthy
@@ -300,11 +307,15 @@ services:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/.+)($|/)'
+      # textfile-метрика возраста бэкапа: db-backup пишет backup_last_success.prom
+      # в общий том backup_metrics, node-exporter отдаёт её Prometheus.
+      - '--collector.textfile.directory=/var/lib/node_exporter/textfile'
     pid: host
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/host/root:ro
+      - backup_metrics:/var/lib/node_exporter/textfile:ro
     restart: always
     networks:
       - monitoring
@@ -336,6 +347,7 @@ volumes:
   prometheus_data:
   grafana_data:
   db_backups:
+  backup_metrics:
 
 networks:
   frontend:

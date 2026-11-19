@@ -294,3 +294,35 @@ groups:
         annotations:
           summary: "Job {{ $labels.job }} исчез из service discovery"
           description: "Нет ни одного образца up для job {{ $labels.job }} за 5 минут — таргет удалён из discovery или изменена конфигурация Prometheus."
+
+  - name: backup_health
+    rules:
+      # Возраст последнего УСПЕШНОГО бэкапа. Метрику
+      # backup_last_success_timestamp_seconds пишет db-backup (textfile через
+      # node-exporter) ТОЛЬКО при успехе pg_dump; при падении дампа timestamp
+      # не обновляется — алерт не маскирует отказ. Расписание hourly (3600s):
+      # порог 7200s = 2×интервал. Пропуск одного запуска терпим (возраст <2h
+      # до следующего успеха); два пропуска подряд переводят возраст за 2h —
+      # firing. for 1m отсекает scrape-глитч (возраст монотонен).
+      - alert: BackupTooOld
+        expr: time() - backup_last_success_timestamp_seconds > 7200
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Бэкап БД устарел: {{ $value | humanizeDuration }} без успешного дампа"
+          description: "Последний успешный pg_dump был {{ $value | humanizeDuration }} назад (порог 2h при часовом расписании). Проверь db-backup: cron жив, том не заполнен, pg_dump не падает."
+
+      # Метрики нет вовсе — отдельный класс отказа: db-backup не стартовал,
+      # контейнер остановлен (trap удаляет textfile) или том backup_metrics не
+      # смонтирован в node-exporter. absent() ловит именно отсутствие серии.
+      # for 2m: краткий рестарт db-backup (стартовый бэкап возвращает метрику
+      # за секунды) не должен флапать; 2m подтверждает устойчивое отсутствие.
+      - alert: BackupMissing
+        expr: absent(backup_last_success_timestamp_seconds)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Метрика бэкапа отсутствует — сервис бэкапа не отдаёт данных"
+          description: "backup_last_success_timestamp_seconds нет в выдаче: db-backup не запущен/остановлен или том backup_metrics не смонтирован в node-exporter. Бэкапы не создаются или не видны мониторингу."
