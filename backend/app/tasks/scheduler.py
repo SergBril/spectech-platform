@@ -339,9 +339,6 @@ def start_scheduler() -> None:
         from datetime import timedelta
 
         from app.core.db import SessionLocal
-        from app.models.catalog import Vehicle
-        from app.models.finance import Act
-        from app.models.shift import ShiftTask
 
         today = date_type.today()
         if today.day != 1:
@@ -353,53 +350,15 @@ def start_scheduler() -> None:
 
         with SessionLocal() as db:
             try:
-                from sqlalchemy import select
 
                 company_ids = _active_company_ids(db)
                 for cid in company_ids:
-                    tasks = (
-                        db.execute(
-                            select(ShiftTask)
-                            .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
-                            .where(Vehicle.company_id == cid)
-                            .where(ShiftTask.shift_date >= prev_month_start)
-                            .where(ShiftTask.shift_date <= prev_month_end)
-                            .where(ShiftTask.status == "completed")
-                        )
-                        .scalars()
-                        .all()
+                    from app.services.act_service import generate_acts_for_shifts
+
+                    result = generate_acts_for_shifts(
+                        db, cid, prev_month_start, prev_month_end
                     )
-
-                    created = 0
-                    for t in tasks:
-                        existing = db.execute(
-                            select(Act).where(Act.shift_task_id == t.id)
-                        ).scalar_one_or_none()
-                        if existing:
-                            continue
-
-                        hours = 0
-                        if t.planned_start and t.planned_end:
-                            hours = round(
-                                (t.planned_end - t.planned_start).total_seconds()
-                                / 3600,
-                                2,
-                            )
-
-                        act = Act(
-                            company_id=cid,
-                            shift_task_id=t.id,
-                            act_number=f"AUTO-{prev_month_start.strftime('%Y%m')}-{t.id:04d}",
-                            act_date=prev_month_end,
-                            vehicle_id=t.vehicle_id,
-                            hours_worked=hours,
-                            hourly_rate=1500,
-                            total_amount=round(hours * 1500, 2),
-                            vat_amount=round(hours * 1500 * 0.2, 2),
-                            status="draft",
-                        )
-                        db.add(act)
-                        created += 1
+                    created = result["created"]
 
                     db.commit()
                     if created > 0:
