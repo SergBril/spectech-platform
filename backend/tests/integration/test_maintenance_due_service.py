@@ -159,12 +159,38 @@ def test_repair_order_does_not_suppress_scheduled_overdue(
 
 
 @pytest.mark.asyncio
-async def test_metrics_job_sets_the_gauge(db_session, sample_vehicle, monkeypatch):
-    """Находка должна быть видна метрикой, а не только строкой в логе."""
+async def test_metrics_job_sets_the_gauge(
+    db_session, sample_vehicle, company, monkeypatch
+):
+    """Гейдж должен показать ВСЕ просроченные машины, а не «хотя бы одну».
+
+    Прежняя версия проверяла count >= 1: такое неравенство прошло бы и при
+    потере половины находок. Здесь две машины и точное равенство.
+
+    Подмена SessionLocal не нужна: conftest выставляет DATABASE_URL в sqlite
+    до импорта приложения, поэтому задачи планировщика внутри pytest открывают
+    тестовую базу. Проверено пробой: bind=sqlite:///./test.db, диалект sqlite.
+    """
     import app.tasks.scheduler as sched
     from app.core import metrics as m
+    from app.models.catalog import Vehicle
+    from app.services.maintenance_service import find_vehicles_due_without_order
 
     _setup(db_session, sample_vehicle, engine_hours=900, next_maintenance_hours=750)
+    second = Vehicle(
+        name="Вторая просроченная машина",
+        id_type="internal",
+        id_value="GAUGE-TEST-002",
+        status="free",
+        company_id=company.id,
+        engine_hours=1000,
+        next_maintenance_hours=750,
+    )
+    db_session.add(second)
+    db_session.commit()
+
+    expected = len(find_vehicles_due_without_order(db_session))
+    assert expected == 2, "подготовка теста должна дать ровно две просроченные машины"
 
     captured = {}
     monkeypatch.setattr(
@@ -177,6 +203,7 @@ async def test_metrics_job_sets_the_gauge(db_session, sample_vehicle, monkeypatc
     await jobs["business_metrics_refresh"]()
 
     assert "count" in captured, "гейдж просрочки ТО не выставляется"
-    assert (
-        captured["count"] >= 1
-    ), "900 ч при пороге 750 ч без наряда обязаны попасть в гейдж"
+    assert captured["count"] == expected, (
+        f"гейдж показал {captured['count']}, а просрочено {expected}: "
+        "часть находок теряется по пути к метрике"
+    )

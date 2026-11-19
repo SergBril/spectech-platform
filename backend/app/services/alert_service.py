@@ -82,7 +82,7 @@ async def check_and_notify_conflicts(
 async def send_alert_email(company_id: int, subject: str, body: str, db: Session):
     """Отправка email-уведомления диспетчерам через EmailService."""
     try:
-        from app.models.auth import User
+        from app.models.auth import User, UserStatus
         from app.models.user_company import UserCompany
         from app.services.email_service import EmailService
 
@@ -95,7 +95,7 @@ async def send_alert_email(company_id: int, subject: str, body: str, db: Session
                 .join(UserCompany, User.id == UserCompany.user_id)
                 .where(
                     UserCompany.company_id == company_id,
-                    User.is_active == True,  # noqa: E712
+                    User.status == UserStatus.active,
                 )
             )
             .scalars()
