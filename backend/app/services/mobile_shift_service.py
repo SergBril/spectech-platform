@@ -26,6 +26,8 @@ async def submit_mobile_shift_report(
     user_id: int,
     odometer_start: float | None = None,
     odometer_end: float | None = None,
+    moto_hours_start: float | None = None,
+    moto_hours_end: float | None = None,
     notes: str = "",
     photo_files: list | None = None,
 ) -> dict:
@@ -69,9 +71,6 @@ async def submit_mobile_shift_report(
     # Update shift status
     task.status = "completed"
 
-    if odometer_end and odometer_start:
-        task.odometer_distance = round(odometer_end - odometer_start, 1)
-
     # Get company_id for report and notifications
     vehicle = db.get(Vehicle, task.vehicle_id)
     company_id = vehicle.company_id if vehicle else None
@@ -80,13 +79,38 @@ async def submit_mobile_shift_report(
     report = ShiftReport(
         shift_task_id=task_id,
         operator_id=profile.employee_contractor_id,
-        operator_odometer=odometer_end,
         operator_comment=notes or None,
         operator_photos=",".join(photo_paths) if photo_paths else None,
         status="operator_submitted",
         company_id=company_id,
     )
     db.add(report)
+
+    # Показания применяет общий сервис: выработка ВЫЧИСЛЯЕТСЯ как разность,
+    # наработка машины обновляется, откат отвергается. Прежний код писал в
+    # operator_odometer накопленное показание, тогда как driver.py писал туда
+    # выработку - одна колонка, два смысла. И присваивал task.odometer_distance,
+    # колонки которого не существовало: пробег смены терялся, а УПД читал None.
+    from app.services.vehicle_readings_service import (
+        ReadingsError,
+        apply_shift_readings,
+    )
+
+    try:
+        apply_shift_readings(
+            db,
+            task,
+            vehicle,
+            odometer_start=odometer_start,
+            odometer_end=odometer_end,
+            hours_start=moto_hours_start,
+            hours_end=moto_hours_end,
+            report=report,
+        )
+    except ReadingsError as e:
+        db.rollback()
+        raise MobileShiftServiceError(e.status_code, e.detail) from e
+
     db.commit()
     db.refresh(report)
 

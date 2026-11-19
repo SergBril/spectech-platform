@@ -106,14 +106,38 @@ def get_my_shifts(
 @router.post("/shifts/{task_id}/start")
 def start_shift(
     task_id: int,
+    odometer_start: int | None = Form(default=None),
+    moto_hours_start: float | None = Form(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """▶️ Начать смену."""
+    """▶️ Начать смену. Показания счётчиков - накопленные, как на панели.
+
+    Поля odometer_start/moto_hours_start существовали в базе, но не собирались:
+    все строки были NULL, и выработку за смену было не из чего вычислить.
+    """
+    from app.models.catalog import Vehicle
+    from app.services.vehicle_readings_service import (
+        ReadingsError,
+        apply_shift_readings,
+    )
+
     task = db.get(ShiftTask, task_id)
     if not task or task.company_id != company_id:
         raise HTTPException(status_code=404, detail="Shift task not found")
+
+    vehicle = db.get(Vehicle, task.vehicle_id)
+    try:
+        apply_shift_readings(
+            db,
+            task,
+            vehicle,
+            odometer_start=odometer_start,
+            hours_start=moto_hours_start,
+        )
+    except ReadingsError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail) from e
 
     # signed_by_operator = водитель принял смену
     task.status = ShiftTaskStatus.signed_by_operator
@@ -125,8 +149,10 @@ def start_shift(
 @router.post("/shifts/{task_id}/report")
 async def submit_shift_report(
     task_id: int,
-    moto_hours: float = Form(...),
-    odometer: int = Form(default=0),
+    moto_hours: float | None = Form(default=None),
+    odometer: int | None = Form(default=None),
+    odometer_end: int | None = Form(default=None),
+    moto_hours_end: float | None = Form(default=None),
     fuel_used: float = Form(default=0),
     comment: str = Form(default=""),
     photo: UploadFile | None = File(default=None),
@@ -159,8 +185,6 @@ async def submit_shift_report(
     report = ShiftReport(
         shift_task_id=task_id,
         operator_id=contractor_id,
-        operator_moto_hours=moto_hours,
-        operator_odometer=odometer,
         operator_fuel_used=fuel_used,
         operator_comment=comment,
         operator_submitted_at=datetime.now(UTC),
@@ -169,6 +193,39 @@ async def submit_shift_report(
         company_id=company_id,
     )
     db.add(report)
+
+    # Показания счётчиков - предпочтительный путь: выработка ВЫЧИСЛЯЕТСЯ как
+    # разность, наработка машины обновляется. Старый вызов с готовой выработкой
+    # остаётся рабочим, но тогда наработку обновить не из чего.
+    from app.models.catalog import Vehicle
+    from app.services.vehicle_readings_service import (
+        ReadingsError,
+        apply_shift_readings,
+    )
+
+    if odometer_end is not None or moto_hours_end is not None:
+        vehicle = db.get(Vehicle, task.vehicle_id)
+        try:
+            apply_shift_readings(
+                db,
+                task,
+                vehicle,
+                odometer_start=task.odometer_start,
+                odometer_end=odometer_end,
+                hours_start=task.moto_hours_start,
+                hours_end=moto_hours_end,
+                report=report,
+            )
+        except ReadingsError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+    elif moto_hours is not None or odometer is not None:
+        report.operator_moto_hours = moto_hours
+        report.operator_odometer = odometer
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail="Нужны показания счётчиков на конец смены либо выработка за смену",
+        )
 
     task.status = ShiftTaskStatus.completed
     db.commit()

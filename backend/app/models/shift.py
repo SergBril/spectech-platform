@@ -61,6 +61,11 @@ class ShiftTask(Base):
     moto_hours_start: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2), nullable=True
     )
+    # Выработка по пробегу за смену (км). Колонки не было: сервис вычислял
+    # разность и присваивал атрибут, который не сохранялся, а УПД читал None.
+    odometer_distance: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 1), nullable=True, comment="Пробег за смену, км (end - start)"
+    )
     fuel_level_start: Mapped[Decimal | None] = mapped_column(
         Numeric(8, 2), nullable=True
     )
@@ -92,6 +97,14 @@ class ShiftReport(Base):
         Numeric(10, 2), nullable=True
     )
     operator_odometer: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Накопленные показания счётчиков на конец смены. operator_* выше -
+    # ВЫРАБОТКА за смену, а не показание; путать их нельзя.
+    odometer_end: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, comment="Показание одометра на конец смены"
+    )
+    moto_hours_end: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True, comment="Показание моточасов на конец смены"
+    )
     operator_fuel_used: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2), nullable=True
     )
