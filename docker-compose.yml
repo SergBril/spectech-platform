@@ -223,7 +223,7 @@ services:
       - database
 
   # ═══════════════════════════════════════════════════════════
-  # Database Backup (daily at 02:00, 30-day retention)
+  # Database Backup (on startup + hourly, 30-day retention)
   # ═══════════════════════════════════════════════════════════
   db-backup:
     image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
@@ -240,7 +240,12 @@ services:
     command:
       - |
         chmod +x /backup.sh
-        echo "0 2 * * * /backup.sh 30 >> /var/log/backup.log 2>&1" > /etc/crontabs/root
+        # Стартовый бэкап + ежечасный cron. Причина: только cron 02:00 не
+        # создаёт файл при дневном рестарте стека — том /backups оставался
+        # пуст (инцидент C:), и страховки фактически не существовало.
+        # Бэкап сразу при старте устраняет пустой том; hourly держит свежесть.
+        /backup.sh 30 >> /var/log/backup.log 2>&1
+        echo "0 * * * * /backup.sh 30 >> /var/log/backup.log 2>&1" > /etc/crontabs/root
         crond -f -l 2
     depends_on:
       postgres:
