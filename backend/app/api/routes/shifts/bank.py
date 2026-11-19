@@ -249,6 +249,7 @@ def get_receivables_dashboard(
 # === Bank Transactions Management ===
 
 
+@router.get("/bank/transactions", summary="📋 Банковские транзакции")
 def list_bank_transactions(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
@@ -284,6 +285,12 @@ def list_bank_transactions(
     stmt = stmt.offset((page - 1) * per_page).limit(per_page)
     txns = db.execute(stmt).scalars().all()
 
+    from app.models.company import Company
+
+    own = db.get(Company, company_id)
+    company_name = own.name if own else None
+    company_inn = getattr(own, "inn", None)
+
     items = []
     for t in txns:
         act = db.get(Act, t.matched_act_id) if t.matched_act_id else None
@@ -292,12 +299,18 @@ def list_bank_transactions(
                 "id": t.id,
                 "doc_number": t.document_number,
                 "doc_date": t.document_date,
-                "payer_name": t.payer_name,
-                "payer_inn": t.payer_inn,
-                "payee_name": t.payee_name,
+                "payer_name": (
+                    t.counterparty_name if t.direction == "incoming" else company_name
+                ),
+                "payer_inn": (
+                    t.counterparty_inn if t.direction == "incoming" else company_inn
+                ),
+                "payee_name": (
+                    company_name if t.direction == "incoming" else t.counterparty_name
+                ),
                 "amount": t.amount,
                 "purpose": t.purpose,
-                "status": t.status,
+                "status": t.match_status,
                 "matched_act_id": t.matched_act_id,
                 "matched_act_number": (
                     getattr(act, "document_number", None) or f"ACT-{act.id}"
@@ -317,9 +330,12 @@ def list_bank_transactions(
     }
 
 
+@router.post(
+    "/bank/transactions/{txn_id}/match", summary="🔗 Привязать транзакцию к акту"
+)
 def manual_match_transaction(
     txn_id: int,
-    act_id: int = Body(...),
+    act_id: int = Body(..., embed=True),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
@@ -344,7 +360,7 @@ def manual_match_transaction(
 
     db.commit()
     return {
-        "message": f"Транзакция {txn.doc_number} привязана к акту {getattr(act, 'document_number', None) or f'ACT-{act.id}'}"
+        "message": f"Транзакция {txn.document_number} привязана к акту {getattr(act, 'document_number', None) or f'ACT-{act.id}'}"
     }
 
 
@@ -452,8 +468,8 @@ def export_transactions_excel(
         act = db.get(Act, t.matched_act_id) if t.matched_act_id else None
         ws.cell(row=row_idx, column=1, value=t.document_date)
         ws.cell(row=row_idx, column=2, value=t.document_number)
-        ws.cell(row=row_idx, column=3, value=t.payer_name or "")
-        ws.cell(row=row_idx, column=4, value=t.payer_inn or "")
+        ws.cell(row=row_idx, column=3, value=t.counterparty_name or "")
+        ws.cell(row=row_idx, column=4, value=t.counterparty_inn or "")
         ws.cell(row=row_idx, column=5, value=t.amount).number_format = "#,##0"
         ws.cell(row=row_idx, column=6, value=t.purpose or "")
         ws.cell(
