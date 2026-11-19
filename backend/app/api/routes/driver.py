@@ -160,7 +160,22 @@ async def submit_shift_report(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """📝 Отправить отчёт по смене."""
+    """📝 Отправить отчёт по смене.
+
+    Пустой отчёт отвергается на границе, до обращения к базе: иначе запрос без
+    данных вернёт 404 вместо 422 и валидация окажется слабее, чем была.
+    """
+    if (
+        moto_hours is None
+        and odometer is None
+        and odometer_end is None
+        and moto_hours_end is None
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Нужны показания счётчиков на конец смены либо выработка за смену",
+        )
+
     task = db.get(ShiftTask, task_id)
     if not task or task.company_id != company_id:
         raise HTTPException(status_code=404, detail="Shift task not found")
@@ -218,14 +233,9 @@ async def submit_shift_report(
             )
         except ReadingsError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
-    elif moto_hours is not None or odometer is not None:
+    else:
         report.operator_moto_hours = moto_hours
         report.operator_odometer = odometer
-    else:
-        raise HTTPException(
-            status_code=422,
-            detail="Нужны показания счётчиков на конец смены либо выработка за смену",
-        )
 
     task.status = ShiftTaskStatus.completed
     db.commit()
