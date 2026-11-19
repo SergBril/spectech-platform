@@ -47,6 +47,32 @@ class Category(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
+    # === Конфигурация счётчиков по типу техники ===
+    # Гусеничный экскаватор не имеет одометра; автокран имеет пробег шасси и
+    # моточасы надстройки - два регламента разных производителей. Форма ввода
+    # показывает только те счётчики, которые есть у машины, иначе пустое поле
+    # заполнят нулём и расчёт сломается.
+    tracks_odometer: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, comment="Ведётся ли учёт пробега"
+    )
+    tracks_engine_hours: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False, comment="Ведётся ли учёт моточасов"
+    )
+    maintenance_basis: Mapped[str] = mapped_column(
+        String(20),
+        default="engine_hours",
+        nullable=False,
+        comment="Ось ТО: engine_hours | odometer | both (что наступит раньше)",
+    )
+    default_interval_hours: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Пресет интервала ТО по моточасам (из регламента)",
+    )
+    default_interval_km: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, comment="Пресет интервала ТО по пробегу (из регламента)"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -189,6 +215,27 @@ class Vehicle(Base):
         nullable=False,
         default=250,
         comment="Интервал ТО в моточасах",
+    )
+    # Одометр: накопленное показание, км. У гусеничной техники не ведётся.
+    odometer_km: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 1),
+        nullable=True,
+        comment="Текущий пробег по одометру, км (накопленное показание)",
+    )
+    maintenance_interval_km: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Интервал ТО по пробегу, км (регламент шасси)",
+    )
+    last_maintenance_km: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 1),
+        nullable=True,
+        comment="Пробег при последнем ТО шасси",
+    )
+    next_maintenance_km: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 1),
+        nullable=True,
+        comment="Пробег для следующего ТО шасси",
     )
     total_maintenance_cost: Mapped[Decimal] = mapped_column(
         Numeric(14, 2),
