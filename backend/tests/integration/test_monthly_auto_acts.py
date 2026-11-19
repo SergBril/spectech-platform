@@ -144,3 +144,41 @@ def test_shift_without_a_report_is_skipped(db_session, company, october_shift):
     db_session.commit()
     assert result["created"] == 0
     assert any("выработк" in s["reason"] for s in result["skipped"])
+
+
+def test_endpoint_creates_the_act(auth_client, db_session, company, october_shift):
+    """Тот же путь, но через API: раньше падал на Act(driver_name=, distance_km=)."""
+    from app.models.finance import Act
+
+    r = auth_client.post(
+        "/api/v1/shifts/acts/auto-generate",
+        json={"date_from": "2026-10-01", "date_to": "2026-10-31"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["created"] == 1, r.text
+
+    act = db_session.query(Act).filter(Act.shift_task_id == october_shift.id).one()
+    assert act.hours_worked == 8.0
+    assert act.total_amount == Decimal("20000.00")
+    assert act.created_by is not None, "автор документа не записан"
+
+
+def test_endpoint_reports_why_a_shift_was_skipped(
+    auth_client, db_session, company, october_shift
+):
+    from app.models.shift import ShiftReport
+
+    db_session.query(ShiftReport).filter(
+        ShiftReport.shift_task_id == october_shift.id
+    ).delete()
+    db_session.commit()
+
+    r = auth_client.post(
+        "/api/v1/shifts/acts/auto-generate",
+        json={"date_from": "2026-10-01", "date_to": "2026-10-31"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["created"] == 0
+    assert body["skipped"] == 1
+    assert "выработк" in body["skipped_reasons"][0]["reason"]

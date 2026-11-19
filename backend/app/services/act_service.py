@@ -20,7 +20,11 @@ logger = logging.getLogger("spectech.acts")
 
 
 def generate_acts_for_shifts(
-    db: Session, company_id: int, period_start: date, period_end: date
+    db: Session,
+    company_id: int,
+    period_start: date,
+    period_end: date,
+    created_by: int | None = None,
 ) -> dict:
     """Создать черновики актов по завершённым сменам компании за период.
 
@@ -109,6 +113,7 @@ def generate_acts_for_shifts(
                 tax_system=TaxSystem.OSNO.value,
                 is_vat_included=True,
                 status="draft",
+                created_by=created_by,
                 comment=f"Автосоздан по смене #{task.id}",
             )
         )

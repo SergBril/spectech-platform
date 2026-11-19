@@ -7,7 +7,7 @@ from fastapi import (
     HTTPException,
     Query,
 )
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_current_user
@@ -533,88 +533,32 @@ def auto_generate_acts(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """Автоматически создать акты выполненных работ из завершённых смен за период."""
-    from datetime import date as date_type
-    from decimal import Decimal
+    """Автоматически создать акты выполненных работ из завершённых смен за период.
 
-    from app.models.contractor import DriverProfile, Employee
+    Создание отдано act_service - тому же, что использует ежемесячная задача.
+    Здесь был второй, расходящийся путь: часы из несуществующих planned_start
+    через getattr (всегда 0), ставка 1500 и НДС 20% константами, поля driver_name
+    и distance_km, которых у Act нет (TypeError), и отсутствие обязательного
+    client_id. Акты либо не создавались, либо были бы нулевыми.
+
+    skipped теперь означает «пропущено с причиной» (нет выработки, заказчика или
+    ставки), а не «акт уже существует»: причины возвращаются явно.
+    """
+    from datetime import date as date_type
+
+    from app.services.act_service import generate_acts_for_shifts
 
     d_from = date_type.fromisoformat(date_from)
     d_to = date_type.fromisoformat(date_to)
 
-    # Получаем завершенные смены без привязанного акта
-    tasks = (
-        db.execute(
-            select(ShiftTask)
-            .join(Vehicle, ShiftTask.vehicle_id == Vehicle.id)
-            .where(Vehicle.company_id == company_id)
-            .where(ShiftTask.shift_date >= d_from)
-            .where(ShiftTask.shift_date <= d_to)
-            .where(ShiftTask.status == "completed")
-        )
-        .scalars()
-        .all()
+    result = generate_acts_for_shifts(
+        db, company_id, d_from, d_to, created_by=current_user.id
     )
-
-    created = 0
-    skipped = 0
-
-    for t in tasks:
-        # Проверяем, не существует ли уже акт для этой смены
-        existing_act = db.execute(
-            select(func.count()).select_from(Act).where(Act.shift_task_id == t.id)
-        ).scalar()
-        if existing_act and existing_act > 0:
-            skipped += 1
-            continue
-
-        vehicle = db.get(Vehicle, t.vehicle_id)
-        hours = 0
-        if getattr(t, "planned_start", None) and getattr(t, "planned_end", None):
-            hours = round(
-                (
-                    getattr(t, "planned_end", None) - getattr(t, "planned_start", None)
-                ).total_seconds()
-                / 3600,
-                2,
-            )
-
-        distance = getattr(t, "odometer_distance", None) or 0
-
-        # Базовая ставка (в будущем можно настроить для каждой техники/водителя)
-        hourly_rate = Decimal(str(getattr(vehicle, "hourly_rate", 0) or 1500))
-        total_amount = hourly_rate * Decimal(str(hours))
-        vat_amount = total_amount * Decimal("0.2")
-
-        driver_name = ""
-        if t.operator_id:
-            profile = db.get(DriverProfile, t.operator_id)
-            if profile:
-                emp = db.get(Employee, profile.employee_contractor_id)
-                driver_name = f"{emp.first_name} {emp.last_name}" if emp else ""
-
-        act = Act(
-            company_id=company_id,
-            shift_task_id=t.id,
-            document_number=f"ACT-{t.shift_date.strftime('%Y%m%d')}-{t.id:04d}",
-            act_date=t.shift_date,
-            vehicle_id=t.vehicle_id,
-            driver_name=driver_name,
-            hours_worked=hours,
-            distance_km=float(distance),
-            hourly_rate=float(hourly_rate),
-            total_amount=float(total_amount),
-            vat_amount=float(vat_amount),
-            status="draft",
-            created_by=current_user.id,
-        )
-        db.add(act)
-        created += 1
-
     db.commit()
     return {
         "message": "Акты успешно сгенерированы",
-        "created": created,
-        "skipped": skipped,
-        "period": f"{d_from} — {d_to}",
+        "created": result["created"],
+        "skipped": len(result["skipped"]),
+        "skipped_reasons": result["skipped"],
+        "period": f"{d_from} / {d_to}",
     }
