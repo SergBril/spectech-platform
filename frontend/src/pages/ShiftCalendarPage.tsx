@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Layout from '../components/Layout';
 import apiClient from '../api/client';
 import { useWebSocket } from '../contexts/WebSocketContext';
@@ -124,7 +124,7 @@ const ShiftCalendarPage: React.FC = () => {
 
   const loadShifts = useCallback(async () => {
     try {
-      const res = await apiClient.get('/shifts', {
+      const res = await apiClient.get('/shifts/tasks', {
         params: { date_from: weekDays[0], date_to: weekDays[6] },
       });
       setShifts(Array.isArray(res.data) ? res.data : res.data?.items || []);
@@ -143,7 +143,7 @@ const ShiftCalendarPage: React.FC = () => {
 
   const autoAssignDriver = async (taskId: number) => {
     try {
-      const res = await apiClient.post(`/shifts/tasks/${taskId}/auto-assign-driver`);
+      const res = await apiClient.post(`/shifts/${taskId}/auto-assign`);
       alert(res.data.message);
       loadShifts();
     } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
@@ -152,7 +152,7 @@ const ShiftCalendarPage: React.FC = () => {
   const bulkAutoAssign = async () => {
     if (!confirm(`Авто-назначить водителей на все пустые смены с ${weekDays[0]} по ${weekDays[6]}?`)) return;
     try {
-      const res = await apiClient.post('/shifts/tasks/bulk-auto-assign', { date_from: weekDays[0], date_to: weekDays[6] });
+      const res = await apiClient.post('/shifts/bulk-auto-assign', { date_from: weekDays[0], date_to: weekDays[6] });
       alert(`Назначено: ${res.data.assigned}, пропущено: ${res.data.skipped}`);
       loadShifts();
     } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
@@ -182,7 +182,7 @@ const ShiftCalendarPage: React.FC = () => {
   const handleDrop = async (targetDate: string) => {
     if (!draggedShift) return;
     try {
-      await apiClient.put(`/shifts/${draggedShift}`, { shift_date: targetDate });
+      await apiClient.put(`/shifts/tasks/${draggedShift}`, { shift_date: targetDate });
       setShifts(prev => prev.map(s => s.id === draggedShift ? { ...s, shift_date: targetDate } : s));
     } catch (err: any) {
       alert('Ошибка переноса: ' + (err.response?.data?.detail || ''));

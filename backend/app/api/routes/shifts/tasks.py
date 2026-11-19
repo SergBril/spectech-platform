@@ -25,16 +25,26 @@ router = APIRouter()
 @router.get("/tasks", response_model=list[ShiftTaskRead])
 def list_shift_tasks(
     request_id: int | None = None,
+    date_from: str | None = Query(default=None, description="YYYY-MM-DD"),
+    date_to: str | None = Query(default=None, description="YYYY-MM-DD"),
     limit: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_ids: list[int] = Depends(get_user_company_ids),
 ):
     """Список сменных заданий (только своей компании)."""
+    from datetime import date as date_type
+
     stmt = select(ShiftTask).where(ShiftTask.company_id.in_(company_ids))
     if request_id:
         stmt = stmt.where(ShiftTask.request_id == request_id)
-    stmt = stmt.order_by(ShiftTask.created_at.desc()).limit(limit)
+    # Без фильтра по периоду календарь показывал последние 50 смен за все даты
+    # вместо выбранной недели: 404 сменился бы тихо неверными данными.
+    if date_from:
+        stmt = stmt.where(ShiftTask.shift_date >= date_type.fromisoformat(date_from))
+    if date_to:
+        stmt = stmt.where(ShiftTask.shift_date <= date_type.fromisoformat(date_to))
+    stmt = stmt.order_by(ShiftTask.shift_date, ShiftTask.shift_number).limit(limit)
     return db.scalars(stmt).all()
 
 
@@ -73,8 +83,6 @@ def get_shift_task(
 async def update_shift_task(
     task_id: int,
     shift_date: str | None = Body(default=None),
-    planned_start: str | None = Body(default=None),
-    planned_end: str | None = Body(default=None),
     driver_id: int | None = Body(default=None),
     status: str | None = Body(default=None),
     db: Session = Depends(get_db),
@@ -92,8 +100,6 @@ async def update_shift_task(
             company_id=company_id,
             user_id=current_user.id,
             shift_date=shift_date,
-            planned_start=planned_start,
-            planned_end=planned_end,
             driver_id=driver_id,
             status=status,
         )
@@ -636,7 +642,7 @@ def bulk_auto_assign_drivers(
     from datetime import date as date_type
     from datetime import timedelta
 
-    from app.models.contractor import DriverProfile, Employee
+    from app.models.contractor import Contractor, DriverProfile, Employee
 
     d_from = date_type.fromisoformat(date_from)
     d_to = date_type.fromisoformat(date_to)
@@ -667,7 +673,9 @@ def bulk_auto_assign_drivers(
             .join(
                 Employee, DriverProfile.employee_contractor_id == Employee.contractor_id
             )
-            .where(getattr(Employee, "company_id", None) == company_id)
+            .join(Contractor, Employee.contractor_id == Contractor.id)
+            .where(Contractor.company_id == company_id)
+            .where(Contractor.is_active.is_(True))
         )
         .scalars()
         .all()

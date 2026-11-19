@@ -3,7 +3,7 @@
 import json
 import logging
 from datetime import date as date_type
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -26,8 +26,6 @@ async def update_shift_task(
     company_id: int,
     user_id: int,
     shift_date: str | None = None,
-    planned_start: str | None = None,
-    planned_end: str | None = None,
     driver_id: int | None = None,
     status: str | None = None,
 ) -> dict:
@@ -72,10 +70,6 @@ async def update_shift_task(
         old_date = task.shift_date
         task.shift_date = date_type.fromisoformat(shift_date)
         changes.append(f"date: {old_date} → {shift_date}")
-    if planned_start is not None:
-        task.planned_start = datetime.fromisoformat(planned_start)
-    if planned_end is not None:
-        task.planned_end = datetime.fromisoformat(planned_end)
     if driver_id is not None:
         task.operator_id = driver_id
     if status is not None:

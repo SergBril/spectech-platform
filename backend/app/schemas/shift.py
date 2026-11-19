@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 class ShiftTaskCreate(BaseModel):
     request_id: int
     assignment_id: int | None = None
-    operator_id: int
+    operator_id: int | None = None
     vehicle_id: int
     shift_date: date
     shift_number: int = 1
@@ -20,7 +20,7 @@ class ShiftTaskRead(BaseModel):
     id: int
     request_id: int
     assignment_id: int | None = None
-    operator_id: int
+    operator_id: int | None = None
     vehicle_id: int
     shift_date: date
     shift_number: int
