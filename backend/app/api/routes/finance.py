@@ -673,43 +673,41 @@ def get_revenue_by_vehicle(
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
 ):
-    """🚜 Топ техники по моточасам за период."""
-    from datetime import datetime as dt
-    from datetime import timedelta
+    """🚜 Топ техники по выработке за период.
 
-    d_from = dt.fromisoformat(date_from)
-    d_to = dt.fromisoformat(date_to) + timedelta(days=1)
+    Источник - отчёты по сменам. Прежний запрос суммировал Rental.moto_hours и
+    соединял по Rental.vehicle_id: ни того, ни другого у Rental нет. Исключение
+    глоталось, а fallback возвращал первые машины компании с нулём часов -
+    график выглядел правдоподобно и показывал выдуманные нули.
+    """
+    from datetime import date as date_type
 
-    try:
-        from app.models.rental import Rental
+    from app.models.shift import ShiftReport, ShiftTask
 
-        results = (
-            db.query(
-                Vehicle.name.label("vehicle_name"),
-                func.coalesce(func.sum(Rental.moto_hours), 0).label("moto_hours"),
-            )
-            .join(Vehicle, Rental.vehicle_id == Vehicle.id)
-            .filter(
-                Rental.company_id == company_id,
-                Rental.start_date >= d_from,
-                Rental.start_date < d_to,
-            )
-            .group_by(Vehicle.id, Vehicle.name)
-            .order_by(func.sum(Rental.moto_hours).desc())
-            .limit(limit)
-            .all()
+    d_from = date_type.fromisoformat(date_from)
+    d_to = date_type.fromisoformat(date_to)
+
+    hours = func.coalesce(
+        ShiftReport.final_moto_hours, ShiftReport.operator_moto_hours, 0
+    )
+    results = (
+        db.query(
+            Vehicle.name.label("vehicle_name"),
+            func.coalesce(func.sum(hours), 0).label("moto_hours"),
         )
-    except Exception:
-        results = []
-
-    if not results:
-        vehicles = (
-            db.query(Vehicle.name)
-            .filter(Vehicle.company_id == company_id)
-            .limit(limit)
-            .all()
+        .join(ShiftTask, ShiftTask.vehicle_id == Vehicle.id)
+        .join(ShiftReport, ShiftReport.shift_task_id == ShiftTask.id)
+        .filter(
+            Vehicle.company_id == company_id,
+            Vehicle.is_deleted.is_(False),
+            ShiftTask.shift_date >= d_from,
+            ShiftTask.shift_date <= d_to,
         )
-        return [{"vehicle_name": v.name, "moto_hours": 0} for v in vehicles]
+        .group_by(Vehicle.id, Vehicle.name)
+        .order_by(func.sum(hours).desc())
+        .limit(limit)
+        .all()
+    )
 
     return [
         {

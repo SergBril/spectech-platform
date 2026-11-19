@@ -74,7 +74,7 @@ def auto_match_payments(
             select(BankTransaction).where(
                 BankTransaction.company_id == company_id,
                 BankTransaction.matched_invoice_id.is_(None),
-                BankTransaction.status == "processed",
+                BankTransaction.match_status == "unmatched",
             )
         )
         .scalars()
@@ -109,8 +109,8 @@ def auto_match_payments(
 
             # Match by payer INN (if available)
             inn_match = False
-            if payment.payer_inn and act.counterparty_inn:
-                inn_match = payment.payer_inn == act.counterparty_inn
+            if payment.counterparty_inn and act.counterparty_inn:
+                inn_match = payment.counterparty_inn == act.counterparty_inn
 
             # Match by purpose containing act number
             purpose_match = False
