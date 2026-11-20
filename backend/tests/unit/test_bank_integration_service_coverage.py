@@ -1,6 +1,6 @@
 """Coverage tests for bank_integration_service."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -94,79 +94,172 @@ class TestParseCsv:
 
 
 class TestSyncPaymentsToDb:
-    """Cover sync_payments_to_db (lines 90-138)."""
+    """sync_payments_to_db на реальной модели bank_statement.
 
-    def test_creates_new(self, service):
-        db = MagicMock()
-        db.execute.return_value.scalar_one_or_none.return_value = None
-        payments = [
-            {
-                "doc_number": "1",
-                "doc_date": "06.11.2026",
-                "payer_inn": "7701",
-                "payer_name": "A",
-                "payer_account": "407",
-                "payee_inn": "7702",
-                "payee_name": "B",
-                "payee_account": "408",
-                "amount": 1000.0,
-                "purpose": "Test",
-                "status": "processed",
-            }
-        ]
+    Дефект MK-1: импорт падал ModuleNotFoundError (app.models.bank не существует)
+    и конструктор использовал поля, которых у BankTransaction нет. direction
+    определяется по совпадению счёта с нашим (конвенция ClientBankExchangeParser),
+    несовпавшие платежи пропускаются. Выписка (BankStatement) создаётся реально.
+    """
 
-        mock_txn_class = MagicMock()
-        with (
-            patch.dict(
-                "sys.modules",
-                {"app.models.bank": MagicMock(BankTransaction=mock_txn_class)},
-            ),
-            patch(
-                "app.services.bank_integration_service.select", return_value=MagicMock()
-            ),
-        ):
-            result = service.sync_payments_to_db(db, 7, payments)
+    @pytest.fixture
+    def our_account(self):
+        from app.core.config import settings
 
-        assert result["created"] == 1
-        assert result["skipped"] == 0
-        db.add.assert_called_once()
-        db.commit.assert_called_once()
+        return getattr(settings, "BANK_ACCOUNT_NUMBER", "40702810210001399360")
 
-    def test_skips_duplicates(self, service):
-        db = MagicMock()
-        existing = MagicMock()
-        db.execute.return_value.scalar_one_or_none.return_value = existing
-        payments = [
-            {
-                "doc_number": "1",
-                "doc_date": "06.11.2026",
-                "payer_inn": "7701",
-                "payer_name": "A",
-                "payer_account": "407",
-                "payee_inn": "7702",
-                "payee_name": "B",
-                "payee_account": "408",
-                "amount": 1000.0,
-                "purpose": "Test",
-                "status": "processed",
-            }
-        ]
+    @pytest.fixture(autouse=True)
+    def _isolated_storage(self, monkeypatch, tmp_path):
+        from app.core.config import settings
 
-        mock_txn_class = MagicMock()
-        with (
-            patch.dict(
-                "sys.modules",
-                {"app.models.bank": MagicMock(BankTransaction=mock_txn_class)},
-            ),
-            patch(
-                "app.services.bank_integration_service.select", return_value=MagicMock()
-            ),
-        ):
-            result = service.sync_payments_to_db(db, 7, payments)
+        monkeypatch.setattr(settings, "local_storage_dir", str(tmp_path))
 
+    def _payment(self, our_account, **over):
+        p = {
+            "doc_number": "1",
+            "doc_date": "06.11.2026",
+            "payer_inn": "7701234567",
+            "payer_name": "ООО Плательщик",
+            "payer_account": "40702810000000001234",
+            "payee_inn": "7700000000",
+            "payee_name": "Test Company",
+            "payee_account": our_account,
+            "amount": 50000.0,
+            "purpose": "Оплата по акту",
+            "status": "processed",
+        }
+        p.update(over)
+        return p
+
+    def test_csv_import_creates_incoming_with_correct_fields(
+        self, service, db_session, company, our_account
+    ):
+        from app.models.bank_statement import BankStatement, BankTransaction
+
+        csv_content = (
+            "Номер,Дата,ИННПлательщика,Плательщик,СчетПлательщика,"
+            "ИННПолучателя,Получатель,СчетПолучателя,Сумма,Назначение\n"
+            "1,06.11.2026,7701234567,ООО Плательщик,40702810000000001234,"
+            f"7700000000,Test Company,{our_account},50000,Оплата по акту"
+        )
+        payments = service.parse_csv(csv_content)
+        result = service.sync_payments_to_db(
+            db_session,
+            company.id,
+            payments,
+            file_name="test.csv",
+            file_content=csv_content.encode("utf-8"),
+        )
+        assert result["created"] == 1, result
+        tx = db_session.query(BankTransaction).one()
+        assert tx.company_id == company.id
+        assert tx.direction == "incoming"
+        assert tx.document_number == "1"
+        # incoming: контрагент - плательщик
+        assert tx.counterparty_name == "ООО Плательщик"
+        assert tx.counterparty_inn == "7701234567"
+        assert float(tx.amount) == 50000.0
+        assert tx.statement_id is not None
+        st = db_session.get(BankStatement, tx.statement_id)
+        assert st is not None
+        assert st.company_id == company.id
+        assert st.account_number == our_account
+        assert st.file_name == "test.csv"
+
+    def test_1c_xml_import_creates_record(
+        self, service, db_session, company, our_account
+    ):
+        from app.models.bank_statement import BankTransaction
+
+        xml = f"""<?xml version="1.0"?>
+<ФайлОбмена>
+  <Документ Тип="ПлатежноеПоручение">
+    <Номер>77</Номер>
+    <Дата>06.11.2026</Дата>
+    <ИННПлательщика>7701234567</ИННПлательщика>
+    <НаименованиеПлательщика>ООО Клиент</НаименованиеПлательщика>
+    <СчетПлательщика>40702810000000001234</СчетПлательщика>
+    <ИННПолучателя>7700000000</ИННПолучателя>
+    <НаименованиеПолучателя>Test Company</НаименованиеПолучателя>
+    <СчетПолучателя>{our_account}</СчетПолучателя>
+    <Сумма>12000.00</Сумма>
+    <НазначениеПлатежа>Оплата</НазначениеПлатежа>
+  </Документ>
+</ФайлОбмена>"""
+        payments = service.parse_1c_xml(xml)
+        result = service.sync_payments_to_db(
+            db_session,
+            company.id,
+            payments,
+            file_name="test.xml",
+            file_content=xml.encode("utf-8"),
+        )
+        assert result["created"] == 1, result
+        tx = db_session.query(BankTransaction).one()
+        assert tx.document_number == "77"
+        assert tx.direction == "incoming"
+        assert float(tx.amount) == 12000.0
+        assert tx.counterparty_name == "ООО Клиент"
+
+    def test_outgoing_uses_payee_as_counterparty(
+        self, service, db_session, company, our_account
+    ):
+        from app.models.bank_statement import BankTransaction
+
+        p = self._payment(
+            our_account,
+            payer_account=our_account,
+            payee_account="40702810000000009999",
+            payer_name="Test Company",
+            payee_name="ООО Поставщик",
+            payee_inn="7709876543",
+        )
+        result = service.sync_payments_to_db(
+            db_session, company.id, [p], file_name="t.csv", file_content=b"x"
+        )
+        assert result["created"] == 1, result
+        tx = db_session.query(BankTransaction).one()
+        assert tx.direction == "outgoing"
+        assert tx.counterparty_name == "ООО Поставщик"
+        assert tx.counterparty_inn == "7709876543"
+
+    def test_uncovered_payment_is_skipped(
+        self, service, db_session, company, our_account
+    ):
+        from app.models.bank_statement import BankTransaction
+
+        p = self._payment(
+            our_account,
+            payer_account="40702810000000001111",
+            payee_account="40702810000000002222",
+        )
+        result = service.sync_payments_to_db(
+            db_session, company.id, [p], file_name="t.csv", file_content=b"x"
+        )
         assert result["created"] == 0
         assert result["skipped"] == 1
-        db.add.assert_not_called()
+        assert db_session.query(BankTransaction).count() == 0
+
+    def test_duplicate_is_skipped(self, service, db_session, company, our_account):
+        p = self._payment(our_account)
+        first = service.sync_payments_to_db(
+            db_session, company.id, [p], file_name="t.csv", file_content=b"x"
+        )
+        second = service.sync_payments_to_db(
+            db_session, company.id, [p], file_name="t.csv", file_content=b"x"
+        )
+        assert first["created"] == 1
+        assert second["created"] == 0
+        assert second["skipped"] == 1
+
+    def test_empty_payments_creates_no_statement(self, service, db_session, company):
+        from app.models.bank_statement import BankStatement
+
+        result = service.sync_payments_to_db(
+            db_session, company.id, [], file_name="t.csv", file_content=b""
+        )
+        assert result == {"created": 0, "skipped": 0}
+        assert db_session.query(BankStatement).count() == 0
 
 
 class TestGetText:

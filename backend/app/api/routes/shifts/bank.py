@@ -17,6 +17,7 @@ from app.core.db import get_db
 from app.models.auth import User
 from app.models.bank_statement import BankTransaction
 from app.models.catalog import Vehicle
+from app.models.contractor import Contractor
 from app.models.finance import Act
 
 router = APIRouter()
@@ -56,7 +57,9 @@ async def import_bank_payments(
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
 
-    result = bank_integration_service.sync_payments_to_db(db, company_id, payments)
+    result = bank_integration_service.sync_payments_to_db(
+        db, company_id, payments, file_name=filename, file_content=content
+    )
     return {"message": f"Импортировано {result['created']} платежей", **result}
 
 
@@ -208,13 +211,17 @@ def get_receivables_dashboard(
         if days_since > 30:
             overdue_amount += outstanding
             vehicle = db.get(Vehicle, act.vehicle_id) if act.vehicle_id else None
+            # Настоящее имя контрагента: поле акта, иначе клиент по client_id.
+            # Пустое значение допустимо (контрагент не указан), выдуманное - нет.
+            client = db.get(Contractor, act.client_id) if act.client_id else None
+            counterparty = act.counterparty_name or (client.name if client else "")
             overdue_acts.append(
                 {
                     "id": act.id,
                     "act_number": act.document_number or f"ACT-{act.id}",
                     "act_date": str(act.act_date),
                     "vehicle_name": vehicle.name if vehicle else "",
-                    "counterparty": "",
+                    "counterparty": counterparty,
                     "outstanding": round(outstanding, 2),
                     "days_overdue": days_since - 30,
                     "status": act.status,

@@ -81,50 +81,154 @@ class BankIntegrationService:
         return payments
 
     def sync_payments_to_db(
-        self, db: Session, company_id: int, payments: list[dict]
+        self,
+        db: Session,
+        company_id: int,
+        payments: list[dict],
+        file_name: str = "",
+        file_content: bytes = b"",
     ) -> dict:
-        """Сохранить платежи в БД (bank_transactions)."""
+        """Сохранить платежи в БД как строки банковской выписки.
 
-        from app.models.bank import BankTransaction
+        BankTransaction живёт в app.models.bank_statement и требует выписку
+        (statement_id) и поля document_number/direction/counterparty_*. direction
+        определяется по совпадению счёта плательщика/получателя с нашим счётом
+        (конвенция ClientBankExchangeParser); платёж, не относящийся к нашему
+        счёту, пропускается. Выписка пакета импорта создаётся реально, а не
+        подставляется выдуманный statement_id.
+        """
+        from datetime import UTC, datetime
+        from decimal import Decimal
+        from pathlib import Path
+
+        from app.core.config import settings
+        from app.models.bank_statement import (
+            BankStatement,
+            BankTransaction,
+            MatchStatus,
+            StatementStatus,
+            TransactionDirection,
+            TransactionType,
+        )
+
+        our_account = getattr(settings, "BANK_ACCOUNT_NUMBER", "40702810210001399360")
 
         created = 0
         skipped = 0
+        seen: set[str] = set()
+        prepared: list[tuple] = []
 
         for p in payments:
-            # Check duplicate by doc_number + doc_date + amount
-            existing = db.execute(
-                select(BankTransaction).where(
-                    BankTransaction.company_id == company_id,
-                    BankTransaction.doc_number == p["doc_number"],
-                    BankTransaction.amount == p["amount"],
-                )
-            ).scalar_one_or_none()
-
-            if existing:
+            doc_date = self._parse_date(p.get("doc_date"))
+            if doc_date is None:
                 skipped += 1
                 continue
 
+            payer_account = p.get("payer_account") or ""
+            payee_account = p.get("payee_account") or ""
+            if payer_account == our_account:
+                direction = TransactionDirection.outgoing
+            elif payee_account == our_account:
+                direction = TransactionDirection.incoming
+            else:
+                # Не относится к нашему счёту - пропускаем (конвенция парсера).
+                skipped += 1
+                continue
+
+            amount = Decimal(str(p.get("amount") or 0))
+            number = p.get("doc_number") or ""
+            amount_str = str(amount).replace(".", "_")
+            bank_transaction_id = (
+                f"{TransactionType.payment_order.value}_{number}_"
+                f"{doc_date.isoformat()}_{amount_str}"
+            )
+            if bank_transaction_id in seen:
+                skipped += 1
+                continue
+            existing = db.execute(
+                select(BankTransaction).where(
+                    BankTransaction.company_id == company_id,
+                    BankTransaction.bank_transaction_id == bank_transaction_id,
+                )
+            ).scalar_one_or_none()
+            if existing:
+                skipped += 1
+                continue
+            seen.add(bank_transaction_id)
+            prepared.append((p, doc_date, direction, bank_transaction_id, amount))
+
+        if not prepared:
+            return {"created": 0, "skipped": skipped}
+
+        dates = [d for _, d, _, _, _ in prepared]
+        storage_dir = Path(settings.local_storage_dir) / "bank_statements"
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
+        safe_name = file_name or "import.csv"
+        storage_path = storage_dir / f"{timestamp}_{safe_name}"
+        storage_path.write_bytes(file_content or b"")
+
+        statement = BankStatement(
+            company_id=company_id,
+            file_name=safe_name,
+            file_size=len(file_content or b""),
+            storage_path=str(storage_path),
+            account_number=our_account,
+            date_start=min(dates),
+            date_end=max(dates),
+            total_transactions=len(prepared),
+            status=StatementStatus.parsed,
+        )
+        db.add(statement)
+        db.flush()
+
+        for p, doc_date, direction, bank_transaction_id, amount in prepared:
+            outgoing = direction == TransactionDirection.outgoing
             txn = BankTransaction(
+                statement_id=statement.id,
                 company_id=company_id,
-                doc_number=p["doc_number"],
-                doc_date=p["doc_date"],
-                payer_inn=p["payer_inn"],
-                payer_name=p["payer_name"],
-                payer_account=p["payer_account"],
-                payee_inn=p["payee_inn"],
-                payee_name=p["payee_name"],
-                payee_account=p["payee_account"],
-                amount=p["amount"],
-                purpose=p["purpose"],
-                status=p["status"],
+                bank_transaction_id=bank_transaction_id,
+                document_type=TransactionType.payment_order,
+                document_number=p.get("doc_number") or "",
+                document_date=doc_date,
+                direction=direction,
+                amount=amount,
+                processed_date=doc_date,
+                counterparty_name=(
+                    p.get("payee_name") if outgoing else p.get("payer_name")
+                )
+                or "",
+                counterparty_inn=(
+                    p.get("payee_inn") if outgoing else p.get("payer_inn")
+                )
+                or None,
+                counterparty_account=(
+                    p.get("payee_account") if outgoing else p.get("payer_account")
+                )
+                or None,
+                purpose=p.get("purpose") or None,
+                match_status=MatchStatus.unmatched,
                 source="import",
             )
             db.add(txn)
             created += 1
 
+        statement.total_transactions = created
         db.commit()
         logger.info(f"Bank sync: {created} created, {skipped} skipped")
         return {"created": created, "skipped": skipped}
+
+    @staticmethod
+    def _parse_date(value: str | None):
+        """Дата платежа из парсера приходит строкой dd.mm.yyyy."""
+        from datetime import datetime
+
+        if not value:
+            return None
+        try:
+            return datetime.strptime(str(value).strip(), "%d.%m.%Y").date()
+        except ValueError:
+            return None
 
     def _get_text(self, parent, tag: str) -> str:
         el = parent.find(tag)
