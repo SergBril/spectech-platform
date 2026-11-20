@@ -14,6 +14,7 @@ from app.models.shift import ShiftTask
 router = APIRouter()
 
 
+@router.get("/stats/finance-dashboard", summary="💰 Финансовый дашборд")
 def get_finance_dashboard(
     year: int = Query(default=None),
     db: Session = Depends(get_db),
@@ -161,6 +162,9 @@ def get_finance_dashboard(
     }
 
 
+@router.get(
+    "/stats/finance-dashboard/export", summary="📥 Экспорт финансового дашборда"
+)
 def export_finance_dashboard_excel(
     year: int = Query(default=None),
     db: Session = Depends(get_db),

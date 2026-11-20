@@ -2,9 +2,9 @@
 
 from fastapi import (
     APIRouter,
-    Body,
     Depends,
     File,
+    Form,
     Query,
     UploadFile,
 )
@@ -20,6 +20,7 @@ from app.models.finance import Act
 router = APIRouter()
 
 
+@router.get("/documents/archive", summary="🔍 Поиск в архиве документов")
 def search_document_archive(
     q: str | None = Query(default=None, description="Полнотекстовый поиск"),
     doc_type: str | None = Query(default=None),
@@ -89,12 +90,13 @@ def search_document_archive(
     }
 
 
+@router.post("/documents/archive", summary="📥 Добавить документ в архив")
 async def add_to_archive(
-    title: str = Body(...),
-    doc_type: str = Body(default="report"),
-    doc_number: str = Body(default=""),
-    content_text: str = Body(default=""),
-    related_act_id: int | None = Body(default=None),
+    title: str = Form(...),
+    doc_type: str = Form(default="report"),
+    doc_number: str = Form(default=""),
+    content_text: str = Form(default=""),
+    related_act_id: int | None = Form(default=None),
     file: UploadFile | None = File(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -133,6 +135,7 @@ async def add_to_archive(
     return {"id": doc.id, "message": "Документ добавлен в архив"}
 
 
+@router.post("/documents/archive/auto-index-acts", summary="🗂️ Индексировать акты")
 def auto_index_acts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

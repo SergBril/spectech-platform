@@ -312,6 +312,7 @@ def delete_template_exclusion(
 # === Utilization Statistics ===
 
 
+@router.get("/auto-assign/rules", summary="📋 Правила автоназначения")
 def list_auto_assign_rules(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -345,6 +346,7 @@ def list_auto_assign_rules(
     ]
 
 
+@router.post("/auto-assign/rules", summary="➕ Создать правило")
 def create_auto_assign_rule(
     name: str = Body(...),
     rule_type: str = Body(...),
@@ -374,6 +376,7 @@ def create_auto_assign_rule(
     return {"id": rule.id, "message": "Правило создано"}
 
 
+@router.delete("/auto-assign/rules/{rule_id}", summary="🗑️ Удалить правило")
 def delete_auto_assign_rule(
     rule_id: int,
     db: Session = Depends(get_db),
