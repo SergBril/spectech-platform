@@ -374,6 +374,7 @@ def get_role_history(
 # === User Notification Preferences ===
 
 
+@router.get("/notification-templates", summary="📋 Шаблоны уведомлений")
 def list_notification_templates(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -399,6 +400,9 @@ def list_notification_templates(
     ]
 
 
+@router.put(
+    "/notification-templates/{tmpl_id}", summary="✏️ Изменить шаблон уведомления"
+)
 def update_notification_template(
     tmpl_id: int,
     subject: str | None = Body(default=None),
@@ -426,6 +430,9 @@ def update_notification_template(
     return {"message": "Template updated"}
 
 
+@router.post(
+    "/notification-templates/init-defaults", summary="🧩 Создать стандартные шаблоны"
+)
 def init_defaults(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -439,6 +446,7 @@ def init_defaults(
     return {"created": created}
 
 
+@router.get("/profile/me", summary="👤 Мой профиль")
 def get_my_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -470,6 +478,7 @@ def get_my_profile(
     }
 
 
+@router.put("/profile/me", summary="✏️ Обновить мой профиль")
 def update_my_profile(
     full_name: str | None = Body(default=None),
     phone: str | None = Body(default=None),
