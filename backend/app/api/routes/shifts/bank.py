@@ -5,6 +5,7 @@ from fastapi import (
     Body,
     Depends,
     File,
+    Form,
     HTTPException,
     Query,
     UploadFile,
@@ -23,9 +24,10 @@ from app.models.finance import Act
 router = APIRouter()
 
 
+@router.post("/bank/import", summary="📥 Импорт платежей 1С/CSV")
 async def import_bank_payments(
     file: UploadFile = File(...),
-    format: str = Body(default="auto"),
+    format: str = Form(default="auto"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
