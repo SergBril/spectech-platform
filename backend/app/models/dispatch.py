@@ -169,6 +169,12 @@ class RequestAssignment(Base):
     operator_id: Mapped[int | None] = mapped_column(
         ForeignKey("employees.contractor_id"), nullable=True
     )
+    # Кто из пользователей создал отклик. Прежде код писал и читал assigned_by,
+    # которого в модели нет: чтение давало AttributeError (уведомления глотались),
+    # запись молча не сохранялась, а конструктор бросал TypeError.
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     planned_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

@@ -147,9 +147,13 @@ def assign_user_role(
                 new_role=role,
             )
             if email_tmpl and target.email:
-                from app.services.email_service import send_email
+                from app.services.email_service import email_service
 
-                send_email(target.email, email_tmpl["subject"], email_tmpl["body"])
+                email_service.send_email(
+                    to_email=target.email,
+                    subject=email_tmpl["subject"],
+                    body=email_tmpl["body"],
+                )
     except Exception:
         pass
 

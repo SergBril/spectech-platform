@@ -1,5 +1,7 @@
 """Модуль tasks для shifts router."""
 
+from datetime import datetime
+
 from fastapi import (
     APIRouter,
     Body,
@@ -370,6 +372,8 @@ async def create_request_from_shift(
     task_id: int,
     work_type: str = Body(default="earthworks"),
     object_address: str = Body(default=""),
+    planned_start: str | None = Body(default=None),
+    planned_end: str | None = Body(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: int = Depends(get_current_company_id),
@@ -386,14 +390,35 @@ async def create_request_from_shift(
     if not vehicle or vehicle.company_id != company_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
+    # У смены есть только дата: полей времени в ShiftTask нет. Прежний код читал
+    # task.planned_start и падал AttributeError. Выдумывать часы нельзя - время
+    # назначения служит запасным источником наработки в отчётах, и полный день
+    # дал бы 24 часа на смену. Время указывает оператор.
+    if not planned_start or not planned_end:
+        raise HTTPException(
+            status_code=422,
+            detail="Укажите время начала и окончания работ (planned_start, planned_end)",
+        )
+    try:
+        dt_start = datetime.fromisoformat(planned_start)
+        dt_end = datetime.fromisoformat(planned_end)
+    except ValueError:
+        raise HTTPException(
+            status_code=422, detail="Неверный формат времени, ожидается ISO"
+        )
+    if dt_end <= dt_start:
+        raise HTTPException(
+            status_code=422, detail="Окончание должно быть позже начала"
+        )
+
     # Create request from shift data
     request = Request(
         company_id=company_id,
         created_by=current_user.id,
         work_type=work_type,
         object_address=object_address or f"Смена {task.shift_date}",
-        planned_start=task.planned_start,
-        planned_end=task.planned_end,
+        planned_start=dt_start,
+        planned_end=dt_end,
         vehicle_category_id=(
             vehicle.category_id if hasattr(vehicle, "category_id") else None
         ),
@@ -407,7 +432,10 @@ async def create_request_from_shift(
     assignment = RequestAssignment(
         request_id=request.id,
         vehicle_id=task.vehicle_id,
-        assigned_by=current_user.id,
+        operator_id=vehicle.assigned_driver_id,
+        created_by_user_id=current_user.id,
+        planned_start=dt_start,
+        planned_end=dt_end,
         status="approved",
     )
     db.add(assignment)

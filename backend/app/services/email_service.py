@@ -50,6 +50,16 @@ class EmailService:
             logger.warning(f"⚠️ Skipping empty attachment: {filename}")
             return
 
+        # Крошечный PDF ломает MIME: mail.ru отвечает 550 invalid headers.
+        # Проверка была только в send_payout_approved, остальные обёртки слали как есть.
+        if filename.lower().endswith(".pdf") and len(content) < 100:
+            logger.warning(
+                "⚠️ Skipping invalid PDF attachment %s (%d bytes)",
+                filename,
+                len(content),
+            )
+            return
+
         if filename.lower().endswith(".pdf"):
             part = MIMEBase("application", "pdf")
         else:
@@ -58,14 +68,13 @@ class EmailService:
         part.set_payload(content)
         encoders.encode_base64(part)
 
-        # RFC 2231 encoding для имён файлов
-        from email.header import Header
-
-        encoded_filename = str(Header(filename, "utf-8"))
+        # RFC 2231: для не-ASCII имён нужен параметр filename*, а не encoded-word
+        # в filename=. Прежний Header() давал =?utf-8?...?= внутри filename=,
+        # что RFC-невалидно: кириллические имена актов давали SMTP 550.
         part.add_header(
             "Content-Disposition",
             "attachment",
-            filename=encoded_filename,
+            filename=("utf-8", "", filename),
         )
         # Добавляем Content-Transfer-Encoding явно
         part["Content-Transfer-Encoding"] = "base64"

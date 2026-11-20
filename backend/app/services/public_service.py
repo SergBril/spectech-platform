@@ -766,10 +766,14 @@ class PublicService:
 
         from datetime import datetime as dt
 
+        # operator_id - FK на employees.contractor_id, а не на users.id.
+        # Прежний код клал туда идентификатор пользователя.
+        resp_vehicle = db.get(Vehicle, vehicle_id)
         assignment = RequestAssignment(
             request_id=request_id,
             vehicle_id=vehicle_id,
-            operator_id=getattr(current_user, "id", None),
+            operator_id=(resp_vehicle.assigned_driver_id if resp_vehicle else None),
+            created_by_user_id=getattr(current_user, "id", None),
             planned_start=(
                 request.planned_start
                 if hasattr(request, "planned_start") and request.planned_start

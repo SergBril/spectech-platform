@@ -91,7 +91,7 @@ class SalaryNotificationDispatcher:
         # === 1. Внутреннее уведомление (ВСЕГДА) ===
         try:
             if user:
-                create_notification(
+                await create_notification(
                     db=db,
                     user_id=user.id,
                     channel="system",
@@ -111,8 +111,10 @@ class SalaryNotificationDispatcher:
         # === 2. Email ===
         if target_email and pdf_bytes:
             try:
-                await email_service.send_email(
-                    to=target_email,
+                # send_email синхронный: await на его результате давал TypeError,
+                # а исключение глоталось - в логе был успех, письма не было.
+                email_service.send_email(
+                    to_email=target_email,
                     subject=f"Расчётный листок за {period_str} — СпецТехника Про",
                     html_body=(
                         f"<div style='font-family: Arial, sans-serif; padding: 20px;'>"
@@ -127,7 +129,7 @@ class SalaryNotificationDispatcher:
                         f"Платформа «СпецТехника Про»</p>"
                         f"</div>"
                     ),
-                    attachments=[("payslip.pdf", pdf_bytes)],
+                    attachments=[{"filename": "payslip.pdf", "content": pdf_bytes}],
                 )
                 results["email"] = True
                 logger.info("✅ Email sent to %s", target_email)

@@ -638,7 +638,7 @@ class RequestService:
                     request_id=assignment.request_id,
                     assignment_id=assignment.id,
                     vehicle_id=assignment.vehicle_id,
-                    operator_id=getattr(vehicle, "current_driver_id", None),
+                    operator_id=getattr(vehicle, "assigned_driver_id", None),
                     shift_date=(
                         request.planned_start.date()
                         if request.planned_start
@@ -653,13 +653,13 @@ class RequestService:
                 try:
                     await create_notification(
                         db=self.db,
-                        user_id=assignment.assigned_by,
+                        user_id=assignment.created_by_user_id,
                         title="✅ Ваш отклик одобрен!",
                         body=f"Заявка #{request.id} подтверждена.",
                         channel="in_app",
                     )
                     await manager.send_to_user(
-                        assignment.assigned_by,
+                        assignment.created_by_user_id,
                         {"type": "response_approved", "request_id": request.id},
                     )
                 except Exception:
@@ -670,13 +670,13 @@ class RequestService:
                 try:
                     await create_notification(
                         db=self.db,
-                        user_id=assignment.assigned_by,
+                        user_id=assignment.created_by_user_id,
                         title="❌ Ваш отклик отклонён",
                         body=f"Заявка #{request.id}: {reason or 'Выбран другой исполнитель'}",
                         channel="in_app",
                     )
                     await manager.send_to_user(
-                        assignment.assigned_by,
+                        assignment.created_by_user_id,
                         {"type": "response_rejected", "request_id": request.id},
                     )
                 except Exception:
@@ -724,7 +724,6 @@ class RequestService:
         vehicle = self.db.get(Vehicle, assignment.vehicle_id)
 
         assignment.status = "approved"
-        assignment.assigned_by = user_id
 
         # Reject other pending responses
         other_responses = (
@@ -771,7 +770,7 @@ class RequestService:
         try:
             await create_notification(
                 db=self.db,
-                user_id=assignment.assigned_by,
+                user_id=assignment.created_by_user_id,
                 title="✅ Ваш отклик одобрен!",
                 body=f"Заявка #{request_id} подтверждена. Техника: {vehicle.name if vehicle else 'N/A'}. Создана смена.",
                 channel="in_app",
@@ -823,7 +822,7 @@ class RequestService:
         try:
             await create_notification(
                 db=self.db,
-                user_id=assignment.assigned_by,
+                user_id=assignment.created_by_user_id,
                 title="❌ Ваш отклик отклонён",
                 body=f"Заявка #{request_id}: {reason or 'Владелец выбрал другого исполнителя'}",
                 channel="in_app",
