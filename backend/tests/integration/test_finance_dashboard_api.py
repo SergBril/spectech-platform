@@ -13,7 +13,15 @@ from app.models.bank_statement import (
 )
 from app.models.catalog import Vehicle
 from app.models.contractor import Contractor
-from app.models.finance import DocumentStatus, Invoice, Payment, PaymentMethod, Payout
+from app.models.dispatch import Request
+from app.models.finance import (
+    Act,
+    DocumentStatus,
+    Invoice,
+    Payment,
+    PaymentMethod,
+    Payout,
+)
 from app.models.rental import (
     PrepaymentStatus,
     RateType,
@@ -21,6 +29,7 @@ from app.models.rental import (
     RentalItem,
     RentalStatus,
 )
+from app.models.shift import ShiftReport, ShiftTask
 
 
 class TestFinanceDashboardAPI:
@@ -249,6 +258,56 @@ class TestFinanceDashboardAPI:
         db_session.commit()
         db_session.refresh(statement)
 
+        # === Смена + отчёт + акт (наработка для revenue/by-vehicle) ===
+        # /finance/revenue/by-vehicle считает выработку из сменных отчётов
+        # (ShiftReport.final_moto_hours/operator_moto_hours), а не из счетов.
+        # Полная цепочка: заявка -> смена -> отчёт -> акт.
+        shift_request = Request(
+            client_id=client_1.id,
+            status="in_progress",
+            request_type="one_time",
+            work_type="Earthworks",
+            planned_start=datetime.now(UTC) - timedelta(days=1),
+            planned_end=datetime.now(UTC),
+            company_id=company.id,
+        )
+        db_session.add(shift_request)
+        db_session.commit()
+        db_session.refresh(shift_request)
+
+        shift_task = ShiftTask(
+            request_id=shift_request.id,
+            vehicle_id=vehicle_1.id,
+            shift_date=today,
+            status="completed",
+            company_id=company.id,
+        )
+        db_session.add(shift_task)
+        db_session.commit()
+        db_session.refresh(shift_task)
+
+        shift_report = ShiftReport(
+            shift_task_id=shift_task.id,
+            operator_moto_hours=Decimal("8.0"),
+            final_moto_hours=Decimal("8.0"),
+            company_id=company.id,
+        )
+        db_session.add(shift_report)
+        db_session.commit()
+
+        shift_act = Act(
+            document_number="DASH-ACT-001",
+            client_id=client_1.id,
+            vehicle_id=vehicle_1.id,
+            company_id=company.id,
+            act_date=today,
+            total_amount=Decimal("16000.00"),
+            hours_worked=8.0,
+            status=DocumentStatus.signed,
+        )
+        db_session.add(shift_act)
+        db_session.commit()
+
         return {
             "company": company,
             "client_1": client_1,
@@ -370,6 +429,13 @@ class TestFinanceDashboardAPI:
             assert isinstance(data, list)
         vehicle_names = [item["vehicle_name"] for item in data]
         assert dashboard_setup["vehicle_1"].name in vehicle_names
+        # Выработка посчитана из сменного отчёта (8 моточасов), а не выдуманный ноль.
+        row = next(
+            item
+            for item in data
+            if item["vehicle_name"] == dashboard_setup["vehicle_1"].name
+        )
+        assert row["moto_hours"] == 8.0
 
     # === ТЕСТЫ ВАЛИДАЦИИ ===
 

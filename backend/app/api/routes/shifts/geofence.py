@@ -13,6 +13,7 @@ from app.api.deps import get_current_company_id, get_current_user
 from app.core.db import get_db
 from app.models.auth import User
 from app.models.catalog import Vehicle
+from app.models.dispatch import RequestAssignment
 from app.models.shift import ShiftTask
 
 router = APIRouter()
@@ -66,8 +67,13 @@ async def process_geofence_event(
         )
         db.add(sg)
         task.status = "in_progress"
-        if not task.actual_start:
-            task.actual_start = ts
+        # Фактическое время старта живёт в RequestAssignment.actual_start
+        # (у ShiftTask такого поля нет). Пишем через связь смены с назначением;
+        # если назначения нет, время не выдумываем.
+        if task.assignment_id:
+            assignment = db.get(RequestAssignment, task.assignment_id)
+            if assignment and not assignment.actual_start:
+                assignment.actual_start = ts
         action = "auto_started"
 
         # Notify dispatcher
@@ -105,8 +111,10 @@ async def process_geofence_event(
             sg.auto_completed = True
 
         task.status = "completed"
-        if not task.actual_end:
-            task.actual_end = ts
+        if task.assignment_id:
+            assignment = db.get(RequestAssignment, task.assignment_id)
+            if assignment and not assignment.actual_end:
+                assignment.actual_end = ts
         action = "auto_completed"
 
         try:

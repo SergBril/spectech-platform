@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.models.catalog import Vehicle
 from app.models.company import Company
 from app.models.dispatch import Request, RequestStatus
-from app.models.rental import Rental, RentalStatus
+from app.models.rental import Rental, RentalItem, RentalStatus
 
 logger = logging.getLogger("spectech.marketplace_service")
 
@@ -267,12 +267,10 @@ class MarketplaceService:
             to_date = from_date + timedelta(days=30)
 
         # Активные и будущие аренды
+        # Техника аренды живёт в RentalItem (у Rental нет vehicle_id).
+        # Фильтруем через фактическую связь items, а не фантомное поле.
         stmt = select(Rental).where(
-            (
-                Rental.vehicle_id == vehicle_id
-                if hasattr(Rental, "vehicle_id")
-                else Rental.id > 0
-            ),
+            Rental.items.any(RentalItem.vehicle_id == vehicle_id),
             Rental.status.in_(
                 [
                     RentalStatus.DRAFT,

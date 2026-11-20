@@ -94,7 +94,7 @@ class TestStatusShiftsIsolation:
             Vehicle(
                 name="Техника A",
                 company_id=company.id,
-                status="available",
+                status="free",
                 id_type="internal",
                 id_value="MAX-A-1",
             )
@@ -104,7 +104,7 @@ class TestStatusShiftsIsolation:
                 Vehicle(
                     name=f"Техника B{i}",
                     company_id=second_company.id,
-                    status="available",
+                    status="free",
                     id_type="internal",
                     id_value=f"MAX-B-{i}",
                 )

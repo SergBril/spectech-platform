@@ -129,7 +129,7 @@ async def max_webhook(request: Request, db: Session = Depends(get_db)):
                     db.query(Vehicle)
                     .filter(
                         Vehicle.company_id == user.company_id,
-                        Vehicle.status == "available",
+                        Vehicle.status == "free",
                         Vehicle.is_deleted == False,
                     )
                     .count()
@@ -178,7 +178,7 @@ async def max_webhook(request: Request, db: Session = Depends(get_db)):
                     db.query(Vehicle)
                     .filter(
                         Vehicle.company_id == user.company_id,
-                        Vehicle.status == "available",
+                        Vehicle.status == "free",
                         Vehicle.is_deleted == False,
                     )
                     .all()
