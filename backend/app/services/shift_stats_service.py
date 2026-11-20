@@ -1322,6 +1322,46 @@ class ShiftStatsService:
             or 0
         )
 
+        # Тренд выручки за 7 дней: суммы по актам. Страница подставляла выдуманный
+        # массив [65,45,80,...] как факт - подделку принимают за данные, в отличие
+        # от пустого графика.
+        from datetime import UTC, datetime, timedelta
+
+        from app.models.telematics import GpsSyncLog
+
+        week_start = today - timedelta(days=6)
+        day_rows = db.execute(
+            select(Act.act_date, func.coalesce(func.sum(Act.total_amount), 0))
+            .where(Act.company_id == company_id)
+            .where(Act.act_date >= week_start)
+            .where(Act.act_date <= today)
+            .group_by(Act.act_date)
+        ).all()
+        by_day = {str(d): float(v or 0) for d, v in day_rows}
+        revenue_trend = []
+        for i in range(7):
+            day = week_start + timedelta(days=i)
+            revenue_trend.append(
+                {"date": str(day), "revenue": by_day.get(str(day), 0.0)}
+            )
+
+        # Здоровье GPS по журналу синхронизации. При отсутствии записей - None:
+        # «нет данных» и «ноль ошибок» - разные утверждения.
+        day_ago = datetime.now(UTC) - timedelta(days=1)
+        recent = db.execute(
+            select(GpsSyncLog.status, GpsSyncLog.duration_ms)
+            .where(GpsSyncLog.company_id == company_id)
+            .where(GpsSyncLog.created_at >= day_ago)
+        ).all()
+        ok = [r for r in recent if r[0] == "success"]
+        durations = [r[1] for r in ok if r[1] is not None]
+        gps_health = {
+            "samples": len(recent),
+            "success_rate": round(len(ok) / len(recent) * 100, 1) if recent else None,
+            "avg_ms": round(sum(durations) / len(durations)) if durations else None,
+            "errors_24h": len(recent) - len(ok),
+        }
+
         return {
             "users": {"total": users_count, "drivers": drivers_count},
             "vehicles": {"total": vehicles_count},
@@ -1337,6 +1377,8 @@ class ShiftStatsService:
             "unmatched_transactions": unmatched_count,
             "documents_in_archive": docs_count,
             "shifts_today": shifts_today,
+            "revenue_trend": revenue_trend,
+            "gps_health": gps_health,
             "date": str(today),
         }
 

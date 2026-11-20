@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import apiClient from '../api/client';
 
@@ -94,17 +94,32 @@ const PlatformOverviewPage: React.FC = () => {
             <div className="bg-white rounded-xl shadow-sm border p-5 mb-6">
               <h2 className="text-lg font-bold text-gray-900 mb-4">📈 Тренд выручки (последние 7 дней)</h2>
               <div className="flex items-end gap-1 h-32">
-                {(data.revenue_trend || [65, 45, 80, 55, 90, 70, 85]).map((val: number, i: number) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                {(() => {
+                  const trend: { date: string; revenue: number }[] = data.revenue_trend || [];
+                  const max = Math.max(...trend.map((d) => d.revenue), 0);
+                  if (!trend.length || max === 0) {
+                    return (
+                      <div className="w-full flex items-center justify-center text-sm text-gray-400">
+                        Нет выручки за последние 7 дней
+                      </div>
+                    );
+                  }
+                  return trend.map((d) => (
                     <div
-                      className="w-full bg-blue-500 rounded-t transition-all duration-500"
-                      style={{ height: `${Math.max(val, 5)}%`, opacity: 0.7 + (i / 20) }}
-                    />
-                    <span className="text-[10px] text-gray-400">
-                      {['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][i]}
-                    </span>
-                  </div>
-                ))}
+                      key={d.date}
+                      className="flex-1 flex flex-col items-center gap-1"
+                      title={`${d.date}: ${d.revenue.toLocaleString('ru-RU')} ₽`}
+                    >
+                      <div
+                        className="w-full bg-blue-500 rounded-t transition-all duration-500"
+                        style={{ height: `${Math.max((d.revenue / max) * 100, 2)}%` }}
+                      />
+                      <span className="text-[10px] text-gray-400">
+                        {new Date(d.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+                      </span>
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
 
