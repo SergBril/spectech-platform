@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import apiClient from '../api/client';
 
@@ -10,7 +10,7 @@ const PnLPerVehiclePage: React.FC = () => {
 
   useEffect(() => {
     setLoading(true);
-    apiClient.get('/shifts/stats/pnl-per-vehicle', { params: { date_from: dateFrom, date_to: dateTo } })
+    apiClient.get('/shifts/stats/pnl', { params: { date_from: dateFrom, date_to: dateTo } })
       .then(res => setData(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -24,7 +24,7 @@ const PnLPerVehiclePage: React.FC = () => {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-4">
             <h1 className="text-2xl font-bold text-gray-900">📊 Прибыльность по технике</h1>
-            <button onClick={() => window.open(`/api/v1/shifts/stats/pnl-per-vehicle/export?date_from=${dateFrom}&date_to=${dateTo}`, '_blank')}
+            <button onClick={() => window.open(`/api/v1/shifts/stats/pnl/export?date_from=${dateFrom}&date_to=${dateTo}`, '_blank')}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium">📥 Excel</button>
           </div>
           <div className="flex gap-3 items-center">

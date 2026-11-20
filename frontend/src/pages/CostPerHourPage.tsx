@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import apiClient from '../api/client';
 
@@ -22,13 +22,13 @@ const CostPerHourPage: React.FC = () => {
   }, [dateFrom, dateTo]);
 
   useEffect(() => {
-    apiClient.get('/shifts/cost-rates').then(res => setRatesForm(res.data)).catch(() => {});
+    apiClient.get('/shifts/stats/cost-rates').then(res => setRatesForm(res.data)).catch(() => {});
     apiClient.get('/shifts/stats/cost-forecast').then(res => setForecast(res.data)).catch(() => {});
   }, []);
 
   const saveRates = async () => {
     try {
-      await apiClient.put('/shifts/cost-rates', ratesForm);
+      await apiClient.patch('/shifts/stats/cost-rates', ratesForm);
       alert('✅ Ставки сохранены');
       setShowRates(false);
       // Reload data

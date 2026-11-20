@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import apiClient from '../api/client';
 
@@ -28,7 +28,7 @@ const UserRolesPage: React.FC = () => {
   const bulkChangeRole = async () => {
     if (!bulkRole || selectedUsers.size === 0) return;
     try {
-      const res = await apiClient.put('/shifts/users/bulk-role', { user_ids: Array.from(selectedUsers), role: bulkRole });
+      const res = await apiClient.post('/shifts/users/bulk-role', { user_ids: Array.from(selectedUsers), role: bulkRole });
       alert(`✅ Обновлено ${res.data.updated} пользователей`);
       setSelectedUsers(new Set());
       loadUsers();

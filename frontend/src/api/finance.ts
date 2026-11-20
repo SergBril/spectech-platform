@@ -1,4 +1,4 @@
-﻿import apiClient from './client';
+import apiClient from './client';
 
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'partially_paid' | 'overdue' | 'cancelled';
 export type ActStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
@@ -537,7 +537,7 @@ export const financeApi = {
   },
 
   verifyUpdSignature: async (actId: number): Promise<{ valid: boolean; xml_size: number; sig_size: number }> => {
-    const response = await apiClient.post(`/acts/${actId}/verify-signature`);
+    const response = await apiClient.get(`/shifts/acts/${actId}/verify-signature`);
     return response.data;
   },
 

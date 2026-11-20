@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import apiClient from '../api/client';
 
 const DriverAppPage: React.FC = () => {
@@ -43,7 +43,7 @@ const DriverAppPage: React.FC = () => {
 
   const startShift = async (taskId: number) => {
     try {
-      await apiClient.post(`/drivers/shifts/${taskId}/start`);
+      await apiClient.post(`/driver/shifts/${taskId}/start`);
       loadShifts();
     } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
   };

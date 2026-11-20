@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import apiClient from '../api/client';
 
 const DispatcherDashboard: React.FC = () => {
@@ -16,14 +16,14 @@ const DispatcherDashboard: React.FC = () => {
 
   const checkIdle = async () => {
     try {
-      const res = await apiClient.post('/shifts/alerts/check-idle');
+      const res = await apiClient.get('/shifts/alerts/idle-vehicles');
       alert(res.data.notified ? res.data.message : 'Нет простаивающей техники ✅');
     } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
   };
 
   const checkConflicts = async () => {
     try {
-      const res = await apiClient.post('/shifts/alerts/check-conflicts');
+      const res = await apiClient.get('/shifts/alerts/conflicts');
       alert(res.data.notified ? res.data.message : 'Нет конфликтов ✅');
     } catch (err: any) { alert('Ошибка: ' + (err.response?.data?.detail || '')); }
   };

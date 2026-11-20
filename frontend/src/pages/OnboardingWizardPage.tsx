@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import Layout from '../components/Layout';
 import apiClient from '../api/client';
 
@@ -17,7 +17,7 @@ const OnboardingWizardPage: React.FC = () => {
     setSaving(true);
     try {
       // Save cost rates
-      await apiClient.put('/shifts/cost-rates', {
+      await apiClient.patch('/shifts/stats/cost-rates', {
         fuel_price_per_liter: form.fuel_price,
         hourly_wage: form.hourly_wage,
         amortization_per_hour: form.amortization,

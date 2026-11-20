@@ -270,7 +270,7 @@ export const RequestDetailPage: React.FC = () => {
     if (selectedResponses.size === 0) return;
     if (!confirm(`${action === 'approve' ? 'Одобрить' : 'Отклонить'} ${selectedResponses.size} откликов?`)) return;
     try {
-      const res = await apiClient.post('/requests/bulk-responses', {
+      const res = await apiClient.post('/requests/responses/bulk-action', {
         assignment_ids: Array.from(selectedResponses),
         action,
         reason: action === 'reject' ? 'Массовое отклонение' : '',
