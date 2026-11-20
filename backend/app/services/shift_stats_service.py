@@ -1136,12 +1136,20 @@ class ShiftStatsService:
         ).all()
 
         if not entries:
+            # Отсутствие топлива - ноль литров той же формы, что и в непустом
+            # случае, а не summary:{} (карточки показывали undefined/NaN).
             return {
                 "period": {"from": str(d_from), "to": str(d_to)},
                 "daily_trend": [],
                 "anomalies": [],
                 "top_consumers": [],
-                "summary": {},
+                "summary": {
+                    "total_liters": 0,
+                    "avg_daily_liters": 0,
+                    "total_entries": 0,
+                    "vehicles_count": 0,
+                    "anomalies_count": 0,
+                },
             }
 
         # Daily trend

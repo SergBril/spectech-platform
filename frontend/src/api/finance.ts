@@ -536,7 +536,7 @@ export const financeApi = {
     return response.data;
   },
 
-  verifyUpdSignature: async (actId: number): Promise<{ valid: boolean; xml_size: number; sig_size: number }> => {
+  verifyUpdSignature: async (actId: number): Promise<{ valid: boolean; provider?: string; signed_at?: string | null; message?: string }> => {
     const response = await apiClient.get(`/shifts/acts/${actId}/verify-signature`);
     return response.data;
   },

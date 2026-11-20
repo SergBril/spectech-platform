@@ -33,7 +33,7 @@ const UtilizationPage: React.FC = () => {
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center gap-2">
             📥 Экспорт Excel
           </button>
-          <button onClick={() => window.open(`/api/v1/shifts/export/1c-acts?date_from=${dateFrom}&date_to=${dateTo}`, '_blank')}
+          <button onClick={() => window.open(`/api/v1/shifts/acts/export/1c?date_from=${dateFrom}&date_to=${dateTo}`, '_blank')}
             className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium flex items-center gap-2">
             🏢 Выгрузка 1С
           </button>
