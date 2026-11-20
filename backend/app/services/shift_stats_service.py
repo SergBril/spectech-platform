@@ -17,6 +17,31 @@ from app.models.shift import (
 logger = logging.getLogger("spectech.shift_stats")
 
 
+def _shift_hours_map(db, task_ids):
+    """Наработка по сменам: подтверждённая диспетчером, иначе от машиниста.
+
+    Прежний расчёт брал getattr(t, "planned_end") - getattr(t, "planned_start").
+    У ShiftTask нет полей времени, оба getattr давали None, условие отсекало все
+    смены, и часы всегда были нулём. В отчётах это обнуляло зарплату и амортизацию:
+    себестоимость занижена, маржа завышена, прогноз затрат показывает только топливо.
+    """
+    from sqlalchemy import func, select
+
+    from app.models.shift import ShiftReport
+
+    if not task_ids:
+        return {}
+    rows = db.execute(
+        select(
+            ShiftReport.shift_task_id,
+            func.coalesce(
+                ShiftReport.final_moto_hours, ShiftReport.operator_moto_hours, 0
+            ),
+        ).where(ShiftReport.shift_task_id.in_(task_ids))
+    ).all()
+    return {tid: float(h or 0) for tid, h in rows}
+
+
 def _load_hours_sources(db, tasks):
     """Batch-load ShiftReports + RequestAssignments for tasks (avoids N+1)."""
     from app.models.dispatch import RequestAssignment
@@ -74,11 +99,6 @@ def _task_hours(t, report_by_task, assign_by_id) -> float:
     a = assign_by_id.get(getattr(t, "assignment_id", None))
     ps = getattr(a, "planned_start", None)
     pe = getattr(a, "planned_end", None)
-    if ps and pe:
-        return round(max(0.0, (pe - ps).total_seconds() / 3600), 2)
-
-    ps = getattr(t, "planned_start", None)
-    pe = getattr(t, "planned_end", None)
     if ps and pe:
         return round(max(0.0, (pe - ps).total_seconds() / 3600), 2)
 
@@ -558,6 +578,7 @@ class ShiftStatsService:
             .scalars()
             .all()
         )
+        hours_map = _shift_hours_map(db, [t.id for t in tasks])
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -593,18 +614,7 @@ class ShiftStatsService:
             util_pct = (
                 round((active_days / total_days) * 100, 1) if total_days > 0 else 0
             )
-            hours = sum(
-                max(
-                    0,
-                    (
-                        getattr(t, "planned_end", None)
-                        - getattr(t, "planned_start", None)
-                    ).total_seconds()
-                    / 3600,
-                )
-                for t in v_tasks
-                if getattr(t, "planned_start", None) and getattr(t, "planned_end", None)
-            )
+            hours = sum(hours_map.get(t.id, 0.0) for t in v_tasks)
 
             ws.cell(row=row_idx, column=1, value=v.name)
             ws.cell(row=row_idx, column=2, value=active_days)
@@ -688,6 +698,7 @@ class ShiftStatsService:
             .scalars()
             .all()
         )
+        hours_map = _shift_hours_map(db, [t.id for t in tasks])
 
         fuel_entries = (
             db.execute(
@@ -706,24 +717,18 @@ class ShiftStatsService:
         company_rates = db.execute(
             select(CompanyCostRates).where(CompanyCostRates.company_id == company_id)
         ).scalar_one_or_none()
-        fuel_price = company_rates.fuel_price_per_liter if company_rates else 65.0
-        hourly_wage = company_rates.hourly_wage if company_rates else 500.0
-        amort_rate = company_rates.amortization_per_hour if company_rates else 300.0
+        fuel_price = (
+            float(company_rates.fuel_price_per_liter) if company_rates else 65.0
+        )
+        hourly_wage = float(company_rates.hourly_wage) if company_rates else 500.0
+        amort_rate = (
+            float(company_rates.amortization_per_hour) if company_rates else 300.0
+        )
 
         actual_days = max((today - lookback).days, 1)
 
-        total_hours = sum(
-            max(
-                0,
-                (
-                    getattr(t, "planned_end", None) - getattr(t, "planned_start", None)
-                ).total_seconds()
-                / 3600,
-            )
-            for t in tasks
-            if getattr(t, "planned_start", None) and getattr(t, "planned_end", None)
-        )
-        total_fuel = sum(f.quantity_liters for f in fuel_entries)
+        total_hours = sum(hours_map.get(t.id, 0.0) for t in tasks)
+        total_fuel = float(sum(f.quantity_liters for f in fuel_entries))
 
         avg_daily_hours = total_hours / actual_days
         avg_daily_fuel = total_fuel / actual_days
@@ -750,15 +755,7 @@ class ShiftStatsService:
             key = str(t.shift_date)
             if key not in daily_data:
                 daily_data[key] = {"date": key, "hours": 0}
-            if getattr(t, "planned_start", None) and getattr(t, "planned_end", None):
-                daily_data[key]["hours"] += max(
-                    0,
-                    (
-                        getattr(t, "planned_end", None)
-                        - getattr(t, "planned_start", None)
-                    ).total_seconds()
-                    / 3600,
-                )
+            daily_data[key]["hours"] += hours_map.get(t.id, 0.0)
 
         for f_entry in fuel_entries:
             task = db.get(ShiftTask, f_entry.shift_task_id)
@@ -846,6 +843,7 @@ class ShiftStatsService:
             .scalars()
             .all()
         )
+        hours_map = _shift_hours_map(db, [t.id for t in tasks])
 
         fuel_entries = (
             db.execute(
@@ -873,19 +871,8 @@ class ShiftStatsService:
             v_tasks = [t for t in tasks if t.vehicle_id == v.id]
             v_fuel = [f for f in fuel_entries if f.vehicle_id == v.id]
 
-            hours = sum(
-                max(
-                    0,
-                    (
-                        getattr(t, "planned_end", None)
-                        - getattr(t, "planned_start", None)
-                    ).total_seconds()
-                    / 3600,
-                )
-                for t in v_tasks
-                if getattr(t, "planned_start", None) and getattr(t, "planned_end", None)
-            )
-            fuel_liters = sum(f.quantity_liters for f in v_fuel)
+            hours = sum(hours_map.get(t.id, 0.0) for t in v_tasks)
+            fuel_liters = float(sum(f.quantity_liters for f in v_fuel))
 
             fuel_cost = fuel_liters * DEFAULT_FUEL_PRICE
             wage_cost = hours * DEFAULT_HOURLY_WAGE
@@ -1374,9 +1361,13 @@ class ShiftStatsService:
         company_rates = db.execute(
             select(CompanyCostRates).where(CompanyCostRates.company_id == company_id)
         ).scalar_one_or_none()
-        fuel_price = company_rates.fuel_price_per_liter if company_rates else 65.0
-        hourly_wage = company_rates.hourly_wage if company_rates else 500.0
-        amort_rate = company_rates.amortization_per_hour if company_rates else 300.0
+        fuel_price = (
+            float(company_rates.fuel_price_per_liter) if company_rates else 65.0
+        )
+        hourly_wage = float(company_rates.hourly_wage) if company_rates else 500.0
+        amort_rate = (
+            float(company_rates.amortization_per_hour) if company_rates else 300.0
+        )
 
         tasks = (
             db.execute(
@@ -1390,6 +1381,7 @@ class ShiftStatsService:
             .scalars()
             .all()
         )
+        hours_map = _shift_hours_map(db, [t.id for t in tasks])
 
         fuel_entries = (
             db.execute(
@@ -1422,20 +1414,9 @@ class ShiftStatsService:
             v_fuel = [f for f in fuel_entries if f.vehicle_id == v.id]
             v_acts = [a for a in acts if a.vehicle_id == v.id]
 
-            hours = sum(
-                max(
-                    0,
-                    (
-                        getattr(t, "planned_end", None)
-                        - getattr(t, "planned_start", None)
-                    ).total_seconds()
-                    / 3600,
-                )
-                for t in v_tasks
-                if getattr(t, "planned_start", None) and getattr(t, "planned_end", None)
-            )
-            fuel_liters = sum(f.quantity_liters for f in v_fuel)
-            revenue = sum(a.total_amount or 0 for a in v_acts)
+            hours = sum(hours_map.get(t.id, 0.0) for t in v_tasks)
+            fuel_liters = float(sum(f.quantity_liters for f in v_fuel))
+            revenue = float(sum(a.total_amount or 0 for a in v_acts))
             fuel_cost = fuel_liters * fuel_price
             wage_cost = hours * hourly_wage
             amort_cost = hours * amort_rate
@@ -1515,6 +1496,7 @@ class ShiftStatsService:
             .scalars()
             .all()
         )
+        hours_map = _shift_hours_map(db, [t.id for t in tasks])
 
         # Per-vehicle stats
         vehicle_stats = []
@@ -1525,16 +1507,7 @@ class ShiftStatsService:
                 round((active_days / total_days) * 100, 1) if total_days > 0 else 0
             )
 
-            total_hours = 0
-            for t in v_tasks:
-                if getattr(t, "planned_start", None) and getattr(
-                    t, "planned_end", None
-                ):
-                    delta = (
-                        getattr(t, "planned_end", None)
-                        - getattr(t, "planned_start", None)
-                    ).total_seconds() / 3600
-                    total_hours += max(0, delta)
+            total_hours = sum(hours_map.get(t.id, 0.0) for t in v_tasks)
 
             vehicle_stats.append(
                 {
